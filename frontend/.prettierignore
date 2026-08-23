@@ -1,0 +1,7 @@
+.next/
+out/
+node_modules/
+bun.lock
+public/
+# CLI-managed by shadcn — keep upstream diffs readable
+components/ui/

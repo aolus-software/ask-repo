@@ -1,0 +1,38 @@
+[project]
+name = "askrepo-backend"
+version = "0.1.0"
+description = "AskRepo API — codebase-aware assistant backend"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "fastapi>=0.120.0",
+    "pydantic-settings>=2.7.0",
+    "uvicorn[standard]>=0.34.0",
+]
+
+[tool.uv]
+# Not an installable package — the app runs from the working directory.
+package = false
+
+[dependency-groups]
+dev = [
+    "httpx>=0.28.0",
+    "pytest>=8.3.0",
+    "ruff>=0.9.0",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py313"
+
+[tool.ruff.lint]
+# ANN enforces the type-hint rules in .claude/rules/clean-code.md; without it that
+# rule is aspirational. T20 bans print(); LOG/G cover logging correctness.
+select = ["E", "F", "I", "UP", "B", "ANN", "T20", "LOG", "G", "RUF"]
+
+[tool.ruff.lint.per-file-ignores]
+# Test helpers don't need return annotations on fixtures' inner scaffolding.
+"tests/**" = ["ANN401"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

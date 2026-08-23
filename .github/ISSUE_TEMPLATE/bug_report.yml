@@ -1,0 +1,98 @@
+name: Bug report
+description: Something behaves differently than documented or expected.
+labels: ["bug", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report. **Never paste secrets** — access tokens, PATs, passwords,
+        `DATABASE_URL` with a real password, or JWTs. Redact them before submitting.
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      description: Which part of the system?
+      options:
+        - backend (API)
+        - frontend (UI)
+        - infra (Docker / Compose)
+        - ingestion (clone + index)
+        - retrieval / answer quality
+        - auth
+        - docs
+        - not sure
+    validations:
+      required: true
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What did you observe?
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected instead
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      description: Include the exact commands or requests. A failing `curl` is ideal.
+      placeholder: |
+        1. cd infra && docker compose up --build
+        2. curl -s localhost:8000/health
+        3. ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs or output
+      description: >
+        Output from `docker compose logs <service>`, a traceback, or the browser console.
+        Redact any secrets.
+      render: shell
+
+  - type: input
+    id: version
+    attributes:
+      label: Version / commit
+      description: Output of `git rev-parse --short HEAD`, or a release tag.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: how-running
+    attributes:
+      label: How are you running it?
+      options:
+        - Docker Compose (infra/docker-compose.yml)
+        - Backend directly (uv run uvicorn)
+        - Frontend directly (bun dev)
+        - Mixed / other
+    validations:
+      required: true
+
+  - type: input
+    id: environment
+    attributes:
+      label: OS and Docker version
+      placeholder: "macOS 15.3, Docker 27.5.1"
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before submitting
+      options:
+        - label: I searched existing issues for this.
+          required: true
+        - label: I removed all secrets from the logs and steps above.
+          required: true

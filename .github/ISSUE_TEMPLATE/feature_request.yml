@@ -1,0 +1,75 @@
+name: Feature request
+description: Propose a capability or change in behaviour.
+labels: ["enhancement", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Before proposing, please skim [`docs/PRD.md`](../../docs/PRD.md). It records what is
+        already planned, what is explicitly out of scope for v1, and which open questions
+        are still unresolved — your idea may already be one of them.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: The problem
+      description: >
+        What are you trying to do that you can't do today? Describe the situation, not the
+        solution — it makes alternative solutions visible.
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives you considered
+      description: Including "do nothing" — what happens if this isn't built?
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - auth & accounts
+        - project ingestion
+        - Dev Knowledge (RAG Q&A)
+        - QA List
+        - Mock Data Generator
+        - retrieval / prompt quality
+        - frontend
+        - infra / deployment
+        - docs
+        - other
+    validations:
+      required: true
+
+  - type: dropdown
+    id: phase
+    attributes:
+      label: Which phase does this belong to?
+      description: >
+        Phase 1 is flat access — every user sees every project. Phase 2 adds per-project
+        RBAC. See PRD §2.1.
+      options:
+        - Phase 1 (v1)
+        - Phase 2 (per-project RBAC)
+        - Later / unsure
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before submitting
+      options:
+        - label: I checked `docs/PRD.md` and this isn't already planned or listed as a non-goal.
+          required: true
+        - label: I searched existing issues for this.
+          required: true

@@ -1,0 +1,384 @@
+# AskRepo — Product Requirements Document
+
+**Type:** Self-hosted internal tool, single tenant per organization
+**Owner:** Zulfikar
+**Status:** Draft v0.3
+**Last updated:** 2026-08-23
+
+---
+
+## 1. Summary
+
+AskRepo is a codebase-aware assistant that lets a developer ask questions about a repo and get grounded answers, backed by RAG, LangChain/LangGraph orchestration, and prompt engineering. The primary goal is **learning** (RAG, LangGraph, LangChain, prompt engineering, context management) by building something usable against real repos.
+
+AskRepo is **self-hosted and single-tenant**: an organization runs its own instance on its own infrastructure, an administrator provisions accounts for its developers, and the instance is reachable only from inside the org's network (VPN/Tailscale). There is no public registration and no cross-organization tenancy — a second organization runs a second instance.
+
+Inside one instance, **projects are shared by every user** in phase 1. Repos are not assumed to be present on disk — ingestion works by submitting a repo link, which the app clones, indexes, and then deletes from disk, tracking the result as a **Project**.
+
+Four core features, sitting on top of an auth foundation:
+
+0. **Auth & Accounts** — admin-provisioned email/password accounts, login, and account lifecycle. Not a feature users came for, but it establishes who is making each request.
+1. **Project (repo-link ingestion)** — create a project from a repo URL; app clones + indexes it, tracks status and re-index.
+2. **Dev Knowledge** — ask questions about a codebase, get grounded answers, scoped to a project.
+3. **QA List** — a saved, browsable list of question/answer pairs generated from or about the codebase.
+4. **QA Mock Data Generator** — auto-generate synthetic Q&A pairs from a codebase for testing/evaluating the retrieval and answer quality.
+
+---
+
+## 2. Goals
+
+- Learn RAG, LangChain, LangGraph, prompt engineering, and context management by building, not tutorials.
+- Produce something usable on real repos — not throwaway toy data.
+- Keep each milestone small enough to finish in days.
+- **Model project access so phase 1's global scope becomes phase 2's per-project RBAC without a rewrite.** Concretely: store `created_by` and `is_admin` from the start, and route every retrieval through a single "which projects may this user see?" resolver, even while that resolver returns *all* of them.
+
+> **Timeline note.** Earlier drafts targeted "v1 in days, not weeks." Auth adds a milestone (M0) before any RAG work, but admin-provisioned accounts keep it small — no email verification, no mail provider, no self-service reset. The per-milestone goal holds.
+
+### 2.1 Phases
+
+**Phase 1 (this document).** Flat access. Every authenticated user can see and query every project. No roles beyond a single `is_admin` flag. Destructive operations are limited to the project's creator or an admin.
+
+**Phase 2 (deferred, not specified here).** Per-project RBAC: users are assigned to projects and see only their own. Roles per project (viewer / editor / owner). Phase 1's `created_by` becomes the seed for the first membership row; the access resolver named in §2 becomes the enforcement point.
+
+### Non-goals (v1)
+
+- Multi-tenancy — one instance serves one organization. No tenant isolation layer.
+- Public registration, social login, self-service password reset.
+- Per-project permissions and roles — deferred to phase 2.
+- Horizontal scaling, high availability, multi-region — a single VPS is the target.
+- CI/CD beyond a build-and-restart script.
+- UI polish.
+- Fine-tuning models.
+- Writing code changes back to the repo automatically (read/explain only for v1).
+
+**Explicitly not a non-goal:** secret encryption at rest, login rate limiting, clone-URL validation, and database backups. An internal tool holding repository credentials still warrants these — see §9.
+
+---
+
+## 3. Users
+
+One organization's developers, on that organization's own instance. Accounts are **provisioned by an administrator**; there is no self-service signup.
+
+**Bootstrap.** On first boot the instance seeds generic administrator accounts — `superuser@example.com` and `admin@example.com` — with an initial password supplied via environment variable and `must_change_password` set. No account is tied to a named individual by default.
+
+**Roles in phase 1.** A single boolean, `is_admin`. Admins can create, update, and soft-delete users, reset any user's password, and perform destructive operations on any project. Everyone else is a regular user: full read and query access to every project, plus destructive rights over projects they created.
+
+**Schema**
+
+```python
+class User(BaseModel):
+    id: UUID
+    name: str
+    email: EmailStr                    # unique, stored lowercase
+    password_hash: str                 # argon2id — the raw password is never stored
+    is_admin: bool = False
+    must_change_password: bool = True  # set on provisioning and on admin reset
+    last_login_at: datetime | None
+    created_at: datetime
+    updated_at: datetime
+    deleted_at: datetime | None        # soft delete
+```
+
+The field is `password_hash`, not `password`. The plaintext exists only in the request body and is never written to a database, log, or response.
+
+**Soft-delete semantics.** `deleted_at` is set rather than the row removed. A soft-deleted user cannot log in and all their refresh tokens are revoked. **Their projects and Q&A pairs survive** — those are shared assets belonging to the instance, not to the person who happened to create them. Their private conversations (§4.2) are soft-deleted with them.
+
+---
+
+## 4. Features
+
+### 4.0 Auth & Accounts
+
+**What it does:** Establishes who is making a request, so actions can be attributed and destructive operations gated. Admin-provisioned accounts, password login issuing short-lived access tokens plus revocable refresh tokens, and admin-driven password reset.
+
+**User stories**
+
+- As an admin, I can create an account for a developer with a name, email, and initial password.
+- As a new user, I'm required to change my initial password on first login.
+- As a user, I can log in and stay logged in across browser restarts without re-entering my password.
+- As a user, I can log out of one device, or out of every device at once.
+- As a user who forgot my password, I can ask an admin to reset it and log in with a new temporary one.
+- As an admin, I can deactivate someone who has left, immediately ending their sessions.
+
+**Acceptance criteria**
+
+- `POST /users` (**admin only**) accepts `{name, email, password, is_admin?}`, creates the account with `must_change_password=True`. `GET /users` lists accounts; `PATCH /users/{id}` updates name/admin flag; `DELETE /users/{id}` soft-deletes and revokes that user's refresh tokens.
+- `POST /auth/login` accepts `{email, password}` and returns a JWT access token (15 min, stateless) plus an opaque refresh token (30 days). The refresh token is stored **hashed** in Postgres so it can be revoked; the access token is not stored.
+- When `must_change_password` is set, login succeeds but every route except `POST /auth/change-password` returns `403` with a machine-readable reason, so the frontend can force the change.
+- `POST /auth/change-password` accepts `{current_password, new_password}`, clears `must_change_password`, and revokes all *other* refresh tokens for that user.
+- `POST /users/{id}/reset-password` (**admin only**) sets a new temporary password and re-sets `must_change_password`, revoking all of that user's refresh tokens.
+- Password policy: minimum 12 characters, rejected if it appears in a common-password list. Hashed with **argon2id** at sensible cost parameters.
+- `POST /auth/refresh` exchanges a refresh token for a new access token **and rotates the refresh token**, invalidating the old one. Presenting an already-used refresh token revokes the whole chain — that is a replay signal.
+- `POST /auth/logout` revokes the presented refresh token. `POST /auth/logout-all` revokes every refresh token for the user.
+- `GET /auth/me` returns the current user. `password_hash` is never serialized in any response.
+- Login failures return one uniform error regardless of cause (unknown email vs wrong password), compared against a dummy hash so timing doesn't differ.
+- Login is rate limited to 5/min/IP and 10/hour/email, returning `429`. Brute force is still a threat on an internal network.
+- Passwords, tokens, and PATs are excluded from logs, tracebacks, and error responses.
+
+**Out of scope for v1:** self-service registration, email verification, email-based password reset, OAuth/social login, 2FA/TOTP, per-project roles (phase 2), session-activity history.
+
+---
+
+### 4.1 Project (repo-link ingestion)
+
+**What it does:** The entry point for getting a codebase into AskRepo. Any authenticated user submits a repo URL (+ branch, + optional PAT for private repos) to create a Project. The app clones the repo, indexes it, deletes the working copy, and tracks status. **Every project is visible and queryable by every user on the instance.**
+
+**User stories**
+
+- As a dev, I can create a project by pasting a repo URL and (optionally) selecting a branch.
+- As a dev, I can add a private repo by providing a PAT, stored encrypted.
+- As a dev, I can query any project a colleague added, without having to add it myself.
+- As a dev, I can see project status (pending → cloning → indexing → ready / failed) and basic stats (files indexed, chunk count, last indexed commit), plus the error message when it failed.
+- As a dev, I can manually trigger a re-index of a project I created after pushing changes.
+- As a dev, I can't accidentally delete or re-index a project someone else added.
+- As an admin, I can delete or re-index any project.
+
+**Acceptance criteria**
+
+- `POST /projects` accepts `{repo_url, branch, pat?}`, records the caller as `created_by`, and kicks off an async clone+index job (background task/queue — not synchronous in the request).
+- **`created_by` is attribution and a destructive-operation gate, not ownership.** It does not scope reads.
+- `GET /projects` lists **all** non-deleted projects on the instance. `GET /projects/{id}` returns any project's status, last indexed commit SHA, file/chunk counts, and error detail.
+- `POST /projects/{id}/reindex` and `DELETE /projects/{id}` require the caller to be `created_by` or an admin; otherwise **`403`**. (`403`, not `404` — project existence is deliberately not a secret here, so hiding it would only confuse.)
+- **Access resolver.** All retrieval goes through one function that answers "which project IDs may this user query?" In phase 1 it returns every project ID. Phase 2 replaces its body with a membership lookup and nothing else changes. Retrieval filters Qdrant by `project_id IN <resolver result>` — never by an unchecked path parameter.
+- Clone uses `git clone --depth 1 --branch <branch> <url>` into a per-project scratch directory (`/data/repos/<project_id>`).
+- **Ingestion safety** (see §9): `https://` scheme only; host must be on a configurable allowlist (default `github.com`, `gitlab.com`); reject any URL resolving to a private, loopback, or link-local address; clone timeout 120s; reject repos over 500 MB.
+- **Quotas:** instance-wide cap on concurrent ingestion jobs (default 2) so one large clone can't starve the box. No per-user project cap — users are trusted colleagues.
+- Indexing runs walk → `.gitignore`-aware filter → code-aware chunk → embed, writing into a shared Qdrant collection with `project_id` on every point.
+- **Disk lifecycle.** After indexing succeeds (or fails terminally), the cloned working copy is **deleted**. `/data/repos` is scratch space, not a persistent volume. Re-index therefore re-clones rather than `git pull` — slower per run, accepted in exchange for bounded disk use.
+- `DELETE /projects/{id}` soft-deletes the row and **hard-deletes** the project's Qdrant points (§5.1).
+- PATs are encrypted at rest with a key from the environment, never logged, and never returned in any API response — not even masked.
+
+**Schema**
+
+```python
+class Project(BaseModel):
+    id: UUID
+    created_by: UUID                 # attribution + destructive-op gate, NOT read scope
+    name: str
+    repo_url: str
+    branch: str = "main"
+    status: Literal["pending", "cloning", "indexing", "ready", "failed"]
+    error: str | None                # populated when status == "failed"
+    last_indexed_commit: str | None
+    file_count: int | None
+    chunk_count: int | None
+    encrypted_pat: bytes | None      # never serialized
+    created_at: datetime
+    updated_at: datetime
+    deleted_at: datetime | None
+```
+
+**Out of scope for v1:** automatic re-index via GitHub webhooks, multi-branch indexing, org-wide repo discovery/browsing, deploy keys (PAT only), per-project access lists (phase 2).
+
+---
+
+### 4.2 Dev Knowledge (RAG Q&A over a codebase)
+
+**What it does:** Once a Project is indexed (§4.1), answer natural-language questions grounded in the actual code. Any user may query any project; **conversations are private to the user who had them.**
+
+**User stories**
+
+- As a dev, I can select any ready project and ask questions against its indexed codebase.
+- As a dev, I can ask "how does the withdrawal calculation work?" and get an answer citing the actual files/functions involved.
+- As a dev, I can ask follow-up questions and have AskRepo retain conversation context.
+- As a dev, my in-progress questions aren't visible to my colleagues — I share answers deliberately, by saving them to the QA List (§4.3).
+
+**Acceptance criteria**
+
+- Query retrieves top-k chunks filtered by `project_id`, drawn from the access resolver (§4.1), injects them into the prompt, and returns an answer referencing the file paths / function names it drew from.
+- The project must exist and be `status == "ready"`; otherwise `404` (no such project) or `409` (not ready) with a clear message.
+- Multi-turn: at least a sliding-window or summarized memory so a 5+ turn conversation doesn't lose earlier context.
+- **Conversations are scoped by `user_id`.** `GET /conversations` returns only the caller's own; requesting someone else's returns `404` — here existence *is* private, unlike projects.
+- Deleting a project soft-deletes conversations against it.
+
+**Schema**
+
+```python
+class Conversation(BaseModel):
+    id: UUID
+    user_id: UUID                    # private to this user
+    project_id: UUID
+    title: str | None                # derived from the first question
+    created_at: datetime
+    updated_at: datetime
+    deleted_at: datetime | None
+
+
+class Message(BaseModel):
+    id: UUID
+    conversation_id: UUID
+    role: Literal["user", "assistant"]
+    content: str
+    citations: list[Citation]        # assistant messages only
+    model: str | None
+    created_at: datetime
+```
+
+**Out of scope for v1:** multi-repo cross-referencing (asking questions across two projects at once), code-writing/edit suggestions, sharing a conversation with a colleague.
+
+---
+
+### 4.3 QA List
+
+**What it does:** A persisted, browsable list of Q&A pairs — either saved from Dev Knowledge sessions or generated by the Mock Data Generator (§4.4). **Shared across the instance**: this is the team's knowledge base and regression set, so anything saved here is visible to everyone.
+
+**Decisions**
+- QA List and Mock Data Generator **share one storage schema** from the start, discriminated by a `source` field. Two tables would have to be merged the moment generated pairs need to appear in the same list view as manual ones.
+- QA pairs are **global**, unlike conversations. Saving to the QA List is the deliberate act of publishing something to colleagues.
+
+**User stories**
+
+- As a dev, I can save a Q&A pair from my Dev Knowledge session into the shared QA List with one action.
+- As a dev, I can view all saved Q&A pairs, filtered by project or tag (e.g. "auth", "billing"), including ones my colleagues saved.
+- As a dev, I can see who saved a pair and when.
+- As a dev, I can re-run a saved question against the current index to see if the answer changed (useful after refactors).
+- As a dev, I can mark a Q&A pair as "verified correct" so it becomes a trusted reference / eval case for the team.
+
+**Acceptance criteria**
+
+- Storage: a single Postgres `qa_pairs` table, scoped by `project_id`, readable by every user.
+- List view filterable by project, tag, `source`, `verified`, and `created_by`.
+- Any user may create and verify a pair. Editing or deleting a pair requires `created_by` or admin — same rule as projects, returning `403`.
+- Re-run takes an existing question, re-queries Dev Knowledge, and shows old vs new answer side by side. The re-run does not overwrite the stored answer unless the user saves it.
+- Deleting a project soft-deletes its Q&A pairs.
+
+**Schema (shared with §4.4)**
+
+```python
+class QAPair(BaseModel):
+    id: UUID
+    project_id: UUID
+    created_by: UUID                          # attribution; does not scope reads
+    question: str
+    answer: str | None                        # null until answered
+    reference_answer: str | None              # generated pairs only
+    citations: list[Citation]                 # file path + chunk id + line range
+    tags: list[str]
+    source: Literal["manual", "generated"]
+    verified: bool = False
+    verified_by: UUID | None
+    model: str | None                         # model that produced `answer`
+    eval_score: float | None                  # generated + evaluated only
+    created_at: datetime
+    updated_at: datetime
+    deleted_at: datetime | None
+```
+
+**Out of scope for v1:** exporting, collaborative editing of a single pair, versioned diffing UI.
+
+---
+
+### 4.4 QA Mock Data Generator
+
+**What it does:** Given a project (or a subset of files/modules), auto-generates synthetic Q&A pairs about the code — used to (a) seed the QA List, and (b) evaluate retrieval/answer quality (a lightweight eval harness).
+
+**User stories**
+
+- As a dev, I can select a project or folder and generate N synthetic Q&A pairs about it.
+- As a dev, I can choose a question "type" mix (e.g. "what does this function do", "where is X handled", "what would break if I changed Y").
+- As a dev, I can run the generated set through Dev Knowledge and get a pass/fail or similarity score against the generated reference answer, so I have a rough eval signal when I change chunking/prompting/models.
+
+**Acceptance criteria**
+
+- Generation uses an LLM prompted against actual code chunks to produce (question, reference answer, source file) triples — grounded generation, not hallucinated topics.
+- Output writes into the shared `qa_pairs` table (§4.3) with `source="generated"`, `verified=False`, and the caller as `created_by`.
+- Eval mode: for each generated pair, run it through Dev Knowledge, compare answer vs `reference_answer` (LLM-graded similarity is fine for v1), and store the result in `eval_score`.
+- Configurable count (10/25/50) and question-type mix.
+- Generation is the most expensive operation in the app; it runs as a background job with an instance-wide concurrency cap, not inline in the request.
+
+**Out of scope for v1:** adversarial/edge-case question generation, human review workflow UI, integration with formal eval frameworks (Ragas, etc.) — worth exploring in v2.
+
+---
+
+## 5. Tech stack (proposed)
+
+| Layer                 | Choice                                                     | Notes                                                                                          |
+| --------------------- | ---------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| Hosting               | VPS / on-prem box, Docker Compose                          | One instance per organization; self-hosted                                                     |
+| API layer             | FastAPI                                                    | Python-native for LangChain/LangGraph                                                          |
+| Orchestration         | LangGraph                                                  | State graph for classify → retrieve → generate → critique/loop                                 |
+| LLM framework         | LangChain                                                  | Prompt templates, output parsers, document loaders/splitters                                    |
+| Auth                  | argon2id hashing + JWT access / opaque refresh tokens      | Access token stateless (15 min); refresh token hashed in Postgres so it is revocable            |
+| ORM / migrations      | SQLAlchemy 2.0 + Alembic                                   | users, projects, qa_pairs, conversations, messages, refresh_tokens                              |
+| Rate limiting         | Redis-backed middleware                                    | Login brute-force protection (M0); reused for job-queue backing at M1                          |
+| Reverse proxy / TLS   | Caddy                                                      | Internal TLS in front of API + frontend. Not internet-facing, so certs may be internal CA      |
+| Ingestion             | `git clone --depth 1` per project + filesystem walk        | Working copy deleted after indexing; `/data/repos` is scratch, not a persistent volume         |
+| Background jobs       | FastAPI `BackgroundTasks` (v1) → Redis + ARQ (M1+)         | Clone + index must not block the request. See note below.                                      |
+| Vector store          | Qdrant                                                     | Shared collection, filtered by `project_id` from the access resolver (§4.1)                     |
+| Models                | Ollama (qwen2.5-coder:14b, qwen3:14b) + hosted API adapter | Compare local vs hosted per node                                                               |
+| Storage               | Postgres                                                   | Users, projects, qa_pairs, conversations, refresh tokens, encrypted PATs                        |
+| Secrets               | Env-provided encryption key (AES-GCM / Fernet)             | Encrypts PATs at rest; key never committed, rotatable                                          |
+| Frontend              | Minimal Next.js                                            | Not the focus; keep thin                                                                       |
+| Networking            | VPN / Tailscale only — no public exposure                  | The instance is internal. Admin access to Postgres/Qdrant dashboards likewise                  |
+
+**No email provider.** Admin-provisioned accounts and admin-driven password reset remove every transactional-email path, so v1 ships without a mail dependency. Adding self-service reset later means adding a provider then.
+
+**On the job queue.** `BackgroundTasks` runs in the API process, so a restart mid-index loses the job and leaves a Project stuck at `indexing` forever. Graduate to **Redis + ARQ** at M1. ARQ over Celery because the indexing pipeline (embeddings, Qdrant writes) is already async and Celery's configuration surface solves problems this project doesn't have. **Kafka is the wrong tool here** — it is a partitioned, replicated event log for high-throughput streams with replaying consumer groups; this workload is a handful of jobs a day that need retries and a status field, which is a task queue, not a log.
+
+### 5.1 Conventions
+
+- **Naming:** `snake_case` **internally** — Python attributes, Postgres columns. `camelCase` **on the wire** — every JSON request and response body. The translation happens in exactly one place: the `ApiModel` base class (`backend/app/schemas/base.py`), which sets Pydantic's `to_camel` alias generator with `populate_by_name=True`. No route or service converts anything by hand, and a schema that inherits plain `BaseModel` is a bug. See `.claude/rules/response-api.md`.
+- **Timestamps:** UTC, ISO-8601, timezone-aware. Column type `timestamptz`.
+- **IDs:** UUID, generated by the application, never sequential integers in URLs.
+- **Soft delete:** every table carries `deleted_at`; all queries filter `deleted_at IS NULL`. Unique constraints on `email` must account for it.
+- **Soft delete does not reach Qdrant.** Vector points have no `deleted_at`, and a query-time filter would be one forgotten call away from serving deleted content. Rule: **Postgres rows are soft-deleted; the corresponding Qdrant points are hard-deleted in the same operation.**
+- **Attribution vs authorization.** `created_by` exists on projects and qa_pairs for attribution and to gate destructive operations. It never scopes reads in phase 1. Read scoping is *only* ever done through the access resolver (§4.1), so phase 2 has exactly one place to change.
+- **Error codes:**
+  - `403` when the caller may see a thing but not do this to it — e.g. deleting someone else's project. Existence is not secret.
+  - `404` when the caller may not know the thing exists — e.g. another user's conversation.
+  - `409` for valid-but-wrong-state (querying a project that isn't `ready`).
+  - `429` for rate limits.
+
+---
+
+## 6. Milestones
+
+0. **M0 — Auth & accounts:** admin-provisioned users, login with access/refresh tokens, forced first-login password change, admin password reset, login rate limiting, seeded bootstrap admins. Nothing else can be attributed until this exists.
+1. **M1 — Project ingestion:** `POST /projects` with repo link → clone + index, status tracking, manual re-index, URL validation, `created_by` gating. Moves jobs to Redis + ARQ.
+2. **M2 — Dev Knowledge core:** basic RAG Q&A against a ready project (no graph yet), with private conversations.
+3. **M3 — LangGraph wrap:** turn the chain into a graph with intent routing + self-critique loop.
+4. **M4 — QA List:** shared `qa_pairs` storage + save/view/filter/re-run.
+5. **M5 — Mock Data Generator:** generate synthetic Q&A + basic eval scoring.
+6. **M6 — Local vs hosted comparison:** benchmark qwen2.5-coder/qwen3 vs hosted model across nodes.
+
+**Phase 2 (after M6):** per-project RBAC — membership table, roles, and swapping the access resolver's body.
+
+---
+
+## 7. Success criteria
+
+- An admin can bring up a fresh instance, log in as a seeded admin, change the initial password, and create an account for a colleague — with no manual database work.
+- **Sharing works as intended:** user B can list and query a project user A created, without any grant step.
+- **Destructive gating holds:** user B attempting to delete or re-index user A's project gets `403`; an admin succeeds. Verified by an automated test.
+- **Conversations stay private:** user B cannot list or read user A's conversations, and gets `404` rather than `403`. Verified by an automated test.
+- Can ask Dev Knowledge a real question about a project repository and get a correct, cited answer.
+- QA List has 20+ saved pairs (mix of manual + generated) usable as a shared regression set.
+- Mock Data Generator can produce a usable eval set for a repo in one run, with scores that meaningfully drop when chunking/prompting is deliberately made worse (sanity check that the eval signal is real).
+- Clear, documented comparison of local vs hosted model performance per node type.
+- No secret (password, token, PAT) appears in any log, traceback, or API response.
+- **Phase-2 readiness:** read scoping happens in exactly one function, confirmed by grep — no route filters projects on its own.
+
+---
+
+## 8. Open questions
+
+- **Are shared PATs acceptable?** With global projects, whoever adds a private repo supplies a PAT that effectively grants every user on the instance read access to that repo's contents via Q&A. That is probably fine inside one company, but it means a project's PAT scope should be as narrow as GitHub allows (read-only, single repo). Worth confirming before private-repo support ships. A GitHub App would make this cleanly org-level rather than person-level.
+- **Who can add projects?** Phase 1 says any user. If a company would rather curate the project list, that's a one-line `is_admin` check on `POST /projects` — worth deciding before M1.
+- **What happens to a departed user's projects?** §3 says shared assets survive a soft-deleted user, leaving `created_by` pointing at a deactivated account. Should destructive rights then fall to admins only, or transfer to someone?
+- How rigorous should the "eval score" be in v1 — LLM-graded similarity is fast to build but noisy; worth revisiting once M5 is done.
+- Encryption key rotation for stored PATs — re-encrypt in place on rotation, or require re-entry?
+- GitHub webhook auto-reindex — not needed now; worth reconsidering in v2 if re-cloning per re-index becomes painful.
+
+---
+
+## 9. Security & abuse considerations
+
+The instance is internal, which lowers the threat model but does not empty it. The users are trusted colleagues; the *inputs* are not.
+
+- **SSRF via clone URL — the sharpest risk, and worse on an internal network than a public one.** `repo_url` is user-supplied and handed to a network client running *inside* the corporate network, where `http://10.0.x.x`, `http://169.254.169.254/`, and internal service names actually resolve. Mitigation: https-only, host allowlist, and rejection of URLs resolving to private/loopback/link-local addresses — resolved at connect time, not just parse time, to defeat DNS rebinding.
+- **Credential storage.** Stored PATs grant read access to the org's repositories. Encrypt with an env-provided key, never log, never return. Keep PAT scope read-only and per-repo.
+- **Untrusted code on disk.** Cloned repos are never executed; no build or dependency-install step runs. Indexing only reads files.
+- **Resource exhaustion.** Clones and embeddings are expensive and the box is shared. Mitigation: repo size cap, clone timeout, instance-wide concurrency caps on ingestion and generation.
+- **Brute force.** Internal does not mean unreachable — a compromised laptop is on the network. Login rate limiting and argon2id stand regardless.
+- **Backups.** Restorable Postgres backups, with the PAT encryption key backed up **separately** from the database.
+- **Not in the threat model:** malicious authenticated users, tenant isolation, and public internet exposure. If the instance is ever published, §4.0 needs self-service account flows and this section needs revisiting — that is a different document.

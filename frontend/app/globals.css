@@ -1,0 +1,185 @@
+@import "tailwindcss";
+
+/* Class-based dark mode, not prefers-color-scheme: the operator gets a toggle. */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/*
+ * Design tokens. Palette values come from the Fexend design system; the structure
+ * is semantic-role-per-token, redefined under .dark.
+ *
+ * Components reference roles (bg-card, text-muted-foreground), never palette
+ * values and never a manual dark: colour override. Dark mode is a change to this
+ * file alone. See docs/design.md and .claude/rules/design-system.md.
+ *
+ * This is the ONLY file in the repo permitted to contain a raw hex colour.
+ */
+:root {
+  --radius: 0.5rem;
+
+  /* Surfaces */
+  --background: #f1f5f9;
+  --foreground: #0f172a;
+  --card: #ffffff;
+  --card-foreground: #0f172a;
+  --popover: #ffffff;
+  --popover-foreground: #0f172a;
+
+  /* Brand */
+  --primary: #615fff;
+  --primary-foreground: #ffffff;
+  --secondary: #9333ea;
+  --secondary-foreground: #ffffff;
+
+  /* Status */
+  --success: #00c950;
+  --success-foreground: #ffffff;
+  --warning: #f59e08;
+  --warning-foreground: #0f172a;
+  --danger: #fb2c36;
+  --danger-foreground: #ffffff;
+  --info: #00b8db;
+  --info-foreground: #ffffff;
+
+  /* shadcn calls the danger role "destructive". Both map to one value so a
+     CLI-generated component and a hand-written one cannot diverge. */
+  --destructive: var(--danger);
+  --destructive-foreground: var(--danger-foreground);
+
+  /* Neutrals */
+  --muted: #f1f5f9;
+  --muted-foreground: #62748e;
+  --accent: #f1f5f9;
+  --accent-foreground: #0f172a;
+  --border: #e2e8f0;
+  --input: #cad5e2;
+  --ring: #615fff;
+
+  /* Sidebar — its own roles so the shell can diverge from page surfaces */
+  --sidebar: #ffffff;
+  --sidebar-foreground: #45556c;
+  --sidebar-primary: #615fff;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #f1f5f9;
+  --sidebar-accent-foreground: #0f172a;
+  --sidebar-border: #e2e8f0;
+  --sidebar-ring: #615fff;
+
+  /* Charts — retrieval scores, eval results (M5) */
+  --chart-1: #615fff;
+  --chart-2: #00b8db;
+  --chart-3: #9333ea;
+  --chart-4: #00c950;
+  --chart-5: #f59e08;
+}
+
+.dark {
+  --background: #020617;
+  --foreground: #f1f5f9;
+  --card: #0f172a;
+  --card-foreground: #f1f5f9;
+  --popover: #0f172a;
+  --popover-foreground: #f1f5f9;
+
+  --primary: #7c86ff;
+  --primary-foreground: #020617;
+  --secondary: #c27aff;
+  --secondary-foreground: #020617;
+
+  --success: #05df72;
+  --success-foreground: #020617;
+  --warning: #ffb900;
+  --warning-foreground: #020617;
+  --danger: #ff6467;
+  --danger-foreground: #020617;
+  --info: #00d3f2;
+  --info-foreground: #020617;
+
+  --muted: #1d293d;
+  --muted-foreground: #90a1b9;
+  --accent: #1d293d;
+  --accent-foreground: #f1f5f9;
+  --border: #1d293d;
+  --input: #45556c;
+  --ring: #7c86ff;
+
+  --sidebar: #0f172a;
+  --sidebar-foreground: #90a1b9;
+  --sidebar-primary: #7c86ff;
+  --sidebar-primary-foreground: #020617;
+  --sidebar-accent: #1d293d;
+  --sidebar-accent-foreground: #f1f5f9;
+  --sidebar-border: #1d293d;
+  --sidebar-ring: #7c86ff;
+
+  --chart-1: #7c86ff;
+  --chart-2: #00d3f2;
+  --chart-3: #c27aff;
+  --chart-4: #05df72;
+  --chart-5: #ffb900;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
+  --color-danger: var(--danger);
+  --color-danger-foreground: var(--danger-foreground);
+  --color-info: var(--info);
+  --color-info-foreground: var(--info-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+
+  --font-sans: var(--font-lexend);
+  --font-mono: var(--font-geist-mono);
+
+  --radius-sm: calc(var(--radius) - 2px);
+  --radius-md: var(--radius);
+  --radius-lg: calc(var(--radius) + 2px);
+  --radius-xl: calc(var(--radius) + 6px);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+  }
+}

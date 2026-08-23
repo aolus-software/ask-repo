@@ -1,0 +1,123 @@
+# AskRepo — development stack.
+#
+#   cd infra && docker compose up --build
+#
+# Every environment value has a `${VAR:-default}` fallback, so this comes up with
+# no .env file at all. To override, create `infra/.env` or export the vars.
+#
+# Frontend  http://localhost:3000
+# API       http://localhost:8000   (docs at /docs)
+# Qdrant    http://localhost:6333/dashboard
+# Redis     localhost:6379          (rate limiting at M0, job queue at M1)
+
+name: askrepo
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-askrepo}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-askrepo}
+      POSTGRES_DB: ${POSTGRES_DB:-askrepo}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-askrepo} -d ${POSTGRES_DB:-askrepo}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  qdrant:
+    image: qdrant/qdrant:v1.15.1
+    restart: unless-stopped
+    ports:
+      - "${QDRANT_HTTP_PORT:-6333}:6333"
+      - "${QDRANT_GRPC_PORT:-6334}:6334"
+    volumes:
+      - qdrant_data:/qdrant/storage
+    healthcheck:
+      # The image has no curl/wget; use Qdrant's own binary as the probe.
+      test: ["CMD", "/qdrant/qdrant", "--version"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  redis:
+    image: redis:8-alpine
+    restart: unless-stopped
+    # appendonly so queued ingestion jobs (M1+) survive a restart. Rate-limit
+    # counters don't need durability, but the queue does.
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+
+  backend:
+    build:
+      context: ../backend
+      dockerfile: ../infra/backend.Dockerfile
+    restart: unless-stopped
+    ports:
+      - "${BACKEND_PORT:-8000}:8000"
+    environment:
+      APP_NAME: ${APP_NAME:-AskRepo API}
+      APP_ENV: ${APP_ENV:-development}
+      DEBUG: ${DEBUG:-true}
+      CORS_ORIGINS: '["http://localhost:${FRONTEND_PORT:-3000}"]'
+      DATABASE_URL: postgresql://${POSTGRES_USER:-askrepo}:${POSTGRES_PASSWORD:-askrepo}@postgres:5432/${POSTGRES_DB:-askrepo}
+      QDRANT_URL: http://qdrant:6333
+      REDIS_URL: redis://redis:6379/0
+    volumes:
+      # Source bind-mount for hot reload. The venv lives in /opt/venv, so it survives.
+      - ../backend:/app
+    depends_on:
+      postgres:
+        condition: service_healthy
+      qdrant:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health/live')"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  frontend:
+    build:
+      context: ../frontend
+      dockerfile: ../infra/frontend.Dockerfile
+    restart: unless-stopped
+    ports:
+      - "${FRONTEND_PORT:-3000}:3000"
+    environment:
+      # Resolved in the browser, so it points at the host-published API port.
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8000}
+      WATCHPACK_POLLING: "true"
+    volumes:
+      - ../frontend:/app
+      # Anonymous volumes keep the image's node_modules/.next from being
+      # shadowed by the bind-mount above.
+      - /app/node_modules
+      - /app/.next
+    depends_on:
+      backend:
+        condition: service_started
+
+volumes:
+  pgdata:
+  qdrant_data:
+  redis_data:
