@@ -11,7 +11,8 @@ from datetime import UTC, datetime
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import User
+from app.models import RefreshToken, User
+from app.repositories.base import BaseRepository
 from app.repositories.user import UserRepository
 
 
@@ -171,3 +172,31 @@ async def test_count_active_admins_can_exclude_one(db_session: AsyncSession) -> 
     repository = UserRepository(db_session)
 
     assert (await repository.count_active_admins(excluding=admin.id)) == 0
+
+
+async def test_soft_delete_refuses_a_model_without_the_column(db_session: AsyncSession) -> None:
+    """A silent no-op would be worse than a crash: the row stays live and nothing says so.
+
+    `RefreshToken` has no `deleted_at` — Task 7's natural subject for this guard, before
+    a `RefreshTokenRepository` exists to test it through.
+    """
+    owner = await _make_user(db_session)
+    now = datetime.now(UTC)
+    token = RefreshToken(
+        id=uuid.uuid4(),
+        user_id=owner.id,
+        family_id=uuid.uuid4(),
+        token_hash="a" * 64,
+        issued_at=now,
+        expires_at=now,
+    )
+    db_session.add(token)
+    await db_session.commit()
+
+    class RefreshTokenRepository(BaseRepository[RefreshToken]):
+        model = RefreshToken
+
+    repository = RefreshTokenRepository(db_session)
+
+    with pytest.raises(TypeError, match="deleted_at"):
+        await repository.soft_delete(token)

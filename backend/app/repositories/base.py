@@ -79,10 +79,14 @@ class BaseRepository[ModelT: Base]:
     async def soft_delete(self, entity: ModelT) -> None:
         """Mark a row deleted. The caller's service owns the commit.
 
-        Callable on any `BaseRepository` subclass, but only meaningful for a model
-        carrying `SoftDeleteMixin` — `RefreshToken` has no `deleted_at` and is revoked
-        through `revoked_at` instead (see `.claude/rules/persistence.md`). The cast
-        documents that assumption at the one line that needs it.
+        Guarded at runtime rather than by types alone: a model without
+        `SoftDeleteMixin` has no `deleted_at` column, and because SQLAlchemy
+        instances have no `__slots__`, assigning one would land in `__dict__`,
+        persist nothing, and raise nothing — a delete that silently does not happen.
         """
-        cast(SoftDeleteMixin, entity).deleted_at = datetime.now(UTC)
+        if not isinstance(entity, SoftDeleteMixin):
+            raise TypeError(
+                f"{type(entity).__name__} does not support soft delete: it has no deleted_at column"
+            )
+        entity.deleted_at = datetime.now(UTC)
         await self.session.flush()

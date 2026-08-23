@@ -64,12 +64,8 @@ class UserRepository(BaseRepository[User]):
         last-admin guard (D17), which exists because the alternative is recovery by
         manual SQL.
         """
-        statement = (
-            select(func.count())
-            .select_from(User)
-            .where(User.deleted_at.is_(None), User.is_admin.is_(True))
-        )
+        statement = self.active_select().where(User.is_admin.is_(True))
         if excluding is not None:
             statement = statement.where(User.id != excluding)
-        result = await self.session.execute(statement)
+        result = await self.session.execute(select(func.count()).select_from(statement.subquery()))
         return result.scalar_one()
