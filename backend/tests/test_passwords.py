@@ -9,6 +9,7 @@ from pathlib import Path
 
 import pytest
 
+from app.config import get_settings
 from app.core.passwords import (
     PasswordPolicyError,
     check_password,
@@ -71,3 +72,15 @@ def test_loading_a_wordlist_normalises_and_skips_blanks(tmp_path: Path) -> None:
 def test_loading_a_missing_wordlist_returns_empty_rather_than_raising(tmp_path: Path) -> None:
     """A missing data file must not stop the app booting; it degrades the check."""
     assert load_common_passwords(tmp_path / "absent.txt") == frozenset()
+
+
+def test_every_vendored_entry_is_long_enough_to_ever_fire() -> None:
+    """Entries below the minimum length are unreachable: check_password rejects on
+    length first, so a short entry in the blocklist is dead weight that reads as
+    protection without being any."""
+    settings = get_settings()
+    vendored = load_common_passwords(settings.common_password_list_path)
+
+    assert vendored, "the vendored blocklist is empty"
+    too_short = sorted(entry for entry in vendored if len(entry) < settings.password_min_length)
+    assert not too_short, f"unreachable entries: {too_short}"
