@@ -5,6 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.routes import health, index
 from app.config import get_settings
+from app.core.errors import register_exception_handlers
 
 
 def create_app() -> FastAPI:
@@ -16,6 +17,8 @@ def create_app() -> FastAPI:
         description="Codebase-aware assistant API.",
         debug=settings.debug,
     )
+
+    register_exception_handlers(app)
 
     app.add_middleware(
         CORSMiddleware,

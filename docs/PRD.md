@@ -331,8 +331,15 @@ class QAPair(BaseModel):
   rows are hard-deleted by a cleanup path (M1, with the job scheduler).
 - **Soft delete does not reach Qdrant.** Vector points have no `deleted_at`, and a query-time filter would be one forgotten call away from serving deleted content. Rule: **Postgres rows are soft-deleted; the corresponding Qdrant points are hard-deleted in the same operation.**
 - **Attribution vs authorization.** `created_by` exists on projects and qa_pairs for attribution and to gate destructive operations. It never scopes reads in phase 1. Read scoping is *only* ever done through the access resolver (§4.1), so phase 2 has exactly one place to change.
+- **Error shape.** Every error the application raises serialises as
+  `{"detail": {"code": "SOME_CODE", "message": "..."}}`. `code` is a stable,
+  machine-readable identifier drawn from a single enum; `message` is for a person.
+  Validation failures (`422`) carry an additional `fields` map keyed by the `camelCase`
+  field name, so a form can render an error per field. This is one shape for the whole
+  API — a route inventing its own leaves clients parsing two.
 - **Error codes:**
-  - `403` when the caller may see a thing but not do this to it — e.g. deleting someone else's project. Existence is not secret.
+  - `403` when the caller may see a thing but not do this to it — e.g. deleting someone
+    else's project. Existence is not secret.
   - `404` when the caller may not know the thing exists — e.g. another user's conversation.
   - `409` for valid-but-wrong-state (querying a project that isn't `ready`).
   - `429` for rate limits.

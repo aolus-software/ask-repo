@@ -55,6 +55,34 @@ def create_project(...) -> ProjectResponse: ...
 | `HTTPException(429)` | `429` | Rate or quota limit |
 | Unhandled | `500` | A bug. Must be logged with `exc_info=True` and must not leak internals to the client |
 
+## The error body has one shape
+
+Application code raises `AppError(status_code, ErrorCode.SOME_CODE, "message")` — never bare
+`HTTPException`, and never a hand-built dict. The wire shape is:
+
+```json
+{ "detail": { "code": "PASSWORD_CHANGE_REQUIRED", "message": "Change your password first." } }
+```
+
+`422` adds a `fields` map keyed by the `camelCase` field name the client sent, because
+`docs/design.md` renders an error per field and should not be parsing Pydantic `loc` arrays.
+
+`ErrorCode` values are a **wire contract**: renaming a member breaks a frontend branch. Add
+members; do not rename them.
+
+Declare error responses using the fragments in `app/schemas/errors.py`:
+
+```python
+from app.schemas.errors import ERROR_RESPONSES
+
+@router.delete("/{user_id}", status_code=204, responses={
+    k: ERROR_RESPONSES[k] for k in (401, 403, 404, 409)
+})
+```
+
+Spread in only the statuses the route can actually return, traced through its handler and its
+dependencies. Do not copy a sibling route's block.
+
 ### `403` vs `404` is a security decision, not a preference
 
 This is the rule most easily got wrong, and `docs/PRD.md` §5.1 is the authority:
@@ -73,11 +101,11 @@ a list. When adding a route, decide which category it is before writing the hand
 Any route taking a Pydantic body or typed query params can raise `RequestValidationError`.
 Declare `422` in `responses` and never suppress it.
 
-## `429` becomes universal once rate limiting lands
+## `429` is declared where rate limiting is applied
 
-Login rate limiting arrives at M0 (`docs/PRD.md` §4.0) and the middleware applies broadly.
-Once it does, `429` is declarable on every route it covers — a route that opts out must say so
-explicitly rather than silently omitting the code.
+Rate limiting is applied per-route by an explicit dependency (arriving at M0 for login,
+`docs/PRD.md` §4.0). A route declares `429` only when it carries a limiter dependency,
+not on every route — each endpoint must trace its own dependencies.
 
 ## Declaring error responses in OpenAPI
 
