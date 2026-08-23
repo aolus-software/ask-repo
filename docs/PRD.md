@@ -70,7 +70,7 @@ class User(BaseModel):
     id: UUID
     name: str
     email: EmailStr                    # unique, stored lowercase
-    password_hash: str                 # argon2id — the raw password is never stored
+    password_hash: str                 # bcrypt — the raw password is never stored
     is_admin: bool = False
     must_change_password: bool = True  # set on provisioning and on admin reset
     last_login_at: datetime | None
@@ -107,7 +107,7 @@ The field is `password_hash`, not `password`. The plaintext exists only in the r
 - When `must_change_password` is set, login succeeds but every route except `POST /auth/change-password` returns `403` with a machine-readable reason, so the frontend can force the change.
 - `POST /auth/change-password` accepts `{current_password, new_password}`, clears `must_change_password`, and revokes all *other* refresh tokens for that user.
 - `POST /users/{id}/reset-password` (**admin only**) sets a new temporary password and re-sets `must_change_password`, revoking all of that user's refresh tokens.
-- Password policy: minimum 12 characters, rejected if it appears in a common-password list. Hashed with **argon2id** at sensible cost parameters.
+- Password policy: minimum 12 characters, maximum 72 bytes once UTF-8 encoded, rejected if it appears in a common-password list. Hashed with **bcrypt** at cost 12. The 72-byte maximum is bcrypt's input limit, not a preference: beyond it bcrypt ignores the remainder, so two different long passwords sharing a prefix would both authenticate.
 - `POST /auth/refresh` exchanges a refresh token for a new access token **and rotates the refresh token**, invalidating the old one. Presenting an already-used refresh token revokes the whole chain — that is a replay signal.
 - `POST /auth/logout` revokes the presented refresh token. `POST /auth/logout-all` revokes every refresh token for the user.
 - `GET /auth/me` returns the current user. `password_hash` is never serialized in any response.
@@ -298,7 +298,7 @@ class QAPair(BaseModel):
 | API layer             | FastAPI                                                    | Python-native for LangChain/LangGraph                                                          |
 | Orchestration         | LangGraph                                                  | State graph for classify → retrieve → generate → critique/loop                                 |
 | LLM framework         | LangChain                                                  | Prompt templates, output parsers, document loaders/splitters                                    |
-| Auth                  | argon2id hashing + JWT access / opaque refresh tokens      | Access token stateless (15 min); refresh token hashed in Postgres so it is revocable            |
+| Auth                  | bcrypt hashing + JWT access / opaque refresh tokens      | Access token stateless (15 min); refresh token hashed in Postgres so it is revocable            |
 | ORM / migrations      | SQLAlchemy 2.0 + Alembic                                   | users, projects, qa_pairs, conversations, messages, refresh_tokens                              |
 | Rate limiting         | Redis-backed middleware                                    | Login brute-force protection (M0); reused for job-queue backing at M1                          |
 | Reverse proxy / TLS   | Caddy                                                      | Internal TLS in front of API + frontend. Not internet-facing, so certs may be internal CA      |
@@ -310,6 +310,8 @@ class QAPair(BaseModel):
 | Secrets               | Env-provided encryption key (AES-GCM / Fernet)             | Encrypts PATs at rest; key never committed, rotatable                                          |
 | Frontend              | Minimal Next.js                                            | Not the focus; keep thin                                                                       |
 | Networking            | VPN / Tailscale only — no public exposure                  | The instance is internal. Admin access to Postgres/Qdrant dashboards likewise                  |
+
+**Bcrypt over argon2id.** argon2id requires 64 MiB per hash by design, a real cost on the single shared VPS that hosts Postgres, Qdrant, Redis, and possibly Ollama. bcrypt keeps the property that matters: each password guess costs real time, and the time is configurable (cost factor). The security difference is negligible in a private network where the attacker is a compromised laptop or an insider with database access.
 
 **No email provider.** Admin-provisioned accounts and admin-driven password reset remove every transactional-email path, so v1 ships without a mail dependency. Adding self-service reset later means adding a provider then.
 
@@ -385,6 +387,6 @@ The instance is internal, which lowers the threat model but does not empty it. T
 - **Credential storage.** Stored PATs grant read access to the org's repositories. Encrypt with an env-provided key, never log, never return. Keep PAT scope read-only and per-repo.
 - **Untrusted code on disk.** Cloned repos are never executed; no build or dependency-install step runs. Indexing only reads files.
 - **Resource exhaustion.** Clones and embeddings are expensive and the box is shared. Mitigation: repo size cap, clone timeout, instance-wide concurrency caps on ingestion and generation.
-- **Brute force.** Internal does not mean unreachable — a compromised laptop is on the network. Login rate limiting and argon2id stand regardless.
+- **Brute force.** Internal does not mean unreachable — a compromised laptop is on the network. Login rate limiting and bcrypt stand regardless.
 - **Backups.** Restorable Postgres backups, with the PAT encryption key backed up **separately** from the database.
 - **Not in the threat model:** malicious authenticated users, tenant isolation, and public internet exposure. If the instance is ever published, §4.0 needs self-service account flows and this section needs revisiting — that is a different document.
