@@ -16,6 +16,7 @@ import hashlib
 import secrets
 import uuid
 from datetime import UTC, datetime, timedelta
+from functools import lru_cache
 from typing import Final
 
 import bcrypt
@@ -131,6 +132,16 @@ def decode_access_token(token: str, *, secret: str) -> uuid.UUID:
         raise TokenInvalidError("token subject is not a UUID") from error
 
 
-# Verified against when the email is unknown, so a login attempt costs the same work
-# whether or not the account exists (`docs/PRD.md:114`).
-DUMMY_PASSWORD_HASH: Final[str] = hash_password(secrets.token_urlsafe(32), cost=4)
+@lru_cache(maxsize=8)
+def dummy_password_hash(cost: int) -> str:
+    """A hash to verify against when the email is unknown.
+
+    Login must cost the same work whether or not the account exists, or response
+    timing enumerates accounts (`docs/PRD.md:114`). That equivalence only holds if
+    this hash is generated at the same cost real passwords use, so the cost is a
+    parameter rather than a constant baked in at import.
+
+    Cached per cost: computed once per process on first use, which also keeps module
+    import free of bcrypt work.
+    """
+    return hash_password(secrets.token_urlsafe(32), cost=cost)

@@ -14,12 +14,12 @@ import pytest
 
 from app.core.security import (
     BCRYPT_MAX_BYTES,
-    DUMMY_PASSWORD_HASH,
     PasswordTooLongError,
     TokenExpiredError,
     TokenInvalidError,
     create_access_token,
     decode_access_token,
+    dummy_password_hash,
     generate_opaque_token,
     hash_password,
     needs_rehash,
@@ -98,10 +98,23 @@ def test_needs_rehash_is_false_for_an_unparseable_hash() -> None:
     assert needs_rehash("garbage", cost=COST) is False
 
 
-def test_the_dummy_hash_verifies_nothing_but_costs_the_same_work() -> None:
+def test_the_dummy_hash_verifies_nothing() -> None:
     """Used for unknown emails so login timing does not reveal existence."""
-    assert DUMMY_PASSWORD_HASH.startswith("$2b$")
-    assert verify_password("any guess at all", DUMMY_PASSWORD_HASH) is False
+    hashed = dummy_password_hash(COST)
+
+    assert hashed.startswith("$2b$")
+    assert verify_password("any guess at all", hashed) is False
+
+
+def test_the_dummy_hash_uses_the_cost_it_is_given() -> None:
+    """A dummy hash cheaper than a real one is a timing oracle, not a defence."""
+    assert needs_rehash(dummy_password_hash(4), cost=6) is True
+    assert needs_rehash(dummy_password_hash(6), cost=6) is False
+
+
+def test_the_dummy_hash_is_stable_within_a_process() -> None:
+    """Cached, so login does not pay to generate one on every unknown-email attempt."""
+    assert dummy_password_hash(COST) is dummy_password_hash(COST)
 
 
 def test_sha256_hex_is_stable_and_the_right_width() -> None:
