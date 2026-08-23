@@ -61,6 +61,8 @@ departs from a ground-truth document, the amendment is listed in §13.
 | D18 | **Redis unavailable fails open, logged at `error`** | A Redis outage degrades brute-force protection; failing closed would lock the whole team out of their own tool. argon2 still makes guessing expensive, and the network is private. |
 | D19 | **mypy is added to `make typecheck` for the backend** | `pyproject.toml` selects `ANN` for annotation *coverage* with nothing verifying annotation *correctness*. M0 introduces `Mapped[...]` models and a generic `BaseRepository` — the code where a checker pays for itself. |
 | D20 | **Partial unique index on `email`, scoped to non-deleted rows** | `docs/PRD.md:323` requires the constraint to account for soft delete without saying how. Partial lets a rehired colleague's address be reused, and forces every lookup to filter `deleted_at IS NULL` anyway. |
+| D21 | **Explicitly sized `varchar(n)` on every string column, not `text`** | A stated length bound is a data-integrity constraint the schema enforces rather than a rule the service is trusted to remember. Sizes are chosen per column, not a blanket 255 — see §4. |
+| D22 | **Re-hash on successful login when argon2 parameters have changed** | The parameters are embedded in the stored hash, so `check_needs_rehash` makes a cost-parameter increase apply to existing accounts instead of only new ones. One `UPDATE` on a path that already does an expensive hash. |
 
 ---
 
@@ -139,9 +141,9 @@ constraint and index names are deterministic and Alembic autogenerate produces s
 | Column | Type | Notes |
 | --- | --- | --- |
 | `id` | `uuid` PK | application-generated `uuid4` (`docs/PRD.md:322`) |
-| `name` | `text` NOT NULL | |
-| `email` | `text` NOT NULL | normalized to lowercase at the schema boundary |
-| `password_hash` | `text` NOT NULL | argon2id |
+| `name` | `varchar(255)` NOT NULL | |
+| `email` | `varchar(255)` NOT NULL | normalized to lowercase at the schema boundary; RFC 5321's practical maximum is 254 |
+| `password_hash` | `varchar(255)` NOT NULL | argon2id encoded string, ~97 chars at the chosen parameters — see §5 |
 | `is_admin` | `boolean` NOT NULL DEFAULT `false` | |
 | `must_change_password` | `boolean` NOT NULL DEFAULT `true` | |
 | `last_login_at` | `timestamptz` NULL | |
@@ -156,6 +158,14 @@ it would not be selective, and the table holds one row per developer in the orga
 Not `citext`: lowercase normalization happens in the request schema, so a Postgres extension
 buys nothing.
 
+**On `varchar(n)` versus `text`.** Every string column above is explicitly sized. Worth knowing
+what that does and does not buy in Postgres: the two types are stored identically and perform
+identically — `varchar(n)` is `text` plus a length check constraint. So the sizes here are a
+data-integrity statement, not an optimization, and each number is chosen to mean something rather
+than being a blanket 255 (which is a MySQL row-format artifact with no significance in Postgres).
+Raising a limit later is a metadata-only `ALTER TABLE` and cheap; lowering one rewrites the
+table.
+
 ### `refresh_tokens`
 
 | Column | Type | Notes |
@@ -163,12 +173,12 @@ buys nothing.
 | `id` | `uuid` PK | |
 | `user_id` | `uuid` NOT NULL | FK → `users.id`, `ON DELETE NO ACTION` (users are never hard-deleted), indexed |
 | `family_id` | `uuid` NOT NULL | the rotation chain; indexed |
-| `token_hash` | `text` NOT NULL | SHA-256 hex, **UNIQUE** |
+| `token_hash` | `varchar(64)` NOT NULL | SHA-256 hex is always exactly 64 characters, **UNIQUE** |
 | `issued_at` | `timestamptz` NOT NULL | |
 | `expires_at` | `timestamptz` NOT NULL | `issued_at + refresh_token_ttl_days` |
 | `used_at` | `timestamptz` NULL | set when rotated normally |
 | `revoked_at` | `timestamptz` NULL | |
-| `revoked_reason` | `text` NULL | `Literal["rotated", "replay", "logout", "logout_all", "password_change", "admin_reset", "user_deactivated"]` |
+| `revoked_reason` | `varchar(32)` NULL | `Literal["rotated", "replay", "logout", "logout_all", "password_change", "admin_reset", "user_deactivated"]` — longest value is 18 chars |
 
 No `deleted_at` (D14). No `user_agent` / `ip` columns — `docs/PRD.md:118` puts
 session-activity history out of scope, and unread columns are debt.
@@ -192,6 +202,29 @@ explicitly. Where a table has no `updated_at` (`refresh_tokens`), this does not 
 
 - **Passwords:** `argon2-cffi`, library defaults (t=3, m=64 MiB, p=4) — `docs/PRD.md:110`'s
   "sensible cost parameters". The 64 MiB-per-hash memory cost is bounded by the login limiter.
+
+  Argon2id and the SHA-256 used for refresh tokens are both hashes, but they are not
+  interchangeable, and mixing them up is the single easiest way to get this milestone wrong.
+  SHA-256 is a *fast* digest — that is its design goal. Argon2id is a *deliberately slow,
+  memory-hard, salted* password hash whose entire purpose is to make guessing expensive. A
+  password is low-entropy and guessable, so it needs argon2id; a refresh token is 256 random
+  bits, so there is nothing to guess and the fast digest is correct (D13).
+
+  Two practical consequences of argon2's encoded format,
+  `$argon2id$v=19$m=65536,t=3,p=4$<salt>$<hash>`:
+
+  - **There is no separate salt column.** The algorithm, version, parameters, and per-row salt
+    are all embedded in that one string. Verification is `PasswordHasher.verify(stored,
+    candidate)`, never `hash(candidate) == stored` — the latter cannot work, because each row's
+    salt differs.
+  - **Stored parameters are visible, so they can be upgraded.** On a successful login, if
+    `PasswordHasher.check_needs_rehash(stored)` is true — the row was written under weaker
+    parameters than the current configuration — the service re-hashes the plaintext it already
+    has in hand and updates the row. Costs one `UPDATE` on the login path and means raising the
+    cost parameters later does not leave old accounts behind.
+
+  Note that `password_max_length` (1024, §11) bounds the *plaintext in the request*, not this
+  column: the stored value is a fixed ~97 characters regardless of how long the password was.
 - **Access tokens:** `PyJWT`, HS256, key from `SECRET_KEY`. Claims: `sub` (user id as string),
   `iat`, `exp`, `jti`, `typ="access"`. **Not** `is_admin` and **not** `must_change_password` —
   both would go stale for up to 15 minutes, and `docs/PRD.md:101` requires deactivation to end
@@ -602,6 +635,8 @@ Auth flow:
 4. Change password → `200`; `GET /users` now `200` with the *same* access token.
 5. Weak password (short, and in the wordlist) → `400 WEAK_PASSWORD` for both.
 6. Unknown email and wrong password both return `401 INVALID_CREDENTIALS`, identical bodies.
+6a. A row stored under weaker argon2 parameters is transparently re-hashed on successful login,
+    and the old hash still verifies before that happens. (D22)
 
 Refresh chain:
 
