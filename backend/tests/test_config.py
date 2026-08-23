@@ -8,7 +8,7 @@ default here is invisible until deployment. The production validators exist beca
 import pytest
 from pydantic import ValidationError
 
-from app.config import Settings
+from app.config import PLACEHOLDER_SECRET_KEY, Settings
 
 
 def test_database_url_default_uses_the_async_driver() -> None:
@@ -22,14 +22,16 @@ def test_password_max_bytes_is_bcryptsafe() -> None:
 
 
 def test_development_tolerates_the_placeholder_secret() -> None:
-    settings = Settings(app_env="development")
+    # Explicit, not ambient: the test suite's own SECRET_KEY env override (see
+    # tests/conftest.py) would otherwise mask what this test checks.
+    settings = Settings(app_env="development", secret_key=PLACEHOLDER_SECRET_KEY)
 
-    assert settings.secret_key == "dev-insecure-change-me"
+    assert settings.secret_key == PLACEHOLDER_SECRET_KEY
 
 
 def test_production_rejects_the_placeholder_secret() -> None:
     with pytest.raises(ValidationError, match="SECRET_KEY"):
-        Settings(app_env="production")
+        Settings(app_env="production", secret_key=PLACEHOLDER_SECRET_KEY)
 
 
 def test_production_rejects_an_insecure_refresh_cookie() -> None:
