@@ -49,6 +49,9 @@ asyncio_mode = "auto"
 # Session scope: the engine fixture is session-scoped, and a function-scoped
 # loop would leave it bound to a closed loop on the second test.
 asyncio_default_fixture_loop_scope = "session"
+# `package = false` means the project is never installed, and pytest puts
+# tests/ on sys.path rather than the backend root — so `app` would not import.
+pythonpath = ["."]
 
 [tool.mypy]
 python_version = "3.13"
