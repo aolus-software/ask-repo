@@ -13,7 +13,7 @@ This spec covers three of the four things `docs/PRD.md` and `docs/design.md` joi
 
 1. **Persistence foundation** — SQLAlchemy 2.0 (async), Alembic, session lifecycle, the
    repository layer, the soft-delete guarantee.
-2. **Auth API** — `users` and `refresh_tokens` tables, argon2id password hashing, JWT access
+2. **Auth API** — `users` and `refresh_tokens` tables, bcrypt password hashing, JWT access
    tokens, opaque rotating refresh tokens, the `must_change_password` gate, admin-driven
    reset, bootstrap seeding.
 3. **Login rate limiting** — the first Redis consumer.
@@ -53,16 +53,18 @@ departs from a ground-truth document, the amendment is listed in §13.
 | D10 | **Common-password check against a vendored wordlist** | No network. `SECURITY.md:51` says keep the instance off the public internet, which rules out the HIBP range API. |
 | D11 | **The gate is HTTP middleware, and it owns the authoritative decode and user load** | Fail-closed: a route added at M2 is gated with no action taken. Owning the load means one decode and one DB read per request. Costs are named in §6 and §11. |
 | D12 | **10-second grace window on refresh rotation**, satisfied by minting a sibling token | Strict rotation logs out any client that refreshes twice concurrently — two browser tabs is enough. Genuine replay (anything older than the window) still revokes the family. The cost is stated precisely in §5. |
-| D13 | **Refresh tokens are hashed with SHA-256, not argon2** | They are 256-bit values from `secrets.token_urlsafe(32)`, so argon2's reason to exist (slowing brute force against low-entropy secrets) does not apply — and argon2's per-row salt would force a full-table scan to look a token up, instead of a unique-index hit. |
+| D13 | **Refresh tokens are hashed with SHA-256, not bcrypt** | They are 256-bit values from `secrets.token_urlsafe(32)`, so a password hash's reason to exist (slowing brute force against low-entropy secrets) does not apply — and bcrypt's per-row salt would force a full-table scan to look a token up, instead of a unique-index hit. |
 | D14 | **`refresh_tokens` carries no `deleted_at`** | Its lifecycle is `revoked_at` / `expires_at`. A third overlapping state column that nothing sets is worse than a documented exception. |
 | D15 | **`/users` mutations are admin-only; reads are open to any authenticated user** | From M1 every project and QA pair shows `created_by`, and `docs/design.md` wants "I can see who saved a pair". Making reads admin-only now forces a second parallel directory endpoint later. |
 | D16 | **Admin-supplied password on reset, not server-generated** | A generated password would have to appear in the response, which `.claude/rules/response-api.md:152-156` forbids outright. |
 | D17 | **Last-admin guard** | A sole admin demoting or deleting themselves leaves an instance recoverable only by manual SQL — exactly what §7's "no manual database work" exists to prevent. |
-| D18 | **Redis unavailable fails open, logged at `error`** | A Redis outage degrades brute-force protection; failing closed would lock the whole team out of their own tool. argon2 still makes guessing expensive, and the network is private. |
+| D18 | **Redis unavailable fails open, logged at `error`** | A Redis outage degrades brute-force protection; failing closed would lock the whole team out of their own tool. bcrypt at cost 12 still makes each guess expensive, and the network is private. |
 | D19 | **mypy is added to `make typecheck` for the backend** | `pyproject.toml` selects `ANN` for annotation *coverage* with nothing verifying annotation *correctness*. M0 introduces `Mapped[...]` models and a generic `BaseRepository` — the code where a checker pays for itself. |
 | D20 | **Partial unique index on `email`, scoped to non-deleted rows** | `docs/PRD.md:323` requires the constraint to account for soft delete without saying how. Partial lets a rehired colleague's address be reused, and forces every lookup to filter `deleted_at IS NULL` anyway. |
 | D21 | **Explicitly sized `varchar(n)` on every string column, not `text`** | A stated length bound is a data-integrity constraint the schema enforces rather than a rule the service is trusted to remember. Sizes are chosen per column, not a blanket 255 — see §4. |
-| D22 | **Re-hash on successful login when argon2 parameters have changed** | The parameters are embedded in the stored hash, so `check_needs_rehash` makes a cost-parameter increase apply to existing accounts instead of only new ones. One `UPDATE` on a path that already does an expensive hash. |
+| D22 | **Re-hash on successful login when the bcrypt cost factor has changed** | The cost is embedded in the stored hash (`$2b$12$…`), so raising it later applies to existing accounts instead of only new ones. One `UPDATE` on a path that already does an expensive hash. |
+| D23 | **bcrypt, not argon2id** | argon2id's 64 MiB of memory per hash is a real cost on the single shared VPS `docs/PRD.md:297` targets. bcrypt is still a proper password hash — deliberately slow, salted, self-describing — so the security property that matters is retained. Contradicts `docs/PRD.md` in four places; amended per §13. |
+| D24 | **Passwords are capped at 72 bytes, validated as bytes** | bcrypt silently truncates its input at 72 bytes: without an explicit cap, two different long passwords can both authenticate and nobody finds out. Rejecting is chosen over SHA-256 pre-hashing — see §5. |
 
 ---
 
@@ -80,7 +82,7 @@ backend/
     ├── config.py                       # + §11 settings, + production validation
     ├── cli.py                          # `python -m app.cli seed-admins`
     ├── core/
-    │   ├── security.py                 # argon2 hash/verify, JWT encode/decode, token mint, sha256
+    │   ├── security.py                 # bcrypt hash/verify/needs-rehash, JWT encode/decode, token mint, sha256
     │   ├── passwords.py                # policy: length bounds + wordlist membership
     │   ├── data/common-passwords.txt   # vendored wordlist
     │   ├── errors.py                   # ErrorCode, AppError, exception handlers
@@ -143,7 +145,7 @@ constraint and index names are deterministic and Alembic autogenerate produces s
 | `id` | `uuid` PK | application-generated `uuid4` (`docs/PRD.md:322`) |
 | `name` | `varchar(255)` NOT NULL | |
 | `email` | `varchar(255)` NOT NULL | normalized to lowercase at the schema boundary; RFC 5321's practical maximum is 254 |
-| `password_hash` | `varchar(255)` NOT NULL | argon2id encoded string, ~97 chars at the chosen parameters — see §5 |
+| `password_hash` | `varchar(255)` NOT NULL | bcrypt encoded string, always exactly 60 chars. Sized at 255 rather than 60 deliberately: a future move to argon2id needs ~97, and headroom here costs nothing while a too-tight column would force a migration |
 | `is_admin` | `boolean` NOT NULL DEFAULT `false` | |
 | `must_change_password` | `boolean` NOT NULL DEFAULT `true` | |
 | `last_login_at` | `timestamptz` NULL | |
@@ -200,37 +202,57 @@ explicitly. Where a table has no `updated_at` (`refresh_tokens`), this does not 
 
 ### Primitives (`app/core/security.py`)
 
-- **Passwords:** `argon2-cffi`, library defaults (t=3, m=64 MiB, p=4) — `docs/PRD.md:110`'s
-  "sensible cost parameters". The 64 MiB-per-hash memory cost is bounded by the login limiter.
+- **Passwords:** the `bcrypt` package directly, cost factor 12 — `docs/PRD.md:110`'s "sensible
+  cost parameters". Not `passlib`: its last release predates bcrypt 4.x and it misdetects the
+  backend version, producing spurious warnings for no benefit here.
 
-  Argon2id and the SHA-256 used for refresh tokens are both hashes, but they are not
+  Chosen over argon2id (D23) because argon2id wants 64 MiB of memory per hash, and
+  `docs/PRD.md:297` targets a single shared VPS also running Postgres, Qdrant, Redis, and
+  possibly a local Ollama model. bcrypt keeps the property that actually matters — each guess
+  costs real time — without the memory footprint.
+
+  bcrypt and the SHA-256 used for refresh tokens are both hashes, but they are not
   interchangeable, and mixing them up is the single easiest way to get this milestone wrong.
-  SHA-256 is a *fast* digest — that is its design goal. Argon2id is a *deliberately slow,
-  memory-hard, salted* password hash whose entire purpose is to make guessing expensive. A
-  password is low-entropy and guessable, so it needs argon2id; a refresh token is 256 random
-  bits, so there is nothing to guess and the fast digest is correct (D13).
+  SHA-256 is a *fast* digest; that is its design goal. bcrypt is a *deliberately slow, salted*
+  password hash whose purpose is to make guessing expensive. A password is low-entropy and
+  guessable, so it needs bcrypt; a refresh token is 256 random bits, so there is nothing to guess
+  and the fast digest is correct (D13).
 
-  Two practical consequences of argon2's encoded format,
-  `$argon2id$v=19$m=65536,t=3,p=4$<salt>$<hash>`:
+  Two practical consequences of bcrypt's encoded format, `$2b$12$<22-char salt><31-char hash>`:
 
-  - **There is no separate salt column.** The algorithm, version, parameters, and per-row salt
-    are all embedded in that one string. Verification is `PasswordHasher.verify(stored,
-    candidate)`, never `hash(candidate) == stored` — the latter cannot work, because each row's
-    salt differs.
-  - **Stored parameters are visible, so they can be upgraded.** On a successful login, if
-    `PasswordHasher.check_needs_rehash(stored)` is true — the row was written under weaker
-    parameters than the current configuration — the service re-hashes the plaintext it already
-    has in hand and updates the row. Costs one `UPDATE` on the login path and means raising the
-    cost parameters later does not leave old accounts behind.
+  - **There is no separate salt column.** Scheme, cost, and per-row salt all live in that one
+    60-character string. Verification is `bcrypt.checkpw(candidate, stored)`, never
+    `hash(candidate) == stored` — the latter cannot work, because each row's salt differs.
+  - **The cost factor is visible, so it can be raised.** On a successful login, if the cost
+    parsed from the stored prefix is below the configured `bcrypt_cost`, the service re-hashes the
+    plaintext it already has in hand and updates the row (D22). Raising the cost later therefore
+    reaches existing accounts, not just new ones.
 
-  Note that `password_max_length` (1024, §11) bounds the *plaintext in the request*, not this
-  column: the stored value is a fixed ~97 characters regardless of how long the password was.
+  **The 72-byte truncation, and why the cap is a rejection (D24).** bcrypt ignores input past 72
+  bytes, silently. Left unhandled, a 200-character password and a different 200-character
+  password sharing their first 72 bytes would both authenticate — a correctness bug that produces
+  no error and no log line. Two ways out:
+
+  1. **Reject anything over 72 bytes** — chosen. One check, no subtlety, and the limit is
+     generous against a 12-character minimum.
+  2. Pre-hash with SHA-256 and feed bcrypt the base64 digest (the `bcrypt_sha256` scheme),
+     supporting arbitrary length. Rejected: it reintroduces a construction whose security
+     argument needs explaining (an attacker holding SHA-256 password hashes from an unrelated
+     breach can test them against these bcrypt hashes directly — "password shucking"), which is
+     the opposite of why bcrypt was chosen here.
+
+  The cap is measured in **bytes after UTF-8 encoding, not characters** — a passphrase of CJK or
+  emoji characters reaches 72 bytes at roughly 18–24 characters, so a character-based check would
+  let truncation through for exactly the users least likely to notice.
+
+  Note that `password_max_bytes` (§11) bounds the *plaintext in the request*, not the column: the
+  stored value is always 60 characters.
 - **Access tokens:** `PyJWT`, HS256, key from `SECRET_KEY`. Claims: `sub` (user id as string),
   `iat`, `exp`, `jti`, `typ="access"`. **Not** `is_admin` and **not** `must_change_password` —
   both would go stale for up to 15 minutes, and `docs/PRD.md:101` requires deactivation to end
   sessions *immediately*, which is only true if every request re-reads the row.
 - **Refresh tokens:** `secrets.token_urlsafe(32)` for the raw value; SHA-256 hex stored (D13).
-- **Uniform login failure:** an unknown email is verified against a module-level dummy argon2
+- **Uniform login failure:** an unknown email is verified against a module-level dummy bcrypt
   hash so timing matches a wrong password, and both return `INVALID_CREDENTIALS`
   (`docs/PRD.md:114`).
 
@@ -242,9 +264,10 @@ the wordlist".
 
 - Minimum 12 characters (`docs/PRD.md:110`).
 - Rejected if present in the vendored wordlist, compared case-insensitively after stripping.
-- Maximum 1024 characters — enforced in the request schema as the one exception, because argon2
-  will hash a 10 MB string and burn CPU doing it. This is a resource control, not validation
-  cosmetics.
+- **Maximum 72 bytes** once UTF-8 encoded — enforced in the request schema as the one exception,
+  because it is a correctness requirement rather than a policy preference (D24). Rejection message
+  names bytes, not characters, so a user hitting it with a non-ASCII passphrase is not left
+  counting letters.
 
 ### Rotation and replay (`POST /auth/refresh`)
 
@@ -580,7 +603,8 @@ New `Settings` fields in `app/config.py`, each with a matching `backend/.env.exa
 | `bootstrap_admin_emails` | `["superuser@example.com", "admin@example.com"]` | `docs/PRD.md:62` |
 | `bootstrap_admin_password` | `None` | `seed-admins` exits non-zero if unset |
 | `password_min_length` | `12` | |
-| `password_max_length` | `1024` | argon2 CPU bound |
+| `password_max_bytes` | `72` | bcrypt's truncation boundary (D24) — not tunable upward without changing algorithm |
+| `bcrypt_cost` | `12` | raising it later re-hashes existing accounts on their next login (D22) |
 | `login_rate_per_minute_ip` | `5` | |
 | `login_rate_per_hour_email` | `10` | |
 | `trusted_proxy_hops` | `0` | §9 |
@@ -635,8 +659,13 @@ Auth flow:
 4. Change password → `200`; `GET /users` now `200` with the *same* access token.
 5. Weak password (short, and in the wordlist) → `400 WEAK_PASSWORD` for both.
 6. Unknown email and wrong password both return `401 INVALID_CREDENTIALS`, identical bodies.
-6a. A row stored under weaker argon2 parameters is transparently re-hashed on successful login,
-    and the old hash still verifies before that happens. (D22)
+6a. A row stored at a lower bcrypt cost is transparently re-hashed on successful login, and the
+    old hash still verifies before that happens. (D22)
+6b. A password of 73 bytes → `400 WEAK_PASSWORD`. A 24-character CJK passphrase exceeding 72
+    bytes → also rejected, proving the check counts bytes rather than characters. And two
+    distinct 80-byte passwords sharing their first 72 bytes must **not** both authenticate —
+    that is the truncation bug D24 exists to prevent, so it is asserted directly rather than
+    inferred from the length check.
 
 Refresh chain:
 
@@ -661,8 +690,8 @@ Contract:
     middleware ordering.)
 15. `RequestValidationError` produces `{detail: {code, message, fields}}` with `camelCase` field
     keys.
-16. No response body in any test contains `password_hash`, `passwordHash`, an argon2 prefix
-    (`$argon2`), or a raw refresh token.
+16. No response body in any test contains `password_hash`, `passwordHash`, a bcrypt prefix
+    (`$2b$`), or a raw refresh token.
 17. Route-coverage walk: every mounted path is open-by-declaration or behind
     `CurrentUser`/`AdminUser`.
 18. `resolve_project_scope` returns `unrestricted` for an admin and a non-admin alike.
@@ -694,6 +723,12 @@ deprecated plugin approach belongs to 1.4.
 
 ### `docs/PRD.md` (source of truth — amended, not silently diverged from)
 
+- **Passwords are hashed with bcrypt, not argon2id** (D23). Four locations, all of which name
+  argon2id explicitly and must change together, or the PRD contradicts the code in the section a
+  reader would check first: `docs/PRD.md:73` (the `User` schema comment), `:110` (the password
+  policy), `:301` (the tech-stack table's Auth row), `:382` (§9's brute-force mitigation). §4.0's
+  policy line also gains the 72-byte maximum (D24), which is a new constraint the PRD does not
+  currently state at all.
 - §4.0: refresh token travels as an httpOnly cookie, access token in the body (D3).
 - §4.0: the gate covers "every route outside `/auth`" rather than "every route except
   `POST /auth/change-password`" (D5).
