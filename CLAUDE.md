@@ -144,7 +144,7 @@ stored hashed so they can be revoked, and rotate on use.
 
 ## Rules
 
-Nine rule files in `.claude/rules/`. Read the ones your change touches.
+Ten rule files in `.claude/rules/`. Read the ones your change touches.
 
 | Rule | Read it when |
 | --- | --- |
@@ -153,6 +153,7 @@ Nine rule files in `.claude/rules/`. Read the ones your change touches.
 | `clean-code.md` | Writing Python — type hints, docstrings, logging, suppressions |
 | `response-api.md` | Any route, schema, or status code |
 | `router.md` | Any `APIRouter` — layout, dependencies, the CRUD shape, access scoping |
+| `persistence.md` | Any model, repository, migration, or session code |
 | `design-system.md` | Any `.tsx` or `.css` — tokens, shadcn, dark mode, spacing |
 | `forms.md` | Any form — dialog vs page, validation ownership, field composition |
 | `navigation.md` | Sidebar, breadcrumbs, or adding a route |
