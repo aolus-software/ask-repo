@@ -59,7 +59,7 @@ def _auth(user: User) -> dict[str, str]:
 
 @pytest.fixture
 def probe_app(app: FastAPI) -> FastAPI:
-    """The real app plus two probe routes, so the real middleware stack is exercised."""
+    """The real app plus probe routes, so the real middleware stack is exercised."""
 
     @app.get("/probe/any")
     async def probe_any(current_user: CurrentUser) -> dict[str, str]:
@@ -67,6 +67,10 @@ def probe_app(app: FastAPI) -> FastAPI:
 
     @app.get("/probe/admin")
     async def probe_admin(current_user: AdminUser) -> dict[str, str]:
+        return {"email": current_user.email}
+
+    @app.get("/healthcheck-probe")
+    async def healthcheck_probe(current_user: CurrentUser) -> dict[str, str]:
         return {"email": current_user.email}
 
     return app
@@ -190,6 +194,21 @@ async def test_health_is_reachable_while_the_gate_is_active(
     response = await probe_client.get("/health/live", headers=_auth(user))
 
     assert response.status_code == 200
+
+
+async def test_a_path_sharing_prefix_with_exempt_entry_is_still_gated(
+    probe_client: AsyncClient, db_session: AsyncSession
+) -> None:
+    """/healthcheck-probe shares a prefix with /health but is not exempt.
+
+    The gate must match on segment boundaries to avoid substring collisions.
+    """
+    user = await _make_user(db_session, must_change_password=True)
+
+    response = await probe_client.get("/healthcheck-probe", headers=_auth(user))
+
+    assert response.status_code == 403
+    assert response.json()["detail"]["code"] == "PASSWORD_CHANGE_REQUIRED"
 
 
 async def test_identity_is_established_even_on_exempt_paths(

@@ -73,10 +73,17 @@ class AuthContext:
 
 
 def _is_gate_exempt(path: str) -> bool:
-    """Whether a pending password change is tolerated on this path."""
+    """Whether a pending password change is tolerated on this path.
+
+    Matches on segment boundaries to avoid prefix collisions: a path is
+    exempt when it equals a prefix or starts with the prefix + '/'.
+    """
     if path == "/":
         return True
-    return path.startswith(GATE_EXEMPT_PREFIXES)
+    for prefix in GATE_EXEMPT_PREFIXES:
+        if path == prefix or path.startswith(prefix + "/"):
+            return True
+    return False
 
 
 class AuthContextMiddleware(BaseHTTPMiddleware):
