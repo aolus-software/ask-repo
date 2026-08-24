@@ -25,6 +25,18 @@ from app.core.errors import AppError, ErrorCode
 logger = logging.getLogger(__name__)
 
 
+def _redact_email_from_key(key: str) -> str:
+    """Return a diagnostic key with the email segment redacted."""
+    if ":email:" not in key:
+        return key
+    parts = key.split(":")
+    if len(parts) >= 4 and parts[2] == "email":
+        if len(parts) > 4:
+            return f"{parts[0]}:{parts[1]}:{parts[2]}:***:{parts[4]}"
+        return f"{parts[0]}:{parts[1]}:{parts[2]}:***"
+    return key
+
+
 def client_ip(request: Request, *, trusted_proxy_hops: int) -> str:
     """The caller's address, accounting for reverse proxies.
 
@@ -72,7 +84,7 @@ class RateLimiter:
                 pipeline.expire(windowed_key, window_seconds)
                 count, _ = await pipeline.execute()
         except RedisError:
-            logger.exception("Rate limiter unavailable; allowing %s", key)
+            logger.exception("Rate limiter unavailable; allowing %s", _redact_email_from_key(key))
             return
 
         if int(count) > limit:
@@ -82,15 +94,28 @@ class RateLimiter:
                 "Too many attempts. Try again shortly.",
             )
 
-    async def reset(self, key: str) -> None:
-        """Drop the current window's counter for `key`."""
-        window = int(time.time()) // 3600
+    async def get_count(self, key: str, *, window_seconds: int) -> int:
+        """Return the current count for a key and window, or 0 if unavailable."""
+        window = int(time.time()) // window_seconds
+        windowed_key = f"{key}:{window}"
         try:
-            # Clear both plausible windows so a minute-scoped and an hour-scoped key
-            # can share this method without the caller tracking which it used.
-            await self.redis.delete(f"{key}:{window}", f"{key}:{int(time.time()) // 60}")
+            count = await self.redis.get(windowed_key)
         except RedisError:
-            logger.exception("Rate limiter unavailable; could not reset %s", key)
+            logger.exception(
+                "Rate limiter unavailable; returning 0 for %s", _redact_email_from_key(key)
+            )
+            return 0
+        return int(count) if count is not None else 0
+
+    async def reset(self, key: str, *, window_seconds: int) -> None:
+        """Drop the current window's counter for `key`."""
+        window = int(time.time()) // window_seconds
+        try:
+            await self.redis.delete(f"{key}:{window}")
+        except RedisError:
+            logger.exception(
+                "Rate limiter unavailable; could not reset %s", _redact_email_from_key(key)
+            )
 
 
 @lru_cache
@@ -141,14 +166,9 @@ class LoginAttemptLimiter:
 
     async def check_email(self, email: str) -> None:
         """Raise `429` if this address has already failed too many times this hour."""
-        window = 3600
         key = self._key(email)
-        try:
-            count = await self.limiter.redis.get(f"{key}:{int(time.time()) // window}")
-        except RedisError:
-            logger.exception("Rate limiter unavailable; allowing %s", key)
-            return
-        if count is not None and int(count) >= self.settings.login_rate_per_hour_email:
+        count = await self.limiter.get_count(key, window_seconds=3600)
+        if count >= self.settings.login_rate_per_hour_email:
             raise AppError(
                 status.HTTP_429_TOO_MANY_REQUESTS,
                 ErrorCode.RATE_LIMITED,
@@ -169,7 +189,7 @@ class LoginAttemptLimiter:
 
     async def clear(self, email: str) -> None:
         """Reset the failure budget after a successful login."""
-        await self.limiter.reset(self._key(email))
+        await self.limiter.reset(self._key(email), window_seconds=3600)
 
 
 def get_login_attempt_limiter(
