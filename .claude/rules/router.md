@@ -56,30 +56,46 @@ dependencies, call **one** service method, return a typed response.
 
 ```python
 @router.post("", response_model=ProjectResponse, status_code=201, summary="Create a project")
-def create_project(
+async def create_project(
     payload: ProjectCreateRequest,
     service: Annotated[ProjectService, Depends(get_project_service)],
-    current_user: Annotated[User, Depends(get_current_user)],
+    current_user: Annotated[AuthenticatedUser, Depends(get_current_user)],
 ) -> ProjectResponse:
-    return service.create(payload, created_by=current_user.id)
+    return await service.create(payload, created_by=current_user.id)
 ```
 
 No conditionals, no data reshaping, no database or Qdrant access, no `os.environ` reads, and
 no more than one service call. If a handler needs an `if`, that branch belongs in the service.
+
+Handlers are `async def`. The persistence layer is async (`.claude/rules/persistence.md`); a
+sync handler would block the event loop or need a threadpool hop for every query.
 
 ## Access control lives in dependencies
 
 Dependencies are this codebase's guards. Never inline an auth check in a handler body.
 
 ```python
-CurrentUser = Annotated[User, Depends(get_current_user)]   # any authenticated user
-AdminUser   = Annotated[User, Depends(require_admin)]      # is_admin, else 403
+CurrentUser = Annotated[AuthenticatedUser, Depends(get_current_user)]  # any authenticated user
+AdminUser   = Annotated[AuthenticatedUser, Depends(require_admin)]     # is_admin, else 403
 ```
+
+`AuthenticatedUser` is a frozen dataclass, not the ORM `User`. `AuthContextMiddleware` resolves
+identity in its own session, which closes before the handler runs — passing the ORM row would
+hand every handler a detached instance. A service that needs to mutate the row loads it itself.
 
 - Router-wide: `APIRouter(prefix="/users", tags=["Users"], dependencies=[Depends(require_admin)])`
   when every route shares the requirement.
 - Per-route: declare the dependency in the signature when routes differ — reads open to all
-  users, destructive operations gated.
+  users, destructive operations gated. `/users` does exactly this: reads take `CurrentUser`,
+  mutations take `AdminUser`.
+
+### The forced-password-change gate is middleware, not a dependency
+
+`AuthContextMiddleware` (`app/core/middleware.py`) returns `403 PASSWORD_CHANGE_REQUIRED` for a
+user with `must_change_password` set, on every path outside `GATE_EXEMPT_PREFIXES`. A new route
+is therefore gated without opting in, which is the point — there is no `require_password_changed`
+dependency to forget. Adding a route group under a **new** prefix means deciding whether that
+prefix belongs in `GATE_EXEMPT_PREFIXES`; the default answer is no.
 
 ### Destructive operations are gated, and the gate is not the route's job to invent
 

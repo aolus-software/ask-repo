@@ -6,6 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api.routes import health, index
 from app.config import get_settings
 from app.core.errors import register_exception_handlers
+from app.core.middleware import AuthContextMiddleware
 
 
 def create_app() -> FastAPI:
@@ -19,6 +20,12 @@ def create_app() -> FastAPI:
     )
 
     register_exception_handlers(app)
+
+    # Registered BEFORE CORS on purpose. add_middleware inserts at index 0 and the
+    # stack is applied reversed, so the last-added middleware is outermost — CORS
+    # must be outside this one, or the gate's 403 reaches the browser without CORS
+    # headers and the frontend sees an opaque network error.
+    app.add_middleware(AuthContextMiddleware)
 
     app.add_middleware(
         CORSMiddleware,
