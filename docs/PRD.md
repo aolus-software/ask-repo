@@ -112,7 +112,16 @@ The field is `password_hash`, not `password`. The plaintext exists only in the r
 - `POST /auth/logout` revokes the presented refresh token. `POST /auth/logout-all` revokes every refresh token for the user.
 - `GET /auth/me` returns the current user. `password_hash` is never serialized in any response.
 - Login failures return one uniform error regardless of cause (unknown email vs wrong password), compared against a dummy hash so timing doesn't differ.
-- Login is rate limited to 5/min/IP and 10/hour/email, returning `429`. Brute force is still a threat on an internal network.
+- Login is rate limited to 5/min/IP and 10/hour/email, returning `429`. Only **failed** attempts
+  count toward the per-email limit and a successful login clears it — a raw per-email counter is
+  a lockout weapon, since anyone knowing a colleague's address could spend the budget on their
+  behalf. The per-IP limit is counted before the credential check, so it also bounds attempts
+  against addresses that do not exist.
+- `POST /auth/change-password` carries the same per-IP limit. It verifies `current_password`, so
+  leaving it uncapped while login is capped only moves the target.
+- Behind a reverse proxy, `TRUSTED_PROXY_HOPS` must be set to the number of proxies in front of
+  the API. Left at `0` with Caddy in front, every request appears to come from Caddy and the
+  per-IP limit becomes a single instance-wide limit.
 - Passwords, tokens, and PATs are excluded from logs, tracebacks, and error responses.
 
 **Out of scope for v1:** self-service registration, email verification, email-based password reset, OAuth/social login, 2FA/TOTP, per-project roles (phase 2), session-activity history.
