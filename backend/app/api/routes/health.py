@@ -4,8 +4,9 @@ Three separate endpoints so orchestrators can probe the right thing:
 
 - ``/health``       — human/debug overview
 - ``/health/live``  — liveness: is the process up at all?
-- ``/health/ready`` — readiness: can it serve traffic? `checks` is empty for now and
-  gains Postgres/Qdrant probes in M0 without changing the response shape.
+- ``/health/ready`` — readiness: can it serve traffic? `checks` is empty for now; no
+  readiness probes have been wired in yet. The dict shape lets one be added later
+  without changing the response shape.
 """
 
 from datetime import UTC, datetime
