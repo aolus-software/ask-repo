@@ -41,7 +41,7 @@ UserServiceDep = Annotated[UserService, Depends(get_user_service)]
     response_model=PaginatedResponse[UserResponse],
     status_code=status.HTTP_200_OK,
     summary="List accounts",
-    responses={code: ERROR_RESPONSES[code] for code in (400, 401, 422)},
+    responses={code: ERROR_RESPONSES[code] for code in (400, 401, 403, 422)},
 )
 async def list_users(
     current_user: CurrentUser,
@@ -56,7 +56,7 @@ async def list_users(
     response_model=UserResponse,
     status_code=status.HTTP_200_OK,
     summary="Get one account",
-    responses={code: ERROR_RESPONSES[code] for code in (401, 404)},
+    responses={code: ERROR_RESPONSES[code] for code in (401, 403, 404)},
 )
 async def get_user(
     user_id: uuid.UUID, current_user: CurrentUser, service: UserServiceDep
