@@ -3,7 +3,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.routes import health, index
+from app.api.routes import health, index, users
 from app.config import get_settings
 from app.core.errors import register_exception_handlers
 from app.core.middleware import AuthContextMiddleware
@@ -37,6 +37,7 @@ def create_app() -> FastAPI:
 
     app.include_router(index.router)
     app.include_router(health.router)
+    app.include_router(users.router)
 
     return app
 

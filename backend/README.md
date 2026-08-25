@@ -51,6 +51,17 @@ curl -s localhost:8000/health | jq
 `checks` later without changing the response shape — a dependency going down
 flips `status` to `degraded` while `/health/live` stays `ok`.
 
+### Users
+
+| Method | Path | Auth | Description |
+| --- | --- | --- | --- |
+| `GET` | `/users` | any user | List accounts, paginated |
+| `GET` | `/users/{id}` | any user | One account |
+| `POST` | `/users` | admin | Provision an account |
+| `PATCH` | `/users/{id}` | admin | Update name or admin flag |
+| `DELETE` | `/users/{id}` | admin | Deactivate, revoking sessions |
+| `POST` | `/users/{id}/reset-password` | admin | Set a temporary password |
+
 ## Layout
 
 ```
