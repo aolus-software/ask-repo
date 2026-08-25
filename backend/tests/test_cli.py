@@ -114,6 +114,29 @@ async def test_seeding_refuses_a_password_failing_policy(db_session: AsyncSessio
     assert result.scalar_one() == 0
 
 
+async def test_a_weak_password_does_not_block_boot_once_everyone_is_seeded(
+    db_session: AsyncSession, caplog: pytest.LogCaptureFixture
+) -> None:
+    """R24's invariant: an already-seeded instance boots regardless of the password's
+    quality, not just its presence. Otherwise a weak `BOOTSTRAP_ADMIN_PASSWORD` left
+    in the environment after first boot crash-loops the container on every restart.
+    """
+    await seed_admins()
+
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setenv("BOOTSTRAP_ADMIN_PASSWORD", "short")
+        get_settings.cache_clear()
+
+        with caplog.at_level("WARNING"):
+            second = await seed_admins()
+
+    get_settings.cache_clear()
+    assert second == 0
+    result = await db_session.execute(text("SELECT count(*) FROM users"))
+    assert result.scalar_one() == 2
+    assert "BOOTSTRAP_ADMIN_PASSWORD is set but unused" in caplog.text
+
+
 async def test_a_soft_deleted_bootstrap_admin_is_reseeded(db_session: AsyncSession) -> None:
     """Otherwise deactivating the seeded admin leaves no recovery path."""
     await seed_admins()
