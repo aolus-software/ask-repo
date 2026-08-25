@@ -51,6 +51,17 @@ curl -s localhost:8000/health | jq
 `checks` later without changing the response shape — a dependency going down
 flips `status` to `degraded` while `/health/live` stays `ok`.
 
+### Auth
+
+| Method | Path | Auth | Description |
+| --- | --- | --- | --- |
+| `POST` | `/auth/login` | none | Log in; sets the refresh cookie |
+| `POST` | `/auth/refresh` | refresh cookie | Rotate the session |
+| `POST` | `/auth/change-password` | access token | Change your own password |
+| `POST` | `/auth/logout` | refresh cookie | Log out of this device |
+| `POST` | `/auth/logout-all` | access token | Log out everywhere |
+| `GET` | `/auth/me` | access token | The current account |
+
 ### Users
 
 | Method | Path | Auth | Description |

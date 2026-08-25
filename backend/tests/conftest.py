@@ -94,6 +94,20 @@ async def _clean_tables(_migrated_database: None) -> AsyncIterator[None]:
     yield
 
 
+@pytest.fixture(autouse=True)
+async def _clean_redis(_test_environment: None) -> AsyncIterator[None]:
+    """Flush the test Redis DB between tests.
+
+    Login rate limiting uses fixed 60-second windows keyed by IP, and every test
+    client shares the same address, so a limiter test that spends the per-IP budget
+    would otherwise bleed 429s into every test that runs afterward in the same window.
+    """
+    client = aioredis.from_url(get_settings().redis_url, decode_responses=True)
+    await client.flushdb()
+    yield
+    await client.aclose()
+
+
 @pytest.fixture
 async def db_session() -> AsyncIterator[AsyncSession]:
     """A session for tests that talk to repositories directly."""

@@ -108,9 +108,16 @@ The field is `password_hash`, not `password`. The plaintext exists only in the r
   into a name should not require an admin token. `PATCH /users/{id}` (**admin only**) updates
   name/admin flag; `DELETE /users/{id}` (**admin only**) soft-deletes and revokes that user's
   refresh tokens.
-- `POST /auth/login` accepts `{email, password}` and returns a JWT access token (15 min, stateless) plus an opaque refresh token (30 days). The refresh token is stored **hashed** in Postgres so it can be revoked; the access token is not stored.
+- `POST /auth/login` accepts `{email, password}` and returns a JWT access token (15 min,
+  stateless) in the response body, plus an opaque refresh token (30 days) as an **httpOnly,
+  `Secure`, `SameSite=Lax` cookie** scoped to `/auth`. The refresh token never appears in a
+  response body: a 30-day credential in `localStorage` is readable by any script on the page.
+  Because the cookie is `Secure`, the instance requires TLS — Caddy (§5) is not optional.
 - When `must_change_password` is set, login succeeds but **every route outside `/auth`** returns `403` with the machine-readable code `PASSWORD_CHANGE_REQUIRED`, so the frontend can force the change. The whole `/auth` surface stays reachable: the user needs `GET /auth/me` to see who they are, `POST /auth/refresh` because the access token expires in 15 minutes while they are typing, and `POST /auth/logout` / `logout-all` to abandon the flow or kill other sessions first.
-- `POST /auth/change-password` accepts `{current_password, new_password}`, clears `must_change_password`, and revokes all *other* refresh tokens for that user.
+- `POST /auth/change-password` accepts `{current_password, new_password}`, clears
+  `must_change_password`, and revokes all *other* refresh tokens for that user. It returns no
+  new access token: `must_change_password` is not a token claim, so the caller's existing token
+  starts working everywhere the moment the row changes.
 - `POST /users/{id}/reset-password` (**admin only**) accepts `{newPassword}` — the admin supplies
   it and communicates it out of band, because a server-generated password would have to be
   returned in a response body. It re-sets `must_change_password` and revokes all of that user's
@@ -119,7 +126,12 @@ The field is `password_hash`, not `password`. The plaintext exists only in the r
   returns `409` when the operation would leave the instance with zero active admins — otherwise
   recovery needs manual SQL, which §7 exists to avoid.
 - Password policy: minimum 12 characters, maximum 72 bytes once UTF-8 encoded, rejected if it appears in a common-password list. Hashed with **bcrypt** at cost 12. The 72-byte maximum is bcrypt's input limit, not a preference: beyond it bcrypt ignores the remainder, so two different long passwords sharing a prefix would both authenticate.
-- `POST /auth/refresh` exchanges a refresh token for a new access token **and rotates the refresh token**, invalidating the old one. Presenting an already-used refresh token revokes the whole chain — that is a replay signal.
+- `POST /auth/refresh` reads the cookie, issues a new access token, **rotates the refresh
+  token**, and invalidates the old one. Presenting an already-consumed refresh token revokes
+  the whole family — that is a replay signal — **except within a 10-second grace window**,
+  where a sibling token is minted instead. Strict rotation would log out any client refreshing
+  twice concurrently, and two browser tabs is enough. The cost is precise: for those 10 seconds
+  a stolen-and-immediately-replayed token is not detected.
 - `POST /auth/logout` revokes the presented refresh token. `POST /auth/logout-all` revokes every refresh token for the user.
 - `GET /auth/me` returns the current user. `password_hash` is never serialized in any response.
 - Login failures return one uniform error regardless of cause (unknown email vs wrong password), compared against a dummy hash so timing doesn't differ.
