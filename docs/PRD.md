@@ -148,7 +148,13 @@ The field is `password_hash`, not `password`. The plaintext exists only in the r
 - **`created_by` is attribution and a destructive-operation gate, not ownership.** It does not scope reads.
 - `GET /projects` lists **all** non-deleted projects on the instance. `GET /projects/{id}` returns any project's status, last indexed commit SHA, file/chunk counts, and error detail.
 - `POST /projects/{id}/reindex` and `DELETE /projects/{id}` require the caller to be `created_by` or an admin; otherwise **`403`**. (`403`, not `404` — project existence is deliberately not a secret here, so hiding it would only confuse.)
-- **Access resolver.** All retrieval goes through one function that answers "which project IDs may this user query?" In phase 1 it returns every project ID. Phase 2 replaces its body with a membership lookup and nothing else changes. Retrieval filters Qdrant by `project_id IN <resolver result>` — never by an unchecked path parameter.
+- **Access resolver.** All retrieval goes through one function, `resolve_project_scope(user)` in
+  `backend/app/core/access.py`, which returns a `ProjectScope`: either `unrestricted` (phase 1's
+  answer for every user) or a concrete set of project ids. Phase 2 replaces its body with a
+  membership lookup and nothing else changes. Retrieval filters Qdrant from that scope — never
+  from an unchecked path parameter. It returns a `ProjectScope` rather than a nullable list
+  because a `None` meaning "unrestricted" is fail-open: an empty `ids` set must mean *no* access,
+  not all of it.
 - Clone uses `git clone --depth 1 --branch <branch> <url>` into a per-project scratch directory (`/data/repos/<project_id>`).
 - **Ingestion safety** (see §9): `https://` scheme only; host must be on a configurable allowlist (default `github.com`, `gitlab.com`); reject any URL resolving to a private, loopback, or link-local address; clone timeout 120s; reject repos over 500 MB.
 - **Quotas:** instance-wide cap on concurrent ingestion jobs (default 2) so one large clone can't starve the box. No per-user project cap — users are trusted colleagues.
@@ -339,7 +345,7 @@ class QAPair(BaseModel):
   a `deleted_at` column would be a third overlapping state that nothing sets. Revoked and expired
   rows are hard-deleted by a cleanup path (M1, with the job scheduler).
 - **Soft delete does not reach Qdrant.** Vector points have no `deleted_at`, and a query-time filter would be one forgotten call away from serving deleted content. Rule: **Postgres rows are soft-deleted; the corresponding Qdrant points are hard-deleted in the same operation.**
-- **Attribution vs authorization.** `created_by` exists on projects and qa_pairs for attribution and to gate destructive operations. It never scopes reads in phase 1. Read scoping is *only* ever done through the access resolver (§4.1), so phase 2 has exactly one place to change.
+- **Attribution vs authorization.** `created_by` exists on projects and qa_pairs for attribution and to gate destructive operations. It never scopes reads in phase 1. Read scoping is *only* ever done through `resolve_project_scope` (§4.1), so phase 2 has exactly one place to change.
 - **Error shape.** Every error the application raises serialises as
   `{"detail": {"code": "SOME_CODE", "message": "..."}}`. `code` is a stable,
   machine-readable identifier drawn from a single enum; `message` is for a person.

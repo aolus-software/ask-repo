@@ -114,9 +114,13 @@ function**, so phase 2 is a change to that function's body and nothing else.
 projects = [p for p in service.list_all() if p.created_by == current_user.id]
 
 # CORRECT — the resolver decides; in phase 1 it returns everything
-project_ids = access.resolve_project_ids(current_user)
-projects = service.list(project_ids)
+scope = access.resolve_project_scope(current_user)
+projects = service.list(scope)
 ```
+
+The resolver returns a `ProjectScope` — either `unrestricted` (phase 1) or a concrete set of
+ids — rather than a nullable list. A `None` meaning "unrestricted" is fail-open: an empty set
+must mean *no* access, not all of it.
 
 A handler that filters projects on its own is a defect even when its output is currently
 identical.
