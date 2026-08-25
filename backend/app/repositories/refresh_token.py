@@ -50,8 +50,14 @@ class RefreshTokenRepository(BaseRepository[RefreshToken]):
         return await self.add(token)
 
     async def mark_used(self, token: RefreshToken) -> None:
-        """Record that this token has been exchanged. Not the same as revoking it."""
+        """Record that this token has been exchanged. Not the same as revoking it.
+
+        `revoked_at` is left untouched — the family is still live — but
+        `revoked_reason` is set to `"rotated"` per the spec's revocation matrix, so the
+        audit column can tell "consumed by normal rotation" apart from "never used".
+        """
         token.used_at = datetime.now(UTC)
+        token.revoked_reason = "rotated"
         await self.session.flush()
 
     async def revoke_one(self, token: RefreshToken, *, reason: RevokedReason) -> None:

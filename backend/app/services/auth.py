@@ -72,9 +72,19 @@ class AuthService:
         return hash_password(password, cost=self.settings.bcrypt_cost)
 
     async def _issue(
-        self, user: User, *, family_id: uuid.UUID | None = None
+        self,
+        user: User,
+        *,
+        family_id: uuid.UUID | None = None,
+        expires_at: datetime | None = None,
     ) -> tuple[AccessTokenResponse, str]:
-        """Mint an access token and a refresh token, storing only the latter's digest."""
+        """Mint an access token and a refresh token, storing only the latter's digest.
+
+        `expires_at` defaults to a fresh `now + refresh_token_ttl_days`. The grace-window
+        sibling path (see `refresh`) passes the *parent's* `expires_at` instead, so a
+        hijacked chain is capped at the original token's remaining lifetime rather than
+        renewing itself indefinitely on every rotation.
+        """
         access_token, expires_in = create_access_token(
             user.id,
             secret=self.settings.secret_key,
@@ -85,7 +95,8 @@ class AuthService:
             user_id=user.id,
             family_id=family_id or uuid.uuid4(),
             token_hash=sha256_hex(raw_refresh),
-            expires_at=datetime.now(UTC) + timedelta(days=self.settings.refresh_token_ttl_days),
+            expires_at=expires_at
+            or datetime.now(UTC) + timedelta(days=self.settings.refresh_token_ttl_days),
         )
         response = AccessTokenResponse(
             access_token=access_token,
@@ -183,7 +194,7 @@ class AuthService:
                 await self.tokens.revoke_family(token.family_id, reason="user_deactivated")
                 await self.session.commit()
                 raise self._invalid_token()
-            issued = await self._issue(user, family_id=token.family_id)
+            issued = await self._issue(user, family_id=token.family_id, expires_at=token.expires_at)
             await self.session.commit()
             return issued
 

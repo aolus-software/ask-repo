@@ -130,8 +130,14 @@ The field is `password_hash`, not `password`. The plaintext exists only in the r
   token**, and invalidates the old one. Presenting an already-consumed refresh token revokes
   the whole family — that is a replay signal — **except within a 10-second grace window**,
   where a sibling token is minted instead. Strict rotation would log out any client refreshing
-  twice concurrently, and two browser tabs is enough. The cost is precise: for those 10 seconds
-  a stolen-and-immediately-replayed token is not detected.
+  twice concurrently, and two browser tabs is enough. The ten seconds bounds **detection**, not
+  damage: a token stolen and replayed inside the window mints an independent sibling chain that
+  rotation will never flag as reuse afterwards — not in ten seconds and not for the rest of the
+  token's life. The sibling's `expires_at` is capped to the parent token's remaining lifetime
+  rather than a fresh full-length grant, so a hijacked chain cannot renew itself indefinitely,
+  but detection itself does not recover on its own; recovery is `POST /auth/logout-all`. The
+  mandatory first-login password change is a real mitigation in practice: `change-password`
+  revokes every refresh token except the caller's, which kills any sibling minted before it.
 - `POST /auth/logout` revokes the presented refresh token. `POST /auth/logout-all` revokes every refresh token for the user.
 - `GET /auth/me` returns the current user. `password_hash` is never serialized in any response.
 - Login failures return one uniform error regardless of cause (unknown email vs wrong password), compared against a dummy hash so timing doesn't differ.

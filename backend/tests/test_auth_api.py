@@ -9,6 +9,7 @@ grace window mints a sibling token instead of treating the second use as a repla
 import uuid
 from datetime import UTC, datetime, timedelta
 
+import pytest
 from fastapi import FastAPI
 from httpx import AsyncClient
 from sqlalchemy import text
@@ -307,11 +308,66 @@ async def test_replaying_a_consumed_token_after_the_grace_window_revokes_the_fam
 
     assert response.status_code == 401
     assert response.json()["detail"]["code"] == "REFRESH_TOKEN_REUSED"
+    assert "Max-Age=0" in response.headers["set-cookie"]
 
     rows = await db_session.execute(text("SELECT revoked_at, revoked_reason FROM refresh_tokens"))
     for revoked_at, revoked_reason in rows.all():
         assert revoked_at is not None
         assert revoked_reason == "replay"
+
+
+async def test_normal_rotation_marks_the_consumed_token_rotated(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    """The audit column should tell "consumed by rotation" apart from "never used"."""
+    await _make_user(db_session)
+    _, cookie = await _login(client)
+
+    _present_cookie(client, cookie)
+    response = await client.post("/auth/refresh")
+    assert response.status_code == 200
+
+    row = await db_session.execute(
+        text(
+            "SELECT used_at, revoked_at, revoked_reason FROM refresh_tokens WHERE token_hash = :h"
+        ),
+        {"h": sha256_hex(cookie)},
+    )
+    used_at, revoked_at, revoked_reason = row.one()
+    assert used_at is not None
+    assert revoked_at is None
+    assert revoked_reason == "rotated"
+
+
+async def test_a_grace_window_sibling_inherits_the_parents_expiry(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    """A sibling minted inside the grace window must not extend a hijacked chain's
+    lifetime — it should be capped at the original token's remaining `expires_at`
+    rather than getting a fresh `now + refresh_token_ttl_days`.
+    """
+    await _make_user(db_session)
+    _, cookie = await _login(client)
+
+    parent_row = await db_session.execute(
+        text("SELECT expires_at FROM refresh_tokens WHERE token_hash = :h"),
+        {"h": sha256_hex(cookie)},
+    )
+    parent_expires_at = parent_row.scalar_one()
+
+    _present_cookie(client, cookie)
+    await client.post("/auth/refresh")
+    _present_cookie(client, cookie)
+    sibling_response = await client.post("/auth/refresh")
+    assert sibling_response.status_code == 200
+
+    sibling_hash = sha256_hex(sibling_response.cookies[get_settings().refresh_cookie_name])
+    sibling_row = await db_session.execute(
+        text("SELECT expires_at FROM refresh_tokens WHERE token_hash = :h"), {"h": sibling_hash}
+    )
+    sibling_expires_at = sibling_row.scalar_one()
+
+    assert sibling_expires_at == parent_expires_at
 
 
 async def test_two_refreshes_inside_the_grace_window_both_succeed(
@@ -547,18 +603,39 @@ async def test_no_auth_response_ever_contains_a_hash(
         assert "passwordHash" not in response.text
 
 
-def test_the_cookie_alias_matches_the_configured_name() -> None:
-    """FastAPI resolves the Cookie alias at import time, so it cannot read a setting.
-
-    If these ever diverge, refresh silently stops seeing the cookie and every session
-    ends after 15 minutes with no error anywhere.
+async def test_login_refresh_logout_work_under_a_configured_cookie_name(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    """`REFRESH_COOKIE_NAME` is read at request time via `request.cookies.get(...)`,
+    not a typed FastAPI `Cookie(alias=...)` fixed at import time — so an operator's
+    override must actually round-trip through login, refresh, and logout, not just
+    get written to the response and never read back.
     """
-    from app.api.routes.auth import RefreshCookie
+    await _make_user(db_session)
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setenv("REFRESH_COOKIE_NAME", "custom_refresh_cookie")
+        get_settings.cache_clear()
+        try:
+            login_response = await client.post(
+                "/auth/login", json={"email": "dev@example.com", "password": PASSWORD}
+            )
+            assert login_response.status_code == 200
+            assert "custom_refresh_cookie" in login_response.cookies
+            client.cookies.set(
+                "custom_refresh_cookie", login_response.cookies["custom_refresh_cookie"]
+            )
 
-    # mypy resolves `RefreshCookie` to its aliased `str | None` in a value position, so
-    # it does not see `Annotated.__metadata__`; the attribute exists at runtime.
-    alias = RefreshCookie.__metadata__[0].alias  # type: ignore[attr-defined]
-    assert alias == get_settings().refresh_cookie_name
+            refresh_response = await client.post("/auth/refresh")
+            assert refresh_response.status_code == 200
+            assert "custom_refresh_cookie" in refresh_response.cookies
+            client.cookies.set(
+                "custom_refresh_cookie", refresh_response.cookies["custom_refresh_cookie"]
+            )
+
+            logout_response = await client.post("/auth/logout")
+            assert logout_response.status_code == 204
+        finally:
+            get_settings.cache_clear()
 
 
 def test_the_auth_prefix_is_gate_exempt() -> None:
