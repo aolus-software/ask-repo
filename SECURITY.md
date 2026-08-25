@@ -41,6 +41,16 @@ does and doesn't cover.
   describe a deployment mistake rather than a bug.
 - Denial of service through resource exhaustion by an authenticated user, beyond the
   concurrency and size caps already documented.
+- **Targeted lockout of one known colleague via the per-email login limit.** The per-email
+  counter (10 failures/hour) counts only failed attempts and clears on success, which stops a
+  legitimate user's own logins from ever spending their own budget — but it does not stop a
+  deliberate attacker. `check_email` runs before authentication, so anyone who knows a
+  colleague's address can spend the budget with ten wrong guesses and keep the real owner
+  locked out for the rest of the hour, even with the correct password, at a cost of roughly ten
+  requests an hour and no valid credential of their own. There is no workaround via an admin
+  password reset — resetting a password does not clear the counter; it only expires on its own
+  after the hour. Also keying this limit by IP is a larger design change than this milestone
+  makes; it has been raised separately and is not part of M0.
 
 See [`docs/PRD.md`](docs/PRD.md) §9 for the full reasoning.
 
