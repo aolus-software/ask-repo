@@ -9,12 +9,13 @@ grace window mints a sibling token instead of treating the second use as a repla
 import uuid
 from datetime import UTC, datetime, timedelta
 
+from fastapi import FastAPI
 from httpx import AsyncClient
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
-from app.core.security import hash_password, sha256_hex
+from app.core.security import hash_password, sha256_hex, verify_password
 from app.models import User
 
 PASSWORD = "a-perfectly-fine-passphrase"
@@ -51,6 +52,18 @@ async def _login(client: AsyncClient, email: str = "dev@example.com") -> tuple[s
 
 def _bearer(token: str) -> dict[str, str]:
     return {"Authorization": f"Bearer {token}"}
+
+
+def _present_cookie(client: AsyncClient, value: str) -> None:
+    """Set the refresh cookie on the client's jar for the next request.
+
+    `AsyncClient.request(cookies=...)` is a deprecated pattern: httpx warns that jar
+    persistence and a per-request override are ambiguous together. Setting the jar
+    explicitly, rather than a per-request kwarg or relying on what a previous response
+    left behind, keeps every test in control of exactly which value is presented —
+    several of these deliberately replay a stale or otherwise-specific cookie.
+    """
+    client.cookies.set(get_settings().refresh_cookie_name, value)
 
 
 async def test_login_returns_an_access_token_and_the_user(
@@ -154,6 +167,46 @@ async def test_the_sixth_login_attempt_in_a_minute_is_429(
     assert response.json()["detail"]["code"] == "RATE_LIMITED"
 
 
+async def test_a_lower_cost_hash_is_upgraded_on_login(
+    client: AsyncClient, db_session: AsyncSession, app: FastAPI
+) -> None:
+    """D22: the cost factor lives in the hash itself, so raising the configured cost
+    reaches existing accounts the next time they log in successfully — there is no
+    background migration that walks every row.
+    """
+    stale_cost = 4
+    configured_cost = 6
+    old_hash = hash_password(PASSWORD, cost=stale_cost)
+    assert verify_password(PASSWORD, old_hash)
+
+    user = User(
+        id=uuid.uuid4(),
+        name="Dev",
+        email="dev@example.com",
+        password_hash=old_hash,
+        is_admin=False,
+        must_change_password=False,
+    )
+    db_session.add(user)
+    await db_session.commit()
+
+    base_settings = get_settings()
+    app.dependency_overrides[get_settings] = lambda: base_settings.model_copy(
+        update={"bcrypt_cost": configured_cost}
+    )
+    try:
+        response = await client.post(
+            "/auth/login", json={"email": "dev@example.com", "password": PASSWORD}
+        )
+    finally:
+        app.dependency_overrides.pop(get_settings, None)
+
+    assert response.status_code == 200
+    await db_session.refresh(user)
+    assert user.password_hash != old_hash
+    assert int(user.password_hash.split("$")[2]) == configured_cost
+
+
 async def test_me_returns_the_caller(client: AsyncClient, db_session: AsyncSession) -> None:
     await _make_user(db_session)
     access, _ = await _login(client)
@@ -171,7 +224,8 @@ async def test_refresh_rotates_the_cookie_and_returns_a_new_access_token(
     _, cookie = await _login(client)
     name = get_settings().refresh_cookie_name
 
-    response = await client.post("/auth/refresh", cookies={name: cookie})
+    _present_cookie(client, cookie)
+    response = await client.post("/auth/refresh")
 
     assert response.status_code == 200
     assert response.cookies[name] != cookie
@@ -190,8 +244,9 @@ async def test_replaying_a_consumed_token_after_the_grace_window_revokes_the_fam
     """The point of rotation: a leaked token is detected on its second use."""
     await _make_user(db_session)
     _, cookie = await _login(client)
-    name = get_settings().refresh_cookie_name
-    await client.post("/auth/refresh", cookies={name: cookie})
+
+    _present_cookie(client, cookie)
+    await client.post("/auth/refresh")
 
     # Age the consumed token past the grace window.
     await db_session.execute(
@@ -200,15 +255,16 @@ async def test_replaying_a_consumed_token_after_the_grace_window_revokes_the_fam
     )
     await db_session.commit()
 
-    response = await client.post("/auth/refresh", cookies={name: cookie})
+    _present_cookie(client, cookie)
+    response = await client.post("/auth/refresh")
 
     assert response.status_code == 401
     assert response.json()["detail"]["code"] == "REFRESH_TOKEN_REUSED"
 
-    remaining = await db_session.execute(
-        text("SELECT count(*) FROM refresh_tokens WHERE revoked_at IS NULL")
-    )
-    assert remaining.scalar_one() == 0
+    rows = await db_session.execute(text("SELECT revoked_at, revoked_reason FROM refresh_tokens"))
+    for revoked_at, revoked_reason in rows.all():
+        assert revoked_at is not None
+        assert revoked_reason == "replay"
 
 
 async def test_two_refreshes_inside_the_grace_window_both_succeed(
@@ -219,8 +275,10 @@ async def test_two_refreshes_inside_the_grace_window_both_succeed(
     _, cookie = await _login(client)
     name = get_settings().refresh_cookie_name
 
-    first = await client.post("/auth/refresh", cookies={name: cookie})
-    second = await client.post("/auth/refresh", cookies={name: cookie})
+    _present_cookie(client, cookie)
+    first = await client.post("/auth/refresh")
+    _present_cookie(client, cookie)
+    second = await client.post("/auth/refresh")
 
     assert first.status_code == 200
     assert second.status_code == 200
@@ -245,14 +303,14 @@ async def test_an_expired_refresh_token_does_not_revoke_the_family(
     """Expiry is checked before replay: an honestly-stale token is not an attack."""
     await _make_user(db_session)
     _, cookie = await _login(client)
-    name = get_settings().refresh_cookie_name
     await db_session.execute(
         text("UPDATE refresh_tokens SET expires_at = :past WHERE token_hash = :hash"),
         {"past": datetime.now(UTC) - timedelta(days=1), "hash": sha256_hex(cookie)},
     )
     await db_session.commit()
 
-    response = await client.post("/auth/refresh", cookies={name: cookie})
+    _present_cookie(client, cookie)
+    response = await client.post("/auth/refresh")
 
     assert response.status_code == 401
     assert response.json()["detail"]["code"] == "TOKEN_EXPIRED"
@@ -266,9 +324,8 @@ async def test_refresh_fails_once_the_owner_is_deactivated(
     user.deleted_at = datetime.now(UTC)
     await db_session.commit()
 
-    response = await client.post(
-        "/auth/refresh", cookies={get_settings().refresh_cookie_name: cookie}
-    )
+    _present_cookie(client, cookie)
+    response = await client.post("/auth/refresh")
 
     assert response.status_code == 401
 
@@ -280,10 +337,10 @@ async def test_change_password_clears_the_flag_and_works_with_the_same_token(
     await _make_user(db_session, must_change_password=True)
     access, cookie = await _login(client)
 
+    _present_cookie(client, cookie)
     changed = await client.post(
         "/auth/change-password",
         headers=_bearer(access),
-        cookies={get_settings().refresh_cookie_name: cookie},
         json={"currentPassword": PASSWORD, "newPassword": NEW_PASSWORD},
     )
     listing = await client.get("/users", headers=_bearer(access))
@@ -311,10 +368,10 @@ async def test_change_password_rejects_a_wrong_current_password(
     await _make_user(db_session)
     access, cookie = await _login(client)
 
+    _present_cookie(client, cookie)
     response = await client.post(
         "/auth/change-password",
         headers=_bearer(access),
-        cookies={get_settings().refresh_cookie_name: cookie},
         json={"currentPassword": "not-the-current-one", "newPassword": NEW_PASSWORD},
     )
 
@@ -328,10 +385,10 @@ async def test_change_password_rejects_a_weak_new_password(
     await _make_user(db_session)
     access, cookie = await _login(client)
 
+    _present_cookie(client, cookie)
     response = await client.post(
         "/auth/change-password",
         headers=_bearer(access),
-        cookies={get_settings().refresh_cookie_name: cookie},
         json={"currentPassword": PASSWORD, "newPassword": "short"},
     )
 
@@ -345,17 +402,52 @@ async def test_change_password_spares_the_callers_own_session(
     """docs/PRD.md:108 — all *other* refresh tokens are revoked."""
     await _make_user(db_session)
     access, cookie = await _login(client)
-    name = get_settings().refresh_cookie_name
 
+    _present_cookie(client, cookie)
     await client.post(
         "/auth/change-password",
         headers=_bearer(access),
-        cookies={name: cookie},
         json={"currentPassword": PASSWORD, "newPassword": NEW_PASSWORD},
     )
-    response = await client.post("/auth/refresh", cookies={name: cookie})
+    _present_cookie(client, cookie)
+    response = await client.post("/auth/refresh")
 
     assert response.status_code == 200
+
+
+async def test_change_password_revokes_other_sessions_with_reason(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    """The `except_token_id` path spares the caller's own token, but it must also
+    actually revoke the others — otherwise a stolen refresh token from a different
+    device would keep working right through a password change meant to end it.
+    """
+    await _make_user(db_session)
+    access, own_cookie = await _login(client)
+    _, other_cookie = await _login(client)
+
+    _present_cookie(client, own_cookie)
+    await client.post(
+        "/auth/change-password",
+        headers=_bearer(access),
+        json={"currentPassword": PASSWORD, "newPassword": NEW_PASSWORD},
+    )
+
+    _present_cookie(client, own_cookie)
+    own_session = await client.post("/auth/refresh")
+    _present_cookie(client, other_cookie)
+    other_session = await client.post("/auth/refresh")
+
+    assert own_session.status_code == 200
+    assert other_session.status_code == 401
+
+    row = await db_session.execute(
+        text("SELECT revoked_at, revoked_reason FROM refresh_tokens WHERE token_hash = :hash"),
+        {"hash": sha256_hex(other_cookie)},
+    )
+    revoked_at, revoked_reason = row.one()
+    assert revoked_at is not None
+    assert revoked_reason == "password_change"
 
 
 async def test_logout_revokes_the_presented_token(
@@ -363,10 +455,11 @@ async def test_logout_revokes_the_presented_token(
 ) -> None:
     await _make_user(db_session)
     _, cookie = await _login(client)
-    name = get_settings().refresh_cookie_name
 
-    logout = await client.post("/auth/logout", cookies={name: cookie})
-    reuse = await client.post("/auth/refresh", cookies={name: cookie})
+    _present_cookie(client, cookie)
+    logout = await client.post("/auth/logout")
+    _present_cookie(client, cookie)
+    reuse = await client.post("/auth/refresh")
 
     assert logout.status_code == 204
     assert reuse.status_code == 401
@@ -385,12 +478,12 @@ async def test_logout_all_revokes_every_session(
     await _make_user(db_session)
     access, first_cookie = await _login(client)
     _, second_cookie = await _login(client)
-    name = get_settings().refresh_cookie_name
 
     await client.post("/auth/logout-all", headers=_bearer(access))
 
     for cookie in (first_cookie, second_cookie):
-        assert (await client.post("/auth/refresh", cookies={name: cookie})).status_code == 401
+        _present_cookie(client, cookie)
+        assert (await client.post("/auth/refresh")).status_code == 401
 
 
 async def test_no_auth_response_ever_contains_a_hash(

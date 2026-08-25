@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import Settings
 from app.core.errors import AppError, ErrorCode
 from app.core.passwords import PasswordPolicyError, check_password, get_common_passwords
+from app.core.rate_limit import LoginAttemptLimiter
 from app.core.security import (
     create_access_token,
     dummy_password_hash,
@@ -34,9 +35,12 @@ from app.schemas.user import UserResponse
 class AuthService:
     """Business rules for `/auth`."""
 
-    def __init__(self, session: AsyncSession, settings: Settings) -> None:
+    def __init__(
+        self, session: AsyncSession, settings: Settings, attempts: LoginAttemptLimiter
+    ) -> None:
         self.session = session
         self.settings = settings
+        self.attempts = attempts
         self.users = UserRepository(session)
         self.tokens = RefreshTokenRepository(session)
 
@@ -104,6 +108,25 @@ class AuthService:
     async def login(self, email: str, password: str) -> tuple[AccessTokenResponse, str]:
         """Verify credentials and issue a new token pair.
 
+        Only failed attempts count toward the per-email rate limit, and a success
+        clears it — a raw per-email counter would otherwise be a lockout weapon
+        (`app/core/rate_limit.py`). `check_email` runs outside the `try` so an address
+        already over budget raises its own `429` rather than being counted again.
+        """
+        await self.attempts.check_email(email)
+        try:
+            issued = await self._authenticate_and_issue(email, password)
+        except Exception:
+            await self.attempts.record_failure(email)
+            raise
+        await self.attempts.clear(email)
+        return issued
+
+    async def _authenticate_and_issue(
+        self, email: str, password: str
+    ) -> tuple[AccessTokenResponse, str]:
+        """Verify credentials and issue a token pair, or raise.
+
         An unknown address is still verified against a dummy hash, so the response
         timing does not reveal whether the account exists (`docs/PRD.md:114`).
         """
@@ -140,13 +163,13 @@ class AuthService:
         """
         token = await self._load_token(raw_token)
 
+        if token.expires_at <= datetime.now(UTC):
+            raise self._invalid_token(ErrorCode.TOKEN_EXPIRED)
+
         if token.revoked_at is not None:
             await self.tokens.revoke_family(token.family_id, reason="replay")
             await self.session.commit()
             raise self._invalid_token(ErrorCode.REFRESH_TOKEN_REUSED)
-
-        if token.expires_at <= datetime.now(UTC):
-            raise self._invalid_token(ErrorCode.TOKEN_EXPIRED)
 
         if token.used_at is not None:
             grace = timedelta(seconds=self.settings.refresh_rotation_grace_seconds)

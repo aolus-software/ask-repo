@@ -26,9 +26,17 @@ SettingsDep = Annotated[Settings, Depends(get_settings)]
 RefreshCookie = Annotated[str | None, Cookie(alias="askrepo_refresh")]
 
 
-def get_auth_service(session: SessionDep, settings: SettingsDep) -> AuthService:
-    """Provide the service with a request-scoped session."""
-    return AuthService(session, settings)
+def get_auth_service(
+    session: SessionDep, settings: SettingsDep, attempts: LoginAttemptLimiterDep
+) -> AuthService:
+    """Provide the service with a request-scoped session.
+
+    `attempts` is only exercised by `login`, but wiring it here rather than per-route
+    keeps every handler down to one service call — see `.claude/rules/router.md`.
+    Building a `LoginAttemptLimiter` does no I/O, so the routes that never touch it pay
+    nothing for carrying it.
+    """
+    return AuthService(session, settings, attempts)
 
 
 AuthServiceDep = Annotated[AuthService, Depends(get_auth_service)]
@@ -70,17 +78,8 @@ async def login(
     response: Response,
     service: AuthServiceDep,
     settings: SettingsDep,
-    attempts: LoginAttemptLimiterDep,
 ) -> AccessTokenResponse:
-    await attempts.check_email(payload.email)
-    try:
-        token_response, raw_refresh = await service.login(payload.email, payload.password)
-    except Exception:
-        # Only failures count toward the per-email budget, so a colleague cannot spend
-        # someone else's allowance to lock them out.
-        await attempts.record_failure(payload.email)
-        raise
-    await attempts.clear(payload.email)
+    token_response, raw_refresh = await service.login(payload.email, payload.password)
     _set_refresh_cookie(response, raw_refresh, settings)
     return token_response
 
@@ -90,7 +89,7 @@ async def login(
     response_model=AccessTokenResponse,
     status_code=status.HTTP_200_OK,
     summary="Rotate the refresh token and issue a new access token",
-    responses={code: ERROR_RESPONSES[code] for code in (401, 429)},
+    responses={401: ERROR_RESPONSES[401]},
 )
 async def refresh(
     response: Response,
