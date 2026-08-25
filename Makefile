@@ -17,7 +17,7 @@ DATASTORES := postgres qdrant redis
 
 .DEFAULT_GOAL := help
 .PHONY: help setup setup-backend setup-frontend \
-        infra infra-stop infra-down infra-logs infra-status \
+        infra infra-stop infra-down infra-logs infra-status migrate seed \
         docker-start-pg docker-start-redis docker-start-qdrant \
         docker-stop-pg docker-stop-redis docker-stop-qdrant \
         psql redis-cli \
@@ -64,6 +64,12 @@ infra-status: ## Show datastore health
 
 infra-logs: ## Tail datastore logs
 	$(COMPOSE) logs -f $(DATASTORES)
+
+migrate: ## Apply database migrations
+	cd $(BACKEND) && uv run alembic upgrade head
+
+seed: ## Create the bootstrap admin accounts (idempotent)
+	cd $(BACKEND) && uv run python -m app.cli seed-admins
 
 docker-start-pg: ## Start postgres only
 	$(COMPOSE) up -d --wait postgres
@@ -128,7 +134,8 @@ format-check: ## Fail if anything is unformatted
 	cd $(BACKEND) && uv run ruff format --check .
 	cd $(FRONTEND) && bunx prettier --check .
 
-typecheck: ## Frontend type errors (the dev server tolerates them; the build does not)
+typecheck: ## Static types, both apps
+	cd $(BACKEND) && uv run mypy .
 	cd $(FRONTEND) && bunx tsc --noEmit
 
 test: test-backend ## Run the test suites

@@ -11,10 +11,10 @@ network.
 Built as a learning project for RAG, LangChain/LangGraph, prompt engineering, and context
 management — against real repositories rather than tutorial data.
 
-> **Status: pre-M0.** The backend currently serves an index route and health checks, and
-> nothing else. None of the features below are implemented yet. See
-> [Roadmap](#roadmap) for what lands when, and [`docs/PRD.md`](docs/PRD.md) for the full
-> specification.
+> **Status: M0 shipped.** Auth & accounts are implemented — admin-provisioned users, login,
+> forced first-login password change, and login rate limiting. M1 (project ingestion) has
+> not started. See [Roadmap](#roadmap) for what lands when, and
+> [`docs/PRD.md`](docs/PRD.md) for the full specification.
 
 ## Features (planned)
 
@@ -72,10 +72,17 @@ make up
 The usual development loop — hot reload on both apps, datastores containerized:
 
 ```bash
-make setup    # uv sync + bun install
-make infra    # postgres + qdrant + redis, waits until healthy
-make dev      # both dev servers, Ctrl-C stops both
+make setup                                        # uv sync + bun install
+make infra                                        # postgres + qdrant + redis, waits until healthy
+make migrate                                       # apply database migrations
+BOOTSTRAP_ADMIN_PASSWORD=<a real passphrase> make seed  # create the bootstrap admins
+make dev                                           # both dev servers, Ctrl-C stops both
 ```
+
+`BOOTSTRAP_ADMIN_PASSWORD` must be set before the first `make seed` or `make up` — the seed
+command refuses to run without it rather than inventing a password. Log in as
+`superuser@example.com` (or `admin@example.com`) with that password; both accounts are
+created with `must_change_password` set, so the first login forces a change.
 
 | Service | URL |
 | --- | --- |
@@ -104,6 +111,8 @@ curl -s localhost:8000/health | jq
 | --- | --- |
 | `make setup` | Install backend + frontend dependencies |
 | `make infra` | Start postgres + qdrant + redis, wait until healthy |
+| `make migrate` | Apply database migrations |
+| `make seed` | Create the bootstrap admin accounts (idempotent) |
 | `make dev` | Both dev servers together |
 | `make dev-backend` / `make dev-frontend` | One dev server |
 | `make check` | lint + format-check + typecheck + test — what CI runs |
@@ -136,11 +145,15 @@ docker compose -f infra/docker-compose.yml stop postgres qdrant redis
 ```bash
 cp .env.example .env                              # optional; every value has a default
 uv sync                                           # creates .venv
+uv run alembic upgrade head                       # apply migrations
+BOOTSTRAP_ADMIN_PASSWORD=<a real passphrase> \
+  uv run python -m app.cli seed-admins            # create the bootstrap admins
 uv run uvicorn app.main:app --reload --port 8000
 uv run pytest                                     # tests
 uv run pytest tests/test_api_model.py             # one file
 uv run pytest -k camel_case                       # one test by name
 uv run ruff check . && uv run ruff format .
+uv run mypy .                                     # typecheck
 ```
 
 **Frontend** (from `frontend/`)
@@ -170,7 +183,7 @@ run them from inside `infra/`.
 
 Milestones from [`docs/PRD.md`](docs/PRD.md) §6, built in order:
 
-- [ ] **M0** — Auth & accounts: admin-provisioned users, login, forced first-login password change, rate limiting
+- [x] **M0** — Auth & accounts: admin-provisioned users, login, forced first-login password change, rate limiting
 - [ ] **M1** — Project ingestion: clone + index, status tracking, re-index, Redis + ARQ job queue
 - [ ] **M2** — Dev Knowledge: RAG Q&A against a ready project, private conversations
 - [ ] **M3** — LangGraph: intent routing + self-critique loop

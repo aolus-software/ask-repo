@@ -32,7 +32,10 @@ pieces directly — see [`README.md`](README.md) → "Starting without `make`".
 ## Checks
 
 From the repo root, `make check` runs everything CI would: lint, format check, typecheck, and
-tests across both apps. The individual commands, if you want them:
+tests across both apps. **Run `make infra` first** — the backend suite runs against real
+Postgres and Redis rather than mocks or SQLite (see `backend/tests/conftest.py`), and
+`typecheck` now runs mypy over the backend as well as `tsc` over the frontend. The individual
+commands, if you want them:
 
 **Backend**
 
@@ -40,6 +43,7 @@ tests across both apps. The individual commands, if you want them:
 cd backend
 uv run ruff check .      # lint
 uv run ruff format .     # format
+uv run mypy .            # typecheck
 uv run pytest            # tests
 ```
 
