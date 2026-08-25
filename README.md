@@ -98,12 +98,20 @@ Every environment value has a fallback, so this comes up with no `.env` file. To
 create `infra/.env` — the variable names are in
 [`infra/docker-compose.yml`](infra/docker-compose.yml).
 
-Verify the API is alive:
+Verify the API is alive, then log in as a seeded admin (replace the password with the one you
+set in `BOOTSTRAP_ADMIN_PASSWORD`):
 
 ```bash
 curl -s localhost:8000/ | jq
 curl -s localhost:8000/health | jq
+curl -s -X POST localhost:8000/auth/login \
+  -H 'Content-Type: application/json' \
+  -d '{"email":"admin@example.com","password":"<a real passphrase>"}' | jq
 ```
+
+The login response carries an `accessToken` and a `user` object with `mustChangePassword: true`
+— the account is unusable for anything outside `/auth` until `POST /auth/change-password`
+clears that flag.
 
 ## Make targets
 
@@ -216,4 +224,4 @@ See [`CONTRIBUTING.md`](CONTRIBUTING.md). Bug reports and feature requests go th
 - [`backend/README.md`](backend/README.md) — API setup, routes, configuration
 - [`frontend/README.md`](frontend/README.md) — UI setup and scripts
 - [`CLAUDE.md`](CLAUDE.md) — architecture notes and the conventions that bite, for AI agents and humans alike
-- [`.claude/rules/`](.claude/rules) — nine enforceable conventions (Python, API contract, design system, forms, navigation)
+- [`.claude/rules/`](.claude/rules) — ten enforceable conventions (Python, persistence, API contract, design system, forms, navigation)
