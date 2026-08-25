@@ -80,7 +80,10 @@ services:
       QDRANT_URL: http://qdrant:6333
       REDIS_URL: redis://redis:6379/0
       SECRET_KEY: ${SECRET_KEY:-dev-insecure-change-me}
-      BOOTSTRAP_ADMIN_PASSWORD: ${BOOTSTRAP_ADMIN_PASSWORD:-change-me-on-first-login}
+      # No fallback: a committed placeholder here would be a valid, publicly-known
+      # password every reader of this file already has. Set it in the environment or
+      # in infra/.env before the first `make up` / `make seed`.
+      BOOTSTRAP_ADMIN_PASSWORD: ${BOOTSTRAP_ADMIN_PASSWORD}
       # Nothing sits in front of the API in the dev stack, so trust the socket address.
       TRUSTED_PROXY_HOPS: ${TRUSTED_PROXY_HOPS:-0}
     volumes:

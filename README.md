@@ -64,8 +64,15 @@ One command, nothing else installed:
 
 ```bash
 git clone <this-repo> && cd ask-repo
-make up
+BOOTSTRAP_ADMIN_PASSWORD=<a real passphrase> make up
 ```
+
+`BOOTSTRAP_ADMIN_PASSWORD` must be set before the first `make seed` or `make up` — the seed
+command refuses to run without it rather than inventing a password, and the backend
+container will not come up without it either. There is deliberately no built-in default: a
+password committed to this repository would be a password every reader of it already knows.
+Log in as `superuser@example.com` (or `admin@example.com`) with that password; both accounts
+are created with `must_change_password` set, so the first login forces a change.
 
 ### Datastores in Docker, apps on your machine
 
@@ -78,11 +85,6 @@ make migrate                                       # apply database migrations
 BOOTSTRAP_ADMIN_PASSWORD=<a real passphrase> make seed  # create the bootstrap admins
 make dev                                           # both dev servers, Ctrl-C stops both
 ```
-
-`BOOTSTRAP_ADMIN_PASSWORD` must be set before the first `make seed` or `make up` — the seed
-command refuses to run without it rather than inventing a password. Log in as
-`superuser@example.com` (or `admin@example.com`) with that password; both accounts are
-created with `must_change_password` set, so the first login forces a change.
 
 | Service | URL |
 | --- | --- |

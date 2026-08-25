@@ -79,6 +79,28 @@ async def test_seeding_refuses_without_a_password(db_session: AsyncSession) -> N
     assert result.scalar_one() == 0
 
 
+async def test_reseeding_with_no_password_is_a_noop_once_everyone_exists(
+    db_session: AsyncSession,
+) -> None:
+    """`bootstrap_admin_password` is not validated at app startup for exactly this reason:
+    an already-seeded instance must boot with the variable removed, since the container
+    entrypoint chains `alembic upgrade head && python -m app.cli seed-admins && uvicorn ...`
+    and a non-zero exit here would stop the API from ever serving.
+    """
+    await seed_admins()
+
+    with pytest.MonkeyPatch.context() as patch:
+        patch.delenv("BOOTSTRAP_ADMIN_PASSWORD", raising=False)
+        get_settings.cache_clear()
+
+        second = await seed_admins()
+
+    get_settings.cache_clear()
+    assert second == 0
+    result = await db_session.execute(text("SELECT count(*) FROM users"))
+    assert result.scalar_one() == 2
+
+
 async def test_seeding_refuses_a_password_failing_policy(db_session: AsyncSession) -> None:
     with pytest.MonkeyPatch.context() as patch:
         patch.setenv("BOOTSTRAP_ADMIN_PASSWORD", "short")
