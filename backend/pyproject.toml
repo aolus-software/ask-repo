@@ -6,8 +6,15 @@ readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
     "fastapi>=0.120.0",
+    "pydantic[email]>=2.10.0",
     "pydantic-settings>=2.7.0",
     "uvicorn[standard]>=0.34.0",
+    "sqlalchemy[asyncio]>=2.0.36",
+    "asyncpg>=0.30.0",
+    "alembic>=1.14.0",
+    "bcrypt>=4.2.0",
+    "pyjwt>=2.10.0",
+    "redis>=5.2.0",
 ]
 
 [tool.uv]
@@ -17,7 +24,9 @@ package = false
 [dependency-groups]
 dev = [
     "httpx>=0.28.0",
+    "mypy>=1.14.0",
     "pytest>=8.3.0",
+    "pytest-asyncio>=0.25.0",
     "ruff>=0.9.0",
 ]
 
@@ -36,3 +45,26 @@ select = ["E", "F", "I", "UP", "B", "ANN", "T20", "LOG", "G", "RUF"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+asyncio_mode = "auto"
+# Session scope: the engine fixture is session-scoped, and a function-scoped
+# loop would leave it bound to a closed loop on the second test.
+asyncio_default_fixture_loop_scope = "session"
+# Tests must share that same loop, or a session-scoped asyncpg connection gets
+# used from a different loop than the one it was created on ("attached to a
+# different loop"). Added in Task 2 when async DB fixtures first exercised this.
+asyncio_default_test_loop_scope = "session"
+# `package = false` means the project is never installed, and pytest puts
+# tests/ on sys.path rather than the backend root — so `app` would not import.
+pythonpath = ["."]
+
+[tool.mypy]
+python_version = "3.13"
+files = ["app", "tests"]
+strict = true
+# SQLAlchemy 2.0 ships PEP 484 typing natively — no plugin, no sqlalchemy2-stubs.
+
+[[tool.mypy.overrides]]
+# asyncpg ships no py.typed marker and no stub package; used directly only in the
+# test harness (backend/tests/conftest.py) to create the test database.
+module = "asyncpg"
+ignore_missing_imports = true

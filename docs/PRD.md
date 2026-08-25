@@ -70,7 +70,7 @@ class User(BaseModel):
     id: UUID
     name: str
     email: EmailStr                    # unique, stored lowercase
-    password_hash: str                 # argon2id — the raw password is never stored
+    password_hash: str                 # bcrypt — the raw password is never stored
     is_admin: bool = False
     must_change_password: bool = True  # set on provisioning and on admin reset
     last_login_at: datetime | None
@@ -102,17 +102,49 @@ The field is `password_hash`, not `password`. The plaintext exists only in the r
 
 **Acceptance criteria**
 
-- `POST /users` (**admin only**) accepts `{name, email, password, is_admin?}`, creates the account with `must_change_password=True`. `GET /users` lists accounts; `PATCH /users/{id}` updates name/admin flag; `DELETE /users/{id}` soft-deletes and revokes that user's refresh tokens.
-- `POST /auth/login` accepts `{email, password}` and returns a JWT access token (15 min, stateless) plus an opaque refresh token (30 days). The refresh token is stored **hashed** in Postgres so it can be revoked; the access token is not stored.
-- When `must_change_password` is set, login succeeds but every route except `POST /auth/change-password` returns `403` with a machine-readable reason, so the frontend can force the change.
-- `POST /auth/change-password` accepts `{current_password, new_password}`, clears `must_change_password`, and revokes all *other* refresh tokens for that user.
-- `POST /users/{id}/reset-password` (**admin only**) sets a new temporary password and re-sets `must_change_password`, revoking all of that user's refresh tokens.
-- Password policy: minimum 12 characters, rejected if it appears in a common-password list. Hashed with **argon2id** at sensible cost parameters.
-- `POST /auth/refresh` exchanges a refresh token for a new access token **and rotates the refresh token**, invalidating the old one. Presenting an already-used refresh token revokes the whole chain — that is a replay signal.
+- `POST /users` (**admin only**) accepts `{name, email, password, isAdmin?}`, creates the account
+  with `must_change_password=True`. `GET /users` and `GET /users/{id}` are readable by **any
+  authenticated user** — from M1 every project and QA pair carries `created_by`, and turning an id
+  into a name should not require an admin token. `PATCH /users/{id}` (**admin only**) updates
+  name/admin flag; `DELETE /users/{id}` (**admin only**) soft-deletes and revokes that user's
+  refresh tokens.
+- `POST /auth/login` accepts `{email, password}` and returns a JWT access token (15 min,
+  stateless) in the response body, plus an opaque refresh token (30 days) as an **httpOnly,
+  `Secure`, `SameSite=Lax` cookie** scoped to `/auth`. The refresh token never appears in a
+  response body: a 30-day credential in `localStorage` is readable by any script on the page.
+  Because the cookie is `Secure`, the instance requires TLS — Caddy (§5) is not optional.
+- When `must_change_password` is set, login succeeds but **every route outside `/auth`** returns `403` with the machine-readable code `PASSWORD_CHANGE_REQUIRED`, so the frontend can force the change. The whole `/auth` surface stays reachable: the user needs `GET /auth/me` to see who they are, `POST /auth/refresh` because the access token expires in 15 minutes while they are typing, and `POST /auth/logout` / `logout-all` to abandon the flow or kill other sessions first.
+- `POST /auth/change-password` accepts `{current_password, new_password}`, clears
+  `must_change_password`, and revokes all *other* refresh tokens for that user. It returns no
+  new access token: `must_change_password` is not a token claim, so the caller's existing token
+  starts working everywhere the moment the row changes.
+- `POST /users/{id}/reset-password` (**admin only**) accepts `{newPassword}` — the admin supplies
+  it and communicates it out of band, because a server-generated password would have to be
+  returned in a response body. It re-sets `must_change_password` and revokes all of that user's
+  refresh tokens.
+- **The last active admin cannot be demoted or deleted.** `PATCH` clearing `isAdmin`, or `DELETE`,
+  returns `409` when the operation would leave the instance with zero active admins — otherwise
+  recovery needs manual SQL, which §7 exists to avoid.
+- Password policy: minimum 12 characters, maximum 72 bytes once UTF-8 encoded, rejected if it appears in a common-password list. Hashed with **bcrypt** at cost 12. The 72-byte maximum is bcrypt's input limit, not a preference: beyond it bcrypt ignores the remainder, so two different long passwords sharing a prefix would both authenticate.
+- `POST /auth/refresh` reads the cookie, issues a new access token, **rotates the refresh
+  token**, and invalidates the old one. Presenting an already-consumed refresh token revokes
+  the whole family — that is a replay signal — **except within a 10-second grace window**,
+  where a sibling token is minted instead. Strict rotation would log out any client refreshing
+  twice concurrently, and two browser tabs is enough. The cost is precise: for those 10 seconds
+  a stolen-and-immediately-replayed token is not detected.
 - `POST /auth/logout` revokes the presented refresh token. `POST /auth/logout-all` revokes every refresh token for the user.
 - `GET /auth/me` returns the current user. `password_hash` is never serialized in any response.
 - Login failures return one uniform error regardless of cause (unknown email vs wrong password), compared against a dummy hash so timing doesn't differ.
-- Login is rate limited to 5/min/IP and 10/hour/email, returning `429`. Brute force is still a threat on an internal network.
+- Login is rate limited to 5/min/IP and 10/hour/email, returning `429`. Only **failed** attempts
+  count toward the per-email limit and a successful login clears it — a raw per-email counter is
+  a lockout weapon, since anyone knowing a colleague's address could spend the budget on their
+  behalf. The per-IP limit is counted before the credential check, so it also bounds attempts
+  against addresses that do not exist.
+- `POST /auth/change-password` carries the same per-IP limit. It verifies `current_password`, so
+  leaving it uncapped while login is capped only moves the target.
+- Behind a reverse proxy, `TRUSTED_PROXY_HOPS` must be set to the number of proxies in front of
+  the API. Left at `0` with Caddy in front, every request appears to come from Caddy and the
+  per-IP limit becomes a single instance-wide limit.
 - Passwords, tokens, and PATs are excluded from logs, tracebacks, and error responses.
 
 **Out of scope for v1:** self-service registration, email verification, email-based password reset, OAuth/social login, 2FA/TOTP, per-project roles (phase 2), session-activity history.
@@ -139,7 +171,13 @@ The field is `password_hash`, not `password`. The plaintext exists only in the r
 - **`created_by` is attribution and a destructive-operation gate, not ownership.** It does not scope reads.
 - `GET /projects` lists **all** non-deleted projects on the instance. `GET /projects/{id}` returns any project's status, last indexed commit SHA, file/chunk counts, and error detail.
 - `POST /projects/{id}/reindex` and `DELETE /projects/{id}` require the caller to be `created_by` or an admin; otherwise **`403`**. (`403`, not `404` — project existence is deliberately not a secret here, so hiding it would only confuse.)
-- **Access resolver.** All retrieval goes through one function that answers "which project IDs may this user query?" In phase 1 it returns every project ID. Phase 2 replaces its body with a membership lookup and nothing else changes. Retrieval filters Qdrant by `project_id IN <resolver result>` — never by an unchecked path parameter.
+- **Access resolver.** All retrieval goes through one function, `resolve_project_scope(user)` in
+  `backend/app/core/access.py`, which returns a `ProjectScope`: either `unrestricted` (phase 1's
+  answer for every user) or a concrete set of project ids. Phase 2 replaces its body with a
+  membership lookup and nothing else changes. Retrieval filters Qdrant from that scope — never
+  from an unchecked path parameter. It returns a `ProjectScope` rather than a nullable list
+  because a `None` meaning "unrestricted" is fail-open: an empty `ids` set must mean *no* access,
+  not all of it.
 - Clone uses `git clone --depth 1 --branch <branch> <url>` into a per-project scratch directory (`/data/repos/<project_id>`).
 - **Ingestion safety** (see §9): `https://` scheme only; host must be on a configurable allowlist (default `github.com`, `gitlab.com`); reject any URL resolving to a private, loopback, or link-local address; clone timeout 120s; reject repos over 500 MB.
 - **Quotas:** instance-wide cap on concurrent ingestion jobs (default 2) so one large clone can't starve the box. No per-user project cap — users are trusted colleagues.
@@ -298,7 +336,7 @@ class QAPair(BaseModel):
 | API layer             | FastAPI                                                    | Python-native for LangChain/LangGraph                                                          |
 | Orchestration         | LangGraph                                                  | State graph for classify → retrieve → generate → critique/loop                                 |
 | LLM framework         | LangChain                                                  | Prompt templates, output parsers, document loaders/splitters                                    |
-| Auth                  | argon2id hashing + JWT access / opaque refresh tokens      | Access token stateless (15 min); refresh token hashed in Postgres so it is revocable            |
+| Auth                  | bcrypt hashing + JWT access / opaque refresh tokens      | Access token stateless (15 min); refresh token hashed in Postgres so it is revocable            |
 | ORM / migrations      | SQLAlchemy 2.0 + Alembic                                   | users, projects, qa_pairs, conversations, messages, refresh_tokens                              |
 | Rate limiting         | Redis-backed middleware                                    | Login brute-force protection (M0); reused for job-queue backing at M1                          |
 | Reverse proxy / TLS   | Caddy                                                      | Internal TLS in front of API + frontend. Not internet-facing, so certs may be internal CA      |
@@ -311,6 +349,8 @@ class QAPair(BaseModel):
 | Frontend              | Minimal Next.js                                            | Not the focus; keep thin                                                                       |
 | Networking            | VPN / Tailscale only — no public exposure                  | The instance is internal. Admin access to Postgres/Qdrant dashboards likewise                  |
 
+**Bcrypt over argon2id.** argon2id requires 64 MiB per hash by design, a real cost on the single shared VPS that hosts Postgres, Qdrant, Redis, and possibly Ollama. bcrypt keeps the property that matters: each password guess costs real time, and the time is configurable (cost factor). The security difference is negligible in a private network where the attacker is a compromised laptop or an insider with database access.
+
 **No email provider.** Admin-provisioned accounts and admin-driven password reset remove every transactional-email path, so v1 ships without a mail dependency. Adding self-service reset later means adding a provider then.
 
 **On the job queue.** `BackgroundTasks` runs in the API process, so a restart mid-index loses the job and leaves a Project stuck at `indexing` forever. Graduate to **Redis + ARQ** at M1. ARQ over Celery because the indexing pipeline (embeddings, Qdrant writes) is already async and Celery's configuration surface solves problems this project doesn't have. **Kafka is the wrong tool here** — it is a partitioned, replicated event log for high-throughput streams with replaying consumer groups; this workload is a handful of jobs a day that need retries and a status field, which is a task queue, not a log.
@@ -320,11 +360,24 @@ class QAPair(BaseModel):
 - **Naming:** `snake_case` **internally** — Python attributes, Postgres columns. `camelCase` **on the wire** — every JSON request and response body. The translation happens in exactly one place: the `ApiModel` base class (`backend/app/schemas/base.py`), which sets Pydantic's `to_camel` alias generator with `populate_by_name=True`. No route or service converts anything by hand, and a schema that inherits plain `BaseModel` is a bug. See `.claude/rules/response-api.md`.
 - **Timestamps:** UTC, ISO-8601, timezone-aware. Column type `timestamptz`.
 - **IDs:** UUID, generated by the application, never sequential integers in URLs.
-- **Soft delete:** every table carries `deleted_at`; all queries filter `deleted_at IS NULL`. Unique constraints on `email` must account for it.
+- **Soft delete:** every table representing a user-facing resource carries `deleted_at`, and all
+  queries filter `deleted_at IS NULL`. Unique constraints must account for it — `users.email` is
+  unique only among rows where `deleted_at IS NULL`, so a departed colleague's address can be
+  reused.
+- **`refresh_tokens` is an explicit exception.** Its lifecycle is `revoked_at` / `expires_at`, and
+  a `deleted_at` column would be a third overlapping state that nothing sets. Revoked and expired
+  rows are hard-deleted by a cleanup path (M1, with the job scheduler).
 - **Soft delete does not reach Qdrant.** Vector points have no `deleted_at`, and a query-time filter would be one forgotten call away from serving deleted content. Rule: **Postgres rows are soft-deleted; the corresponding Qdrant points are hard-deleted in the same operation.**
-- **Attribution vs authorization.** `created_by` exists on projects and qa_pairs for attribution and to gate destructive operations. It never scopes reads in phase 1. Read scoping is *only* ever done through the access resolver (§4.1), so phase 2 has exactly one place to change.
+- **Attribution vs authorization.** `created_by` exists on projects and qa_pairs for attribution and to gate destructive operations. It never scopes reads in phase 1. Read scoping is *only* ever done through `resolve_project_scope` (§4.1), so phase 2 has exactly one place to change.
+- **Error shape.** Every error the application raises serialises as
+  `{"detail": {"code": "SOME_CODE", "message": "..."}}`. `code` is a stable,
+  machine-readable identifier drawn from a single enum; `message` is for a person.
+  Validation failures (`422`) carry an additional `fields` map keyed by the `camelCase`
+  field name, so a form can render an error per field. This is one shape for the whole
+  API — a route inventing its own leaves clients parsing two.
 - **Error codes:**
-  - `403` when the caller may see a thing but not do this to it — e.g. deleting someone else's project. Existence is not secret.
+  - `403` when the caller may see a thing but not do this to it — e.g. deleting someone
+    else's project. Existence is not secret.
   - `404` when the caller may not know the thing exists — e.g. another user's conversation.
   - `409` for valid-but-wrong-state (querying a project that isn't `ready`).
   - `429` for rate limits.
@@ -379,6 +432,6 @@ The instance is internal, which lowers the threat model but does not empty it. T
 - **Credential storage.** Stored PATs grant read access to the org's repositories. Encrypt with an env-provided key, never log, never return. Keep PAT scope read-only and per-repo.
 - **Untrusted code on disk.** Cloned repos are never executed; no build or dependency-install step runs. Indexing only reads files.
 - **Resource exhaustion.** Clones and embeddings are expensive and the box is shared. Mitigation: repo size cap, clone timeout, instance-wide concurrency caps on ingestion and generation.
-- **Brute force.** Internal does not mean unreachable — a compromised laptop is on the network. Login rate limiting and argon2id stand regardless.
+- **Brute force.** Internal does not mean unreachable — a compromised laptop is on the network. Login rate limiting and bcrypt stand regardless.
 - **Backups.** Restorable Postgres backups, with the PAT encryption key backed up **separately** from the database.
 - **Not in the threat model:** malicious authenticated users, tenant isolation, and public internet exposure. If the instance is ever published, §4.0 needs self-service account flows and this section needs revisiting — that is a different document.

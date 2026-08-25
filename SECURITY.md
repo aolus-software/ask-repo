@@ -62,3 +62,12 @@ A few properties are your responsibility, not the code's:
 - **Don't publish the Postgres, Qdrant, or Redis ports.** The development Compose file
   publishes them to `localhost` for convenience; a production deployment should not.
   Redis in particular ships without a password in the dev configuration.
+- **Set `BOOTSTRAP_ADMIN_PASSWORD` before first boot**, and change both seeded accounts
+  immediately after. The seed command refuses to run without it rather than inventing a
+  password, so a missing value fails the boot loudly instead of quietly creating a guessable
+  admin.
+- **TLS is required, not optional.** The refresh token is a `Secure` cookie, so a browser will
+  not send it over plain HTTP outside `localhost`. Run Caddy in front.
+- **A Redis outage degrades login rate limiting.** The limiter fails open by design — an outage
+  should not lock the whole team out — so brute-force protection is reduced to bcrypt's cost
+  while Redis is down.

@@ -12,9 +12,12 @@ organization runs one instance on its own internal network.
 the security model. It outranks every other doc and outranks the code. When code and the PRD
 disagree, that is a contradiction to report — not a doc to quietly rewrite.
 
-**Status: pre-M0.** The backend serves an index route and health checks. There is no auth, no
-ingestion, no RAG, no database layer. Do not assume a module exists because the PRD describes
-it — the PRD describes the destination.
+**Status: M0 (backend) shipped.** The backend serves an index route, health checks, and the
+full auth/accounts surface: admin-provisioned users, login, forced first-login password
+change, session rotation, and login rate limiting. Postgres and Redis are read. There is still
+no ingestion, no RAG, and no Qdrant use — those land at M1. The frontend has not moved: it is
+still the landing page from scaffolding, with no API client and no auth screens. Do not assume
+a module exists because the PRD describes it — the PRD describes the destination.
 
 ## Commands
 
@@ -66,12 +69,13 @@ Two apps, three datastores, one Compose file. `backend/` is FastAPI + Python 3.1
 
 The parts below are the ones you cannot infer from any single file.
 
-### Datastores are wired but unread
+### Postgres and Redis are read; Qdrant is not yet
 
 `Settings` declares `database_url`, `qdrant_url`, and `redis_url`, and Compose points them at
-live services, but **no code reads them yet**. Postgres and Redis activate at M0 (users,
-sessions, login rate limiting); Qdrant and the Redis job queue at M1. A missing database layer
-is the current state, not a bug to fix on sight.
+live services. Postgres is read through the repository layer (`app/repositories/`) for users
+and refresh tokens; Redis is read by the login rate limiter (`app/core/rate_limit.py`).
+`qdrant_url` remains declared and unread until M1, along with the Redis-backed job queue — a
+missing vector layer is the current state, not a bug to fix on sight.
 
 ### Configuration flows one way
 
@@ -142,9 +146,30 @@ provider anywhere in the stack. An admin creates accounts; `must_change_password
 change on first login. Access tokens are stateless JWTs (15 min); refresh tokens are opaque,
 stored hashed so they can be revoked, and rotate on use.
 
+### Identity is resolved once, in middleware
+
+`AuthContextMiddleware` decodes the bearer token, loads the user row, and stashes a frozen
+`AuthenticatedUser` on `request.state`. `CurrentUser` / `AdminUser` read it. Two consequences:
+the user row is read on **every** authenticated request (which is what makes deactivation
+immediate, per `docs/PRD.md:101`), and the middleware is registered **before** `CORSMiddleware`
+so CORS ends up outermost and the gate's `403` carries CORS headers.
+
+### The forced-password-change gate is structural
+
+While `must_change_password` is set, every route outside `/auth` returns
+`403 PASSWORD_CHANGE_REQUIRED` — enforced by middleware, not by a dependency, so a route added
+later is covered without opting in. Adding a route group under a **new** prefix means deciding
+whether it belongs in `GATE_EXEMPT_PREFIXES`.
+
+### One error shape
+
+Every error the app raises is `{"detail": {"code": ..., "message": ...}}`, built by `AppError`.
+`ErrorCode` values are a wire contract — add members, never rename them. `422` adds a `fields`
+map keyed by the `camelCase` field name.
+
 ## Rules
 
-Nine rule files in `.claude/rules/`. Read the ones your change touches.
+Ten rule files in `.claude/rules/`. Read the ones your change touches.
 
 | Rule | Read it when |
 | --- | --- |
@@ -153,6 +178,7 @@ Nine rule files in `.claude/rules/`. Read the ones your change touches.
 | `clean-code.md` | Writing Python — type hints, docstrings, logging, suppressions |
 | `response-api.md` | Any route, schema, or status code |
 | `router.md` | Any `APIRouter` — layout, dependencies, the CRUD shape, access scoping |
+| `persistence.md` | Any model, repository, migration, or session code |
 | `design-system.md` | Any `.tsx` or `.css` — tokens, shadcn, dark mode, spacing |
 | `forms.md` | Any form — dialog vs page, validation ownership, field composition |
 | `navigation.md` | Sidebar, breadcrumbs, or adding a route |

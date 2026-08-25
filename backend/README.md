@@ -3,9 +3,10 @@
 FastAPI service for AskRepo — the codebase-aware assistant described in
 [`docs/PRD.md`](../docs/PRD.md).
 
-This is currently a skeleton: it identifies itself and reports health. The RAG /
-LangGraph work (project ingestion, Dev Knowledge, QA List, mock data generation)
-lands on top of it starting with milestone M0.
+M0 is shipped: the service identifies itself, reports health, and serves the full
+auth/accounts surface — admin-provisioned users, login, forced first-login password
+change, session rotation, and login rate limiting. The RAG / LangGraph work (project
+ingestion, Dev Knowledge, QA List, mock data generation) starts at M1.
 
 ## Requirements
 
@@ -14,15 +15,22 @@ lands on top of it starting with milestone M0.
 
 ## Running locally
 
+Postgres and Redis must be up first — `make infra` from the repo root, or
+`docker compose -f infra/docker-compose.yml up -d --wait postgres qdrant redis`.
+
 ```bash
 cd backend
-cp .env.example .env          # optional — every value has a default
-uv sync                       # creates .venv and installs dependencies
+cp .env.example .env                              # optional — every value has a default
+uv sync                                            # creates .venv and installs dependencies
+uv run alembic upgrade head                        # apply migrations
+BOOTSTRAP_ADMIN_PASSWORD=<a real passphrase> \
+  uv run python -m app.cli seed-admins             # create the bootstrap admins (idempotent)
 uv run uvicorn app.main:app --reload
 ```
 
 The API is then on <http://localhost:8000>, with interactive docs at
-<http://localhost:8000/docs>.
+<http://localhost:8000/docs>. Log in as `superuser@example.com` or `admin@example.com`
+with the password you set; both are seeded with `must_change_password` set.
 
 ## Running in Docker
 
@@ -40,7 +48,7 @@ Source is bind-mounted, so `--reload` picks up your edits.
 | `GET`  | `/`             | `{app, version, date}` — service identity and server time     |
 | `GET`  | `/health`       | `{status, app, version, env, timestamp}` — overview           |
 | `GET`  | `/health/live`  | `{status}` — liveness; `ok` whenever the process is up         |
-| `GET`  | `/health/ready` | `{status, checks}` — readiness; `checks` is empty until M0     |
+| `GET`  | `/health/ready` | `{status, checks}` — readiness; `checks` is empty for now      |
 
 ```bash
 curl -s localhost:8000/ | jq
@@ -49,26 +57,85 @@ curl -s localhost:8000/health | jq
 
 `/health/ready` exists so datastore probes (Postgres, Qdrant) can be added to
 `checks` later without changing the response shape — a dependency going down
-flips `status` to `degraded` while `/health/live` stays `ok`.
+flips `status` to `degraded` while `/health/live` stays `ok`. No probes have been
+wired in yet; M0 added Postgres/Redis reads elsewhere in the app but not here.
+
+### Auth
+
+| Method | Path | Auth | Description |
+| --- | --- | --- | --- |
+| `POST` | `/auth/login` | none | Log in; sets the refresh cookie |
+| `POST` | `/auth/refresh` | refresh cookie | Rotate the session |
+| `POST` | `/auth/change-password` | access token | Change your own password |
+| `POST` | `/auth/logout` | refresh cookie | Log out of this device |
+| `POST` | `/auth/logout-all` | access token | Log out everywhere |
+| `GET` | `/auth/me` | access token | The current account |
+
+### Users
+
+| Method | Path | Auth | Description |
+| --- | --- | --- | --- |
+| `GET` | `/users` | any user | List accounts, paginated |
+| `GET` | `/users/{id}` | any user | One account |
+| `POST` | `/users` | admin | Provision an account |
+| `PATCH` | `/users/{id}` | admin | Update name or admin flag |
+| `DELETE` | `/users/{id}` | admin | Deactivate, revoking sessions |
+| `POST` | `/users/{id}/reset-password` | admin | Set a temporary password |
 
 ## Layout
 
 ```
 backend/
-├── pyproject.toml        # dependencies, ruff + pytest config
+├── pyproject.toml        # dependencies, ruff + pytest + mypy config
+├── alembic.ini
+├── alembic/versions/     # migrations
 ├── .env.example
 ├── app/
-│   ├── main.py           # create_app(): CORS, router mounting
+│   ├── main.py           # create_app(): middleware, CORS, router mounting
 │   ├── config.py         # Settings (pydantic-settings) + get_settings()
+│   ├── cli.py            # `python -m app.cli seed-admins`
+│   ├── api/
+│   │   ├── deps.py       # CurrentUser / AdminUser dependencies
+│   │   └── routes/
+│   │       ├── index.py  # GET /
+│   │       ├── health.py # GET /health, /health/live, /health/ready
+│   │       ├── auth.py   # POST /auth/login, /refresh, /change-password, ...
+│   │       └── users.py  # /users CRUD + reset-password
+│   ├── core/
+│   │   ├── access.py     # the phase-2 access-resolver seam
+│   │   ├── errors.py     # AppError, ErrorCode, exception handlers
+│   │   ├── middleware.py # AuthContextMiddleware — identity + the password-change gate
+│   │   ├── passwords.py  # password policy (length, common-password blocklist)
+│   │   ├── rate_limit.py # Redis-backed login rate limiting
+│   │   └── security.py   # hashing, JWT access tokens, opaque refresh tokens
+│   ├── db/session.py     # async engine + sessionmaker
+│   ├── models/            # SQLAlchemy models: User, RefreshToken
+│   ├── repositories/      # the only layer that issues `select`
 │   ├── schemas/
-│   │   └── base.py       # ApiModel — the snake_case → camelCase boundary
-│   └── api/routes/
-│       ├── index.py      # GET /
-│       └── health.py     # GET /health, /health/live, /health/ready
+│   │   ├── base.py       # ApiModel — the snake_case → camelCase boundary
+│   │   ├── auth.py
+│   │   ├── errors.py
+│   │   ├── pagination.py
+│   │   └── user.py
+│   └── services/          # AuthService, UserService — orchestration + business rules
 └── tests/
-    ├── conftest.py       # TestClient fixture
-    ├── test_api_model.py # the camelCase wire contract
-    └── test_meta_routes.py
+    ├── conftest.py           # app/client/db_session fixtures, real Postgres + Redis
+    ├── test_api_model.py     # the camelCase wire contract
+    ├── test_meta_routes.py
+    ├── test_config.py
+    ├── test_schema.py
+    ├── test_security.py
+    ├── test_passwords.py
+    ├── test_errors.py
+    ├── test_access.py
+    ├── test_auth_middleware.py
+    ├── test_rate_limit.py
+    ├── test_user_repository.py
+    ├── test_refresh_token_repository.py
+    ├── test_auth_api.py
+    ├── test_users_api.py
+    ├── test_cli.py
+    └── test_m0_acceptance.py # PRD §7's success criterion, end to end
 ```
 
 Settings come from the environment, falling back to `.env`, falling back to the
@@ -77,13 +144,17 @@ defaults in `config.py`. `get_settings()` is `lru_cache`d and injected via
 
 ## Configuration
 
-See [`.env.example`](.env.example). Two notes:
+See [`.env.example`](.env.example). A few notes:
 
 - `CORS_ORIGINS` must be a **JSON array** (`["http://localhost:3000"]`), not a
   comma-separated string — pydantic-settings parses complex types as JSON.
-- `DATABASE_URL`, `QDRANT_URL`, and `REDIS_URL` are wired but unread; no code
-  touches them yet. They land at M0 (Postgres for users/projects, Redis for
-  auth rate limiting) and M1 (Qdrant for vectors, Redis for the ingestion queue).
+- `DATABASE_URL` is read via the repository layer (`app/repositories/`) for users and
+  refresh tokens, and `REDIS_URL` by the login rate limiter (`app/core/rate_limit.py`).
+  `QDRANT_URL` remains wired but unread until M1 (vectors), as does the Redis-backed
+  ingestion queue.
+- Auth, password-policy, and bootstrap-admin settings are documented inline in
+  `.env.example` — that file is the canonical list. `BOOTSTRAP_ADMIN_PASSWORD` has no
+  default on purpose: seeding refuses to run without it rather than inventing one.
 
 ## Conventions
 
@@ -102,10 +173,16 @@ Full conventions in [`CLAUDE.md`](../CLAUDE.md) and
 
 ## Development
 
+`make infra` (from the repo root) must be running before `pytest` — the suite runs against
+real Postgres and real Redis, never SQLite or a mock (see `tests/conftest.py`).
+
 ```bash
-uv run ruff check .        # lint
-uv run ruff format .       # format
-uv run pytest              # tests
+uv run alembic upgrade head              # apply migrations
+uv run python -m app.cli seed-admins     # create the bootstrap admins (idempotent)
+uv run ruff check .                      # lint
+uv run ruff format .                     # format
+uv run mypy .                            # typecheck (strict, over app and tests)
+uv run pytest                            # tests — needs `make infra` first
 ```
 
 `ruff` is configured (in `pyproject.toml`) with `ANN` for type-hint coverage, `T20` to ban

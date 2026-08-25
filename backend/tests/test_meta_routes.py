@@ -1,10 +1,10 @@
 """Index and health routes."""
 
-from fastapi.testclient import TestClient
+from httpx import AsyncClient
 
 
-def test_index_reports_app_and_time(client: TestClient) -> None:
-    response = client.get("/")
+async def test_index_reports_app_and_time(client: AsyncClient) -> None:
+    response = await client.get("/")
 
     assert response.status_code == 200
     body = response.json()
@@ -13,8 +13,8 @@ def test_index_reports_app_and_time(client: TestClient) -> None:
     assert body["date"]
 
 
-def test_health_reports_env(client: TestClient) -> None:
-    response = client.get("/health")
+async def test_health_reports_env(client: AsyncClient) -> None:
+    response = await client.get("/health")
 
     assert response.status_code == 200
     body = response.json()
@@ -23,18 +23,18 @@ def test_health_reports_env(client: TestClient) -> None:
     assert body["timestamp"]
 
 
-def test_liveness_is_ok(client: TestClient) -> None:
-    response = client.get("/health/live")
+async def test_liveness_is_ok(client: AsyncClient) -> None:
+    response = await client.get("/health/live")
 
     assert response.status_code == 200
     assert response.json() == {"status": "ok"}
 
 
-def test_readiness_reports_empty_checks_until_datastores_are_wired(
-    client: TestClient,
+async def test_readiness_reports_empty_checks_until_datastores_are_wired(
+    client: AsyncClient,
 ) -> None:
     """`checks` gains Postgres/Qdrant/Redis probes at M0/M1 without a shape change."""
-    response = client.get("/health/ready")
+    response = await client.get("/health/ready")
 
     assert response.status_code == 200
     assert response.json() == {"status": "ok", "checks": {}}
