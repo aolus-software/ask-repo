@@ -74,17 +74,24 @@ class RateLimiter:
     def __init__(self, redis: aioredis.Redis) -> None:
         self.redis = redis
 
+    def _windowed_key(self, key: str, *, window_seconds: int) -> str:
+        """Compute the Redis key for a given rate limit key and current window."""
+        window = int(time.time()) // window_seconds
+        return f"{key}:{window}"
+
     async def hit(self, key: str, *, limit: int, window_seconds: int) -> None:
         """Count one attempt against `key`; raise `AppError(429)` once over `limit`."""
-        window = int(time.time()) // window_seconds
-        windowed_key = f"{key}:{window}"
+        windowed_key = self._windowed_key(key, window_seconds=window_seconds)
         try:
             async with self.redis.pipeline(transaction=True) as pipeline:
                 pipeline.incr(windowed_key)
                 pipeline.expire(windowed_key, window_seconds)
                 count, _ = await pipeline.execute()
         except RedisError:
-            logger.exception("Rate limiter unavailable; allowing %s", _redact_email_from_key(key))
+            logger.exception(
+                "Rate limiter unavailable; allowing %s",
+                _redact_email_from_key(windowed_key),
+            )
             return
 
         if int(count) > limit:
@@ -96,25 +103,26 @@ class RateLimiter:
 
     async def get_count(self, key: str, *, window_seconds: int) -> int:
         """Return the current count for a key and window, or 0 if unavailable."""
-        window = int(time.time()) // window_seconds
-        windowed_key = f"{key}:{window}"
+        windowed_key = self._windowed_key(key, window_seconds=window_seconds)
         try:
             count = await self.redis.get(windowed_key)
         except RedisError:
             logger.exception(
-                "Rate limiter unavailable; returning 0 for %s", _redact_email_from_key(key)
+                "Rate limiter unavailable; returning 0 for %s",
+                _redact_email_from_key(windowed_key),
             )
             return 0
         return int(count) if count is not None else 0
 
     async def reset(self, key: str, *, window_seconds: int) -> None:
         """Drop the current window's counter for `key`."""
-        window = int(time.time()) // window_seconds
+        windowed_key = self._windowed_key(key, window_seconds=window_seconds)
         try:
-            await self.redis.delete(f"{key}:{window}")
+            await self.redis.delete(windowed_key)
         except RedisError:
             logger.exception(
-                "Rate limiter unavailable; could not reset %s", _redact_email_from_key(key)
+                "Rate limiter unavailable; could not reset %s",
+                _redact_email_from_key(windowed_key),
             )
 
 
