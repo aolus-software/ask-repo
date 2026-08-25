@@ -140,8 +140,10 @@ The field is `password_hash`, not `password`. The plaintext exists only in the r
   a lockout weapon, since anyone knowing a colleague's address could spend the budget on their
   behalf. The per-IP limit is counted before the credential check, so it also bounds attempts
   against addresses that do not exist.
-- `POST /auth/change-password` carries the same per-IP limit. It verifies `current_password`, so
-  leaving it uncapped while login is capped only moves the target.
+- `POST /auth/change-password` carries a separate per-IP limit of the same size, keyed
+  independently of login's (`rl:pwchange:ip:*` vs `rl:login:ip:*`) so spending one budget never
+  blocks the other. It verifies `current_password`, so leaving it uncapped while login is capped
+  only moves the target.
 - Behind a reverse proxy, `TRUSTED_PROXY_HOPS` must be set to the number of proxies in front of
   the API. Left at `0` with Caddy in front, every request appears to come from Caddy and the
   per-IP limit becomes a single instance-wide limit.

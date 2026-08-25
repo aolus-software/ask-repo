@@ -167,6 +167,53 @@ async def test_the_sixth_login_attempt_in_a_minute_is_429(
     assert response.json()["detail"]["code"] == "RATE_LIMITED"
 
 
+async def test_change_password_has_its_own_rate_limit_budget(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    """Spec §9's third row: change-password counts against `rl:pwchange:ip:*`, not
+    login's `rl:login:ip:*` — spending one budget must not affect the other.
+    """
+    await _make_user(db_session)
+    access, cookie = await _login(client)
+
+    for _ in range(get_settings().login_rate_per_minute_ip):
+        await client.post(
+            "/auth/login", json={"email": "dev@example.com", "password": "wrong-but-long-enough"}
+        )
+
+    _present_cookie(client, cookie)
+    response = await client.post(
+        "/auth/change-password",
+        headers=_bearer(access),
+        json={"currentPassword": PASSWORD, "newPassword": NEW_PASSWORD},
+    )
+
+    assert response.status_code == 200
+
+
+async def test_the_sixth_change_password_attempt_in_a_minute_is_429(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    await _make_user(db_session)
+    access, cookie = await _login(client)
+    _present_cookie(client, cookie)
+
+    for _ in range(get_settings().login_rate_per_minute_ip):
+        await client.post(
+            "/auth/change-password",
+            headers=_bearer(access),
+            json={"currentPassword": "wrong-current-password", "newPassword": NEW_PASSWORD},
+        )
+    response = await client.post(
+        "/auth/change-password",
+        headers=_bearer(access),
+        json={"currentPassword": PASSWORD, "newPassword": NEW_PASSWORD},
+    )
+
+    assert response.status_code == 429
+    assert response.json()["detail"]["code"] == "RATE_LIMITED"
+
+
 async def test_a_lower_cost_hash_is_upgraded_on_login(
     client: AsyncClient, db_session: AsyncSession, app: FastAPI
 ) -> None:

@@ -68,6 +68,14 @@ A few properties are your responsibility, not the code's:
   admin.
 - **TLS is required, not optional.** The refresh token is a `Secure` cookie, so a browser will
   not send it over plain HTTP outside `localhost`. Run Caddy in front.
+- **Set `TRUSTED_PROXY_HOPS` to the number of proxies in front of the API** — one, with the
+  Caddy setup above. It tells `client_ip()` how many entries to discard from the right of
+  `X-Forwarded-For` before trusting what remains. Left at its default of `0` behind a proxy,
+  every request's socket address is Caddy's, so the per-IP login limit — meant to be 5 attempts
+  per minute per caller — becomes 5 attempts per minute for the entire organization, and because
+  the limit is counted before the credential check, ordinary successful logins consume it too. A
+  production boot with `TRUSTED_PROXY_HOPS` still at `0` is refused for exactly this reason
+  (`app/config.py`).
 - **A Redis outage degrades login rate limiting.** The limiter fails open by design — an outage
   should not lock the whole team out — so brute-force protection is reduced to bcrypt's cost
   while Redis is down.

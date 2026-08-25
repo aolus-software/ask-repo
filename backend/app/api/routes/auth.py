@@ -14,7 +14,11 @@ from fastapi import APIRouter, Cookie, Depends, Response, status
 
 from app.api.deps import CurrentUser, SessionDep
 from app.config import Settings, get_settings
-from app.core.rate_limit import LoginAttemptLimiterDep, enforce_login_ip_limit
+from app.core.rate_limit import (
+    LoginAttemptLimiterDep,
+    enforce_login_ip_limit,
+    enforce_password_change_ip_limit,
+)
 from app.schemas.auth import AccessTokenResponse, ChangePasswordRequest, LoginRequest
 from app.schemas.errors import ERROR_RESPONSES
 from app.schemas.user import UserResponse
@@ -107,7 +111,7 @@ async def refresh(
     response_model=UserResponse,
     status_code=status.HTTP_200_OK,
     summary="Change your own password",
-    dependencies=[Depends(enforce_login_ip_limit)],
+    dependencies=[Depends(enforce_password_change_ip_limit)],
     responses={code: ERROR_RESPONSES[code] for code in (400, 401, 422, 429)},
 )
 async def change_password(

@@ -55,6 +55,17 @@ def test_production_accepts_a_complete_configuration() -> None:
     settings = Settings(
         app_env="production",
         secret_key="a-real-secret-value-for-testing-only",
+        trusted_proxy_hops=1,
     )
 
     assert settings.app_env == "production"
+
+
+def test_production_rejects_zero_trusted_proxy_hops() -> None:
+    """Left at 0 behind Caddy, the per-IP limit silently becomes instance-wide."""
+    with pytest.raises(ValidationError, match="TRUSTED_PROXY_HOPS"):
+        Settings(
+            app_env="production",
+            secret_key="a-real-secret-value-for-testing-only",
+            trusted_proxy_hops=0,
+        )

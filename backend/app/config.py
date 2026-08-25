@@ -75,6 +75,13 @@ class Settings(BaseSettings):
             raise ValueError("SECRET_KEY must be set to a real value when APP_ENV=production")
         if not self.refresh_cookie_secure:
             raise ValueError("REFRESH_COOKIE_SECURE cannot be false when APP_ENV=production")
+        if self.trusted_proxy_hops == 0:
+            raise ValueError(
+                "TRUSTED_PROXY_HOPS must be set to the number of proxies in front of the "
+                "API when APP_ENV=production — left at 0 behind Caddy, every request "
+                "looks like it came from the proxy and the per-IP rate limit becomes "
+                "instance-wide"
+            )
         return self
 
 
