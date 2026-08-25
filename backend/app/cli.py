@@ -28,11 +28,11 @@ async def seed_admins() -> int:
     outright rather than seeding a weak password: an instance whose admin account has a
     guessable password is worse than one that failed to start and said why.
 
-    An absent `BOOTSTRAP_ADMIN_PASSWORD` is only a hard failure when there is actually
-    something left to create. `bootstrap_admin_password` is deliberately not validated
-    at application startup, precisely so an already-seeded instance can boot with the
-    variable removed — the entrypoint chains this command with `&&`, so raising here
-    unconditionally would make that impossible.
+    An already-seeded instance must boot regardless of `BOOTSTRAP_ADMIN_PASSWORD`'s
+    presence *or* quality — the entrypoint chains this command with `&&`, and with
+    `restart: unless-stopped` a non-zero exit here crash-loops the container. So the
+    "nothing left to create" return happens before either password check, not just
+    before the missing-password one.
     """
     settings = get_settings()
     password = settings.bootstrap_admin_password
@@ -47,13 +47,20 @@ async def seed_admins() -> int:
             else:
                 missing.append(normalised)
 
-        if not password:
-            if missing:
-                raise ValueError(
-                    "BOOTSTRAP_ADMIN_PASSWORD is not set; refusing to seed administrator accounts"
+        if not missing:
+            if password:
+                logger.warning(
+                    "BOOTSTRAP_ADMIN_PASSWORD is set but unused: every bootstrap admin "
+                    "already exists"
                 )
-            logger.info("All bootstrap admins already exist; nothing to seed")
+            else:
+                logger.info("All bootstrap admins already exist; nothing to seed")
             return 0
+
+        if not password:
+            raise ValueError(
+                "BOOTSTRAP_ADMIN_PASSWORD is not set; refusing to seed administrator accounts"
+            )
 
         try:
             check_password(
@@ -66,9 +73,6 @@ async def seed_admins() -> int:
             raise ValueError(
                 f"BOOTSTRAP_ADMIN_PASSWORD fails password policy: {error.reason}"
             ) from error
-
-        if not missing:
-            return 0
 
         password_hash = hash_password(password, cost=settings.bcrypt_cost)
         created = 0

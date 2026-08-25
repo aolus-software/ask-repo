@@ -13,8 +13,11 @@ from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
+from app.core.errors import AppError
 from app.core.security import create_access_token, hash_password
 from app.models import User
+from app.schemas.user import UserCreateRequest
+from app.services.user import UserService
 
 GOOD_PASSWORD = "a-perfectly-fine-passphrase"
 
@@ -118,6 +121,31 @@ async def test_a_duplicate_email_is_409(client: AsyncClient, db_session: AsyncSe
 
     assert response.status_code == 409
     assert response.json()["detail"]["code"] == "EMAIL_ALREADY_EXISTS"
+
+
+async def test_a_racing_duplicate_email_is_409_not_500(db_session: AsyncSession) -> None:
+    """Two admins creating the same address in one flush window both pass the
+    check-then-insert pre-check; the second commit hits the partial unique index and
+    must still surface `409 EMAIL_ALREADY_EXISTS`, not a bare `500`.
+    """
+    await _make_user(db_session, email="race@example.com")
+    service = UserService(db_session, get_settings())
+
+    async def _pretend_available(email: str) -> bool:
+        """Simulate the pre-check having run before the colliding row existed."""
+        return False
+
+    service.users.email_exists = _pretend_available  # type: ignore[method-assign]
+
+    with pytest.raises(AppError) as caught:
+        await service.create(
+            UserCreateRequest(
+                name="Racer", email="race@example.com", password=GOOD_PASSWORD, is_admin=False
+            )
+        )
+
+    assert caught.value.status_code == 409
+    assert caught.value.code == "EMAIL_ALREADY_EXISTS"
 
 
 async def test_a_soft_deleted_email_can_be_reused(

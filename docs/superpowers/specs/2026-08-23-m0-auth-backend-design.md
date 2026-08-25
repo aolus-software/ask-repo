@@ -294,12 +294,23 @@ development (`SECURITY.md:64`), and deriving the successor deterministically fro
 (`HMAC(secret, parent)`) would mean that stealing any single token yields the entire future
 chain, silently — destroying the property rotation exists to provide.
 
-Minting a sibling means a family can briefly hold more than one live token. The cost is precise
-and bounded: for `refresh_rotation_grace_seconds` after a legitimate rotation, a token stolen
-and replayed inside that window produces a second live token without tripping detection.
-Anything outside the window still revokes the whole family. That is the trade being made against
-guaranteed logouts for anyone with two tabs open, and it is why the window is 10 seconds rather
-than minutes.
+Minting a sibling means a family can briefly hold more than one live token. Trace what happens
+if the stolen token is replayed inside the window: the legitimate client rotates `A` → `B`; the
+attacker replays stolen `A` inside the window and gets sibling `C`, with nothing revoked and
+`A.used_at` untouched. The two chains — `B` and `C` — are now independent. The legitimate client
+rotates `B` → `D`; the attacker rotates `C` → `E`. Neither side ever re-presents a consumed
+token from here on, so replay detection never fires again — not in ten seconds, not for the rest
+of the token's life. The window bounds **detection**, not damage.
+
+What keeps this from being unbounded: a sibling's `expires_at` is carried over from its
+*parent's* `expires_at` rather than computed fresh, so the hijacked chain is capped at the
+original token's remaining lifetime instead of renewing itself indefinitely on every rotation
+(`_issue`'s `expires_at` parameter). Recovery is `POST /auth/logout-all`, which the affected user
+has to think to call — detection alone will not prompt it. In practice, the mandatory
+first-login `change-password` revokes every refresh token except the caller's, so a sibling
+minted before that point does not survive it. That is the trade being made against guaranteed
+logouts for anyone with two tabs open, and it is why the window is 10 seconds rather than
+minutes.
 
 ### Revocation matrix
 

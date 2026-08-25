@@ -56,7 +56,7 @@ async def list_users(
     response_model=UserResponse,
     status_code=status.HTTP_200_OK,
     summary="Get one account",
-    responses={code: ERROR_RESPONSES[code] for code in (401, 403, 404)},
+    responses={code: ERROR_RESPONSES[code] for code in (401, 403, 404, 422)},
 )
 async def get_user(
     user_id: uuid.UUID, current_user: CurrentUser, service: UserServiceDep
@@ -97,7 +97,7 @@ async def update_user(
     "/{user_id}",
     status_code=status.HTTP_204_NO_CONTENT,
     summary="Deactivate an account",
-    responses={code: ERROR_RESPONSES[code] for code in (401, 403, 404, 409)},
+    responses={code: ERROR_RESPONSES[code] for code in (401, 403, 404, 409, 422)},
 )
 async def delete_user(user_id: uuid.UUID, current_user: AdminUser, service: UserServiceDep) -> None:
     await service.soft_delete(user_id)

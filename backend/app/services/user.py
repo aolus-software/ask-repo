@@ -8,6 +8,7 @@ import uuid
 from datetime import UTC, datetime
 
 from fastapi import status
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import Settings
@@ -59,6 +60,13 @@ class UserService:
             raise AppError(status.HTTP_404_NOT_FOUND, ErrorCode.USER_NOT_FOUND, "No such user.")
         return user
 
+    def _email_taken(self) -> AppError:
+        return AppError(
+            status.HTTP_409_CONFLICT,
+            ErrorCode.EMAIL_ALREADY_EXISTS,
+            "An account with that email already exists.",
+        )
+
     async def _guard_last_admin(self, user: User) -> None:
         """Refuse an operation that would leave the instance with no admin (D17)."""
         if not user.is_admin:
@@ -99,13 +107,18 @@ class UserService:
         return UserResponse.model_validate(await self._load(user_id))
 
     async def create(self, payload: UserCreateRequest) -> UserResponse:
-        """Provision an account. `must_change_password` is set on every new account."""
+        """Provision an account. `must_change_password` is set on every new account.
+
+        The pre-check below is check-then-insert, not a lock: two admins creating the
+        same address in one flush window can both pass it. `BaseRepository.add` flushes
+        immediately, so the partial-unique-index violation surfaces there, not at
+        `commit` — the `except IntegrityError` wraps both. It raises the same `409` the
+        pre-check does, instead of a bare `500`. The pre-check stays because it is the
+        common case and gives a cleaner message without a round trip to the database's
+        error text.
+        """
         if await self.users.email_exists(payload.email):
-            raise AppError(
-                status.HTTP_409_CONFLICT,
-                ErrorCode.EMAIL_ALREADY_EXISTS,
-                "An account with that email already exists.",
-            )
+            raise self._email_taken()
 
         user = User(
             id=uuid.uuid4(),
@@ -115,8 +128,12 @@ class UserService:
             is_admin=payload.is_admin,
             must_change_password=True,
         )
-        await self.users.add(user)
-        await self.session.commit()
+        try:
+            await self.users.add(user)
+            await self.session.commit()
+        except IntegrityError as error:
+            await self.session.rollback()
+            raise self._email_taken() from error
         return UserResponse.model_validate(user)
 
     async def update(self, user_id: uuid.UUID, payload: UserUpdateRequest) -> UserResponse:

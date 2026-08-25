@@ -28,9 +28,12 @@ class Base(DeclarativeBase):
 class TimestampMixin:
     """`created_at` / `updated_at`, both timezone-aware.
 
-    `onupdate` is a Python-side default: it fires for ORM flushes but NOT for bulk
-    `UPDATE` statements. Repository methods issuing bulk updates set `updated_at`
-    explicitly — see `.claude/rules/persistence.md`.
+    `onupdate=func.now()` is a **server-side SQL expression**, not a Python-side
+    default: SQLAlchemy renders `now()` directly into the `UPDATE` it builds during
+    an ORM flush. It does NOT fire for a bulk `UPDATE` Core statement, because that
+    path never goes through the ORM's per-row `UPDATE` construction that would apply
+    it. Repository methods issuing bulk updates set `updated_at` explicitly — see
+    `.claude/rules/persistence.md`.
     """
 
     created_at: Mapped[datetime] = mapped_column(

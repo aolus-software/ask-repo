@@ -10,11 +10,16 @@ without a request or response object.
 
 from typing import Annotated
 
-from fastapi import APIRouter, Cookie, Depends, Response, status
+from fastapi import APIRouter, Depends, Request, Response, status
 
 from app.api.deps import CurrentUser, SessionDep
 from app.config import Settings, get_settings
-from app.core.rate_limit import LoginAttemptLimiterDep, enforce_login_ip_limit
+from app.core.errors import AppError, ErrorCode
+from app.core.rate_limit import (
+    LoginAttemptLimiterDep,
+    enforce_login_ip_limit,
+    enforce_password_change_ip_limit,
+)
 from app.schemas.auth import AccessTokenResponse, ChangePasswordRequest, LoginRequest
 from app.schemas.errors import ERROR_RESPONSES
 from app.schemas.user import UserResponse
@@ -23,7 +28,17 @@ from app.services.auth import AuthService
 router = APIRouter(prefix="/auth", tags=["Auth"])
 
 SettingsDep = Annotated[Settings, Depends(get_settings)]
-RefreshCookie = Annotated[str | None, Cookie(alias="askrepo_refresh")]
+
+
+def _read_refresh_cookie(request: Request, settings: Settings) -> str | None:
+    """Read the refresh cookie under its *configured* name.
+
+    Not a typed FastAPI `Cookie(...)` parameter: that alias is fixed at import time,
+    so it cannot honour an operator's `REFRESH_COOKIE_NAME` override. Reading from
+    `request.cookies` at call time can. The trade-off is that the cookie no longer
+    appears as a typed parameter in the OpenAPI schema — see each route's summary.
+    """
+    return request.cookies.get(settings.refresh_cookie_name)
 
 
 def get_auth_service(
@@ -65,6 +80,20 @@ def _clear_refresh_cookie(response: Response, settings: Settings) -> None:
     )
 
 
+def _refresh_cookie_clear_headers(settings: Settings) -> dict[str, str]:
+    """The `Set-Cookie` header that clears the refresh cookie, as a plain header dict.
+
+    Needed on the exception path, not just the success path: once `AppError` (an
+    `HTTPException`) propagates out of a route, FastAPI's own handler builds a fresh
+    `JSONResponse` and never looks at the `response: Response` dependency the route
+    was mutating — so clearing the cookie there has no effect on what the client
+    receives. Attaching the header to the exception itself is what survives.
+    """
+    scratch = Response()
+    _clear_refresh_cookie(scratch, settings)
+    return {"set-cookie": scratch.headers["set-cookie"]}
+
+
 @router.post(
     "/login",
     response_model=AccessTokenResponse,
@@ -89,15 +118,35 @@ async def login(
     response_model=AccessTokenResponse,
     status_code=status.HTTP_200_OK,
     summary="Rotate the refresh token and issue a new access token",
+    description=(
+        "Reads the refresh token from the cookie named by `REFRESH_COOKIE_NAME` "
+        "(not a typed OpenAPI parameter)."
+    ),
     responses={401: ERROR_RESPONSES[401]},
 )
 async def refresh(
+    request: Request,
     response: Response,
     service: AuthServiceDep,
     settings: SettingsDep,
-    refresh_token: RefreshCookie = None,
 ) -> AccessTokenResponse:
-    token_response, raw_refresh = await service.refresh(refresh_token)
+    refresh_token = _read_refresh_cookie(request, settings)
+    try:
+        token_response, raw_refresh = await service.refresh(refresh_token)
+    except AppError as error:
+        # Replay detection revokes the family server-side, but the browser will keep
+        # re-sending a dead cookie forever unless this response also clears it. The
+        # header goes on the re-raised error itself, not the `response` dependency —
+        # FastAPI's own HTTPException handler builds a fresh JSONResponse once this
+        # propagates, so anything mutated on `response` here would be discarded.
+        if error.code == ErrorCode.REFRESH_TOKEN_REUSED:
+            raise AppError(
+                error.status_code,
+                error.code,
+                error.message,
+                headers=_refresh_cookie_clear_headers(settings),
+            ) from error
+        raise
     _set_refresh_cookie(response, raw_refresh, settings)
     return token_response
 
@@ -107,15 +156,21 @@ async def refresh(
     response_model=UserResponse,
     status_code=status.HTTP_200_OK,
     summary="Change your own password",
-    dependencies=[Depends(enforce_login_ip_limit)],
+    description=(
+        "Reads the refresh token from the cookie named by `REFRESH_COOKIE_NAME` "
+        "(not a typed OpenAPI parameter)."
+    ),
+    dependencies=[Depends(enforce_password_change_ip_limit)],
     responses={code: ERROR_RESPONSES[code] for code in (400, 401, 422, 429)},
 )
 async def change_password(
+    request: Request,
     payload: ChangePasswordRequest,
     current_user: CurrentUser,
     service: AuthServiceDep,
-    refresh_token: RefreshCookie = None,
+    settings: SettingsDep,
 ) -> UserResponse:
+    refresh_token = _read_refresh_cookie(request, settings)
     return await service.change_password(current_user.id, payload, refresh_token)
 
 
@@ -123,14 +178,19 @@ async def change_password(
     "/logout",
     status_code=status.HTTP_204_NO_CONTENT,
     summary="Log out of this device",
+    description=(
+        "Reads the refresh token from the cookie named by `REFRESH_COOKIE_NAME` "
+        "(not a typed OpenAPI parameter)."
+    ),
     responses={},
 )
 async def logout(
+    request: Request,
     response: Response,
     service: AuthServiceDep,
     settings: SettingsDep,
-    refresh_token: RefreshCookie = None,
 ) -> None:
+    refresh_token = _read_refresh_cookie(request, settings)
     await service.logout(refresh_token)
     _clear_refresh_cookie(response, settings)
 

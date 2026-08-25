@@ -36,8 +36,10 @@ currently correct.
 
 ## Bulk updates must set `updated_at` themselves
 
-`TimestampMixin.updated_at` uses SQLAlchemy's `onupdate`, which is a **Python-side** default: it
-fires on an ORM flush and **not** on a bulk `UPDATE`. Any repository method issuing a bulk
+`TimestampMixin.updated_at` uses SQLAlchemy's `onupdate=func.now()`, which is a
+**server-side SQL expression**: SQLAlchemy renders `now()` directly into the `UPDATE` it
+builds during an ORM flush. It fires on an ORM flush and **not** on a bulk `UPDATE`, because a
+bulk update never goes through that per-row construction. Any repository method issuing a bulk
 update sets `updated_at` in the `values()` explicitly. Forgetting leaves rows whose
 `updated_at` predates their last change, which is the kind of bug found months later while
 debugging something else.

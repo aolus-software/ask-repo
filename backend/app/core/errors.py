@@ -53,8 +53,22 @@ class AppError(HTTPException):
     the structured detail.
     """
 
-    def __init__(self, status_code: int, code: ErrorCode, message: str) -> None:
-        super().__init__(status_code=status_code, detail=error_detail(code, message))
+    def __init__(
+        self,
+        status_code: int,
+        code: ErrorCode,
+        message: str,
+        *,
+        headers: dict[str, str] | None = None,
+    ) -> None:
+        """`headers` is for the rare case a route needs to attach one to the error
+        response itself — e.g. clearing a cookie on a replay — because FastAPI's
+        default `HTTPException` handler builds its own response once an exception
+        propagates, ignoring anything mutated on the route's injected `Response`.
+        """
+        super().__init__(
+            status_code=status_code, detail=error_detail(code, message), headers=headers
+        )
         self.code = code
         self.message = message
 

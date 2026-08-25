@@ -130,18 +130,32 @@ The field is `password_hash`, not `password`. The plaintext exists only in the r
   token**, and invalidates the old one. Presenting an already-consumed refresh token revokes
   the whole family — that is a replay signal — **except within a 10-second grace window**,
   where a sibling token is minted instead. Strict rotation would log out any client refreshing
-  twice concurrently, and two browser tabs is enough. The cost is precise: for those 10 seconds
-  a stolen-and-immediately-replayed token is not detected.
+  twice concurrently, and two browser tabs is enough. The ten seconds bounds **detection**, not
+  damage: a token stolen and replayed inside the window mints an independent sibling chain that
+  rotation will never flag as reuse afterwards — not in ten seconds and not for the rest of the
+  token's life. The sibling's `expires_at` is capped to the parent token's remaining lifetime
+  rather than a fresh full-length grant, so a hijacked chain cannot renew itself indefinitely,
+  but detection itself does not recover on its own; recovery is `POST /auth/logout-all`. The
+  mandatory first-login password change is a real mitigation in practice: `change-password`
+  revokes every refresh token except the caller's, which kills any sibling minted before it.
 - `POST /auth/logout` revokes the presented refresh token. `POST /auth/logout-all` revokes every refresh token for the user.
 - `GET /auth/me` returns the current user. `password_hash` is never serialized in any response.
 - Login failures return one uniform error regardless of cause (unknown email vs wrong password), compared against a dummy hash so timing doesn't differ.
 - Login is rate limited to 5/min/IP and 10/hour/email, returning `429`. Only **failed** attempts
-  count toward the per-email limit and a successful login clears it — a raw per-email counter is
-  a lockout weapon, since anyone knowing a colleague's address could spend the budget on their
-  behalf. The per-IP limit is counted before the credential check, so it also bounds attempts
-  against addresses that do not exist.
-- `POST /auth/change-password` carries the same per-IP limit. It verifies `current_password`, so
-  leaving it uncapped while login is capped only moves the target.
+  count toward the per-email limit and a successful login clears it. Be precise about what this
+  does and does not buy: counting only failures stops a legitimate user's own successful logins
+  from ever spending their own budget, but it does **not** stop a deliberate attacker — an
+  attacker's wrong guesses are failures too, and `check_email` runs *before* authentication, so
+  after ten wrong guesses against a colleague's known address, the real owner cannot log in for
+  the rest of the hour even with the correct password. At roughly ten requests an hour, needing
+  no valid credential, an attacker can sustain that denial-of-service against one named person
+  indefinitely. This is an accepted risk, documented in `SECURITY.md`, not a design that closes
+  the lockout weapon — it only keeps ordinary use from tripping it. The per-IP limit is counted
+  before the credential check, so it also bounds attempts against addresses that do not exist.
+- `POST /auth/change-password` carries a separate per-IP limit of the same size, keyed
+  independently of login's (`rl:pwchange:ip:*` vs `rl:login:ip:*`) so spending one budget never
+  blocks the other. It verifies `current_password`, so leaving it uncapped while login is capped
+  only moves the target.
 - Behind a reverse proxy, `TRUSTED_PROXY_HOPS` must be set to the number of proxies in front of
   the API. Left at `0` with Caddy in front, every request appears to come from Caddy and the
   per-IP limit becomes a single instance-wide limit.

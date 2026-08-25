@@ -144,7 +144,7 @@ SettingsDep = Annotated[Settings, Depends(get_settings)]
 async def enforce_login_ip_limit(
     request: Request, limiter: RateLimiterDep, settings: SettingsDep
 ) -> None:
-    """Per-IP limit on a credential-checking route.
+    """Per-IP limit on `POST /auth/login`.
 
     Counted before the credential check, so it also bounds attempts against addresses
     that do not exist — which is what makes it the enumeration-resistant half of the
@@ -153,6 +153,24 @@ async def enforce_login_ip_limit(
     address = client_ip(request, trusted_proxy_hops=settings.trusted_proxy_hops)
     await limiter.hit(
         f"rl:login:ip:{address}", limit=settings.login_rate_per_minute_ip, window_seconds=60
+    )
+
+
+async def enforce_password_change_ip_limit(
+    request: Request, limiter: RateLimiterDep, settings: SettingsDep
+) -> None:
+    """Per-IP limit on `POST /auth/change-password`, counted separately from login.
+
+    Same budget size as the login limit (`docs/PRD.md` §4.0), but its own Redis key
+    (`rl:pwchange:ip:*` vs `rl:login:ip:*`, spec §9) — `change-password` verifies
+    `current_password`, so leaving it uncapped while login is capped just moves the
+    target, but sharing login's counter would mean a few mistyped login attempts
+    block a legitimate password change, or a password change spends the budget a
+    login needs next.
+    """
+    address = client_ip(request, trusted_proxy_hops=settings.trusted_proxy_hops)
+    await limiter.hit(
+        f"rl:pwchange:ip:{address}", limit=settings.login_rate_per_minute_ip, window_seconds=60
     )
 
 
