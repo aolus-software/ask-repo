@@ -80,7 +80,7 @@ class Settings(BaseSettings):
     embedding_provider: Literal["ollama", "openai", "voyage"] = "ollama"
     embedding_model: str = "nomic-embed-text"
     embedding_base_url: str = "http://localhost:11434"
-    embedding_api_key: str = ""
+    embedding_api_key: str | None = None
     embedding_batch_size: int = 64
 
     # Ingestion — repository cloning and chunking.
