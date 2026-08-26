@@ -48,6 +48,7 @@ def _test_environment() -> Iterator[None]:
         patch.setenv("REDIS_URL", _swap_database(dev.redis_url, str(TEST_REDIS_DB)))
         patch.setenv("SECRET_KEY", "test-secret-key-not-used-anywhere-real")
         patch.setenv("BCRYPT_COST", "4")  # keep the suite fast; cost is not under test
+        patch.setenv("PAT_ENCRYPTION_KEY", "Hu25IBLmyXgJmARywo5aj5DQrr3yGs3RPgqyC7_kVDo=")
         get_settings.cache_clear()
         yield
     get_settings.cache_clear()
