@@ -155,7 +155,6 @@ def ingestion_queue() -> InMemoryIngestionQueue:
 def app_with_queue(ingestion_queue: InMemoryIngestionQueue) -> FastAPI:
     """The app with the broker replaced, so route tests need no Kafka."""
     from app.api.routes.projects import get_ingestion_queue
-
     from app.main import create_app
 
     application = create_app()
@@ -163,21 +162,21 @@ def app_with_queue(ingestion_queue: InMemoryIngestionQueue) -> FastAPI:
     return application
 
 
-@pytest.fixture
-async def authed_client(
-    app_with_queue: FastAPI, db_session: AsyncSession
+async def _authenticated_client(
+    app_with_queue: FastAPI, db_session: AsyncSession, *, is_admin: bool
 ) -> AsyncIterator[AsyncClient]:
     """An `AsyncClient` authenticated as a freshly created, ready-to-use user.
 
     `must_change_password=False`, or the forced-password-change gate returns
-    `403 PASSWORD_CHANGE_REQUIRED` on every `/projects` call.
+    `403 PASSWORD_CHANGE_REQUIRED` on every `/projects` call. Every call creates a
+    distinct account, so fixtures built on this represent genuinely different users.
     """
     user = User(
         id=uuid.uuid4(),
         name="Dev",
         email=f"{uuid.uuid4().hex}@example.com",
         password_hash=hash_password("a-perfectly-fine-passphrase", cost=4),
-        is_admin=False,
+        is_admin=is_admin,
         must_change_password=False,
     )
     db_session.add(user)
@@ -193,4 +192,40 @@ async def authed_client(
     async with AsyncClient(
         transport=transport, base_url="http://test", headers=headers
     ) as async_client:
+        yield async_client
+
+
+@pytest.fixture
+async def authed_client(
+    app_with_queue: FastAPI, db_session: AsyncSession
+) -> AsyncIterator[AsyncClient]:
+    """An `AsyncClient` authenticated as a freshly created, ready-to-use user."""
+    async for async_client in _authenticated_client(app_with_queue, db_session, is_admin=False):
+        yield async_client
+
+
+@pytest.fixture
+async def client_for_user_a(
+    app_with_queue: FastAPI, db_session: AsyncSession
+) -> AsyncIterator[AsyncClient]:
+    """A distinct authenticated user — the project creator in sharing/gating tests."""
+    async for async_client in _authenticated_client(app_with_queue, db_session, is_admin=False):
+        yield async_client
+
+
+@pytest.fixture
+async def client_for_user_b(
+    app_with_queue: FastAPI, db_session: AsyncSession
+) -> AsyncIterator[AsyncClient]:
+    """A second, distinct authenticated user — the reader/attacker in those tests."""
+    async for async_client in _authenticated_client(app_with_queue, db_session, is_admin=False):
+        yield async_client
+
+
+@pytest.fixture
+async def client_for_admin(
+    app_with_queue: FastAPI, db_session: AsyncSession
+) -> AsyncIterator[AsyncClient]:
+    """A distinct authenticated admin, who overrides the destructive gate."""
+    async for async_client in _authenticated_client(app_with_queue, db_session, is_admin=True):
         yield async_client
