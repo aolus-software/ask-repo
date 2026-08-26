@@ -56,6 +56,7 @@ def test_production_accepts_a_complete_configuration() -> None:
         app_env="production",
         secret_key="a-real-secret-value-for-testing-only",
         trusted_proxy_hops=1,
+        pat_encryption_key="Hu25IBLmyXgJmARywo5aj5DQrr3yGs3RPgqyC7_kVDo=",
     )
 
     assert settings.app_env == "production"
@@ -69,3 +70,26 @@ def test_production_rejects_zero_trusted_proxy_hops() -> None:
             secret_key="a-real-secret-value-for-testing-only",
             trusted_proxy_hops=0,
         )
+
+
+def test_production_refuses_placeholder_pat_key(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """PATs encrypted with a known key are not encrypted."""
+    monkeypatch.setenv("APP_ENV", "production")
+    monkeypatch.setenv("SECRET_KEY", "a-real-secret-key-value")
+    monkeypatch.setenv("TRUSTED_PROXY_HOPS", "1")
+    monkeypatch.delenv("PAT_ENCRYPTION_KEY", raising=False)
+
+    with pytest.raises(ValidationError, match="PAT_ENCRYPTION_KEY"):
+        Settings()
+
+
+def test_ingestion_defaults_match_the_prd() -> None:
+    """Ingestion settings default to the PRD values."""
+    settings = Settings()
+    assert settings.clone_timeout_seconds == 120
+    assert settings.repo_max_size_mb == 500
+    assert settings.repo_host_allowlist == ["github.com", "gitlab.com"]
+    assert settings.kafka_ingest_partitions == 2
+    assert settings.embedding_batch_size == 64
