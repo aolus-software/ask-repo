@@ -9,7 +9,16 @@ import uuid
 from datetime import datetime
 from enum import StrEnum
 
-from sqlalchemy import BigInteger, Boolean, DateTime, ForeignKey, Integer, LargeBinary, String
+from sqlalchemy import (
+    BigInteger,
+    Boolean,
+    DateTime,
+    ForeignKey,
+    Integer,
+    LargeBinary,
+    String,
+    text,
+)
 from sqlalchemy.dialects.postgresql import UUID as PgUUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -41,10 +50,16 @@ class Project(Base, TimestampMixin, SoftDeleteMixin):
 
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     repo_url: Mapped[str] = mapped_column(String(2048), nullable=False)
-    branch: Mapped[str] = mapped_column(String(255), nullable=False, default="main")
+    branch: Mapped[str] = mapped_column(
+        String(255), nullable=False, default="main", server_default=text("'main'")
+    )
 
     status: Mapped[str] = mapped_column(
-        String(32), nullable=False, default=ProjectStatus.PENDING.value, index=True
+        String(32),
+        nullable=False,
+        default=ProjectStatus.PENDING.value,
+        server_default=text("'pending'"),
+        index=True,
     )
     error: Mapped[str | None] = mapped_column(String(4096), nullable=True)
     last_indexed_commit: Mapped[str | None] = mapped_column(String(40), nullable=True)
@@ -66,10 +81,14 @@ class Project(Base, TimestampMixin, SoftDeleteMixin):
 
     # A reindex leaves `status` at `ready` so the project stays queryable, which
     # means status cannot express "a run is in progress". This flag does.
-    reindex_in_progress: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    reindex_in_progress: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=text("false")
+    )
     # Which Qdrant generation serves queries. New points are written under
     # generation+1 and the pointer flips only once they are all in.
-    active_generation: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
+    active_generation: Mapped[int] = mapped_column(
+        BigInteger, nullable=False, default=0, server_default=text("0")
+    )
 
     # Which collection holds this project's points — needed in order to delete
     # them after the embedding provider has been switched.

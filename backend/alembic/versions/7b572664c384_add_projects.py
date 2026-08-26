@@ -24,8 +24,12 @@ def upgrade() -> None:
         sa.Column("created_by", postgresql.UUID(as_uuid=True), nullable=False),
         sa.Column("name", sa.String(length=255), nullable=False),
         sa.Column("repo_url", sa.String(length=2048), nullable=False),
-        sa.Column("branch", sa.String(length=255), nullable=False),
-        sa.Column("status", sa.String(length=32), nullable=False),
+        sa.Column(
+            "branch", sa.String(length=255), server_default=sa.text("'main'"), nullable=False
+        ),
+        sa.Column(
+            "status", sa.String(length=32), server_default=sa.text("'pending'"), nullable=False
+        ),
         sa.Column("error", sa.String(length=4096), nullable=True),
         sa.Column("last_indexed_commit", sa.String(length=40), nullable=True),
         sa.Column("file_count", sa.Integer(), nullable=True),
@@ -34,8 +38,15 @@ def upgrade() -> None:
         sa.Column("lease_owner", sa.String(length=255), nullable=True),
         sa.Column("lease_expires_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("last_job_id", postgresql.UUID(as_uuid=True), nullable=True),
-        sa.Column("reindex_in_progress", sa.Boolean(), nullable=False),
-        sa.Column("active_generation", sa.BigInteger(), nullable=False),
+        sa.Column(
+            "reindex_in_progress",
+            sa.Boolean(),
+            server_default=sa.text("false"),
+            nullable=False,
+        ),
+        sa.Column(
+            "active_generation", sa.BigInteger(), server_default=sa.text("0"), nullable=False
+        ),
         sa.Column("embedding_collection", sa.String(length=255), nullable=True),
         sa.Column("embedding_model", sa.String(length=255), nullable=True),
         sa.Column(
