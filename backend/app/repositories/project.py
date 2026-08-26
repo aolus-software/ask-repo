@@ -136,7 +136,7 @@ class ProjectRepository(BaseRepository[Project]):
         job_id: uuid.UUID,
         status: ProjectStatus,
         error: str | None = None,
-        **fields: Any,  # noqa: ANN401 -- extra column writes vary per call site (e.g. file_count)
+        **fields: object,
     ) -> None:
         """Finish a run: write the outcome and drop the lease.
 
