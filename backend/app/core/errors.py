@@ -39,6 +39,9 @@ class ErrorCode(StrEnum):
     LAST_ADMIN = "LAST_ADMIN"
     INVALID_SORT_FIELD = "INVALID_SORT_FIELD"
     RATE_LIMITED = "RATE_LIMITED"
+    PROJECT_NOT_FOUND = "PROJECT_NOT_FOUND"
+    NOT_PROJECT_OWNER = "NOT_PROJECT_OWNER"
+    INVALID_REPO_URL = "INVALID_REPO_URL"
 
 
 def error_detail(code: ErrorCode, message: str) -> dict[str, str]:

@@ -86,6 +86,33 @@ async def test_token_hash_is_unique(db_session: AsyncSession) -> None:
     assert result.scalar_one() == 1
 
 
+async def test_projects_table_has_the_ingestion_columns(db_session: AsyncSession) -> None:
+    """The seven columns beyond docs/PRD.md §4.1's original schema (spec §8)."""
+    result = await db_session.execute(
+        text("SELECT column_name FROM information_schema.columns WHERE table_name = 'projects'")
+    )
+    columns = {row[0] for row in result}
+    assert {
+        "lease_owner",
+        "lease_expires_at",
+        "last_job_id",
+        "reindex_in_progress",
+        "active_generation",
+        "embedding_collection",
+        "embedding_model",
+    } <= columns
+
+
+async def test_projects_soft_delete_column_exists(db_session: AsyncSession) -> None:
+    result = await db_session.execute(
+        text(
+            "SELECT data_type FROM information_schema.columns "
+            "WHERE table_name = 'projects' AND column_name = 'deleted_at'"
+        )
+    )
+    assert result.scalar_one() == "timestamp with time zone"
+
+
 async def test_downgrade_then_upgrade_is_clean() -> None:
     """A migration that cannot be reversed cannot be iterated on safely."""
     for args in (["downgrade", "base"], ["upgrade", "head"]):
