@@ -1,6 +1,6 @@
 """Writing chunks to Qdrant.
 
-Three things here are load-bearing and easy to get wrong:
+Four things here are load-bearing and easy to get wrong:
 
 1. **The collection name carries the model.** A collection's vector size is fixed at
    creation — nomic-embed-text is 768, text-embedding-3-small is 1536 — so a single
@@ -18,6 +18,10 @@ Three things here are load-bearing and easy to get wrong:
 3. **The payload holds the chunk text.** `docs/PRD.md` §4.1 deletes the working copy
    after indexing, so there is no file to re-read at query time. Qdrant is the system
    of record for code content, not merely an index over it.
+4. **A 4xx is terminal, not retryable.** Every attempt on the retry ladder re-clones
+   and re-embeds the whole repository, so retrying a request Qdrant will always
+   reject burns eleven minutes and three embedding bills to reach the dead-letter
+   queue with a misleading reason. See `_as_ingestion_error`.
 """
 
 import re
@@ -25,13 +29,20 @@ import uuid
 from typing import Any, Protocol
 
 from qdrant_client import AsyncQdrantClient, models
+from qdrant_client.http.exceptions import UnexpectedResponse
 
 from app.ingestion.chunker import Chunk
-from app.ingestion.errors import RetryableIngestionError
+from app.ingestion.errors import (
+    IngestionError,
+    RetryableIngestionError,
+    TerminalIngestionError,
+)
 
 COLLECTION_PREFIX = "code_chunks"
 # Qdrant collection names allow a narrow character set; model ids do not respect it.
 _UNSAFE = re.compile(r"[^a-z0-9]+")
+# 429 means slow down, not stop, so it stays on the retry ladder with the 5xxs.
+_RETRYABLE_CLIENT_STATUS = frozenset({429})
 
 
 def collection_name(*, provider: str, model: str, dimensions: int) -> str:
@@ -54,6 +65,25 @@ def point_id(project_id: uuid.UUID, file_path: str, chunk_index: int, generation
     return str(uuid.uuid5(project_id, f"{file_path}:{chunk_index}:{generation}"))
 
 
+def _as_ingestion_error(error: Exception, action: str) -> IngestionError:
+    """Whether `action` failing this way is worth another attempt.
+
+    A 4xx from Qdrant is our own malformed request against a schema we control — the
+    wrong vector width, an unknown collection — so it will fail identically forever.
+    Retrying it is not cheap: every attempt re-clones the repository and re-embeds it
+    to arrive at the same 4xx, which costs real money on a hosted provider.
+
+    Deliberately stricter than the embedder adapter, which retries every status but
+    401/403. There a 400 may reflect one awkward input among thousands; here it
+    reflects a misconfiguration, and the operator needs to be told that rather than
+    watching the job circle the retry ladder for eleven minutes.
+    """
+    status = error.status_code if isinstance(error, UnexpectedResponse) else None
+    if status is not None and 400 <= status < 500 and status not in _RETRYABLE_CLIENT_STATUS:
+        return TerminalIngestionError(f"{action}: {error}")
+    return RetryableIngestionError(f"{action}: {error}")
+
+
 def _payload(
     *, project_id: uuid.UUID, generation: int, chunk: Chunk, commit_sha: str
 ) -> dict[str, Any]:
@@ -74,6 +104,14 @@ def _payload(
 
 class VectorStore(Protocol):
     """Where embedded chunks live."""
+
+    collection: str
+    """Which collection this store writes to.
+
+    Declared on the protocol, not merely on the implementations, because the pipeline
+    records it on the project row (`Project.embedding_collection`) — that is how a
+    later delete finds the points again once the active collection has moved on.
+    """
 
     async def ensure_collection(self) -> None:
         """Create the collection and its payload index if absent."""
@@ -128,8 +166,7 @@ class QdrantVectorStore:
                 field_schema=models.PayloadSchemaType.KEYWORD,
             )
         except Exception as error:
-            # Any client failure here is a datastore problem, not a bad repository.
-            raise RetryableIngestionError(f"Qdrant is unavailable: {error}") from error
+            raise _as_ingestion_error(error, "Preparing the Qdrant collection failed") from error
 
     async def upsert(
         self,
@@ -157,8 +194,7 @@ class QdrantVectorStore:
         try:
             await self._client.upsert(collection_name=self.collection, points=points, wait=True)
         except Exception as error:
-            # Any client failure here is a datastore problem, not a bad repository.
-            raise RetryableIngestionError(f"Qdrant upsert failed: {error}") from error
+            raise _as_ingestion_error(error, "Qdrant upsert failed") from error
 
     async def _delete_where(self, conditions: list[models.FieldCondition]) -> None:
         """Delete every point matching all conditions."""
@@ -169,8 +205,7 @@ class QdrantVectorStore:
                 wait=True,
             )
         except Exception as error:
-            # Any client failure here is a datastore problem, not a bad repository.
-            raise RetryableIngestionError(f"Qdrant delete failed: {error}") from error
+            raise _as_ingestion_error(error, "Qdrant delete failed") from error
 
     async def delete_generation(self, *, project_id: uuid.UUID, generation: int) -> None:
         """Drop the superseded generation once the new one is fully written."""

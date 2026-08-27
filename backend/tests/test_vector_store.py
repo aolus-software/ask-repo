@@ -1,9 +1,24 @@
-"""Collection naming, point identity, and payload contents."""
+"""Collection naming, point identity, payload contents, and failure classification."""
 
 import uuid
 
+import httpx
+import pytest
+from qdrant_client.http.exceptions import ResponseHandlingException, UnexpectedResponse
+
 from app.ingestion.chunker import Chunk
-from app.ingestion.vector_store import InMemoryVectorStore, collection_name, point_id
+from app.ingestion.errors import RetryableIngestionError, TerminalIngestionError
+from app.ingestion.vector_store import (
+    InMemoryVectorStore,
+    QdrantVectorStore,
+    VectorStore,
+    collection_name,
+    point_id,
+)
+
+# Constructing AsyncQdrantClient performs a synchronous version probe, which cannot
+# reach a server in these tests. Filtered by exact message so nothing else is hidden.
+pytestmark = pytest.mark.filterwarnings("ignore:Failed to obtain server version")
 
 
 def chunk(index: int = 0, path: str = "app/main.py") -> Chunk:
@@ -152,3 +167,149 @@ async def test_upsert_same_generation_overwrites_by_id_alone() -> None:
 
     assert len(store.points) == 1
     assert store.points[0]["vector"] == [0.2] * 4
+
+
+def collection_of(store: VectorStore) -> str:
+    """Mirrors Task 15's `embedding_collection=self.store.collection`.
+
+    Typed against the protocol rather than a concrete class on purpose: the pipeline
+    records which collection a project's points went into, and if `VectorStore` stops
+    declaring `collection`, `uv run mypy .` fails here instead of in Task 15.
+    """
+    return store.collection
+
+
+def test_both_stores_expose_collection_through_the_protocol() -> None:
+    """Runtime half of the guard above -- the typecheck half is `collection_of`."""
+    real: VectorStore = QdrantVectorStore(
+        url="http://qdrant.invalid:6333", collection="code_chunks__x__y__4", dimensions=4
+    )
+    fake: VectorStore = InMemoryVectorStore(dimensions=4)
+
+    assert collection_of(real) == "code_chunks__x__y__4"
+    assert collection_of(fake) == "in-memory"
+
+
+class FailingClient:
+    """Stands in for `AsyncQdrantClient`: every call raises the error it was given.
+
+    The real store is otherwise covered by no test at all, so its `except` blocks --
+    the only place failure classification happens -- would go unexercised.
+    """
+
+    def __init__(self, error: Exception) -> None:
+        self.error = error
+
+    async def collection_exists(self, *args: object, **kwargs: object) -> bool:
+        raise self.error
+
+    async def upsert(self, *args: object, **kwargs: object) -> None:
+        raise self.error
+
+    async def delete(self, *args: object, **kwargs: object) -> None:
+        raise self.error
+
+
+def store_failing_with(error: Exception) -> QdrantVectorStore:
+    """A real store whose client always fails. No connection is ever opened."""
+    store = QdrantVectorStore(url="http://qdrant.invalid:6333", collection="c", dimensions=4)
+    # Test seam: the real client would need a live server to fail in these ways.
+    store._client = FailingClient(error)  # type: ignore[assignment]
+    return store
+
+
+# The verbatim body a live Qdrant v1.15.1 returned for a 2-float vector sent to a
+# 4-dimension collection, captured during the Task 14 review.
+DIMENSION_ERROR_BODY = (
+    b'{"status":{"error":"Wrong input: Vector dimension error: expected dim: 4, got 2"}}'
+)
+
+
+def unexpected_response(status: int) -> UnexpectedResponse:
+    """What the Qdrant client raises for a non-2xx, with a real dimension error body."""
+    return UnexpectedResponse(
+        status_code=status,
+        reason_phrase="Bad Request",
+        content=DIMENSION_ERROR_BODY,
+        headers=httpx.Headers(),
+    )
+
+
+# A 4xx means the request itself is wrong and will be wrong every time; 429 and the
+# 5xxs are worth another attempt. Every attempt re-clones and re-embeds the whole
+# repository, which is why misclassifying costs eleven minutes and three embedding
+# bills before the job reaches the dead-letter queue.
+CLASSIFICATION = [
+    (400, TerminalIngestionError),
+    (401, TerminalIngestionError),
+    (403, TerminalIngestionError),
+    (404, TerminalIngestionError),
+    (409, TerminalIngestionError),
+    (429, RetryableIngestionError),
+    (500, RetryableIngestionError),
+    (503, RetryableIngestionError),
+]
+
+
+@pytest.mark.parametrize(("status", "expected"), CLASSIFICATION)
+@pytest.mark.parametrize("operation", ["ensure_collection", "upsert", "delete_generation"])
+async def test_qdrant_failures_are_classified_consistently(
+    status: int, expected: type[Exception], operation: str
+) -> None:
+    """A permanent failure must not ride the retry ladder, and a transient one must.
+
+    Parametrised across operations as well as statuses because the classification
+    lives in three separate `except` blocks -- one hardcoded exception type in any of
+    them would otherwise pass on the strength of the other two.
+    """
+    store = store_failing_with(unexpected_response(status))
+    project = uuid.uuid4()
+
+    with pytest.raises(expected):
+        if operation == "ensure_collection":
+            await store.ensure_collection()
+        elif operation == "upsert":
+            await store.upsert(
+                project_id=project,
+                generation=1,
+                chunks=[chunk(0)],
+                vectors=[[0.1] * 4],
+                commit_sha="a" * 40,
+            )
+        else:
+            await store.delete_generation(project_id=project, generation=1)
+
+
+async def test_a_connection_failure_is_retryable() -> None:
+    """Qdrant being unreachable says nothing about the request -- it may work later."""
+    store = store_failing_with(ResponseHandlingException(OSError("connection refused")))
+
+    with pytest.raises(RetryableIngestionError):
+        await store.ensure_collection()
+
+
+async def test_an_unrecognised_failure_is_retryable() -> None:
+    """An error with no status code is not evidence the request was malformed, so it
+    keeps the benefit of the doubt rather than failing the project outright."""
+    store = store_failing_with(RuntimeError("something the client did not wrap"))
+
+    with pytest.raises(RetryableIngestionError):
+        await store.ensure_collection()
+
+
+async def test_the_terminal_message_names_what_qdrant_rejected() -> None:
+    """The operator sees this string in `Project.error`. "Qdrant upsert failed" alone
+    would point them at an outage that is not happening; the dimension error names the
+    actual misconfiguration."""
+    store = store_failing_with(unexpected_response(400))
+
+    with pytest.raises(TerminalIngestionError) as raised:
+        await store.upsert(
+            project_id=uuid.uuid4(),
+            generation=1,
+            chunks=[chunk(0)],
+            vectors=[[0.1] * 4],
+            commit_sha="a" * 40,
+        )
+
+    assert "Vector dimension error" in str(raised.value)
