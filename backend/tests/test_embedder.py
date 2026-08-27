@@ -1,13 +1,27 @@
 """Provider selection, task prefixes, and error classification."""
 
+import json
+
 import httpx
 import pytest
 
 from app.config import Settings
-from app.ingestion.embedder import FakeEmbedder, build_embedder, probe_dimensions
+from app.ingestion.embedder import Embedder, FakeEmbedder, build_embedder, probe_dimensions
 from app.ingestion.embedder.ollama import OllamaEmbedder
 from app.ingestion.embedder.openai import OpenAIEmbedder
-from app.ingestion.errors import RetryableIngestionError, TerminalIngestionError
+from app.ingestion.embedder.voyage import VoyageEmbedder
+from app.ingestion.errors import IngestionError, RetryableIngestionError, TerminalIngestionError
+
+
+def _build(provider: str, transport: httpx.AsyncBaseTransport) -> Embedder:
+    """One embedder of the given provider, wired to a stub transport."""
+    if provider == "ollama":
+        return OllamaEmbedder(base_url="http://e.test", model="m", transport=transport)
+    if provider == "openai":
+        return OpenAIEmbedder(
+            base_url="http://e.test", model="m", api_key="key", transport=transport
+        )
+    return VoyageEmbedder(base_url="http://e.test", model="m", api_key="key", transport=transport)
 
 
 def settings_for(provider: str) -> Settings:
@@ -46,22 +60,51 @@ async def test_documents_and_queries_use_different_prefixes() -> None:
     assert "search_query" in seen[1]
 
 
-async def test_a_server_error_is_retryable() -> None:
-    transport = httpx.MockTransport(lambda request: httpx.Response(503, text="unavailable"))
-    embedder = OllamaEmbedder(base_url="http://e.test", model="m", transport=transport)
+async def test_voyage_documents_and_queries_use_different_input_types() -> None:
+    """Voyage encodes the task distinction as an `input_type` request parameter
+    rather than a text prefix. Swapping the two values degrades retrieval exactly
+    like a swapped Ollama prefix would, with no error to catch it — so this test
+    reads the actual request body sent for each call, not a return value."""
+    seen: list[httpx.Request] = []
 
-    with pytest.raises(RetryableIngestionError):
-        await embedder.embed_documents(["x"])
+    async def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        return httpx.Response(200, json={"data": [{"embedding": [0.1, 0.2]}]})
 
-
-async def test_an_auth_failure_is_terminal() -> None:
-    """A bad API key will still be bad in ten minutes."""
-    transport = httpx.MockTransport(lambda request: httpx.Response(401, text="unauthorized"))
-    embedder = OpenAIEmbedder(
-        base_url="http://e.test", model="m", api_key="bad", transport=transport
+    transport = httpx.MockTransport(handler)
+    embedder = VoyageEmbedder(
+        base_url="http://embed.test", model="voyage-code-2", api_key="key", transport=transport
     )
 
-    with pytest.raises(TerminalIngestionError):
+    await embedder.embed_documents(["some code"])
+    await embedder.embed_query("some question")
+
+    assert json.loads(seen[0].read())["input_type"] == "document"
+    assert json.loads(seen[1].read())["input_type"] == "query"
+
+
+@pytest.mark.parametrize("provider", ["ollama", "openai", "voyage"])
+@pytest.mark.parametrize(
+    ("status", "expected"),
+    [
+        (401, TerminalIngestionError),
+        (403, TerminalIngestionError),
+        (500, RetryableIngestionError),
+        (503, RetryableIngestionError),
+    ],
+)
+async def test_status_codes_are_classified_consistently_across_providers(
+    provider: str, status: int, expected: type[IngestionError]
+) -> None:
+    """401/403 never retry — a bad key stays bad. Every other >= 400 does, because
+    it might be a transient provider outage. This must hold identically for every
+    provider: a classifier that only checks one status code, or that is wired to
+    only one provider, would leave the other providers' failures misrouted with
+    nothing to catch it."""
+    transport = httpx.MockTransport(lambda request: httpx.Response(status, text="error"))
+    embedder = _build(provider, transport)
+
+    with pytest.raises(expected):
         await embedder.embed_documents(["x"])
 
 
