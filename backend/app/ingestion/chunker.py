@@ -88,8 +88,9 @@ class LanguageAwareChunker:
         """Split a file, recovering each chunk's line range from its character offset.
 
         The splitter works in characters, so the offset is mapped back to a line by
-        counting newlines before it. Searching from `cursor` rather than from zero
-        keeps a repeated chunk body from resolving to the first occurrence.
+        counting newlines before it. With overlap, a piece may start before the prior
+        piece ended, so cursor is advanced by 1 (not by the prior piece's length) to
+        keep the search monotonic while permitting overlapped chunks to be found.
         """
         if not source.strip():
             return []
@@ -103,7 +104,7 @@ class LanguageAwareChunker:
             offset = source.find(piece, cursor)
             if offset == -1:
                 offset = cursor
-            cursor = offset + len(piece)
+            cursor = offset + 1
 
             start_line = source.count("\n", 0, offset) + 1
             end_line = start_line + piece.count("\n")

@@ -92,3 +92,121 @@ def test_embedding_text_prepends_path_and_symbol() -> None:
     assert "backend/app/core/repo_url.py" in prepared
     assert "validate_repo_url" in prepared
     assert prepared.endswith(chunk.text)
+
+
+def test_line_numbers_correct_with_production_overlap() -> None:
+    """Production constants (chunk_size=1200, chunk_overlap=150) with real multifunction
+    source. This test catches the cursor-advance bug: with overlap, the next piece starts
+    before the prior piece ends, so cursor must advance minimally to find it."""
+    # A 122-line Python source with multiple functions, over 1200 chars with overlap
+    large_source = '''"""Module with multiple functions for testing overlap."""
+
+
+def validate_input(data: dict) -> bool:
+    """Validate input data structure.
+
+    Checks that required fields are present and have correct types.
+    Raises ValueError if validation fails.
+    """
+    required = {"name", "email", "age"}
+    if not required.issubset(data.keys()):
+        raise ValueError(f"Missing required fields: {required - data.keys()}")
+
+    if not isinstance(data["name"], str):
+        raise ValueError("name must be a string")
+    if not isinstance(data["email"], str):
+        raise ValueError("email must be a string")
+    if not isinstance(data["age"], int):
+        raise ValueError("age must be an integer")
+
+    return True
+
+
+def process_records(records: list) -> list:
+    """Process a list of records with filtering and transformation.
+
+    Applies multiple transformations to each record, filtering out invalid ones.
+    Returns transformed records that pass all validations.
+    """
+    processed = []
+    for record in records:
+        try:
+            if validate_input(record):
+                transformed = {
+                    "full_name": record["name"].upper(),
+                    "contact": record["email"].lower(),
+                    "years": record["age"],
+                }
+                processed.append(transformed)
+        except (ValueError, KeyError) as e:
+            # Skip invalid records and continue processing
+            continue
+    return processed
+
+
+def compute_statistics(numbers: list) -> dict:
+    """Compute basic statistics on a list of numbers.
+
+    Calculates mean, median, and standard deviation.
+    Returns a dict with results or empty if input is empty.
+    """
+    if not numbers:
+        return {}
+
+    mean = sum(numbers) / len(numbers)
+
+    sorted_nums = sorted(numbers)
+    n = len(sorted_nums)
+    if n % 2 == 0:
+        median = (sorted_nums[n // 2 - 1] + sorted_nums[n // 2]) / 2
+    else:
+        median = sorted_nums[n // 2]
+
+    variance = sum((x - mean) ** 2 for x in numbers) / len(numbers)
+    stdev = variance ** 0.5
+
+    return {
+        "mean": mean,
+        "median": median,
+        "stdev": stdev,
+        "min": min(numbers),
+        "max": max(numbers),
+    }
+
+
+def aggregate_results(results: list) -> dict:
+    """Aggregate multiple result dictionaries into summary.
+
+    Combines statistics from multiple runs into unified view.
+    """
+    summary = {"total": len(results), "entries": results}
+    return summary
+'''
+
+    lines = large_source.splitlines()
+    chunks = LanguageAwareChunker(chunk_size=1200, chunk_overlap=150).split(
+        source_file(), large_source
+    )
+
+    # Must produce multiple chunks to test overlap behavior
+    assert len(chunks) > 1, f"Expected multiple chunks with overlap, got {len(chunks)}"
+
+    # Critical: every chunk's line range must actually contain its text
+    for chunk in chunks:
+        assert 1 <= chunk.start_line <= chunk.end_line <= len(lines), (
+            f"Chunk {chunk.chunk_index} has invalid line range: "
+            f"start_line={chunk.start_line}, end_line={chunk.end_line}, "
+            f"total_lines={len(lines)}"
+        )
+
+        # Slice the source using the chunk's line numbers
+        window_lines = lines[chunk.start_line - 1 : chunk.end_line]
+        window = "\n".join(window_lines)
+
+        # The chunk's first line must appear in the window
+        chunk_first_line = chunk.text.strip().splitlines()[0]
+        assert chunk_first_line in window, (
+            f"Chunk {chunk.chunk_index} first line not found in window at "
+            f"lines {chunk.start_line}-{chunk.end_line}. "
+            f"Expected '{chunk_first_line}' in window:\n{window}"
+        )
