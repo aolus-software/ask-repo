@@ -143,9 +143,15 @@ hard-delete, in the same operation.**
 
 `POST /projects` returns immediately and the clone+index runs in the background. The cloned
 working copy is **deleted after indexing**, so `/data/repos` is scratch space, not a persistent
-volume — and reindex re-clones rather than `git pull`. Jobs move from
-`BackgroundTasks` to Redis + ARQ at M1, because a restart mid-index otherwise leaves a project
-stuck at `indexing` forever.
+volume — and reindex re-clones rather than `git pull`.
+
+**M1's job queue is Kafka, not Redis + ARQ.** `docs/PRD.md:370` still argues against Kafka by
+name, and that technical argument was not disputed — it was **overridden for a non-technical
+reason**: `docs/PRD.md` §1 names learning as the project's primary goal, and event streaming was
+added to that list. The design spec's §2.1 records the decision and tabulates the accepted costs
+and their mitigations. **This is a live contradiction with the PRD, and Task 21 of the M1 plan
+amends §5 and §5's job-queue note to settle it** — until then, treat the spec as the decided
+design and the PRD's §5 note as the superseded one. Do not "fix" the code toward ARQ.
 
 `repo_url` is user-supplied and fetched from **inside** a private network, where `10.0.x.x` and
 internal service names resolve. Validation (https-only, host allowlist, private-address
