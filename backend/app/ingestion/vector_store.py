@@ -139,9 +139,17 @@ class VectorStore(Protocol):
 
 
 class QdrantVectorStore:
-    """The real store."""
+    """The real store.
 
-    def __init__(self, *, url: str, collection: str, dimensions: int) -> None:
+    `dimensions` is required only to *create* a collection, so it is optional here.
+    The delete path builds a store for whichever collection a project recorded
+    (`Project.embedding_collection`) and has no probed width to offer — the probe runs
+    once at worker startup (spec §6.3), nowhere near a `DELETE /projects/{id}`. A
+    placeholder would be worse than `None`: it names a real Qdrant property, so a
+    fabricated number reads as fact and would name the wrong collection.
+    """
+
+    def __init__(self, *, url: str, collection: str, dimensions: int | None = None) -> None:
         self.collection = collection
         self.dimensions = dimensions
         self._client = AsyncQdrantClient(url=url)
@@ -152,12 +160,22 @@ class QdrantVectorStore:
         The payload index is not optional: filtering without one degrades to a scan
         as the collection grows, and every M2 query filters by project.
         """
+        dimensions = self.dimensions
+        if dimensions is None:
+            # Raised outside the try below on purpose: this is a wiring mistake, not a
+            # Qdrant failure, and classifying it as retryable would spend three
+            # attempts and two clones on a bug no attempt can fix.
+            raise RuntimeError(
+                "this QdrantVectorStore was built without a vector width, so it can "
+                "only read and delete; creating a collection needs the probed "
+                "dimension count"
+            )
         try:
             if not await self._client.collection_exists(self.collection):
                 await self._client.create_collection(
                     collection_name=self.collection,
                     vectors_config=models.VectorParams(
-                        size=self.dimensions, distance=models.Distance.COSINE
+                        size=dimensions, distance=models.Distance.COSINE
                     ),
                 )
             await self._client.create_payload_index(

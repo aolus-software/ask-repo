@@ -7,7 +7,11 @@ import pytest
 from qdrant_client.http.exceptions import ResponseHandlingException, UnexpectedResponse
 
 from app.ingestion.chunker import Chunk
-from app.ingestion.errors import RetryableIngestionError, TerminalIngestionError
+from app.ingestion.errors import (
+    IngestionError,
+    RetryableIngestionError,
+    TerminalIngestionError,
+)
 from app.ingestion.vector_store import (
     InMemoryVectorStore,
     QdrantVectorStore,
@@ -313,3 +317,21 @@ async def test_the_terminal_message_names_what_qdrant_rejected() -> None:
         )
 
     assert "Vector dimension error" in str(raised.value)
+
+
+async def test_a_store_built_without_a_width_refuses_to_create_a_collection() -> None:
+    """The delete path builds a store for a recorded collection with no probed width.
+
+    That store must never invent one: a collection created at the wrong size makes
+    every subsequent write fail. The refusal is a plain error rather than an ingestion
+    error on purpose -- it is a wiring bug, and classifying it as retryable would
+    spend the whole retry ladder re-cloning to reach the same mistake.
+    """
+    store = QdrantVectorStore(url="http://qdrant.invalid:6333", collection="c")
+
+    assert store.dimensions is None
+    with pytest.raises(RuntimeError) as raised:
+        await store.ensure_collection()
+
+    assert not isinstance(raised.value, IngestionError)
+    assert "dimension" in str(raised.value)

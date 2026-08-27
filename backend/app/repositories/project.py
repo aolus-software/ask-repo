@@ -129,6 +129,21 @@ class ProjectRepository(BaseRepository[Project]):
         )
         return cast(CursorResult[Any], result).rowcount == 1
 
+    async def set_status(self, *, project_id: uuid.UUID, status: ProjectStatus) -> None:
+        """Advance a project's status without touching its lease.
+
+        Used mid-run, where the job still owns the project and only the state the API
+        reports has moved on.
+        """
+        now = datetime.now(UTC)
+        await self.session.execute(
+            update(Project)
+            .where(Project.id == project_id)
+            # Bulk UPDATE: `onupdate` does not fire on this path
+            # (.claude/rules/persistence.md).
+            .values(status=status.value, updated_at=now)
+        )
+
     async def release(
         self,
         *,

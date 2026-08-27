@@ -9,11 +9,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import get_settings
 from app.core.errors import AppError, ErrorCode
 from app.core.middleware import AuthenticatedUser
+from app.ingestion.chunker import Chunk
+from app.ingestion.vector_store import InMemoryVectorStore, VectorStore
 from app.models.project import ProjectStatus
 from app.queue.protocol import InMemoryIngestionQueue
 from app.repositories.project import ProjectRepository
 from app.schemas.project import ProjectCreateRequest
-from app.services.project import ProjectService
+from app.services.project import ProjectService, VectorStoreFactory
 from tests.factories import create_project, create_user
 
 
@@ -27,8 +29,22 @@ def actor_for(user_id: uuid.UUID, *, is_admin: bool = False) -> AuthenticatedUse
     )
 
 
-def service_for(session: AsyncSession, queue: InMemoryIngestionQueue) -> ProjectService:
-    return ProjectService(session, get_settings(), queue)
+def _no_store_expected(collection: str) -> VectorStore:
+    """The factory for tests that must never reach Qdrant.
+
+    Raising rather than returning a fake: a test that unexpectedly triggers a vector
+    delete should say so loudly instead of quietly passing against a stub.
+    """
+    raise AssertionError(f"this test expected no vector store, but one was built for {collection}")
+
+
+def service_for(
+    session: AsyncSession,
+    queue: InMemoryIngestionQueue,
+    *,
+    store_factory: VectorStoreFactory = _no_store_expected,
+) -> ProjectService:
+    return ProjectService(session, get_settings(), queue, store_factory=store_factory)
 
 
 async def test_create_enqueues_exactly_one_job(db_session: AsyncSession) -> None:
@@ -102,6 +118,62 @@ async def test_an_admin_can_delete_any_project(db_session: AsyncSession) -> None
         project.id, actor=actor_for(admin.id, is_admin=True)
     )
     await db_session.commit()
+
+    assert await ProjectRepository(db_session).get(project.id) is None
+
+
+async def test_delete_hard_deletes_the_vectors_in_the_recorded_collection(
+    db_session: AsyncSession,
+) -> None:
+    """docs/PRD.md §5.1: vector points have no deleted_at, so they go for real.
+
+    The collection asked for is asserted, not just the emptiness of the store: a
+    delete that always built a store for the *wrong* collection would leave the real
+    points orphaned forever and still pass a points-are-gone assertion.
+    """
+    recorded = "code_chunks__ollama__nomic_embed_text__768"
+    owner = await create_user(db_session)
+    project = await create_project(db_session, created_by=owner.id)
+    project.embedding_collection = recorded
+    await db_session.commit()
+
+    store = InMemoryVectorStore(dimensions=4)
+    await store.upsert(
+        project_id=project.id,
+        generation=1,
+        chunks=[Chunk("a.py", 1, 2, "python", None, 0, "x = 1")],
+        vectors=[[0.1] * 4],
+        commit_sha="a" * 40,
+    )
+    asked: list[str] = []
+
+    def store_for(collection: str) -> VectorStore:
+        asked.append(collection)
+        return store
+
+    service = service_for(db_session, InMemoryIngestionQueue(), store_factory=store_for)
+    await service.delete(project.id, actor=actor_for(owner.id))
+
+    assert asked == [recorded]
+    assert store.points == []
+
+
+async def test_delete_does_not_touch_qdrant_when_nothing_was_ever_indexed(
+    db_session: AsyncSession,
+) -> None:
+    """A project with no `embedding_collection` has no points to delete.
+
+    `_no_store_expected` fails the test if a store is built anyway — which is what
+    guessing a collection name from settings would have to do.
+    """
+    owner = await create_user(db_session)
+    project = await create_project(db_session, created_by=owner.id)
+    await db_session.commit()
+    assert project.embedding_collection is None
+
+    await service_for(db_session, InMemoryIngestionQueue()).delete(
+        project.id, actor=actor_for(owner.id)
+    )
 
     assert await ProjectRepository(db_session).get(project.id) is None
 

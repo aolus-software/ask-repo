@@ -5,6 +5,7 @@ and `delete` cannot drift apart (`.claude/rules/router.md`).
 """
 
 import uuid
+from collections.abc import Callable
 from urllib.parse import urlsplit
 
 from fastapi import status
@@ -16,6 +17,7 @@ from app.core.crypto import SecretBox
 from app.core.errors import AppError, ErrorCode
 from app.core.middleware import AuthenticatedUser
 from app.core.repo_url import RepoUrlRejected, validate_repo_url
+from app.ingestion.vector_store import VectorStore
 from app.models.project import Project, ProjectStatus
 from app.queue.protocol import IngestionQueue
 from app.queue.topics import INGEST_TOPIC, IngestionMessage
@@ -24,6 +26,15 @@ from app.schemas.pagination import ListQuery, PaginatedResponse
 from app.schemas.project import ProjectCreateRequest, ProjectResponse, ReindexResponse
 
 DEFAULT_SORT = "created_at"
+
+VectorStoreFactory = Callable[[str], VectorStore]
+"""Collection name in, a store for that collection out.
+
+A factory rather than one pre-built store, because the only honest source of a
+collection's vector width is the startup probe (spec §6.3) and a request handler has
+no probed width to build a store with. Deleting a project therefore has to target the
+collection the project itself recorded, which is only known once its row is loaded.
+"""
 
 # A run is in flight in these states, so a second trigger is a no-op.
 BUSY_STATUSES = frozenset(
@@ -34,10 +45,18 @@ BUSY_STATUSES = frozenset(
 class ProjectService:
     """Business rules for projects. Owns its transactions."""
 
-    def __init__(self, session: AsyncSession, settings: Settings, queue: IngestionQueue) -> None:
+    def __init__(
+        self,
+        session: AsyncSession,
+        settings: Settings,
+        queue: IngestionQueue,
+        *,
+        store_factory: VectorStoreFactory,
+    ) -> None:
         self.session = session
         self.settings = settings
         self.queue = queue
+        self.store_factory = store_factory
         self._repository = ProjectRepository(session)
 
     async def create(
@@ -129,14 +148,27 @@ class ProjectService:
         return ReindexResponse(enqueued=True, project=ProjectResponse.model_validate(project))
 
     async def delete(self, project_id: uuid.UUID, *, actor: AuthenticatedUser) -> None:
-        """Soft-delete the project.
+        """Soft-delete the project and hard-delete its vectors, in one operation.
 
-        Its Qdrant points are hard-deleted in the same operation by the vector store
-        (`docs/PRD.md` §5.1) — wired in Task 15.
+        `docs/PRD.md` §5.1: vector points carry no `deleted_at`, so a query-time
+        filter would be one forgotten call away from serving deleted content. The
+        points go for real, in the collection the project recorded — not in whichever
+        collection is currently active, which a later provider switch would have
+        moved on from (spec §6.4).
+
+        A project that was never indexed has no collection and no points, so Qdrant is
+        not called at all. The vector delete runs before the commit deliberately: if
+        Qdrant refuses, the row stays visible rather than becoming a soft-deleted
+        project whose content is still queryable.
         """
         project = await self._require_readable(project_id, actor)
         self._require_destructive_rights(project, actor)
         await self._repository.soft_delete(project)
+
+        if project.embedding_collection:
+            store = self.store_factory(project.embedding_collection)
+            await store.delete_project(project.id)
+
         await self.session.commit()
 
     async def _enqueue(self, project_id: uuid.UUID) -> None:
