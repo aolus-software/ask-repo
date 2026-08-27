@@ -10,6 +10,7 @@ from app.config import get_settings
 from app.core.errors import AppError, ErrorCode
 from app.core.middleware import AuthenticatedUser
 from app.ingestion.chunker import Chunk
+from app.ingestion.errors import RetryableIngestionError
 from app.ingestion.vector_store import InMemoryVectorStore, VectorStore
 from app.models.project import ProjectStatus
 from app.queue.protocol import InMemoryIngestionQueue
@@ -212,3 +213,38 @@ async def test_get_raises_404_for_a_missing_project(db_session: AsyncSession) ->
             uuid.uuid4(), actor=actor_for(user.id)
         )
     assert caught.value.status_code == 404
+
+
+async def test_delete_reports_503_when_the_vector_store_is_unreachable(
+    db_session: AsyncSession,
+) -> None:
+    """A Qdrant outage is a dependency being down, not a bug, so it is not a 500
+    (`.claude/rules/response-api.md`). And because nothing is committed, the project
+    must still be there afterwards -- a soft-deleted row whose vectors survived would
+    be exactly the split state PRD 5.1's same-operation rule exists to prevent."""
+    owner = await create_user(db_session)
+    project = await create_project(db_session, created_by=owner.id)
+    project.embedding_collection = "code_chunks__ollama__nomic_embed_text__768"
+    await db_session.commit()
+    # Held separately: `rollback()` below expires the ORM object, and reading an
+    # attribute off it afterwards would need lazy IO from a sync context.
+    project_id = project.id
+
+    class UnreachableStore(InMemoryVectorStore):
+        async def delete_project(self, project_id: uuid.UUID) -> None:
+            raise RetryableIngestionError("Qdrant delete failed: connection refused")
+
+    service = service_for(
+        db_session,
+        InMemoryIngestionQueue(),
+        store_factory=lambda _collection: UnreachableStore(dimensions=4),
+    )
+
+    with pytest.raises(AppError) as raised:
+        await service.delete(project.id, actor=actor_for(owner.id))
+
+    assert raised.value.status_code == 503
+    assert raised.value.code is ErrorCode.VECTOR_STORE_UNAVAILABLE
+
+    await db_session.rollback()
+    assert await ProjectRepository(db_session).get(project_id) is not None

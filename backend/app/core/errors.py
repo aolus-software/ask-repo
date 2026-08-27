@@ -42,6 +42,7 @@ class ErrorCode(StrEnum):
     PROJECT_NOT_FOUND = "PROJECT_NOT_FOUND"
     NOT_PROJECT_OWNER = "NOT_PROJECT_OWNER"
     INVALID_REPO_URL = "INVALID_REPO_URL"
+    VECTOR_STORE_UNAVAILABLE = "VECTOR_STORE_UNAVAILABLE"
 
 
 def error_detail(code: ErrorCode, message: str) -> dict[str, str]:

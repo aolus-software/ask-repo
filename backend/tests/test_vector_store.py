@@ -1,9 +1,11 @@
 """Collection naming, point identity, payload contents, and failure classification."""
 
 import uuid
+from types import SimpleNamespace
 
 import httpx
 import pytest
+from qdrant_client import models
 from qdrant_client.http.exceptions import ResponseHandlingException, UnexpectedResponse
 
 from app.ingestion.chunker import Chunk
@@ -335,3 +337,65 @@ async def test_a_store_built_without_a_width_refuses_to_create_a_collection() ->
 
     assert not isinstance(raised.value, IngestionError)
     assert "dimension" in str(raised.value)
+
+
+class WidthReportingClient:
+    """A client whose collection already exists, created at `existing_width`."""
+
+    def __init__(self, existing_width: int) -> None:
+        self.existing_width = existing_width
+        self.created_indexes: list[str] = []
+
+    async def collection_exists(self, *args: object, **kwargs: object) -> bool:
+        return True
+
+    async def get_collection(self, *args: object, **kwargs: object) -> object:
+        """Only the path `_verify_width` reads. Building a full `CollectionInfo`
+        would couple this test to every unrelated field qdrant-client requires."""
+        return SimpleNamespace(
+            config=SimpleNamespace(
+                params=SimpleNamespace(
+                    vectors=models.VectorParams(
+                        size=self.existing_width, distance=models.Distance.COSINE
+                    )
+                )
+            )
+        )
+
+    async def create_payload_index(self, *args: object, **kwargs: object) -> None:
+        self.created_indexes.append(str(kwargs.get("field_name")))
+
+
+def store_with_existing_width(existing: int, *, asking_for: int) -> QdrantVectorStore:
+    store = QdrantVectorStore(
+        url="http://qdrant.invalid:6333", collection="c", dimensions=asking_for
+    )
+    # Test seam: reproducing this needs a collection built at another width.
+    store._client = WidthReportingClient(existing)  # type: ignore[assignment]
+    return store
+
+
+async def test_a_width_mismatch_on_an_existing_collection_is_terminal() -> None:
+    """A collection's vector size is fixed at creation, so no retry changes the
+    answer. Left unchecked this surfaced only as a 400 on every later upsert, naming
+    no cause -- the collection name normally encodes the width, but a provider that
+    re-tags a model id keeps the name and changes the number."""
+    store = store_with_existing_width(768, asking_for=1536)
+
+    with pytest.raises(TerminalIngestionError) as raised:
+        await store.ensure_collection()
+
+    assert "768" in str(raised.value)
+    assert "1536" in str(raised.value)
+
+
+async def test_a_matching_width_is_accepted_and_indexes_both_filtered_fields() -> None:
+    """The width check must not reject the normal case, and both fields that get
+    filtered need an index -- `generation` is filtered by the swap's delete."""
+    store = store_with_existing_width(768, asking_for=768)
+
+    await store.ensure_collection()
+
+    client = store._client
+    assert isinstance(client, WidthReportingClient)
+    assert client.created_indexes == ["project_id", "generation"]

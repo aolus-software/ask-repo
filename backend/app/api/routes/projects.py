@@ -119,7 +119,9 @@ async def reindex_project(
     "/{project_id}",
     status_code=status.HTTP_204_NO_CONTENT,
     summary="Delete a project and its index",
-    responses={code: ERROR_RESPONSES[code] for code in (401, 403, 404, 422)},
+    # 503 is unique to this route: it is the only one that must reach Qdrant to
+    # satisfy `docs/PRD.md` §5.1's same-operation hard delete.
+    responses={code: ERROR_RESPONSES[code] for code in (401, 403, 404, 422, 503)},
 )
 async def delete_project(
     project_id: uuid.UUID, current_user: CurrentUser, service: ProjectServiceDep

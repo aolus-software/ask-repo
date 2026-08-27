@@ -4,6 +4,7 @@ The `created_by`-or-admin gate lives here rather than in the routes, so `reindex
 and `delete` cannot drift apart (`.claude/rules/router.md`).
 """
 
+import logging
 import uuid
 from collections.abc import Callable
 from urllib.parse import urlsplit
@@ -17,6 +18,7 @@ from app.core.crypto import SecretBox
 from app.core.errors import AppError, ErrorCode
 from app.core.middleware import AuthenticatedUser
 from app.core.repo_url import RepoUrlRejected, validate_repo_url
+from app.ingestion.errors import IngestionError
 from app.ingestion.vector_store import VectorStore
 from app.models.project import Project, ProjectStatus
 from app.queue.protocol import IngestionQueue
@@ -24,6 +26,8 @@ from app.queue.topics import INGEST_TOPIC, IngestionMessage
 from app.repositories.project import ProjectRepository
 from app.schemas.pagination import ListQuery, PaginatedResponse
 from app.schemas.project import ProjectCreateRequest, ProjectResponse, ReindexResponse
+
+logger = logging.getLogger(__name__)
 
 DEFAULT_SORT = "created_at"
 
@@ -167,7 +171,22 @@ class ProjectService:
 
         if project.embedding_collection:
             store = self.store_factory(project.embedding_collection)
-            await store.delete_project(project.id)
+            try:
+                await store.delete_project(project.id)
+            except IngestionError as error:
+                # Not a bug, so not a 500 (`.claude/rules/response-api.md`): the vector
+                # store is a dependency and it is down. Nothing is committed, so the
+                # project stays visible and the caller can retry.
+                logger.exception(
+                    "Vector delete failed for project %s in collection %s",
+                    project.id,
+                    project.embedding_collection,
+                )
+                raise AppError(
+                    status.HTTP_503_SERVICE_UNAVAILABLE,
+                    ErrorCode.VECTOR_STORE_UNAVAILABLE,
+                    "The vector store is unreachable, so the project was not deleted.",
+                ) from error
 
         await self.session.commit()
 

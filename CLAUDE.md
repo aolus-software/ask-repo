@@ -12,12 +12,20 @@ organization runs one instance on its own internal network.
 the security model. It outranks every other doc and outranks the code. When code and the PRD
 disagree, that is a contradiction to report — not a doc to quietly rewrite.
 
-**Status: M0 (backend) shipped.** The backend serves an index route, health checks, and the
-full auth/accounts surface: admin-provisioned users, login, forced first-login password
-change, session rotation, and login rate limiting. Postgres and Redis are read. There is still
-no ingestion, no RAG, and no Qdrant use — those land at M1. The frontend has not moved: it is
-still the landing page from scaffolding, with no API client and no auth screens. Do not assume
-a module exists because the PRD describes it — the PRD describes the destination.
+**Status: M0 (backend) shipped; M1 ingestion in progress.** The backend serves an index route,
+health checks, the full auth/accounts surface (admin-provisioned users, login, forced
+first-login password change, session rotation, login rate limiting), and the project CRUD
+routes. All three datastores are read.
+
+M1 has landed its stages and the pipeline that joins them — `app/ingestion/` holds the cloner,
+walker, chunker, embedder adapter, Qdrant vector store, and `IngestionPipeline`, and
+`ProjectService.delete` hard-deletes a project's points. **Nothing calls the pipeline yet:**
+`app/queue/` defines the message format, topics, and protocol but no broker, so there is no
+worker and no background execution until Tasks 16–20. There is still no RAG — that is M2.
+
+The frontend has not moved: it is still the landing page from scaffolding, with no API client
+and no auth screens. Do not assume a module exists because the PRD describes it — the PRD
+describes the destination.
 
 ## Commands
 
@@ -69,13 +77,17 @@ Two apps, three datastores, one Compose file. `backend/` is FastAPI + Python 3.1
 
 The parts below are the ones you cannot infer from any single file.
 
-### Postgres and Redis are read; Qdrant is not yet
+### All three datastores are now read
 
 `Settings` declares `database_url`, `qdrant_url`, and `redis_url`, and Compose points them at
-live services. Postgres is read through the repository layer (`app/repositories/`) for users
-and refresh tokens; Redis is read by the login rate limiter (`app/core/rate_limit.py`).
-`qdrant_url` remains declared and unread until M1, along with the Redis-backed job queue — a
-missing vector layer is the current state, not a bug to fix on sight.
+live services. Postgres is read through the repository layer (`app/repositories/`) for users,
+refresh tokens, and projects; Redis is read by the login rate limiter
+(`app/core/rate_limit.py`). `qdrant_url` is read by `app/ingestion/vector_store.py` and by
+`build_store_factory` in `app/api/routes/projects.py` — the M1 ingestion work made the vector
+layer real.
+
+The queue is the part still stubbed: `app/queue/` defines the message format, topics, and an
+in-memory implementation, but no broker is wired up until Task 16.
 
 ### Configuration flows one way
 

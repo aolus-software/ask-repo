@@ -82,6 +82,23 @@ wired in yet; M0 added Postgres/Redis reads elsewhere in the app but not here.
 | `DELETE` | `/users/{id}` | admin | Deactivate, revoking sessions |
 | `POST` | `/users/{id}/reset-password` | admin | Set a temporary password |
 
+### Projects
+
+Every authenticated user can list and read **every** project — phase-1 sharing is intended, not
+a leak (`docs/PRD.md` §4.1). Only the project's `created_by` or an admin may reindex or delete.
+
+| Method | Path | Auth | Description |
+| --- | --- | --- | --- |
+| `GET` | `/projects` | any user | List all projects, paginated |
+| `GET` | `/projects/{id}` | any user | One project |
+| `POST` | `/projects` | any user | Register a repository and enqueue its first index |
+| `POST` | `/projects/{id}/reindex` | creator or admin | Re-index; a run already in flight is a no-op |
+| `DELETE` | `/projects/{id}` | creator or admin | Soft-delete the row and hard-delete its vectors |
+
+`DELETE` is the one route that can return **`503 VECTOR_STORE_UNAVAILABLE`**: it must reach
+Qdrant to satisfy `docs/PRD.md` §5.1's same-operation hard delete, and if Qdrant is down nothing
+is committed, so the project stays visible and the call can be retried.
+
 ## Layout
 
 ```
@@ -150,8 +167,9 @@ See [`.env.example`](.env.example). A few notes:
   comma-separated string — pydantic-settings parses complex types as JSON.
 - `DATABASE_URL` is read via the repository layer (`app/repositories/`) for users and
   refresh tokens, and `REDIS_URL` by the login rate limiter (`app/core/rate_limit.py`).
-  `QDRANT_URL` remains wired but unread until M1 (vectors), as does the Redis-backed
-  ingestion queue.
+  `QDRANT_URL` is read by `app/ingestion/vector_store.py` and by `build_store_factory`
+  in `app/api/routes/projects.py`, which reaches the collection a project recorded so
+  a delete can hard-delete its points.
 - Auth, password-policy, and bootstrap-admin settings are documented inline in
   `.env.example` — that file is the canonical list. `BOOTSTRAP_ADMIN_PASSWORD` has no
   default on purpose: seeding refuses to run without it rather than inventing one.

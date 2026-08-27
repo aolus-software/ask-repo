@@ -155,10 +155,16 @@ class QdrantVectorStore:
         self._client = AsyncQdrantClient(url=url)
 
     async def ensure_collection(self) -> None:
-        """Create the collection and the `project_id` payload index if absent.
+        """Create the collection and its payload indexes if absent, and check its width.
 
-        The payload index is not optional: filtering without one degrades to a scan
-        as the collection grows, and every M2 query filters by project.
+        The payload indexes are not optional: filtering without one degrades to a scan
+        as the collection grows. `project_id` is filtered by every M2 query and by both
+        deletes; `generation` is filtered by the swap's delete.
+
+        An existing collection is verified rather than trusted. The name encodes the
+        width, so the two normally agree — but a provider that re-tags a model id with
+        a different dimension count keeps the name and changes the number, and then
+        every upsert would fail with a 400 that names no cause.
         """
         dimensions = self.dimensions
         if dimensions is None:
@@ -171,20 +177,46 @@ class QdrantVectorStore:
                 "dimension count"
             )
         try:
-            if not await self._client.collection_exists(self.collection):
+            if await self._client.collection_exists(self.collection):
+                await self._verify_width(dimensions)
+            else:
                 await self._client.create_collection(
                     collection_name=self.collection,
                     vectors_config=models.VectorParams(
                         size=dimensions, distance=models.Distance.COSINE
                     ),
                 )
-            await self._client.create_payload_index(
-                collection_name=self.collection,
-                field_name="project_id",
-                field_schema=models.PayloadSchemaType.KEYWORD,
-            )
+            for field in ("project_id", "generation"):
+                await self._client.create_payload_index(
+                    collection_name=self.collection,
+                    field_name=field,
+                    field_schema=(
+                        models.PayloadSchemaType.KEYWORD
+                        if field == "project_id"
+                        else models.PayloadSchemaType.INTEGER
+                    ),
+                )
+        except IngestionError:
+            raise
         except Exception as error:
             raise _as_ingestion_error(error, "Preparing the Qdrant collection failed") from error
+
+    async def _verify_width(self, dimensions: int) -> None:
+        """Refuse to write into a collection created at a different vector width.
+
+        Terminal, not retryable: the collection's size is fixed at creation, so no
+        number of attempts changes the answer. Either the collection is dropped and
+        rebuilt, or the provider goes back to the model this collection was built for.
+        """
+        info = await self._client.get_collection(self.collection)
+        params = info.config.params.vectors
+        existing = params.size if isinstance(params, models.VectorParams) else None
+        if existing is not None and existing != dimensions:
+            raise TerminalIngestionError(
+                f"collection {self.collection} was created with vectors of width "
+                f"{existing}, but this worker embeds at {dimensions}; the collection "
+                f"must be dropped and rebuilt, or the embedding model changed back"
+            )
 
     async def upsert(
         self,
