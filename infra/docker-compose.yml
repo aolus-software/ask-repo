@@ -8,6 +8,7 @@
 # Frontend  http://localhost:3000
 # API       http://localhost:8000   (docs at /docs)
 # Qdrant    http://localhost:6333/dashboard
+# Postgres  localhost:5432          (projects, users, refresh tokens)
 # Redis     localhost:6379          (rate limiting)
 # Kafka     localhost:9092          (ingestion job queue, M1)
 

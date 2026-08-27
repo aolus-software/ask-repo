@@ -12,7 +12,7 @@ planned, what's deliberately out of scope for v1, and which questions are still 
 ```bash
 git clone <your-fork> && cd ask-repo
 make setup    # uv sync + bun install
-make infra    # postgres + qdrant + redis
+make infra    # postgres + qdrant + redis + kafka
 make dev      # both dev servers
 ```
 

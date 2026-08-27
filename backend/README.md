@@ -5,8 +5,12 @@ FastAPI service for AskRepo — the codebase-aware assistant described in
 
 M0 is shipped: the service identifies itself, reports health, and serves the full
 auth/accounts surface — admin-provisioned users, login, forced first-login password
-change, session rotation, and login rate limiting. The RAG / LangGraph work (project
-ingestion, Dev Knowledge, QA List, mock data generation) starts at M1.
+change, session rotation, and login rate limiting.
+
+M1 is in progress. The project routes and the entire ingestion pipeline are here —
+clone, walk, chunk, embed, and write to Qdrant — along with the Kafka producer. What is
+missing is the consumer: **nothing runs the pipeline in the background yet**, so a new
+project stays `pending`. The Dev Knowledge / QA List / mock-data work starts at M2.
 
 ## Requirements
 
@@ -15,8 +19,10 @@ ingestion, Dev Knowledge, QA List, mock data generation) starts at M1.
 
 ## Running locally
 
-Postgres and Redis must be up first — `make infra` from the repo root, or
-`docker compose -f infra/docker-compose.yml up -d --wait postgres qdrant redis`.
+The datastores must be up first — `make infra` from the repo root, or
+`docker compose -f infra/docker-compose.yml up -d --wait postgres qdrant redis kafka`.
+Postgres and Redis are enough to run the test suite; Qdrant is needed to index, and
+Kafka to enqueue.
 
 ```bash
 cd backend
@@ -38,7 +44,7 @@ with the password you set; both are seeded with `must_change_password` set.
 cd infra && docker compose up --build
 ```
 
-That brings up the API alongside Postgres, Qdrant, Redis, and the frontend.
+That brings up the API alongside Postgres, Qdrant, Redis, Kafka, and the frontend.
 Source is bind-mounted, so `--reload` picks up your edits.
 
 ## Routes
@@ -55,10 +61,10 @@ curl -s localhost:8000/ | jq
 curl -s localhost:8000/health | jq
 ```
 
-`/health/ready` exists so datastore probes (Postgres, Qdrant) can be added to
+`/health/ready` exists so datastore probes (Postgres, Qdrant, Kafka) can be added to
 `checks` later without changing the response shape — a dependency going down
-flips `status` to `degraded` while `/health/live` stays `ok`. No probes have been
-wired in yet; M0 added Postgres/Redis reads elsewhere in the app but not here.
+flips `status` to `degraded` while `/health/live` stays `ok`. **No probes have been
+wired in yet**, even though all four datastores are now read elsewhere in the app.
 
 ### Auth
 
@@ -108,51 +114,58 @@ backend/
 ├── alembic/versions/     # migrations
 ├── .env.example
 ├── app/
-│   ├── main.py           # create_app(): middleware, CORS, router mounting
+│   ├── main.py           # create_app(): middleware, CORS, routers, Kafka lifespan
 │   ├── config.py         # Settings (pydantic-settings) + get_settings()
 │   ├── cli.py            # `python -m app.cli seed-admins`
 │   ├── api/
 │   │   ├── deps.py       # CurrentUser / AdminUser dependencies
 │   │   └── routes/
-│   │       ├── index.py  # GET /
-│   │       ├── health.py # GET /health, /health/live, /health/ready
-│   │       ├── auth.py   # POST /auth/login, /refresh, /change-password, ...
-│   │       └── users.py  # /users CRUD + reset-password
+│   │       ├── index.py    # GET /
+│   │       ├── health.py   # GET /health, /health/live, /health/ready
+│   │       ├── auth.py     # POST /auth/login, /refresh, /change-password, ...
+│   │       ├── users.py    # /users CRUD + reset-password
+│   │       └── projects.py # /projects CRUD + reindex; build_store_factory
 │   ├── core/
 │   │   ├── access.py     # the phase-2 access-resolver seam
+│   │   ├── crypto.py     # SecretBox (PAT encryption at rest) + scrub
 │   │   ├── errors.py     # AppError, ErrorCode, exception handlers
 │   │   ├── middleware.py # AuthContextMiddleware — identity + the password-change gate
 │   │   ├── passwords.py  # password policy (length, common-password blocklist)
 │   │   ├── rate_limit.py # Redis-backed login rate limiting
+│   │   ├── repo_url.py   # clone-URL validation: https, allowlist, private-address refusal
 │   │   └── security.py   # hashing, JWT access tokens, opaque refresh tokens
 │   ├── db/session.py     # async engine + sessionmaker
-│   ├── models/            # SQLAlchemy models: User, RefreshToken
+│   ├── ingestion/        # one indexing run, stage by stage
+│   │   ├── pipeline.py   # clone → walk → chunk → embed → upsert → generation swap
+│   │   ├── cloner.py     # DNS-pinned git clone with size and time caps
+│   │   ├── walker.py     # which files are worth indexing
+│   │   ├── chunker.py    # language-aware splitting, line ranges preserved
+│   │   ├── embedder/     # Ollama / OpenAI / Voyage behind one protocol
+│   │   ├── vector_store.py # Qdrant: model-named collections, generation-scoped points
+│   │   └── errors.py     # Terminal vs Retryable — what decides whether a job retries
+│   ├── queue/
+│   │   ├── topics.py     # IngestionMessage, the topic names, the retry ladder
+│   │   ├── protocol.py   # IngestionQueue + the in-memory double
+│   │   └── producer.py   # KafkaIngestionQueue + ensure_topics
+│   ├── models/            # SQLAlchemy models: User, RefreshToken, Project
 │   ├── repositories/      # the only layer that issues `select`
 │   ├── schemas/
 │   │   ├── base.py       # ApiModel — the snake_case → camelCase boundary
 │   │   ├── auth.py
 │   │   ├── errors.py
 │   │   ├── pagination.py
+│   │   ├── project.py
 │   │   └── user.py
-│   └── services/          # AuthService, UserService — orchestration + business rules
+│   └── services/          # AuthService, UserService, ProjectService
 └── tests/
     ├── conftest.py           # app/client/db_session fixtures, real Postgres + Redis
+    ├── factories.py          # create_user / create_project
     ├── test_api_model.py     # the camelCase wire contract
-    ├── test_meta_routes.py
-    ├── test_config.py
-    ├── test_schema.py
-    ├── test_security.py
-    ├── test_passwords.py
-    ├── test_errors.py
+    ├── test_route_coverage.py
     ├── test_access.py
-    ├── test_auth_middleware.py
-    ├── test_rate_limit.py
-    ├── test_user_repository.py
-    ├── test_refresh_token_repository.py
-    ├── test_auth_api.py
-    ├── test_users_api.py
-    ├── test_cli.py
-    └── test_m0_acceptance.py # PRD §7's success criterion, end to end
+    ├── ...                   # one file per module; `ls tests/` is the current list
+    ├── test_m0_acceptance.py # PRD §7's M0 success criterion, end to end
+    └── test_m1_acceptance.py # PRD §7's M1 access/gating/scoping criteria
 ```
 
 Settings come from the environment, falling back to `.env`, falling back to the

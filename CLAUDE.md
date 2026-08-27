@@ -33,7 +33,7 @@ The `Makefile` at the root wraps everything; `make help` lists all targets.
 
 ```bash
 make setup            # install backend + frontend dependencies
-make infra            # start postgres + qdrant + redis only, wait until healthy
+make infra            # start postgres + qdrant + redis + kafka only, wait until healthy
 make dev              # both dev servers together (needs `make infra` first)
 make check            # lint + format-check + typecheck + test, as CI would
 make test-one T=tests/test_api_model.py
@@ -61,7 +61,7 @@ bun run build                             # catches type errors the dev server t
 bun lint
 
 # Whole stack — from infra/
-docker compose up --build                 # backend, frontend, postgres, qdrant, redis
+docker compose up --build                 # backend, frontend, postgres, qdrant, redis, kafka
 docker compose config --quiet             # validate before committing compose changes
 docker compose logs -f backend
 ```
