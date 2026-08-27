@@ -5,6 +5,7 @@ The filter that matters is about binaries, size, and committed-but-worthless pat
 """
 
 from pathlib import Path
+from unittest.mock import patch
 
 from app.ingestion.walker import detect_language, walk
 
@@ -79,3 +80,55 @@ def test_detects_language_from_extension() -> None:
     assert detect_language(Path("a/b.py")) == "python"
     assert detect_language(Path("a/b.ts")) == "typescript"
     assert detect_language(Path("a/b.unknownext")) == "text"
+
+
+def test_handles_non_utf8_gitignore(tmp_path: Path) -> None:
+    """A .gitignore that is not valid UTF-8 does not abort the walk.
+
+    Regression test for: _load_gitignore raised UnicodeDecodeError when .gitignore
+    was not UTF-8, aborting the entire project's indexing.
+    """
+    # Write a .gitignore with latin-1 encoding (not UTF-8)
+    gitignore_path = tmp_path / ".gitignore"
+    gitignore_path.write_bytes(b"generated/\n\xf1\n")  # \xf1 is invalid UTF-8
+
+    write(tmp_path, "app.py", "x = 1\n")
+    write(tmp_path, "generated/schema.py", "y = 2\n")
+
+    # Should not raise; should yield at least app.py
+    found = {file.relative_path for file in walk(tmp_path, max_file_bytes=1_000_000)}
+    assert "app.py" in found
+
+
+def test_skips_files_removed_mid_walk(tmp_path: Path) -> None:
+    """A file removed between is_file() check and stat() does not abort the walk.
+
+    Regression test for: walk() raised FileNotFoundError when a file was deleted
+    mid-walk (between is_file() check and path.stat() call), aborting indexing.
+    """
+    write(tmp_path, "app.py", "x = 1\n")
+    write(tmp_path, "removable.py", "y = 2\n")
+    write(tmp_path, "kept.py", "z = 3\n")
+
+    removable_path = tmp_path / "removable.py"
+    stat_calls: dict[str, int] = {}
+
+    # Patch Path.stat to raise FileNotFoundError on the size-check stat() call
+    # Path.stat calls: is_file() [1], is_symlink()->lstat() [2], size check [3]
+    original_stat = Path.stat
+
+    def patched_stat(self: Path, *, follow_symlinks: bool = True) -> object:
+        path_key = str(self)
+        call_count = stat_calls.get(path_key, 0) + 1
+        stat_calls[path_key] = call_count
+
+        if self == removable_path and call_count > 2:
+            raise FileNotFoundError(f"File disappeared: {self}")
+        return original_stat(self, follow_symlinks=follow_symlinks)
+
+    with patch.object(Path, "stat", patched_stat):
+        # Should not raise; should yield app.py and kept.py (removable.py skipped)
+        found = {file.relative_path for file in walk(tmp_path, max_file_bytes=1_000_000)}
+        assert "app.py" in found
+        assert "kept.py" in found
+        assert "removable.py" not in found

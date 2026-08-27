@@ -95,15 +95,27 @@ def _is_binary(path: Path) -> bool:
 
 
 def _load_gitignore(root: Path) -> pathspec.PathSpec | None:  # type: ignore[type-arg]  # pathspec stubs declare PathSpec as generic without parameters
-    """The repository's own ignore rules, if it has any."""
+    """The repository's own ignore rules, if it has any.
+
+    If the .gitignore cannot be decoded as UTF-8, treat it as if no ignore rules
+    exist — this is an edge case safety net, not the main filter.
+    """
     gitignore = root / ".gitignore"
     if not gitignore.is_file():
         return None
-    return pathspec.PathSpec.from_lines("gitignore", gitignore.read_text().splitlines())
+    try:
+        return pathspec.PathSpec.from_lines("gitignore", gitignore.read_text().splitlines())
+    except (OSError, ValueError):
+        # OSError: file access issues; ValueError: non-UTF-8 decode errors
+        return None
 
 
 def walk(root: Path, *, max_file_bytes: int) -> Iterator[SourceFile]:
-    """Yield every file in `root` worth indexing."""
+    """Yield every file in `root` worth indexing.
+
+    Files removed mid-walk (between is_file() check and later operations) are
+    skipped silently — a working copy on scratch disk may have files disappear.
+    """
     spec = _load_gitignore(root)
 
     for path in sorted(root.rglob("*")):
@@ -118,7 +130,11 @@ def walk(root: Path, *, max_file_bytes: int) -> Iterator[SourceFile]:
             continue
         if spec is not None and spec.match_file(relative):
             continue
-        if path.stat().st_size > max_file_bytes:
+        try:
+            if path.stat().st_size > max_file_bytes:
+                continue
+        except OSError:
+            # File removed or became inaccessible mid-walk
             continue
         if _is_binary(path):
             continue
