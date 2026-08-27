@@ -73,3 +73,9 @@ strict = true
 # test harness (backend/tests/conftest.py) to create the test database.
 module = "asyncpg"
 ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+# aiokafka is annotated internally but ships no py.typed marker, so mypy refuses to
+# read those annotations. Nothing to do but trust the boundary in app/queue/.
+module = ["aiokafka", "aiokafka.*"]
+ignore_missing_imports = true
