@@ -11,6 +11,7 @@ import uuid
 from typing import ClassVar, Self
 
 import pytest
+from aiokafka.errors import TopicAlreadyExistsError
 from fastapi import FastAPI
 
 from app.config import Settings, get_settings
@@ -241,6 +242,36 @@ async def test_ensure_topics_tolerates_topics_that_already_exist(
     await ensure_topics(bootstrap_servers="localhost:9092", partitions=2)
 
     assert StubAdminClient.instances[0].closed is True
+
+
+class RaisingAdminClient(StubAdminClient):
+    """A client that *raises* already-exists instead of reporting it in the response.
+
+    aiokafka 0.14 reports per-topic outcomes in `topic_errors` and never raises here,
+    so `ensure_topics` handles both shapes. This pins the branch that would otherwise
+    be unreachable and therefore untested -- `aiokafka>=0.12.0` is an open-ended pin,
+    and a client that went back to raising would fail startup on every restart after
+    the first.
+    """
+
+    async def create_topics(self, topics: list[object]) -> StubResponse:
+        self.requested = list(topics)
+        raise TopicAlreadyExistsError("topic already exists")
+
+
+async def test_ensure_topics_tolerates_a_client_that_raises_already_exists(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The other shape of the same normal path. Must not fail startup, and must
+    still close the admin client."""
+    monkeypatch.setattr(
+        "app.queue.producer.AIOKafkaAdminClient",
+        lambda **kwargs: RaisingAdminClient(**kwargs),
+    )
+
+    await ensure_topics(bootstrap_servers="localhost:9092", partitions=2)
+
+    assert RaisingAdminClient.instances[-1].closed is True
 
 
 async def test_ensure_topics_raises_on_any_other_broker_error(
