@@ -59,6 +59,12 @@ export interface UserResponse {
   updatedAt: string;
 }
 
+/** The length bounds a new password must satisfy. Rendered, never hard-coded. */
+export interface PasswordPolicyResponse {
+  minLength: number;
+  maxBytes: number;
+}
+
 /** What the backend's POST /auth/login returns. Never forwarded to the browser. */
 export interface AccessTokenResponse {
   accessToken: string;

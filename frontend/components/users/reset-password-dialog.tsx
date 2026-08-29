@@ -4,8 +4,7 @@ import { useState } from "react";
 import { toast } from "sonner";
 
 import { FormDialog } from "@/components/form/form-dialog";
-import { PasswordInput } from "@/components/form/password-input";
-import { Field, FieldDescription, FieldError, FieldLabel } from "@/components/ui/field";
+import { PasswordField } from "@/components/form/password-field";
 import { useResetPassword } from "@/hooks/use-user-mutations";
 import { fieldError } from "@/lib/api/errors";
 import type { UserResponse } from "@/lib/api/types";
@@ -48,23 +47,13 @@ export function ResetPasswordDialog({
       error={mutation.error}
       onSubmit={handleSubmit}
     >
-      <Field>
-        <FieldLabel htmlFor="reset-password">
-          Temporary password <span className="text-danger">*</span>
-        </FieldLabel>
-        <PasswordInput
-          id="reset-password"
-          autoComplete="new-password"
-          value={newPassword}
-          onChange={(event) => setNewPassword(event.target.value)}
-          aria-invalid={Boolean(fieldError(mutation.error, "newPassword"))}
-        />
-        {fieldError(mutation.error, "newPassword") ? (
-          <FieldError>{fieldError(mutation.error, "newPassword")}</FieldError>
-        ) : (
-          <FieldDescription>Communicate it to them directly.</FieldDescription>
-        )}
-      </Field>
+      <PasswordField
+        id="reset-password"
+        label="Temporary password"
+        value={newPassword}
+        onChange={setNewPassword}
+        serverError={fieldError(mutation.error, "newPassword")}
+      />
     </FormDialog>
   );
 }

@@ -7,6 +7,7 @@ import type { ListParams } from "@/lib/api/types";
  */
 export const keys = {
   me: ["me"] as const,
+  passwordPolicy: ["password-policy"] as const,
   projects: {
     all: ["projects"] as const,
     list: (params: ListParams) => ["projects", "list", params] as const,

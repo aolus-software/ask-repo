@@ -20,7 +20,12 @@ from app.core.rate_limit import (
     enforce_login_ip_limit,
     enforce_password_change_ip_limit,
 )
-from app.schemas.auth import AccessTokenResponse, ChangePasswordRequest, LoginRequest
+from app.schemas.auth import (
+    AccessTokenResponse,
+    ChangePasswordRequest,
+    LoginRequest,
+    PasswordPolicyResponse,
+)
 from app.schemas.errors import ERROR_RESPONSES
 from app.schemas.user import UserResponse
 from app.services.auth import AuthService
@@ -92,6 +97,25 @@ def _refresh_cookie_clear_headers(settings: Settings) -> dict[str, str]:
     scratch = Response()
     _clear_refresh_cookie(scratch, settings)
     return {"set-cookie": scratch.headers["set-cookie"]}
+
+
+@router.get(
+    "/password-policy",
+    response_model=PasswordPolicyResponse,
+    status_code=status.HTTP_200_OK,
+    summary="The rules a new password must satisfy",
+)
+async def password_policy(settings: SettingsDep) -> PasswordPolicyResponse:
+    """Publish the length bounds so a client can render them instead of guessing.
+
+    Unauthenticated on purpose: the forced-password-change screen needs it while the
+    caller is still gated, and the values leak nothing — a single rejected password
+    reveals the minimum anyway.
+    """
+    return PasswordPolicyResponse(
+        min_length=settings.password_min_length,
+        max_bytes=settings.password_max_bytes,
+    )
 
 
 @router.post(

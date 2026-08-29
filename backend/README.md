@@ -88,6 +88,7 @@ wired in yet**, even though all four datastores are now read elsewhere in the ap
 
 | Method | Path | Auth | Description |
 | --- | --- | --- | --- |
+| `GET` | `/auth/password-policy` | none | The length bounds a new password must satisfy |
 | `POST` | `/auth/login` | none | Log in; sets the refresh cookie |
 | `POST` | `/auth/refresh` | refresh cookie | Rotate the session |
 | `POST` | `/auth/change-password` | access token | Change your own password |

@@ -4,9 +4,9 @@ import { useState } from "react";
 import { toast } from "sonner";
 
 import { FormDialog } from "@/components/form/form-dialog";
-import { PasswordInput } from "@/components/form/password-input";
+import { PasswordField } from "@/components/form/password-field";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Field, FieldDescription, FieldError, FieldLabel } from "@/components/ui/field";
+import { Field, FieldError, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { useCreateUser } from "@/hooks/use-user-mutations";
 import { fieldError } from "@/lib/api/errors";
@@ -76,27 +76,13 @@ export function CreateUserDialog({
         ) : null}
       </Field>
 
-      <Field>
-        <FieldLabel htmlFor="password">
-          Temporary password <span className="text-danger">*</span>
-        </FieldLabel>
-        <PasswordInput
-          id="password"
-          autoComplete="new-password"
-          value={values.password}
-          onChange={(event) => setValues({ ...values, password: event.target.value })}
-          aria-invalid={Boolean(fieldError(mutation.error, "password"))}
-        />
-        {fieldError(mutation.error, "password") ? (
-          <FieldError>{fieldError(mutation.error, "password")}</FieldError>
-        ) : (
-          // Communicated out of band on purpose: a server-generated password would
-          // have to travel in a response body (docs/PRD.md §4.0).
-          <FieldDescription>
-            Share this with them directly. They must change it.
-          </FieldDescription>
-        )}
-      </Field>
+      <PasswordField
+        id="password"
+        label="Temporary password"
+        value={values.password}
+        onChange={(password) => setValues({ ...values, password })}
+        serverError={fieldError(mutation.error, "password")}
+      />
 
       <Field orientation="horizontal">
         <Checkbox

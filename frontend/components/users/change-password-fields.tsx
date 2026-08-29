@@ -1,6 +1,7 @@
 "use client";
 
-import { Field, FieldDescription, FieldError, FieldLabel } from "@/components/ui/field";
+import { Field, FieldError, FieldLabel } from "@/components/ui/field";
+import { PasswordField } from "@/components/form/password-field";
 import { PasswordInput } from "@/components/form/password-input";
 import { fieldError } from "@/lib/api/errors";
 
@@ -43,27 +44,13 @@ export function ChangePasswordFields({
         ) : null}
       </Field>
 
-      <Field>
-        <FieldLabel htmlFor="newPassword">
-          New password <span className="text-danger">*</span>
-        </FieldLabel>
-        <PasswordInput
-          id="newPassword"
-          autoComplete="new-password"
-          value={values.newPassword}
-          onChange={(event) => onChange({ ...values, newPassword: event.target.value })}
-          aria-invalid={Boolean(fieldError(error, "newPassword"))}
-        />
-        {fieldError(error, "newPassword") ? (
-          <FieldError>{fieldError(error, "newPassword")}</FieldError>
-        ) : (
-          // Deliberately vague: never restate the backend's password policy
-          // (forms.md §4). The backend supplies specifics when they are violated.
-          <FieldDescription>
-            Choose a strong password you do not use anywhere else.
-          </FieldDescription>
-        )}
-      </Field>
+      <PasswordField
+        id="newPassword"
+        label="New password"
+        value={values.newPassword}
+        onChange={(newPassword) => onChange({ ...values, newPassword })}
+        serverError={fieldError(error, "newPassword")}
+      />
     </>
   );
 }
