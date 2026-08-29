@@ -5,6 +5,7 @@ from app.models.base import Base, SoftDeleteMixin, TimestampMixin
 from app.models.project import Project, ProjectStatus
 from app.models.refresh_token import RefreshToken, RevokedReason
 from app.models.user import User
+from app.models.conversation import Conversation, FinishReason, MessageRole
 
 __all__ = [
     "Base",
@@ -15,4 +16,7 @@ __all__ = [
     "SoftDeleteMixin",
     "TimestampMixin",
     "User",
+    "Conversation",
+    "FinishReason",
+    "MessageRole",
 ]
