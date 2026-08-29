@@ -206,13 +206,18 @@ class ProjectRepository(BaseRepository[Project]):
         an unclassified exception — strands it at True, and `ProjectService.reindex`
         then answers `enqueued: false` forever with no route, flag, or admin action
         able to clear it.
+
+        The lease is expired rather than cleared, so `lease_owner` still names us.
+        `claim` gates on expiry alone, so the project is immediately reclaimable
+        either way — but the consumer's dead-letter `release` gates on *ownership*,
+        and clearing the owner here would lock it out of recording the outcome. The
+        retryable path leaves the owner in place for the same reason.
         """
         now = datetime.now(UTC)
         result = await self.session.execute(
             update(Project)
             .where(Project.id == project_id, Project.lease_owner == worker_id)
             .values(
-                lease_owner=None,
                 lease_expires_at=now,
                 reindex_in_progress=False,
                 # Bulk UPDATE: `onupdate` does not fire on this path

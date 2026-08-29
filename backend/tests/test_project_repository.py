@@ -174,8 +174,10 @@ async def test_abandon_clears_the_reindex_flag(db_session: AsyncSession) -> None
 
     await db_session.refresh(project)
     assert project.reindex_in_progress is False
-    # The outcome is still the consumer's to decide, so the status is untouched.
+    # The outcome is still the consumer's to decide, so the status is untouched, and
+    # the lease is expired rather than disowned so the dead-letter release can match.
     assert project.status == ProjectStatus.READY
+    assert project.lease_owner == "worker-0"
     assert await repository.claim(
         project_id=project.id, job_id=uuid.uuid4(), worker_id="worker-1", lease_seconds=300
     )

@@ -62,8 +62,12 @@ class IngestionMessage:
     def key(self) -> bytes:
         """Partition key.
 
-        Keying by project keeps a project's retries on one partition, so two
-        attempts at the same repository never run concurrently on two workers.
+        Keying by project puts a project's messages on one partition *of one topic*,
+        so ordering holds within the ingest topic. It does **not** prevent two
+        concurrent attempts: the retry ladder crosses topics, so a queued retry and a
+        fresh reindex can be delivered at the same moment on different partitions.
+        `ProjectRepository.claim` is the only thing that stops them both running —
+        do not treat the lease as belt-and-braces on top of this.
         """
         return str(self.project_id).encode()
 

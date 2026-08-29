@@ -399,7 +399,10 @@ async def test_an_undecryptable_pat_does_not_strand_the_project(
 
     await db_session.refresh(project)
     assert project.reindex_in_progress is False
-    assert project.lease_owner is None
+    # The lease is expired, not disowned: the consumer's dead-letter release gates on
+    # ownership, so clearing it here would lock the outcome out of being recorded.
+    assert project.lease_expires_at is not None
+    assert project.lease_expires_at <= datetime.now(UTC)
 
 
 async def test_the_lease_heartbeat_runs_on_a_session_of_its_own(
