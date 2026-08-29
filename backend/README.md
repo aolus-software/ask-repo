@@ -121,7 +121,47 @@ a leak (`docs/PRD.md` §4.1). Only the project's `created_by` or an admin may re
 
 `DELETE` is the one route that can return **`503 VECTOR_STORE_UNAVAILABLE`**: it must reach
 Qdrant to satisfy `docs/PRD.md` §5.1's same-operation hard delete, and if Qdrant is down nothing
-is committed, so the project stays visible and the call can be retried.
+is committed, so the project stays visible and the call can be retried. It also soft-deletes
+every conversation against the project, for every owner (`docs/PRD.md` §4.2).
+
+### Conversations
+
+The mirror image of projects: a conversation is visible **only** to the user who had it. Every
+miss is `404`, never `403` — a `403` would confirm it exists — and `is_admin` does not widen
+this, because conversations are not shared (`docs/PRD.md` §4.2).
+
+| Method | Path | Auth | Description |
+| --- | --- | --- | --- |
+| `GET` | `/conversations` | owner only | List your own, paginated; optional `projectId` filter |
+| `GET` | `/conversations/{id}` | owner only | One conversation with its messages, oldest first |
+| `POST` | `/conversations` | any user | Open a conversation against a readable project |
+| `DELETE` | `/conversations/{id}` | owner only | Soft-delete |
+| `POST` | `/conversations/{id}/messages` | owner only | Ask a question; **streams the answer** |
+
+`POST /conversations/{id}/messages` responds `text/event-stream`, so it has no
+`response_model`. Everything that can set a status code happens before the body starts —
+`404` for an unreachable conversation or project, `409 PROJECT_NOT_READY`, `409
+EMBEDDING_MODEL_CHANGED`, `422` for an empty question. Once streaming begins the response is
+`200` and failures arrive as an `error` event.
+
+Five event types, all `camelCase` payloads:
+
+| Event | Payload | Notes |
+| --- | --- | --- |
+| `status` | `{phase}` | `queued` \| `rewriting` \| `retrieving` \| `generating`. May repeat |
+| `citations` | `{citations: [...]}` | Exactly once, **before** the first `token` |
+| `token` | `{text}` | One fragment of the answer |
+| `done` | `{messageId, model, finishReason, citedIndexes, groundingWarnings}` | Terminator |
+| `error` | `{messageId, code, message, finishReason}` | Terminator |
+
+Exactly one terminator per stream, and both carry `finishReason`: `stop`, `error`, `timeout`,
+or `disconnected`. A disconnect emits nothing — nobody is listening — but the tokens that
+arrived are still persisted. `groundingWarnings` is empty for a normal answer and carries
+`no_context`, `uncited_answer`, or `unknown_paths` when the answer may not be grounded.
+
+A `: keep-alive` comment goes out every 15 seconds during any gap, and the response sets
+`Cache-Control: no-cache` and `X-Accel-Buffering: no` so a proxy does not accumulate the
+stream and deliver it in one piece.
 
 ## Layout
 
@@ -142,7 +182,8 @@ backend/
 │   │       ├── health.py   # GET /health, /health/live, /health/ready
 │   │       ├── auth.py     # POST /auth/login, /refresh, /change-password, ...
 │   │       ├── users.py    # /users CRUD + reset-password
-│   │       └── projects.py # /projects CRUD + reindex; build_store_factory
+│   │       ├── projects.py # /projects CRUD + reindex
+│   │       └── conversations.py # /conversations CRUD + the SSE answer endpoint
 │   ├── core/
 │   │   ├── access.py     # the phase-2 access-resolver seam
 │   │   ├── crypto.py     # SecretBox (PAT encryption at rest) + scrub
@@ -167,8 +208,14 @@ backend/
 │   │   ├── producer.py   # KafkaIngestionQueue + ensure_topics
 │   │   ├── consumer.py   # handle_message, the routing ladder, the polling loop
 │   │   └── retry.py      # holds a delayed message until it is due, then re-queues it
+│   ├── rag/               # one answer, stage by stage
+│   │   ├── retriever.py  # embed query → filtered search → merge adjacent → typed spans
+│   │   ├── chat.py       # Ollama / OpenAI chat models behind build_chat_model
+│   │   ├── prompts.py    # the answer prompt, the rewrite prompt, span formatting
+│   │   ├── answerer.py   # rewrite → retrieve → generate, as a stream of events
+│   │   └── grounding.py  # the refusal, and the checks that make a bad answer visible
 │   ├── worker.py          # the worker entrypoint: consumers + the reconcile sweep
-│   ├── models/            # SQLAlchemy models: User, RefreshToken, Project
+│   ├── models/            # SQLAlchemy models: User, RefreshToken, Project, Conversation, Message
 │   ├── repositories/      # the only layer that issues `select`
 │   ├── schemas/
 │   │   ├── base.py       # ApiModel — the snake_case → camelCase boundary
@@ -201,9 +248,15 @@ See [`.env.example`](.env.example). A few notes:
   comma-separated string — pydantic-settings parses complex types as JSON.
 - `DATABASE_URL` is read via the repository layer (`app/repositories/`) for users and
   refresh tokens, and `REDIS_URL` by the login rate limiter (`app/core/rate_limit.py`).
-  `QDRANT_URL` is read by `app/ingestion/vector_store.py` and by `build_store_factory`
-  in `app/api/routes/projects.py`, which reaches the collection a project recorded so
-  a delete can hard-delete its points.
+  `QDRANT_URL` is read by `app/ingestion/vector_store.py` through `build_store_factory`,
+  which reaches the collection a project recorded — so a delete can hard-delete its
+  points and a question can search them.
+- `CHAT_*` configures the answering model, separately from `EMBEDDING_*`: an instance
+  commonly embeds locally and answers with a hosted model, or the reverse.
+  `CHAT_MAX_CONCURRENCY` caps answers generated at once instance-wide — Ollama
+  serialises inference internally, so raising it makes every answer slower rather than
+  the queue shorter. `RAG_MIN_SCORE` is the relevance floor below which no answer is
+  generated at all.
 - `KAFKA_BOOTSTRAP_SERVERS` is read by both processes: `ensure_topics` and
   `KafkaIngestionQueue` from the API lifespan, and the consumers from `app/worker.py`.
   `KAFKA_INGEST_PARTITIONS` (default 2) *is* the ingestion concurrency cap — worker

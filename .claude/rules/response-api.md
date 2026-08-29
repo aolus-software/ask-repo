@@ -23,8 +23,9 @@ class ProjectResponse(ApiModel):
 ```
 
 A model on plain `BaseModel` silently ships `snake_case` keys and is a defect, not a style
-preference. `backend/tests/test_api_model.py` is what keeps this honest — it exists because no
-route shipped so far has a multi-word field, so nothing else would catch a regression.
+preference. `backend/tests/test_api_model.py` is what keeps this honest. It matters most for
+payloads FastAPI cannot check: the SSE event models in `app/schemas/conversation.py` never pass
+through a `response_model`, so the `SSE_EVENT_MODELS` walk is the only enforcement they get.
 
 Never hand-convert casing in a route or service. One translation point, no exceptions.
 

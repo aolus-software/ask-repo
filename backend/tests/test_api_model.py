@@ -1,9 +1,11 @@
 """The wire contract: internal `snake_case`, external `camelCase`.
 
 `.claude/rules/response-api.md` makes `ApiModel` mandatory for anything crossing the
-HTTP boundary. These tests are what makes that rule enforceable rather than aspirational
-— none of the routes shipped so far has a multi-word field, so without them a regression
-in `ApiModel` would go unnoticed until the first `lastIndexedCommit` lands.
+HTTP boundary. FastAPI enforces it for ordinary routes by validating against the declared
+`response_model` — but the **SSE event payloads** have no `response_model` to validate
+against, because the body is `text/event-stream`. The `SSE_EVENT_MODELS` walk below is the
+only thing holding those to the rule; an event added to the stream but not to the tuple
+ships unchecked.
 """
 
 import uuid
