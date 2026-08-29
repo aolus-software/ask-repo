@@ -24,8 +24,10 @@ Four things here are load-bearing and easy to get wrong:
    queue with a misleading reason. See `_as_ingestion_error`.
 """
 
+import math
 import re
 import uuid
+from dataclasses import dataclass
 from typing import Any, Protocol
 
 from qdrant_client import AsyncQdrantClient, models
@@ -65,6 +67,19 @@ def point_id(project_id: uuid.UUID, file_path: str, chunk_index: int, generation
     return str(uuid.uuid5(project_id, f"{file_path}:{chunk_index}:{generation}"))
 
 
+@dataclass(frozen=True, slots=True)
+class SearchHit:
+    """One raw Qdrant match: the payload M1 wrote, plus its similarity score.
+
+    Deliberately dumb. Turning payload dictionaries into the typed `RetrievedChunk`
+    is the retriever's job, and keeping that conversion in one place is what stops
+    payload keys leaking separately into the prompt builder and the citation builder.
+    """
+
+    payload: dict[str, Any]
+    score: float
+
+
 def _as_ingestion_error(error: Exception, action: str) -> IngestionError:
     """Whether `action` failing this way is worth another attempt.
 
@@ -102,6 +117,16 @@ def _payload(
     }
 
 
+def _cosine(left: list[float], right: list[float]) -> float:
+    """Cosine similarity, with a zero vector scoring 0 rather than dividing by it."""
+    dot = sum(a * b for a, b in zip(left, right, strict=True))
+    left_norm = math.sqrt(sum(a * a for a in left))
+    right_norm = math.sqrt(sum(b * b for b in right))
+    if left_norm == 0.0 or right_norm == 0.0:
+        return 0.0
+    return dot / (left_norm * right_norm)
+
+
 class VectorStore(Protocol):
     """Where embedded chunks live."""
 
@@ -115,6 +140,17 @@ class VectorStore(Protocol):
 
     async def ensure_collection(self) -> None:
         """Create the collection and its payload index if absent."""
+        ...
+
+    async def search(
+        self,
+        *,
+        project_id: uuid.UUID,
+        generation: int,
+        vector: list[float],
+        limit: int,
+    ) -> list[SearchHit]:
+        """The `limit` closest chunks in one project's active generation."""
         ...
 
     async def upsert(
@@ -200,6 +236,45 @@ class QdrantVectorStore:
             raise
         except Exception as error:
             raise _as_ingestion_error(error, "Preparing the Qdrant collection failed") from error
+
+    async def search(
+        self,
+        *,
+        project_id: uuid.UUID,
+        generation: int,
+        vector: list[float],
+        limit: int,
+    ) -> list[SearchHit]:
+        """The `limit` closest chunks in one project's active generation.
+
+        Both filters are mandatory and both have payload indexes created by
+        `ensure_collection` — without the index this degrades to a scan as the
+        collection grows, and without the generation filter a query during a reindex
+        mixes two generations of the same repository.
+        """
+        try:
+            response = await self._client.query_points(
+                collection_name=self.collection,
+                query=vector,
+                query_filter=models.Filter(
+                    must=[
+                        models.FieldCondition(
+                            key="project_id", match=models.MatchValue(value=str(project_id))
+                        ),
+                        models.FieldCondition(
+                            key="generation", match=models.MatchValue(value=generation)
+                        ),
+                    ]
+                ),
+                limit=limit,
+                with_payload=True,
+            )
+        except Exception as error:
+            raise _as_ingestion_error(error, "Qdrant search failed") from error
+        return [
+            SearchHit(payload=dict(point.payload or {}), score=point.score)
+            for point in response.points
+        ]
 
     async def _verify_width(self, dimensions: int) -> None:
         """Refuse to write into a collection created at a different vector width.
@@ -296,6 +371,34 @@ class InMemoryVectorStore:
     async def ensure_collection(self) -> None:
         """Record that the caller asked."""
         self.ensured = True
+
+    async def search(
+        self,
+        *,
+        project_id: uuid.UUID,
+        generation: int,
+        vector: list[float],
+        limit: int,
+    ) -> list[SearchHit]:
+        """Cosine similarity over the stored points, same filters as the real store.
+
+        Cosine specifically, because that is the distance the real collection is
+        created with (`models.Distance.COSINE`). A fake ranking by dot product would
+        order differently for vectors of differing magnitude, and retrieval tests
+        would then pass here and fail against Qdrant.
+        """
+        matches = [
+            point
+            for point in self.points
+            if point["payload"]["project_id"] == str(project_id)
+            and point["payload"]["generation"] == generation
+        ]
+        scored = [
+            SearchHit(payload=dict(point["payload"]), score=_cosine(vector, point["vector"]))
+            for point in matches
+        ]
+        scored.sort(key=lambda hit: hit.score, reverse=True)
+        return scored[:limit]
 
     async def upsert(
         self,

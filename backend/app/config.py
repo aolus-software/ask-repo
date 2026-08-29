@@ -123,12 +123,11 @@ class Settings(BaseSettings):
     rag_context_max_chars: int = Field(default=24_000, ge=1000)
     # Zero is legitimate here — it disables multi-turn memory entirely.
     rag_history_turns: int = Field(default=6, ge=0)
-        # Cosine similarity a chunk must reach to be shown to the model at all. Below
+    # Cosine similarity a chunk must reach to be shown to the model at all. Below
     # this the embedder is saying "unrelated", and answering from unrelated code is
     # how a fluent, confident, entirely wrong answer gets produced. 0.0 disables the
     # floor; raise it if answers cite plausible-looking but irrelevant files.
     rag_min_score: float = Field(default=0.25, ge=0.0, le=1.0)
-
 
     # Encrypts stored PATs at rest (docs/PRD.md §9). Backed up separately from
     # the database — a backup holding both is plaintext storage with extra steps.

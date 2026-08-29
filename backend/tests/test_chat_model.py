@@ -25,5 +25,9 @@ def test_the_configured_temperature_reaches_the_model() -> None:
     """Answers about code should be reproducible. A default that silently failed to
     apply would show up as flaky answers, not as an error."""
     settings = Settings(chat_provider="ollama", chat_temperature=0.0)
+    model = build_chat_model(settings)
 
-    assert build_chat_model(settings).temperature == 0.0
+    # Narrowed rather than cast: `temperature` lives on the concrete model, not on
+    # the `BaseChatModel` the factory is declared to return.
+    assert isinstance(model, ChatOllama)
+    assert model.temperature == 0.0

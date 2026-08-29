@@ -160,6 +160,4 @@ the stream but not to this tuple ships unchecked."""
 
 def encode_event(event: StreamEvent) -> bytes:
     """Frame one event as an SSE message."""
-    return (
-        f"event: {event.event_name}\ndata: {event.model_dump_json(by_alias=True)}\n\n"
-    ).encode()
+    return (f"event: {event.event_name}\ndata: {event.model_dump_json(by_alias=True)}\n\n").encode()

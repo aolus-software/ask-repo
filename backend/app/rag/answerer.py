@@ -20,9 +20,9 @@ from langchain_core.messages import BaseMessage
 
 from app.core.errors import ErrorCode
 from app.models.conversation import FinishReason
-from app.rag.prompts import ANSWER_PROMPT, REWRITE_PROMPT, Turn, format_spans, to_langchain_history
-from app.rag.retriever import CodeRetriever, RetrievedChunk
 from app.rag.grounding import NO_CONTEXT_ANSWER, grounding_warnings
+from app.rag.prompts import ANSWER_PROMPT, REWRITE_PROMPT, Turn, format_spans, to_langchain_history
+from app.rag.retriever import RetrievedChunk, Retriever
 from app.schemas.conversation import (
     CitationPayload,
     CitationsEvent,
@@ -86,7 +86,7 @@ class Answerer:
     def __init__(
         self,
         *,
-        retriever: CodeRetriever,
+        retriever: Retriever,
         chat_model: BaseChatModel,
         model_id: str,
         semaphore: asyncio.Semaphore,
@@ -145,12 +145,9 @@ class Answerer:
                     model=self.model_id,
                     finish_reason=FinishReason.STOP,
                     cited_indexes=[],
-                    grounding_warnings=grounding_warnings(
-                        answer="", spans=spans, cited_count=0
-                    ),
+                    grounding_warnings=grounding_warnings(answer="", spans=spans, cited_count=0),
                 )
                 return
-
 
             yield StatusEvent(phase="generating")
             messages = ANSWER_PROMPT.format_messages(
@@ -189,7 +186,6 @@ class Answerer:
                 )
                 return
 
-
             answer = "".join(parts)
             cited = cited_indexes(answer, count=len(citations))
             warnings = grounding_warnings(answer=answer, spans=spans, cited_count=len(cited))
@@ -225,9 +221,7 @@ class Answerer:
                 )
             rewritten = _text_of(result).strip()
         except Exception:
-            logger.warning(
-                "Query rewrite failed; retrieving on the raw question", exc_info=True
-            )
+            logger.warning("Query rewrite failed; retrieving on the raw question", exc_info=True)
             return question
 
         if not rewritten or len(rewritten) > MAX_REWRITE_CHARS:

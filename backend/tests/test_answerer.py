@@ -3,55 +3,77 @@
 import asyncio
 import uuid
 
+from langchain_core.language_models import BaseChatModel
+
 from app.models.conversation import FinishReason
 from app.rag.answerer import Answerer, cited_indexes
+from app.rag.grounding import NO_CONTEXT, NO_CONTEXT_ANSWER, UNKNOWN_PATHS
 from app.rag.prompts import Turn
+from app.rag.retriever import RetrievedChunk, Retriever
 from app.schemas.conversation import (
     CitationsEvent,
     DoneEvent,
     ErrorEvent,
     StatusEvent,
+    StreamEvent,
     TokenEvent,
 )
-from app.rag.grounding import NO_CONTEXT, NO_CONTEXT_ANSWER, UNKNOWN_PATHS
 from tests.fakes import FailingChatModel, ScriptedChatModel
 from tests.test_retriever import _span
 
 
 class RecordingRetriever:
-    """Records the query it was asked for, so rewrite behaviour is observable."""
+    """Records the query it was asked for, so rewrite behaviour is observable.
 
-    def __init__(self, spans: list[object] | None = None) -> None:
+    Satisfies the `Retriever` protocol structurally — no base class and no cast.
+    """
+
+    def __init__(self, spans: list[RetrievedChunk] | None = None) -> None:
         self.spans = spans if spans is not None else [_span("app/a.py", 0, 1, 10)]
         self.queries: list[str] = []
 
     async def retrieve(
         self, query: str, *, project_id: uuid.UUID, generation: int
-    ) -> list[object]:
+    ) -> list[RetrievedChunk]:
         self.queries.append(query)
         return self.spans
 
 
-def build(chat_model: object, retriever: object | None = None, **kwargs: object) -> Answerer:
+def build(
+    chat_model: BaseChatModel,
+    retriever: Retriever | None = None,
+    *,
+    concurrency: int = 2,
+    timeout_seconds: float = 30,
+) -> Answerer:
+    """An answerer over fakes. Explicit parameters rather than `**kwargs`, so a
+    misspelled option is a type error here instead of a silently ignored default."""
     return Answerer(
-        retriever=retriever or RecordingRetriever(),  # type: ignore[arg-type]  # duck-typed in tests
-        chat_model=chat_model,  # type: ignore[arg-type]  # duck-typed in tests
+        retriever=retriever if retriever is not None else RecordingRetriever(),
+        chat_model=chat_model,
         model_id="test-model",
-        semaphore=asyncio.Semaphore(kwargs.pop("concurrency", 2)),  # type: ignore[arg-type]
-        timeout_seconds=kwargs.pop("timeout_seconds", 30),  # type: ignore[arg-type]
+        semaphore=asyncio.Semaphore(concurrency),
+        timeout_seconds=timeout_seconds,
     )
 
 
-async def collect(answerer: Answerer, **kwargs: object) -> list[object]:
-    defaults = {
-        "question": "how does it work",
-        "history": [],
-        "project_id": uuid.uuid4(),
-        "generation": 0,
-        "message_id": uuid.uuid4(),
-    }
-    defaults.update(kwargs)
-    return [event async for event in answerer.answer(**defaults)]  # type: ignore[arg-type]
+async def collect(
+    answerer: Answerer,
+    *,
+    question: str = "how does it work",
+    history: list[Turn] | None = None,
+) -> list[StreamEvent]:
+    """Drain a whole turn into a list, so ordering can be asserted on positions."""
+    return [
+        event
+        async for event in answerer.answer(
+            question=question,
+            history=history if history is not None else [],
+            project_id=uuid.uuid4(),
+            generation=0,
+            message_id=uuid.uuid4(),
+        )
+    ]
 
 
 async def test_citations_arrive_once_and_before_the_first_token() -> None:
@@ -93,8 +115,10 @@ async def test_a_follow_up_retrieves_on_the_rewritten_query() -> None:
     await collect(
         build(model, retriever),
         question="what about the error case?",
-        history=[Turn(role="user", content="how is the url validated"),
-                 Turn(role="assistant", content="via validate_repo_url")],
+        history=[
+            Turn(role="user", content="how is the url validated"),
+            Turn(role="assistant", content="via validate_repo_url"),
+        ],
     )
 
     assert retriever.queries == ["What happens when URL validation fails?"]
@@ -166,14 +190,14 @@ async def test_a_contended_semaphore_announces_the_wait() -> None:
     semaphore = asyncio.Semaphore(1)
     await semaphore.acquire()
     answerer = Answerer(
-        retriever=RecordingRetriever(),  # type: ignore[arg-type]  # duck-typed in tests
+        retriever=RecordingRetriever(),
         chat_model=ScriptedChatModel(tokens=["a"]),
         model_id="test-model",
         semaphore=semaphore,
         timeout_seconds=30,
     )
 
-    events: list[object] = []
+    events: list[StreamEvent] = []
     task = asyncio.create_task(_drain(answerer, events))
     await asyncio.sleep(0)
     semaphore.release()
@@ -183,7 +207,7 @@ async def test_a_contended_semaphore_announces_the_wait() -> None:
     assert events[0].phase == "queued"
 
 
-async def _drain(answerer: Answerer, sink: list[object]) -> None:
+async def _drain(answerer: Answerer, sink: list[StreamEvent]) -> None:
     async for event in answerer.answer(
         question="q", history=[], project_id=uuid.uuid4(), generation=0, message_id=uuid.uuid4()
     ):
@@ -195,6 +219,7 @@ def test_cited_indexes_ignores_labels_that_do_not_exist() -> None:
     Reporting it would send a client looking for a citation that is not there."""
     assert cited_indexes("see [1] and [3], also [9]", count=4) == [1, 3]
 
+
 async def test_nothing_retrieved_refuses_without_calling_the_model() -> None:
     """The guard that matters most. With no evidence, asking the model to answer
     anyway leaves one prompt instruction between the user and a fabrication — and
@@ -204,9 +229,7 @@ async def test_nothing_retrieved_refuses_without_calling_the_model() -> None:
 
     events = await collect(build(model, retriever))
 
-    assert not any(
-        isinstance(e, TokenEvent) and "never be streamed" in e.text for e in events
-    )
+    assert not any(isinstance(e, TokenEvent) and "never be streamed" in e.text for e in events)
     assert isinstance(events[-1], DoneEvent)
     assert events[-1].grounding_warnings == [NO_CONTEXT]
     assert events[-1].cited_indexes == []
@@ -227,6 +250,7 @@ async def test_an_answer_naming_an_unretrieved_file_is_flagged() -> None:
 
     events = await collect(build(model, retriever))
 
+    assert isinstance(events[-1], DoneEvent)
     assert UNKNOWN_PATHS in events[-1].grounding_warnings
 
 
@@ -236,4 +260,5 @@ async def test_a_clean_answer_carries_no_warnings() -> None:
 
     events = await collect(build(model, retriever))
 
+    assert isinstance(events[-1], DoneEvent)
     assert events[-1].grounding_warnings == []

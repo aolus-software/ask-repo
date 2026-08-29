@@ -62,12 +62,7 @@ def test_an_answer_that_cites_nothing_is_flagged() -> None:
 def test_a_cited_answer_naming_only_retrieved_paths_is_clean() -> None:
     spans = [_span("app/main.py", 0, 1, 10)]
 
-    assert (
-        grounding_warnings(
-            answer="See [1] in app/main.py.", spans=spans, cited_count=1
-        )
-        == []
-    )
+    assert grounding_warnings(answer="See [1] in app/main.py.", spans=spans, cited_count=1) == []
 
 
 def test_an_invented_path_is_flagged_even_when_the_answer_cites() -> None:
@@ -80,3 +75,23 @@ def test_an_invented_path_is_flagged_even_when_the_answer_cites() -> None:
         spans=spans,
         cited_count=1,
     )
+
+
+def test_a_linked_url_is_not_reported_as_an_invented_file() -> None:
+    """A URL is path-shaped by construction — a dotted host, then slash-separated
+    segments — so `https://github.com/acme/repo.git` would otherwise be reported as
+    a file that was never retrieved. Linking the repository or an issue is an
+    ordinary thing for an answer to do, and a check that fires on ordinary answers
+    stops being read."""
+    spans = [_span("app/main.py", 0, 1, 10)]
+
+    assert unknown_paths("Cloned from https://github.com/acme/repo.git by [1].", spans) == []
+
+
+def test_a_url_does_not_mask_a_real_invention_beside_it() -> None:
+    """Stripping URLs must not swallow the rest of the sentence."""
+    spans = [_span("app/main.py", 0, 1, 10)]
+
+    assert unknown_paths(
+        "See https://example.com/docs and also app/services/billing.py.", spans
+    ) == ["app/services/billing.py"]

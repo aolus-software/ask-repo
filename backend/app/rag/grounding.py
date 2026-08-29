@@ -42,6 +42,13 @@ a refusal exactly as it renders an answer. The machine-readable distinction is
 # ending in a filename-like word, and without the extension it matches "3/4".
 _PATH_PATTERN = re.compile(r"\b(?:[\w.-]+/)+[\w-]+\.[A-Za-z0-9]+\b")
 
+# Removed before scanning. A URL is path-shaped by construction — a dotted host
+# followed by slash-separated segments — so `https://github.com/acme/repo.git`
+# matches `_PATH_PATTERN` as `github.com/acme/repo.git` and gets reported as a file
+# that was never retrieved. Linking the repository or an issue is an ordinary thing
+# for an answer to do, and this check is worth only as much as it is believed.
+_URL_PATTERN = re.compile(r"\bhttps?://\S+", re.IGNORECASE)
+
 
 def _same_file(candidate: str, retrieved: str) -> bool:
     """Whether two paths name the same file, allowing for a differing prefix.
@@ -59,18 +66,23 @@ def _same_file(candidate: str, retrieved: str) -> bool:
 
 
 def unknown_paths(answer: str, spans: list[RetrievedChunk]) -> list[str]:
-    """File paths the answer names that appear in no retrieved excerpt."""
+    """File paths the answer names that appear in no retrieved excerpt.
+
+    URLs are stripped first — see `_URL_PATTERN`. A scheme-less host
+    (`github.com/acme/repo`) still matches and is still reported; that is the
+    accepted limit, because a bare dotted-slash token is genuinely ambiguous
+    between a host and a path.
+    """
     retrieved = {span.file_path for span in spans}
+    scannable = _URL_PATTERN.sub(" ", answer)
     return sorted(
         candidate
-        for candidate in set(_PATH_PATTERN.findall(answer))
+        for candidate in set(_PATH_PATTERN.findall(scannable))
         if not any(_same_file(candidate, path) for path in retrieved)
     )
 
 
-def grounding_warnings(
-    *, answer: str, spans: list[RetrievedChunk], cited_count: int
-) -> list[str]:
+def grounding_warnings(*, answer: str, spans: list[RetrievedChunk], cited_count: int) -> list[str]:
     """Machine-readable signals that this answer may not be grounded.
 
     An empty list is the normal case. `NO_CONTEXT` is returned alone: with nothing

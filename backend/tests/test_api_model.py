@@ -6,14 +6,12 @@ HTTP boundary. These tests are what makes that rule enforceable rather than aspi
 in `ApiModel` would go unnoticed until the first `lastIndexedCommit` lands.
 """
 
-from app.schemas.base import ApiModel
-
 import uuid
 
 import pytest
 
-from app.core.errors import ErrorCode
 from app.models.conversation import FinishReason
+from app.schemas.base import ApiModel
 from app.schemas.conversation import (
     SSE_EVENT_MODELS,
     DoneEvent,
@@ -21,7 +19,6 @@ from app.schemas.conversation import (
     TokenEvent,
     encode_event,
 )
-
 
 
 class _Sample(ApiModel):
@@ -61,6 +58,7 @@ def test_single_word_fields_are_unchanged() -> None:
     )
 
     assert "status" in dumped
+
 
 @pytest.mark.parametrize("model", SSE_EVENT_MODELS)
 def test_every_sse_event_model_is_an_api_model(model: type[ApiModel]) -> None:

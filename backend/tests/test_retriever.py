@@ -6,19 +6,23 @@ exactly, so the assertions here are on exact text, not on lengths.
 
 import uuid
 
+from app.ingestion.chunker import Chunk
 from app.ingestion.embedder import FakeEmbedder
 from app.ingestion.vector_store import InMemoryVectorStore
-from app.rag.retriever import CodeRetriever, RetrievedChunk, apply_budget, merge_adjacent, TRUNCATION_MARKER
-from app.ingestion.chunker import Chunk
+from app.rag.retriever import (
+    TRUNCATION_MARKER,
+    CodeRetriever,
+    RetrievedChunk,
+    apply_budget,
+    merge_adjacent,
+)
 
 
 def _lines(start: int, end: int) -> str:
     return "\n".join(f"line {number}" for number in range(start, end + 1))
 
 
-def _span(
-    path: str, index: int, start: int, end: int, score: float = 0.5
-) -> RetrievedChunk:
+def _span(path: str, index: int, start: int, end: int, score: float = 0.5) -> RetrievedChunk:
     return RetrievedChunk(
         file_path=path,
         start_line=start,
@@ -30,6 +34,7 @@ def _span(
         score=score,
         chunk_indexes=(index,),
     )
+
 
 def _chunk_for_store(path: str, index: int, start: int, end: int) -> Chunk:
     return Chunk(
@@ -133,6 +138,7 @@ async def test_retrieve_embeds_the_query_and_returns_typed_spans() -> None:
     assert spans[0].file_path == "app/core/repo_url.py"
     assert spans[0].commit_sha == "9d12711"
     assert (spans[0].start_line, spans[0].end_line) == (40, 96)
+
 
 async def test_hits_below_the_relevance_floor_are_dropped() -> None:
     """A chunk the embedder scores below the floor is one it says is unrelated.

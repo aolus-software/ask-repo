@@ -17,6 +17,7 @@ Three things here are load-bearing:
 import uuid
 from dataclasses import dataclass
 from itertools import groupby
+from typing import Protocol
 
 from app.ingestion.embedder import Embedder
 from app.ingestion.vector_store import SearchHit, VectorStore
@@ -138,6 +139,22 @@ def apply_budget(chunks: list[RetrievedChunk], *, max_chars: int) -> list[Retrie
             )
         break
     return kept
+
+
+class Retriever(Protocol):
+    """Anything that can find code for a question.
+
+    Declared for the same reason `Embedder`, `VectorStore`, and `Chunker` are: the
+    answerer depends on the ability to retrieve, not on `CodeRetriever` itself. That
+    is what lets a test substitute a recording double with no cast, and what will let
+    M3's graph swap the implementation without touching the caller.
+    """
+
+    async def retrieve(
+        self, query: str, *, project_id: uuid.UUID, generation: int
+    ) -> list[RetrievedChunk]:
+        """The spans this question should be answered from."""
+        ...
 
 
 class CodeRetriever:
