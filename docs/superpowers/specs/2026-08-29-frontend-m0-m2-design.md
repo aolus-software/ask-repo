@@ -236,7 +236,7 @@ when `NODE_ENV === "production"`.
 
 | Name | Holds | `Max-Age` |
 | --- | --- | --- |
-| `askrepo_session` | the opaque refresh token, mirrored from the backend | 30 days |
+| `askrepo_session` | the backend's refresh cookie as a verbatim `name=value` pair | 30 days |
 | `askrepo_access` | the JWT access token | `expiresIn − 30` seconds |
 
 The access cookie's own lifetime **is** the expiry check. When the browser drops it, the token
@@ -258,9 +258,16 @@ These are the only route handlers that write cookies.
 
 **`POST /api/auth/login`** takes `{email, password}`, calls `POST {API_URL}/auth/login`, and on
 success receives `{accessToken, tokenType, expiresIn, user}` plus the backend's own refresh
-`Set-Cookie`. It parses the refresh token out of that header, sets both Next cookies, and
-returns **`{user}` and nothing else**. The access token never crosses to the browser — that is
-the entire point of the layer.
+`Set-Cookie`. It stores that cookie's **`name=value` pair verbatim** in `askrepo_session`, sets
+`askrepo_access`, and returns **`{user}` and nothing else**. The access token never crosses to
+the browser — that is the entire point of the layer.
+
+**The pair is stored verbatim because the backend's cookie name is configurable.**
+`Settings.refresh_cookie_name` (`backend/app/config.py:43`) defaults to `askrepo_refresh` but is
+an operator override. A frontend that parsed the token out by a hard-coded name would break the
+moment `REFRESH_COOKIE_NAME` was set — and break silently, as a login that appears to succeed and
+a session that cannot refresh. Capturing `name=value` and replaying it as a `Cookie` header on
+refresh means the BFF never needs to know the name at all.
 
 Failures pass through with their status and body intact, because the login form needs to tell
 `401 INVALID_CREDENTIALS` from `429 RATE_LIMITED`.
