@@ -1,18 +1,26 @@
-import { parseApiError } from "@/lib/api/errors";
+import { networkError, parseApiError } from "@/lib/api/errors";
 
 /**
  * The browser's only route to the API: same-origin, through the proxy. It carries no
  * token and knows nothing about auth — the proxy attaches the bearer.
  */
 async function request(path: string, init?: RequestInit): Promise<Response> {
-  const response = await fetch(`/api${path}`, {
-    ...init,
-    credentials: "same-origin",
-    headers: {
-      ...(init?.body ? { "content-type": "application/json" } : {}),
-      ...init?.headers,
-    },
-  });
+  let response: Response;
+  try {
+    response = await fetch(`/api${path}`, {
+      ...init,
+      credentials: "same-origin",
+      headers: {
+        ...(init?.body ? { "content-type": "application/json" } : {}),
+        ...init?.headers,
+      },
+    });
+  } catch (error) {
+    // An abort is the caller's own doing (a cancelled answer stream); everything else
+    // is the network failing before a Response existed.
+    if (error instanceof DOMException && error.name === "AbortError") throw error;
+    throw networkError();
+  }
   if (!response.ok) throw await parseApiError(response);
   return response;
 }

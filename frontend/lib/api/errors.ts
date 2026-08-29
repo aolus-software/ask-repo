@@ -73,6 +73,23 @@ export async function parseApiError(response: Response): Promise<ApiError> {
   );
 }
 
+/**
+ * The network never carried the request: DNS failure, refused connection, aborted
+ * TLS. No Response exists, so `parseApiError` cannot help — but callers still branch
+ * on `ApiError`, and a form banner renders `error.message`, so letting the raw
+ * `TypeError: Failed to fetch` through would print browser jargon at the operator.
+ *
+ * Status 0 is the conventional "no response" marker and keeps the 4xx retry rule in
+ * `lib/query/provider.tsx` from treating it as a client error.
+ */
+export function networkError(): ApiError {
+  return new ApiError(
+    0,
+    "INTERNAL_ERROR",
+    "Could not reach the server. Check your connection and try again.",
+  );
+}
+
 /** Read one field's error. Returns undefined for anything that is not an ApiError. */
 export function fieldError(error: unknown, name: string): string | undefined {
   return isApiError(error) ? error.fieldErrors[name] : undefined;

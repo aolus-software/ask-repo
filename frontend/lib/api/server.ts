@@ -1,6 +1,6 @@
 import { cookies } from "next/headers";
 
-import { parseApiError } from "@/lib/api/errors";
+import { networkError, parseApiError } from "@/lib/api/errors";
 import { ACCESS_COOKIE } from "@/lib/auth/cookies";
 import { apiUrl } from "@/lib/auth/session";
 
@@ -17,15 +17,22 @@ export async function serverFetch<T>(path: string, init?: RequestInit): Promise<
   const store = await cookies();
   const accessToken = store.get(ACCESS_COOKIE)?.value;
 
-  const response = await fetch(`${apiUrl()}${path}`, {
-    ...init,
-    headers: {
-      ...(accessToken ? { authorization: `Bearer ${accessToken}` } : {}),
-      ...(init?.body ? { "content-type": "application/json" } : {}),
-      ...init?.headers,
-    },
-    cache: "no-store",
-  });
+  let response: Response;
+  try {
+    response = await fetch(`${apiUrl()}${path}`, {
+      ...init,
+      headers: {
+        ...(accessToken ? { authorization: `Bearer ${accessToken}` } : {}),
+        ...(init?.body ? { "content-type": "application/json" } : {}),
+        ...init?.headers,
+      },
+      cache: "no-store",
+    });
+  } catch {
+    // The backend is unreachable from the server — during a render this surfaces as
+    // the page's own error path, not as an unhandled rejection.
+    throw networkError();
+  }
 
   if (!response.ok) throw await parseApiError(response);
   if (response.status === 204) return undefined as T;
