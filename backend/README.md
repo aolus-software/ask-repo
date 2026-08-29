@@ -7,12 +7,12 @@ M0 is shipped: the service identifies itself, reports health, and serves the ful
 auth/accounts surface — admin-provisioned users, login, forced first-login password
 change, session rotation, and login rate limiting.
 
-M1 is in progress. The project routes and the entire ingestion pipeline are here —
-clone, walk, chunk, embed, and write to Qdrant — along with the Kafka producer and the
-consumer that turns a queued message into an indexing run. What is missing is the
-**worker process that runs that consumer**, plus the delayed-retry consumer and the
-reconcile sweep, so a new project still stays `pending` today. The Dev Knowledge /
-QA List / mock-data work starts at M2.
+M1 is complete. The project routes and the entire ingestion pipeline are here — clone,
+walk, chunk, embed, and write to Qdrant — along with the Kafka producer, the consumer
+that turns a queued message into an indexing run, the delayed-retry consumers, and
+`app/worker.py`: the separate process that runs all of them and sweeps up jobs the
+broker never received. `POST /projects` enqueues and a worker indexes. The Dev
+Knowledge / QA List / mock-data work starts at M2.
 
 ## Requirements
 
@@ -23,8 +23,8 @@ QA List / mock-data work starts at M2.
 
 The datastores must be up first — `make infra` from the repo root, or
 `docker compose -f infra/docker-compose.yml up -d --wait postgres qdrant redis kafka`.
-Postgres and Redis are enough to run the test suite; Qdrant is needed to index, and
-Kafka to enqueue.
+Postgres and Redis are enough to run the test suite; Qdrant is needed to index, Kafka to
+enqueue, and Ollama to embed (unless `EMBEDDING_PROVIDER` points at a hosted API).
 
 ```bash
 cd backend
@@ -39,6 +39,22 @@ uv run uvicorn app.main:app --reload
 The API is then on <http://localhost:8000>, with interactive docs at
 <http://localhost:8000/docs>. Log in as `superuser@example.com` or `admin@example.com`
 with the password you set; both are seeded with `must_change_password` set.
+
+### The ingestion worker
+
+The API only *enqueues* indexing jobs. Nothing indexes until a worker is running, so a
+new project sits at `pending` until you start one — in a second terminal:
+
+```bash
+cd backend
+uv run python -m app.worker
+```
+
+It is the same codebase with a different entrypoint, so it reads the same `Settings` and
+the same `.env`. One process runs the ingest consumer, one consumer per retry rung, and a
+sweep every 60 seconds that re-enqueues jobs whose produce failed or whose worker died,
+and prunes expired refresh tokens. Run more than one and they share the ingest topic's
+partitions — two is the configured cap (`KAFKA_INGEST_PARTITIONS`).
 
 ## Running in Docker
 
@@ -149,7 +165,9 @@ backend/
 │   │   ├── topics.py     # IngestionMessage, the topic names, the retry ladder
 │   │   ├── protocol.py   # IngestionQueue + TopicProducer + the in-memory double
 │   │   ├── producer.py   # KafkaIngestionQueue + ensure_topics
-│   │   └── consumer.py   # handle_message, the routing ladder, the polling loop
+│   │   ├── consumer.py   # handle_message, the routing ladder, the polling loop
+│   │   └── retry.py      # holds a delayed message until it is due, then re-queues it
+│   ├── worker.py          # the worker entrypoint: consumers + the reconcile sweep
 │   ├── models/            # SQLAlchemy models: User, RefreshToken, Project
 │   ├── repositories/      # the only layer that issues `select`
 │   ├── schemas/
@@ -186,6 +204,21 @@ See [`.env.example`](.env.example). A few notes:
   `QDRANT_URL` is read by `app/ingestion/vector_store.py` and by `build_store_factory`
   in `app/api/routes/projects.py`, which reaches the collection a project recorded so
   a delete can hard-delete its points.
+- `KAFKA_BOOTSTRAP_SERVERS` is read by both processes: `ensure_topics` and
+  `KafkaIngestionQueue` from the API lifespan, and the consumers from `app/worker.py`.
+  `KAFKA_INGEST_PARTITIONS` (default 2) *is* the ingestion concurrency cap — worker
+  replicas beyond the partition count sit idle. `KAFKA_MAX_ATTEMPTS` bounds the retry
+  ladder before a job is dead-lettered.
+- `EMBEDDING_PROVIDER` / `EMBEDDING_MODEL` / `EMBEDDING_BASE_URL` / `EMBEDDING_API_KEY`
+  are read by the **worker only**. The vector width is probed at worker startup, never
+  configured — it forms part of the Qdrant collection name, so guessing it wrong would
+  mix incompatible vectors.
+- `PAT_ENCRYPTION_KEY` encrypts stored personal access tokens at rest. The API writes
+  them and the worker reads them, so both processes must share the value — a mismatch
+  surfaces as a clone that fails to decrypt, not as a warning. Back it up **separately
+  from the database**.
+- `REPO_SCRATCH_DIR` (default `/data/repos`) is scratch, not a volume to preserve: the
+  working copy is deleted after indexing and a reindex re-clones.
 - Auth, password-policy, and bootstrap-admin settings are documented inline in
   `.env.example` — that file is the canonical list. `BOOTSTRAP_ADMIN_PASSWORD` has no
   default on purpose: seeding refuses to run without it rather than inventing one.

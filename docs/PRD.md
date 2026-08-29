@@ -28,9 +28,10 @@ Four core features, sitting on top of an auth foundation:
 ## 2. Goals
 
 - Learn RAG, LangChain, LangGraph, prompt engineering, and context management by building, not tutorials.
+- Learn **event streaming** the same way. This is why the M1 job queue is Kafka rather than the lighter task queue this workload actually calls for — §5's note on the job queue records that trade, and its costs, explicitly.
 - Produce something usable on real repos — not throwaway toy data.
 - Keep each milestone small enough to finish in days.
-- **Model project access so phase 1's global scope becomes phase 2's per-project RBAC without a rewrite.** Concretely: store `created_by` and `is_admin` from the start, and route every retrieval through a single "which projects may this user see?" resolver, even while that resolver returns *all* of them.
+- **Model project access so phase 1's global scope becomes phase 2's per-project RBAC without a rewrite.** Concretely: store `created_by` and `is_admin` from the start, and route every retrieval through a single "which projects may this user see?" resolver, even while that resolver returns _all_ of them.
 
 > **Timeline note.** Earlier drafts targeted "v1 in days, not weeks." Auth adds a milestone (M0) before any RAG work, but admin-provisioned accounts keep it small — no email verification, no mail provider, no self-service reset. The per-milestone goal holds.
 
@@ -115,7 +116,7 @@ The field is `password_hash`, not `password`. The plaintext exists only in the r
   Because the cookie is `Secure`, the instance requires TLS — Caddy (§5) is not optional.
 - When `must_change_password` is set, login succeeds but **every route outside `/auth`** returns `403` with the machine-readable code `PASSWORD_CHANGE_REQUIRED`, so the frontend can force the change. The whole `/auth` surface stays reachable: the user needs `GET /auth/me` to see who they are, `POST /auth/refresh` because the access token expires in 15 minutes while they are typing, and `POST /auth/logout` / `logout-all` to abandon the flow or kill other sessions first.
 - `POST /auth/change-password` accepts `{current_password, new_password}`, clears
-  `must_change_password`, and revokes all *other* refresh tokens for that user. It returns no
+  `must_change_password`, and revokes all _other_ refresh tokens for that user. It returns no
   new access token: `must_change_password` is not a token claim, so the caller's existing token
   starts working everywhere the moment the row changes.
 - `POST /users/{id}/reset-password` (**admin only**) accepts `{newPassword}` — the admin supplies
@@ -145,7 +146,7 @@ The field is `password_hash`, not `password`. The plaintext exists only in the r
   count toward the per-email limit and a successful login clears it. Be precise about what this
   does and does not buy: counting only failures stops a legitimate user's own successful logins
   from ever spending their own budget, but it does **not** stop a deliberate attacker — an
-  attacker's wrong guesses are failures too, and `check_email` runs *before* authentication, so
+  attacker's wrong guesses are failures too, and `check_email` runs _before_ authentication, so
   after ten wrong guesses against a colleague's known address, the real owner cannot log in for
   the rest of the hour even with the correct password. At roughly ten requests an hour, needing
   no valid credential, an attacker can sustain that denial-of-service against one named person
@@ -190,12 +191,14 @@ The field is `password_hash`, not `password`. The plaintext exists only in the r
   answer for every user) or a concrete set of project ids. Phase 2 replaces its body with a
   membership lookup and nothing else changes. Retrieval filters Qdrant from that scope — never
   from an unchecked path parameter. It returns a `ProjectScope` rather than a nullable list
-  because a `None` meaning "unrestricted" is fail-open: an empty `ids` set must mean *no* access,
+  because a `None` meaning "unrestricted" is fail-open: an empty `ids` set must mean _no_ access,
   not all of it.
 - Clone uses `git clone --depth 1 --branch <branch> <url>` into a per-project scratch directory (`/data/repos/<project_id>`).
 - **Ingestion safety** (see §9): `https://` scheme only; host must be on a configurable allowlist (default `github.com`, `gitlab.com`); reject any URL resolving to a private, loopback, or link-local address; clone timeout 120s; reject repos over 500 MB.
-- **Quotas:** instance-wide cap on concurrent ingestion jobs (default 2) so one large clone can't starve the box. No per-user project cap — users are trusted colleagues.
-- Indexing runs walk → `.gitignore`-aware filter → code-aware chunk → embed, writing into a shared Qdrant collection with `project_id` on every point.
+- **Quotas:** instance-wide cap on concurrent ingestion jobs (default 2) so one large clone can't starve the box. The cap is **structural, not a setting**: 2 ingest partitions against 2 worker replicas, so a third worker would have no partition to own. Raising it means adding partitions *and* replicas. No per-user project cap — users are trusted colleagues.
+- Indexing runs walk → filter → code-aware chunk → embed, writing into a Qdrant collection with `project_id` on every point.
+- **What the walk actually filters.** A fresh `git clone` has already applied `.gitignore` — ignored files were never committed, so they are not on disk to begin with. `.gitignore` is still consulted, but only for the genuine edge case of a file committed before it was ignored. The filters that do the real work are the ones a clone does not apply: **binary detection** (a `.png` or a compiled artefact embeds to noise), a **per-file size cap** (default 1 MiB, so a checked-in minified bundle or fixture dump cannot dominate the index), and a **denylist** of committed-but-worthless paths (`.git`, `node_modules`, `vendor`, lockfiles, `*.min.js`, source maps).
+- **Reindex is a generation swap, not a rebuild in place.** The project stays `ready` and queryable for the whole run: new vectors are written under an incremented `active_generation`, the project only starts reading from it once the run completes, and the previous generation is deleted afterwards. Two consequences worth stating plainly — a reindex never takes a project offline, and **a reindex that fails part-way leaves the previous index intact and still serving**. `reindex_in_progress` marks that a run is live; a second reindex request while one is running is idempotent (§5.1), not an error.
 - **Disk lifecycle.** After indexing succeeds (or fails terminally), the cloned working copy is **deleted**. `/data/repos` is scratch space, not a persistent volume. Re-index therefore re-clones rather than `git pull` — slower per run, accepted in exchange for bounded disk use.
 - `DELETE /projects/{id}` soft-deletes the row and **hard-deletes** the project's Qdrant points (§5.1).
 - PATs are encrypted at rest with a key from the environment, never logged, and never returned in any API response — not even masked.
@@ -215,10 +218,22 @@ class Project(BaseModel):
     file_count: int | None
     chunk_count: int | None
     encrypted_pat: bytes | None      # never serialized
+
+    # --- Job coordination (M1). None of these are ever serialized to the wire. ---
+    lease_owner: str | None          # worker id currently holding this project
+    lease_expires_at: datetime | None  # the lease is the deduplication boundary
+    last_job_id: UUID | None         # the job that last finished; refuses a replay
+    reindex_in_progress: bool        # a reindex is running over a live index
+    active_generation: int           # which vector generation queries should read
+    embedding_collection: str | None  # the Qdrant collection this project's points are in
+    embedding_model: str | None      # the model those vectors were produced with
+
     created_at: datetime
     updated_at: datetime
     deleted_at: datetime | None
 ```
+
+**Why the last seven columns exist.** The queue delivers at least once, so two workers can be handed the same job; `lease_owner` / `lease_expires_at` / `last_job_id` are what make one of them stand down, and they live in Postgres rather than in the broker because the database is the only thing both workers already agree on. `active_generation` and `embedding_collection` exist because a reindex must not take the project offline — see the next point. `embedding_model` records what the stored vectors actually are, so a model change is detectable rather than silently mixing incompatible vectors in one collection.
 
 **Out of scope for v1:** automatic re-index via GitHub webhooks, multi-branch indexing, org-wide repo discovery/browsing, deploy keys (PAT only), per-project access lists (phase 2).
 
@@ -240,7 +255,7 @@ class Project(BaseModel):
 - Query retrieves top-k chunks filtered by `project_id`, drawn from the access resolver (§4.1), injects them into the prompt, and returns an answer referencing the file paths / function names it drew from.
 - The project must exist and be `status == "ready"`; otherwise `404` (no such project) or `409` (not ready) with a clear message.
 - Multi-turn: at least a sliding-window or summarized memory so a 5+ turn conversation doesn't lose earlier context.
-- **Conversations are scoped by `user_id`.** `GET /conversations` returns only the caller's own; requesting someone else's returns `404` — here existence *is* private, unlike projects.
+- **Conversations are scoped by `user_id`.** `GET /conversations` returns only the caller's own; requesting someone else's returns `404` — here existence _is_ private, unlike projects.
 - Deleting a project soft-deletes conversations against it.
 
 **Schema**
@@ -275,6 +290,7 @@ class Message(BaseModel):
 **What it does:** A persisted, browsable list of Q&A pairs — either saved from Dev Knowledge sessions or generated by the Mock Data Generator (§4.4). **Shared across the instance**: this is the team's knowledge base and regression set, so anything saved here is visible to everyone.
 
 **Decisions**
+
 - QA List and Mock Data Generator **share one storage schema** from the start, discriminated by a `source` field. Two tables would have to be merged the moment generated pairs need to appear in the same list view as manual ones.
 - QA pairs are **global**, unlike conversations. Saving to the QA List is the deliberate act of publishing something to colleagues.
 
@@ -344,30 +360,47 @@ class QAPair(BaseModel):
 
 ## 5. Tech stack (proposed)
 
-| Layer                 | Choice                                                     | Notes                                                                                          |
-| --------------------- | ---------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
-| Hosting               | VPS / on-prem box, Docker Compose                          | One instance per organization; self-hosted                                                     |
-| API layer             | FastAPI                                                    | Python-native for LangChain/LangGraph                                                          |
-| Orchestration         | LangGraph                                                  | State graph for classify → retrieve → generate → critique/loop                                 |
-| LLM framework         | LangChain                                                  | Prompt templates, output parsers, document loaders/splitters                                    |
-| Auth                  | bcrypt hashing + JWT access / opaque refresh tokens      | Access token stateless (15 min); refresh token hashed in Postgres so it is revocable            |
-| ORM / migrations      | SQLAlchemy 2.0 + Alembic                                   | users, projects, qa_pairs, conversations, messages, refresh_tokens                              |
-| Rate limiting         | Redis-backed middleware                                    | Login brute-force protection (M0); reused for job-queue backing at M1                          |
-| Reverse proxy / TLS   | Caddy                                                      | Internal TLS in front of API + frontend. Not internet-facing, so certs may be internal CA      |
-| Ingestion             | `git clone --depth 1` per project + filesystem walk        | Working copy deleted after indexing; `/data/repos` is scratch, not a persistent volume         |
-| Background jobs       | FastAPI `BackgroundTasks` (v1) → Redis + ARQ (M1+)         | Clone + index must not block the request. See note below.                                      |
-| Vector store          | Qdrant                                                     | Shared collection, filtered by `project_id` from the access resolver (§4.1)                     |
-| Models                | Ollama (qwen2.5-coder:14b, qwen3:14b) + hosted API adapter | Compare local vs hosted per node                                                               |
-| Storage               | Postgres                                                   | Users, projects, qa_pairs, conversations, refresh tokens, encrypted PATs                        |
-| Secrets               | Env-provided encryption key (AES-GCM / Fernet)             | Encrypts PATs at rest; key never committed, rotatable                                          |
-| Frontend              | Minimal Next.js                                            | Not the focus; keep thin                                                                       |
-| Networking            | VPN / Tailscale only — no public exposure                  | The instance is internal. Admin access to Postgres/Qdrant dashboards likewise                  |
+| Layer               | Choice                                                     | Notes                                                                                     |
+| ------------------- | ---------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| Hosting             | VPS / on-prem box, Docker Compose                          | One instance per organization; self-hosted                                                |
+| API layer           | FastAPI                                                    | Python-native for LangChain/LangGraph                                                     |
+| Orchestration       | LangGraph                                                  | State graph for classify → retrieve → generate → critique/loop                            |
+| LLM framework       | LangChain                                                  | Prompt templates, output parsers, document loaders/splitters                              |
+| Auth                | bcrypt hashing + JWT access / opaque refresh tokens        | Access token stateless (15 min); refresh token hashed in Postgres so it is revocable      |
+| ORM / migrations    | SQLAlchemy 2.0 + Alembic                                   | users, projects, qa_pairs, conversations, messages, refresh_tokens                        |
+| Rate limiting       | Redis-backed middleware                                    | Login brute-force protection (M0). Redis does **not** back the job queue — see below      |
+| Reverse proxy / TLS | Caddy                                                      | Internal TLS in front of API + frontend. Not internet-facing, so certs may be internal CA |
+| Ingestion           | `git clone --depth 1` per project + filesystem walk        | Working copy deleted after indexing; `/data/repos` is scratch, not a persistent volume    |
+| Background jobs     | Kafka + a separate worker process (M1)                     | Clone + index must not block the request. See note below.                                 |
+| Vector store        | Qdrant                                                     | Shared collection, filtered by `project_id` from the access resolver (§4.1)               |
+| Models              | Ollama (qwen2.5-coder:14b, qwen3:14b) + hosted API adapter | Compare local vs hosted per node                                                          |
+| Storage             | Postgres                                                   | Users, projects, qa_pairs, conversations, refresh tokens, encrypted PATs                  |
+| Secrets             | Env-provided encryption key (AES-GCM / Fernet)             | Encrypts PATs at rest; key never committed, rotatable                                     |
+| Frontend            | Minimal Next.js                                            | Not the focus; keep thin                                                                  |
+| Networking          | VPN / Tailscale only — no public exposure                  | The instance is internal. Admin access to Postgres/Qdrant dashboards likewise             |
 
 **Bcrypt over argon2id.** argon2id requires 64 MiB per hash by design, a real cost on the single shared VPS that hosts Postgres, Qdrant, Redis, and possibly Ollama. bcrypt keeps the property that matters: each password guess costs real time, and the time is configurable (cost factor). The security difference is negligible in a private network where the attacker is a compromised laptop or an insider with database access.
 
 **No email provider.** Admin-provisioned accounts and admin-driven password reset remove every transactional-email path, so v1 ships without a mail dependency. Adding self-service reset later means adding a provider then.
 
-**On the job queue.** `BackgroundTasks` runs in the API process, so a restart mid-index loses the job and leaves a Project stuck at `indexing` forever. Graduate to **Redis + ARQ** at M1. ARQ over Celery because the indexing pipeline (embeddings, Qdrant writes) is already async and Celery's configuration surface solves problems this project doesn't have. **Kafka is the wrong tool here** — it is a partitioned, replicated event log for high-throughput streams with replaying consumer groups; this workload is a handful of jobs a day that need retries and a status field, which is a task queue, not a log.
+**On the job queue.** Running the clone in the API process via `BackgroundTasks` was never viable past a prototype: a restart mid-index loses the job and leaves a Project stuck at `indexing` forever. So M1 moves ingestion into a **separate worker process**, and the queue between them is **Kafka**.
+
+Earlier drafts of this section chose Redis + ARQ and argued against Kafka by name: *"Kafka is the wrong tool here — it is a partitioned, replicated event log for high-throughput streams with replaying consumer groups; this workload is a handful of jobs a day that need retries and a status field, which is a task queue, not a log."*
+
+**That reasoning still stands. It was overridden, and the override was not technical.** §1 names learning as this project's primary goal, and §2's goal list now carries event streaming alongside RAG and LangGraph. Kafka is here because it is worth learning on a real workload, not because it is the lighter tool for this job — it is not. A reader who concludes "this should have been ARQ" has understood the trade correctly; it was made deliberately, with the costs priced in.
+
+Those costs are real, and the M1 design spec (`docs/superpowers/specs/2026-08-25-m1-project-ingestion-design.md` §2.1) mitigates each rather than pretending it is absent:
+
+| Cost | Mitigation |
+| --- | --- |
+| Kafka has no delayed-retry primitive | A chain of fixed-delay retry topics; a consumer holds each message until it is due, polling with its partitions paused so it keeps its place in the group |
+| No per-message acknowledgement or redelivery | Offsets are committed manually, only after the work is done and durable |
+| A rebalance can hand a long-running job to a second worker | The worker pauses its partitions and keeps polling for the whole job, and a database lease — not the offset — is the deduplication boundary |
+| Concurrency is partition count, not a setting | §4.1's cap of 2 is enforced structurally: 2 partitions × 2 worker replicas |
+| Head-of-line blocking within a partition | **Accepted, unmitigated.** A twenty-minute index holds its partition for twenty minutes and every project hashing to it waits, even while the other worker is idle. The lever is more partitions and more replicas, which raises the concurrency cap in the same step |
+| A broker on a shared single VPS | Single-node KRaft, replication factor 1, no high availability. This is a development-scale broker and is documented as one |
+
+Redis stays in the stack for login rate limiting only. It does not back the queue.
 
 ### 5.1 Conventions
 
@@ -382,7 +415,7 @@ class QAPair(BaseModel):
   a `deleted_at` column would be a third overlapping state that nothing sets. Revoked and expired
   rows are hard-deleted by a cleanup path (M1, with the job scheduler).
 - **Soft delete does not reach Qdrant.** Vector points have no `deleted_at`, and a query-time filter would be one forgotten call away from serving deleted content. Rule: **Postgres rows are soft-deleted; the corresponding Qdrant points are hard-deleted in the same operation.**
-- **Attribution vs authorization.** `created_by` exists on projects and qa_pairs for attribution and to gate destructive operations. It never scopes reads in phase 1. Read scoping is *only* ever done through `resolve_project_scope` (§4.1), so phase 2 has exactly one place to change.
+- **Attribution vs authorization.** `created_by` exists on projects and qa_pairs for attribution and to gate destructive operations. It never scopes reads in phase 1. Read scoping is _only_ ever done through `resolve_project_scope` (§4.1), so phase 2 has exactly one place to change.
 - **Error shape.** Every error the application raises serialises as
   `{"detail": {"code": "SOME_CODE", "message": "..."}}`. `code` is a stable,
   machine-readable identifier drawn from a single enum; `message` is for a person.
@@ -395,13 +428,20 @@ class QAPair(BaseModel):
   - `404` when the caller may not know the thing exists — e.g. another user's conversation.
   - `409` for valid-but-wrong-state (querying a project that isn't `ready`).
   - `429` for rate limits.
+- **Idempotent action endpoints return `202`, not `409`.** Asking for something that is already
+  happening is not an error — re-triggering a reindex while one is running is the request being
+  satisfied, not refused. Such endpoints return `202` with an **outcome flag** in the body
+  (`POST /projects/{id}/reindex` returns `{enqueued: bool, project: ProjectResponse}`), so a
+  caller can still tell "I started one" from "one was already running" and render accordingly,
+  without needing an error branch. `409` remains correct for a state that genuinely blocks the
+  request, such as querying a project that is not `ready`.
 
 ---
 
 ## 6. Milestones
 
 0. **M0 — Auth & accounts:** admin-provisioned users, login with access/refresh tokens, forced first-login password change, admin password reset, login rate limiting, seeded bootstrap admins. Nothing else can be attributed until this exists.
-1. **M1 — Project ingestion:** `POST /projects` with repo link → clone + index, status tracking, manual re-index, URL validation, `created_by` gating. Moves jobs to Redis + ARQ.
+1. **M1 — Project ingestion:** `POST /projects` with repo link → clone + index, status tracking, manual re-index, URL validation, `created_by` gating. Moves ingestion out of the API process into a Kafka-driven worker (§5).
 2. **M2 — Dev Knowledge core:** basic RAG Q&A against a ready project (no graph yet), with private conversations.
 3. **M3 — LangGraph wrap:** turn the chain into a graph with intent routing + self-critique loop.
 4. **M4 — QA List:** shared `qa_pairs` storage + save/view/filter/re-run.
@@ -429,8 +469,8 @@ class QAPair(BaseModel):
 
 ## 8. Open questions
 
-- **Are shared PATs acceptable?** With global projects, whoever adds a private repo supplies a PAT that effectively grants every user on the instance read access to that repo's contents via Q&A. That is probably fine inside one company, but it means a project's PAT scope should be as narrow as GitHub allows (read-only, single repo). Worth confirming before private-repo support ships. A GitHub App would make this cleanly org-level rather than person-level.
-- **Who can add projects?** Phase 1 says any user. If a company would rather curate the project list, that's a one-line `is_admin` check on `POST /projects` — worth deciding before M1.
+- **~~Are shared PATs acceptable?~~ Decided (M1): yes, with the caveat intact.** Full personal-access-token support ships at M1. The consequence is unchanged and is accepted rather than solved: whoever adds a private repo supplies a PAT that effectively grants every user on the instance read access to that repo's contents via Q&A. Operators should scope PATs as narrowly as the host allows — read-only, single repo. **That is an operator instruction, not something the code enforces.** A GitHub App would make this cleanly org-level rather than person-level, and remains the better answer if this ever moves outside one trusted team.
+- **~~Who can add projects?~~ Decided (M1): any authenticated user.** No `is_admin` check on `POST /projects`, matching §4.1's default. A company that would rather curate the list can add that check in one place; nothing else depends on the answer.
 - **What happens to a departed user's projects?** §3 says shared assets survive a soft-deleted user, leaving `created_by` pointing at a deactivated account. Should destructive rights then fall to admins only, or transfer to someone?
 - How rigorous should the "eval score" be in v1 — LLM-graded similarity is fast to build but noisy; worth revisiting once M5 is done.
 - Encryption key rotation for stored PATs — re-encrypt in place on rotation, or require re-entry?
@@ -440,9 +480,9 @@ class QAPair(BaseModel):
 
 ## 9. Security & abuse considerations
 
-The instance is internal, which lowers the threat model but does not empty it. The users are trusted colleagues; the *inputs* are not.
+The instance is internal, which lowers the threat model but does not empty it. The users are trusted colleagues; the _inputs_ are not.
 
-- **SSRF via clone URL — the sharpest risk, and worse on an internal network than a public one.** `repo_url` is user-supplied and handed to a network client running *inside* the corporate network, where `http://10.0.x.x`, `http://169.254.169.254/`, and internal service names actually resolve. Mitigation: https-only, host allowlist, and rejection of URLs resolving to private/loopback/link-local addresses — resolved at connect time, not just parse time, to defeat DNS rebinding.
+- **SSRF via clone URL — the sharpest risk, and worse on an internal network than a public one.** `repo_url` is user-supplied and handed to a network client running _inside_ the corporate network, where `http://10.0.x.x`, `http://169.254.169.254/`, and internal service names actually resolve. Mitigation: https-only, host allowlist, and rejection of URLs resolving to private/loopback/link-local addresses — resolved at connect time, not just parse time, to defeat DNS rebinding.
 - **Credential storage.** Stored PATs grant read access to the org's repositories. Encrypt with an env-provided key, never log, never return. Keep PAT scope read-only and per-repo.
 - **Untrusted code on disk.** Cloned repos are never executed; no build or dependency-install step runs. Indexing only reads files.
 - **Resource exhaustion.** Clones and embeddings are expensive and the box is shared. Mitigation: repo size cap, clone timeout, instance-wide concurrency caps on ingestion and generation.

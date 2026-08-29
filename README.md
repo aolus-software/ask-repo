@@ -11,12 +11,13 @@ network.
 Built as a learning project for RAG, LangChain/LangGraph, prompt engineering, and context
 management — against real repositories rather than tutorial data.
 
-> **Status: M0 shipped, M1 in progress.** Auth & accounts are implemented —
+> **Status: M0 and M1 shipped (backend).** Auth & accounts are implemented —
 > admin-provisioned users, login, forced first-login password change, and login rate
-> limiting — as are the project routes and the whole ingestion pipeline (clone, walk,
-> chunk, embed, Qdrant). The Kafka worker that *runs* that pipeline is still being built,
-> so indexing does not happen in the background yet. See [Roadmap](#roadmap) for what
-> lands when, and [`docs/PRD.md`](docs/PRD.md) for the full specification.
+> limiting — as are the project routes and the whole ingestion pipeline: clone, walk,
+> chunk, embed, Qdrant, driven by a Kafka job queue and a separate worker process.
+> `POST /projects` enqueues a repository and a worker indexes it in the background.
+> The frontend is still scaffolding. See [Roadmap](#roadmap) for what lands when, and
+> [`docs/PRD.md`](docs/PRD.md) for the full specification.
 
 ## Features (planned)
 
@@ -96,6 +97,12 @@ make dev                                           # both dev servers, Ctrl-C st
 | Postgres | `localhost:5432` |
 | Redis | `localhost:6379` |
 | Kafka | `localhost:9092` |
+| Ollama | `localhost:11434` (embeddings) |
+
+The **ingestion worker** publishes no port — it is reached through Kafka, not HTTP.
+`make up` runs two replicas of it, one per ingest partition. Running the apps locally
+with `make dev` does *not* start a worker; see
+[`backend/README.md`](backend/README.md#the-ingestion-worker) for how to run one.
 
 Every environment value has a fallback, so this comes up with no `.env` file. To customize,
 create `infra/.env` — the variable names are in
@@ -197,7 +204,7 @@ run them from inside `infra/`.
 Milestones from [`docs/PRD.md`](docs/PRD.md) §6, built in order:
 
 - [x] **M0** — Auth & accounts: admin-provisioned users, login, forced first-login password change, rate limiting
-- [ ] **M1** — Project ingestion: clone + index, status tracking, re-index, Kafka job queue
+- [x] **M1** — Project ingestion: clone + index, status tracking, re-index, Kafka job queue
 - [ ] **M2** — Dev Knowledge: RAG Q&A against a ready project, private conversations
 - [ ] **M3** — LangGraph: intent routing + self-critique loop
 - [ ] **M4** — QA List: shared storage, save / view / filter / re-run
