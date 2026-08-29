@@ -133,3 +133,41 @@ async def test_retrieve_embeds_the_query_and_returns_typed_spans() -> None:
     assert spans[0].file_path == "app/core/repo_url.py"
     assert spans[0].commit_sha == "9d12711"
     assert (spans[0].start_line, spans[0].end_line) == (40, 96)
+
+async def test_hits_below_the_relevance_floor_are_dropped() -> None:
+    """A chunk the embedder scores below the floor is one it says is unrelated.
+    Filtering before merging, not after, so adjacency cannot smuggle a weak chunk
+    in behind a strong neighbour — otherwise the floor would depend on chunk order."""
+    store = InMemoryVectorStore(dimensions=3)
+    project = uuid.uuid4()
+    await store.upsert(
+        project_id=project,
+        generation=0,
+        chunks=[_chunk_for_store("unrelated.py", 0, 1, 5)],
+        vectors=[[0.0, 1.0, 0.0]],
+        commit_sha="aaa",
+    )
+
+    retriever = CodeRetriever(
+        store=store,
+        embedder=_OrthogonalEmbedder(),
+        top_k=12,
+        max_chars=24_000,
+        min_score=0.5,
+    )
+
+    assert await retriever.retrieve("q", project_id=project, generation=0) == []
+
+
+class _OrthogonalEmbedder:
+    """Embeds every query to a vector at right angles to the stored one, so the
+    cosine score is 0 — well under any floor."""
+
+    model_id = "orthogonal"
+    dimensions = 3
+
+    async def embed_documents(self, texts: list[str]) -> list[list[float]]:
+        return [[0.0, 1.0, 0.0] for _ in texts]
+
+    async def embed_query(self, text: str) -> list[float]:
+        return [1.0, 0.0, 0.0]

@@ -13,6 +13,7 @@ from app.schemas.conversation import (
     StatusEvent,
     TokenEvent,
 )
+from app.rag.grounding import NO_CONTEXT, NO_CONTEXT_ANSWER, UNKNOWN_PATHS
 from tests.fakes import FailingChatModel, ScriptedChatModel
 from tests.test_retriever import _span
 
@@ -193,3 +194,46 @@ def test_cited_indexes_ignores_labels_that_do_not_exist() -> None:
     """A model that cites `[9]` when four spans were supplied has invented one.
     Reporting it would send a client looking for a citation that is not there."""
     assert cited_indexes("see [1] and [3], also [9]", count=4) == [1, 3]
+
+async def test_nothing_retrieved_refuses_without_calling_the_model() -> None:
+    """The guard that matters most. With no evidence, asking the model to answer
+    anyway leaves one prompt instruction between the user and a fabrication — and
+    burns a full generation to produce it."""
+    retriever = RecordingRetriever(spans=[])
+    model = ScriptedChatModel(tokens=["this should never be streamed"])
+
+    events = await collect(build(model, retriever))
+
+    assert not any(
+        isinstance(e, TokenEvent) and "never be streamed" in e.text for e in events
+    )
+    assert isinstance(events[-1], DoneEvent)
+    assert events[-1].grounding_warnings == [NO_CONTEXT]
+    assert events[-1].cited_indexes == []
+
+
+async def test_the_refusal_reaches_the_client_as_ordinary_tokens() -> None:
+    """A refusal renders like an answer, so clients need no special case. The
+    machine-readable distinction is in groundingWarnings."""
+    events = await collect(build(ScriptedChatModel(tokens=["x"]), RecordingRetriever(spans=[])))
+    streamed = "".join(e.text for e in events if isinstance(e, TokenEvent))
+
+    assert streamed == NO_CONTEXT_ANSWER
+
+
+async def test_an_answer_naming_an_unretrieved_file_is_flagged() -> None:
+    retriever = RecordingRetriever(spans=[_span("app/main.py", 0, 1, 10)])
+    model = ScriptedChatModel(tokens=["See [1], then app/invented/thing.py."])
+
+    events = await collect(build(model, retriever))
+
+    assert UNKNOWN_PATHS in events[-1].grounding_warnings
+
+
+async def test_a_clean_answer_carries_no_warnings() -> None:
+    retriever = RecordingRetriever(spans=[_span("app/main.py", 0, 1, 10)])
+    model = ScriptedChatModel(tokens=["It is set up in [1], app/main.py."])
+
+    events = await collect(build(model, retriever))
+
+    assert events[-1].grounding_warnings == []

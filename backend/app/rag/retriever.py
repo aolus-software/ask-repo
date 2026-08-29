@@ -144,12 +144,19 @@ class CodeRetriever:
     """Question in, contiguous code spans out."""
 
     def __init__(
-        self, *, store: VectorStore, embedder: Embedder, top_k: int, max_chars: int
+        self,
+        *,
+        store: VectorStore,
+        embedder: Embedder,
+        top_k: int,
+        max_chars: int,
+        min_score: float = 0.0,
     ) -> None:
         self.store = store
         self.embedder = embedder
         self.top_k = top_k
         self.max_chars = max_chars
+        self.min_score = min_score
 
     async def retrieve(
         self, query: str, *, project_id: uuid.UUID, generation: int
@@ -163,5 +170,9 @@ class CodeRetriever:
         hits = await self.store.search(
             project_id=project_id, generation=generation, vector=vector, limit=self.top_k
         )
-        merged = merge_adjacent([chunk_from_hit(hit) for hit in hits])
+        # Filtered before merging, not after: a below-floor chunk is one the
+        # embedder calls unrelated, and letting adjacency drag it in behind a strong
+        # neighbour would make the floor depend on chunk ordering.
+        kept = [chunk_from_hit(hit) for hit in hits if hit.score >= self.min_score]
+        merged = merge_adjacent(kept)
         return apply_budget(merged, max_chars=self.max_chars)

@@ -22,6 +22,7 @@ from app.core.errors import ErrorCode
 from app.models.conversation import FinishReason
 from app.rag.prompts import ANSWER_PROMPT, REWRITE_PROMPT, Turn, format_spans, to_langchain_history
 from app.rag.retriever import CodeRetriever, RetrievedChunk
+from app.rag.grounding import NO_CONTEXT_ANSWER, grounding_warnings
 from app.schemas.conversation import (
     CitationPayload,
     CitationsEvent,
@@ -130,6 +131,27 @@ class Answerer:
             citations = _to_citations(spans)
             yield CitationsEvent(citations=citations)
 
+            if not spans:
+                # The guard the prompt cannot provide. With no evidence, asking the
+                # model to answer anyway leaves one instruction between the user and
+                # a fabrication — and spends a full generation producing it.
+                logger.info(
+                    "Nothing above the relevance floor for project %s; refusing to answer",
+                    project_id,
+                )
+                yield TokenEvent(text=NO_CONTEXT_ANSWER)
+                yield DoneEvent(
+                    message_id=message_id,
+                    model=self.model_id,
+                    finish_reason=FinishReason.STOP,
+                    cited_indexes=[],
+                    grounding_warnings=grounding_warnings(
+                        answer="", spans=spans, cited_count=0
+                    ),
+                )
+                return
+
+
             yield StatusEvent(phase="generating")
             messages = ANSWER_PROMPT.format_messages(
                 context=format_spans(spans),
@@ -167,11 +189,20 @@ class Answerer:
                 )
                 return
 
+
+            answer = "".join(parts)
+            cited = cited_indexes(answer, count=len(citations))
+            warnings = grounding_warnings(answer=answer, spans=spans, cited_count=len(cited))
+            if warnings:
+                logger.warning(
+                    "Answer for project %s carries grounding warnings: %s", project_id, warnings
+                )
             yield DoneEvent(
                 message_id=message_id,
                 model=self.model_id,
                 finish_reason=FinishReason.STOP,
-                cited_indexes=cited_indexes("".join(parts), count=len(citations)),
+                cited_indexes=cited,
+                grounding_warnings=warnings,
             )
 
     async def _rewrite(self, question: str, history: list[Turn]) -> str:
