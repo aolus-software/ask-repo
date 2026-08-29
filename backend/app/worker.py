@@ -20,8 +20,9 @@ from app.ingestion.chunker import LanguageAwareChunker
 from app.ingestion.embedder import build_embedder, probe_dimensions
 from app.ingestion.pipeline import IngestionPipeline
 from app.ingestion.vector_store import QdrantVectorStore, collection_name
-from app.queue.consumer import IngestionConsumer, Producer
+from app.queue.consumer import IngestionConsumer
 from app.queue.producer import KafkaIngestionQueue, ensure_topics
+from app.queue.protocol import TopicProducer
 from app.queue.retry import RetryConsumer
 from app.queue.topics import RETRY_TOPICS, IngestionMessage
 from app.repositories.project import ProjectRepository
@@ -34,7 +35,7 @@ STRANDED_AFTER_SECONDS = 120
 
 
 async def reconcile_once(
-    *, repository: ProjectRepository, producer: Producer, topic: str
+    *, repository: ProjectRepository, producer: TopicProducer, topic: str
 ) -> int:
     """Re-enqueue every job that was lost. Returns how many.
 
@@ -43,9 +44,7 @@ async def reconcile_once(
     every worker concurrently — the lease claim deduplicates, so a duplicate message
     costs one skipped poll.
     """
-    stranded = await repository.find_stranded(
-        pending_older_than_seconds=STRANDED_AFTER_SECONDS
-    )
+    stranded = await repository.find_stranded(pending_older_than_seconds=STRANDED_AFTER_SECONDS)
     for project in stranded:
         logger.info("re-enqueueing stranded project %s (status=%s)", project.id, project.status)
         await producer.produce_to(
@@ -63,7 +62,7 @@ async def reconcile_once(
     return len(stranded)
 
 
-async def reconcile_loop(*, producer: Producer, topic: str) -> None:
+async def reconcile_loop(*, producer: TopicProducer, topic: str) -> None:
     """The 60-second tick: recover lost jobs and prune dead refresh tokens.
 
     `docs/PRD.md` §5.1 schedules the `refresh_tokens` cleanup for "M1, with the job
@@ -81,7 +80,7 @@ async def reconcile_loop(*, producer: Producer, topic: str) -> None:
                 await session.commit()
                 if pruned:
                     logger.info("pruned %d dead refresh tokens", pruned)
-        except Exception:  # noqa: BLE001 - the loop must outlive any single failure
+        except Exception:
             logger.exception("reconcile tick failed")
 
 
@@ -136,9 +135,7 @@ async def main() -> None:
 
     tasks = [
         asyncio.create_task(consumer.run()),
-        asyncio.create_task(
-            reconcile_loop(producer=producer, topic=settings.kafka_ingest_topic)
-        ),
+        asyncio.create_task(reconcile_loop(producer=producer, topic=settings.kafka_ingest_topic)),
         *[
             asyncio.create_task(
                 RetryConsumer(settings=settings, producer=producer, topic=topic).run()

@@ -11,7 +11,7 @@ import uuid
 from datetime import UTC, datetime
 from typing import Any, cast
 
-from sqlalchemy import update, delete, or_
+from sqlalchemy import delete, or_, update
 from sqlalchemy.engine import CursorResult
 
 from app.models.refresh_token import RefreshToken, RevokedReason
@@ -120,5 +120,4 @@ class RefreshTokenRepository(BaseRepository[RefreshToken]):
                 or_(RefreshToken.expires_at < now, RefreshToken.revoked_at.is_not(None))
             )
         )
-        return result.rowcount
-
+        return cast(CursorResult[Any], result).rowcount
