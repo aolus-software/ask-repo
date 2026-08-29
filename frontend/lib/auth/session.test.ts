@@ -73,6 +73,14 @@ describe("refreshSession", () => {
     expect(await refreshSession("askrepo_refresh=dead")).toBeNull();
   });
 
+  it("returns null when the backend returns a 200 with a literal JSON null body", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response("null", { status: 200, headers: { "content-type": "application/json" } })),
+    );
+    expect(await refreshSession("askrepo_refresh=old")).toBeNull();
+  });
+
   it("returns null when the backend is unreachable", async () => {
     vi.stubGlobal(
       "fetch",

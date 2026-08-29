@@ -59,18 +59,21 @@ async function performRefresh(sessionCookie: string): Promise<RefreshResult | nu
 
   if (!response.ok) return null;
 
-  let body: { accessToken?: unknown; expiresIn?: unknown };
+  let body: unknown;
   try {
-    body = (await response.json()) as typeof body;
+    body = await response.json();
   } catch {
     return null;
   }
 
-  if (typeof body.accessToken !== "string" || typeof body.expiresIn !== "number") return null;
+  if (typeof body !== "object" || body === null) return null;
+
+  const { accessToken, expiresIn } = body as { accessToken?: unknown; expiresIn?: unknown };
+  if (typeof accessToken !== "string" || typeof expiresIn !== "number") return null;
 
   return {
-    accessToken: body.accessToken,
-    expiresIn: body.expiresIn,
+    accessToken,
+    expiresIn,
     // A rotation that sets no cookie leaves the old pair in place rather than clearing it.
     sessionCookie: extractSessionCookie(response) ?? sessionCookie,
   };
