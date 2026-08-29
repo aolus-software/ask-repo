@@ -81,13 +81,124 @@ async def test_a_completed_job_id_is_not_reclaimed(db_session: AsyncSession) -> 
     await repository.claim(
         project_id=project.id, job_id=job_id, worker_id="worker-0", lease_seconds=300
     )
-    await repository.release(project_id=project.id, job_id=job_id, status=ProjectStatus.READY)
+    await repository.release(
+        project_id=project.id, job_id=job_id, worker_id="worker-0", status=ProjectStatus.READY
+    )
     await db_session.commit()
 
     # The same message arrives again.
     assert not await repository.claim(
         project_id=project.id, job_id=job_id, worker_id="worker-1", lease_seconds=300
     )
+
+
+async def test_release_refuses_a_soft_deleted_project(db_session: AsyncSession) -> None:
+    """docs/PRD.md §5.1: a run must not write onto a project someone deleted mid-index.
+
+    `embedding_collection` is written only by `release`, so a `DELETE` landing here
+    finds it NULL and skips Qdrant. If the worker were then allowed to record its
+    outcome, the deleted repository's chunk text would stay on the instance forever
+    with nothing referencing it.
+    """
+    project = await create_project(db_session, status=ProjectStatus.PENDING)
+    repository = ProjectRepository(db_session)
+    job_id = uuid.uuid4()
+    await repository.claim(
+        project_id=project.id, job_id=job_id, worker_id="worker-0", lease_seconds=300
+    )
+    await repository.soft_delete(project)
+    await db_session.commit()
+
+    released = await repository.release(
+        project_id=project.id,
+        job_id=job_id,
+        worker_id="worker-0",
+        status=ProjectStatus.READY,
+        embedding_collection="askrepo_fake_4",
+    )
+    await db_session.commit()
+
+    assert released is False
+    row = await repository.get_including_deleted(project.id)
+    assert row is not None
+    assert row.embedding_collection is None
+    # Still where `claim` left it: the refused release wrote nothing at all.
+    assert row.status == ProjectStatus.CLONING
+
+
+async def test_release_refuses_a_worker_that_lost_its_lease(db_session: AsyncSession) -> None:
+    """Two workers, one project: only the one that still holds it may record an outcome.
+
+    Otherwise the surviving row can name a generation the winning run has already
+    deleted — a `ready` project whose every query returns nothing.
+    """
+    project = await create_project(db_session, status=ProjectStatus.PENDING)
+    repository = ProjectRepository(db_session)
+    stale_job = uuid.uuid4()
+    await repository.claim(
+        project_id=project.id, job_id=stale_job, worker_id="worker-0", lease_seconds=-1
+    )
+    assert await repository.claim(
+        project_id=project.id, job_id=uuid.uuid4(), worker_id="worker-1", lease_seconds=300
+    )
+    await db_session.commit()
+
+    released = await repository.release(
+        project_id=project.id,
+        job_id=stale_job,
+        worker_id="worker-0",
+        status=ProjectStatus.READY,
+        active_generation=1,
+    )
+    await db_session.commit()
+
+    assert released is False
+    await db_session.refresh(project)
+    assert project.lease_owner == "worker-1"
+    assert project.active_generation == 0
+
+
+async def test_abandon_clears_the_reindex_flag(db_session: AsyncSession) -> None:
+    """The only way out of `reindex_in_progress` for a run that ends unclassified."""
+    project = await create_project(db_session, status=ProjectStatus.READY)
+    repository = ProjectRepository(db_session)
+    await repository.claim(
+        project_id=project.id, job_id=uuid.uuid4(), worker_id="worker-0", lease_seconds=300
+    )
+    await db_session.commit()
+    await db_session.refresh(project)
+    assert project.reindex_in_progress is True
+
+    assert await repository.abandon(project_id=project.id, worker_id="worker-0")
+    await db_session.commit()
+
+    await db_session.refresh(project)
+    assert project.reindex_in_progress is False
+    # The outcome is still the consumer's to decide, so the status is untouched.
+    assert project.status == ProjectStatus.READY
+    assert await repository.claim(
+        project_id=project.id, job_id=uuid.uuid4(), worker_id="worker-1", lease_seconds=300
+    )
+
+
+async def test_abandon_refuses_a_worker_that_lost_its_lease(db_session: AsyncSession) -> None:
+    """A late loser must not clear the flag the new owner's run is relying on."""
+    project = await create_project(db_session, status=ProjectStatus.READY)
+    repository = ProjectRepository(db_session)
+    await repository.claim(
+        project_id=project.id, job_id=uuid.uuid4(), worker_id="worker-0", lease_seconds=-1
+    )
+    assert await repository.claim(
+        project_id=project.id, job_id=uuid.uuid4(), worker_id="worker-1", lease_seconds=300
+    )
+    await db_session.commit()
+
+    assert not await repository.abandon(project_id=project.id, worker_id="worker-0")
+    await db_session.commit()
+
+    await db_session.refresh(project)
+    assert project.lease_owner == "worker-1"
+    assert project.reindex_in_progress is True
 
 
 async def test_exactly_one_of_two_concurrent_claims_wins() -> None:

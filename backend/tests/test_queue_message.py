@@ -2,8 +2,14 @@
 
 import uuid
 
-from app.queue.protocol import InMemoryIngestionQueue
-from app.queue.topics import DLQ_TOPIC, RETRY_TOPICS, IngestionMessage, next_destination
+from app.queue.protocol import InMemoryIngestionQueue, TopicProducer
+from app.queue.topics import (
+    DLQ_TOPIC,
+    INGEST_TOPIC,
+    RETRY_TOPICS,
+    IngestionMessage,
+    next_destination,
+)
 
 
 def message(**overrides: object) -> IngestionMessage:
@@ -50,3 +56,18 @@ async def test_the_in_memory_queue_records_what_it_was_given() -> None:
     sent = message()
     await queue.enqueue(sent)
     assert queue.messages == [sent]
+    assert queue.produced == [(INGEST_TOPIC, sent)]
+
+
+async def test_the_in_memory_queue_can_stand_in_for_the_retry_producer() -> None:
+    """The retry ladder routes by topic, so the test double has to record the topic.
+
+    Without `produce_to` here, a consumer test would have to take the concrete
+    `KafkaIngestionQueue` and give up running without a broker.
+    """
+    producer: TopicProducer = InMemoryIngestionQueue()
+    sent = message(attempt=1)
+    await producer.produce_to(DLQ_TOPIC, sent)
+
+    assert isinstance(producer, InMemoryIngestionQueue)
+    assert producer.produced == [(DLQ_TOPIC, sent)]

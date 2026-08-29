@@ -61,11 +61,20 @@ def pipeline_for(
     )
 
 
-async def claim_for(session: AsyncSession, project_id: uuid.UUID) -> uuid.UUID:
+async def claim_for(
+    session: AsyncSession,
+    project_id: uuid.UUID,
+    *,
+    worker_id: str = "w0",
+    lease_seconds: int = 300,
+) -> uuid.UUID:
     """Claim a project the way the consumer will, and return the job id."""
     job_id = uuid.uuid4()
     await ProjectRepository(session).claim(
-        project_id=project_id, job_id=job_id, worker_id="w0", lease_seconds=300
+        project_id=project_id,
+        job_id=job_id,
+        worker_id=worker_id,
+        lease_seconds=lease_seconds,
     )
     await session.commit()
     return job_id
@@ -214,6 +223,183 @@ async def test_a_retryable_failure_leaves_the_project_claimable(
     assert await ProjectRepository(db_session).claim(
         project_id=project.id, job_id=uuid.uuid4(), worker_id="w1", lease_seconds=300
     )
+
+
+async def test_a_rejected_repo_url_is_terminal(db_session: AsyncSession, tmp_path: Path) -> None:
+    """Spec §4.4 lists a rejected URL as its first terminal example.
+
+    `RepoUrlRejected` is a plain `Exception`, so unclassified it escapes `run()` past
+    both handlers: the row keeps its lease, keeps `error` NULL, and reports `cloning`
+    forever while the reconcile sweep re-enqueues it every 60 seconds — each iteration
+    re-cloning and re-embedding the whole repository.
+    """
+    project = await create_project(
+        db_session, status=ProjectStatus.PENDING, repo_url="http://github.com/acme/repo.git"
+    )
+    await db_session.commit()
+    job_id = await claim_for(db_session, project.id)
+
+    pipeline = pipeline_for(db_session, InMemoryVectorStore(dimensions=4), make_repo(tmp_path))
+    with pytest.raises(TerminalIngestionError):
+        await pipeline.run(project_id=project.id, job_id=job_id, worker_id="w0")
+
+    await db_session.refresh(project)
+    assert project.status == ProjectStatus.FAILED
+    assert project.error is not None
+    assert "https" in project.error
+    assert project.lease_owner is None
+    assert project.reindex_in_progress is False
+
+
+async def test_a_project_deleted_mid_run_keeps_none_of_its_chunks(
+    db_session: AsyncSession, tmp_path: Path
+) -> None:
+    """docs/PRD.md §5.1: deleting a project takes its vectors with it, always.
+
+    The delete reads `embedding_collection` — written only by `release`, so still NULL
+    while a first index is running — and correctly skips Qdrant. That leaves the
+    in-flight run as the only thing that can clean up after itself, and it only knows
+    to because `release` refuses the soft-deleted row.
+    """
+    project = await create_project(db_session, status=ProjectStatus.PENDING)
+    await db_session.commit()
+    project_id = project.id
+    store = InMemoryVectorStore(dimensions=4)
+    repo = make_repo(tmp_path)
+    job_id = await claim_for(db_session, project_id)
+
+    async def delete_then_clone(validated: ValidatedRepoUrl, **kwargs: object) -> CloneResult:
+        """Someone deletes the project while the clone is in flight."""
+        async with get_sessionmaker()() as other:
+            repository = ProjectRepository(other)
+            row = await repository.get(project_id)
+            assert row is not None
+            assert row.embedding_collection is None
+            await repository.soft_delete(row)
+            await other.commit()
+        return CloneResult(path=repo, commit_sha=COMMIT)
+
+    pipeline = IngestionPipeline(
+        db_session,
+        get_settings(),
+        embedder=FakeEmbedder(dimensions=4),
+        store=store,
+        chunker=LanguageAwareChunker(chunk_size=1200, chunk_overlap=150),
+        clone_fn=delete_then_clone,
+    )
+    await pipeline.run(project_id=project_id, job_id=job_id, worker_id="w0")
+
+    assert store.points == []
+    # A session of its own: `db_session`'s identity map still holds the pre-delete
+    # attributes, so reading through it would assert against a stale copy.
+    async with get_sessionmaker()() as reader:
+        row = await ProjectRepository(reader).get_including_deleted(project_id)
+        assert row is not None
+        assert row.deleted_at is not None
+        assert row.embedding_collection is None
+        assert row.status != ProjectStatus.READY
+
+
+async def test_a_worker_that_lost_its_lease_records_no_outcome(
+    db_session: AsyncSession, tmp_path: Path
+) -> None:
+    """Two workers on one project: the loser must not overwrite the winner's row.
+
+    Its points are left alone rather than deleted — the new owner derives the same
+    generation number from the same pointer, so dropping that generation could
+    destroy what the winning run wrote.
+    """
+    project = await create_project(db_session, status=ProjectStatus.PENDING)
+    await db_session.commit()
+    project_id = project.id
+    store = InMemoryVectorStore(dimensions=4)
+    repo = make_repo(tmp_path)
+    # An already-expired lease, so a second worker can take the project mid-run.
+    job_id = await claim_for(db_session, project_id, lease_seconds=-1)
+
+    async def steal_then_clone(validated: ValidatedRepoUrl, **kwargs: object) -> CloneResult:
+        async with get_sessionmaker()() as other:
+            assert await ProjectRepository(other).claim(
+                project_id=project_id,
+                job_id=uuid.uuid4(),
+                worker_id="w1",
+                lease_seconds=300,
+            )
+            await other.commit()
+        return CloneResult(path=repo, commit_sha=COMMIT)
+
+    pipeline = IngestionPipeline(
+        db_session,
+        get_settings(),
+        embedder=FakeEmbedder(dimensions=4),
+        store=store,
+        chunker=LanguageAwareChunker(chunk_size=1200, chunk_overlap=150),
+        clone_fn=steal_then_clone,
+    )
+    await pipeline.run(project_id=project_id, job_id=job_id, worker_id="w0")
+
+    await db_session.refresh(project)
+    assert project.lease_owner == "w1"
+    assert project.status != ProjectStatus.READY
+    assert project.active_generation == 0
+    assert project.embedding_collection is None
+    assert store.points, "the loser's points belong to the new owner's generation"
+
+
+async def test_an_unexpected_error_does_not_strand_the_reindex_flag(
+    db_session: AsyncSession, tmp_path: Path
+) -> None:
+    """R17: `claim` sets `reindex_in_progress` and only `release` clears it.
+
+    A run that ends through neither leaves the flag True forever, and
+    `ProjectService.reindex` then answers `enqueued: false` with no route, flag, or
+    admin action able to clear it — the project is stuck on its old index.
+    """
+    project = await create_project(db_session, status=ProjectStatus.READY)
+    await db_session.commit()
+    job_id = await claim_for(db_session, project.id)
+    await db_session.refresh(project)
+    assert project.reindex_in_progress is True
+
+    pipeline = pipeline_for(
+        db_session,
+        InMemoryVectorStore(dimensions=4),
+        tmp_path / "unused",
+        fail_with=RuntimeError("a bug nobody classified"),
+    )
+    with pytest.raises(RuntimeError):
+        await pipeline.run(project_id=project.id, job_id=job_id, worker_id="w0")
+
+    await db_session.refresh(project)
+    assert project.reindex_in_progress is False
+    # The outcome stays the consumer's call: retry once, then dead-letter (spec §4.4).
+    assert project.status == ProjectStatus.READY
+    assert await ProjectRepository(db_session).claim(
+        project_id=project.id, job_id=uuid.uuid4(), worker_id="w1", lease_seconds=300
+    )
+
+
+async def test_an_undecryptable_pat_does_not_strand_the_project(
+    db_session: AsyncSession, tmp_path: Path
+) -> None:
+    """The decrypt sits on the path into the run, so it must be inside the handlers.
+
+    A rotated `PAT_ENCRYPTION_KEY` makes `SecretBox.decrypt` raise before the clone
+    is even attempted — outside the `try` that would be a stranded lease and a
+    permanently raised reindex flag.
+    """
+    project = await create_project(db_session, status=ProjectStatus.READY)
+    project.encrypted_pat = b"not-a-token-this-key-can-read"
+    await db_session.commit()
+    job_id = await claim_for(db_session, project.id)
+
+    pipeline = pipeline_for(db_session, InMemoryVectorStore(dimensions=4), make_repo(tmp_path))
+    with pytest.raises(ValueError, match="could not be decrypted"):
+        await pipeline.run(project_id=project.id, job_id=job_id, worker_id="w0")
+
+    await db_session.refresh(project)
+    assert project.reindex_in_progress is False
+    assert project.lease_owner is None
 
 
 async def test_the_lease_heartbeat_runs_on_a_session_of_its_own(

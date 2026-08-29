@@ -149,19 +149,37 @@ class ProjectRepository(BaseRepository[Project]):
         *,
         project_id: uuid.UUID,
         job_id: uuid.UUID,
+        worker_id: str,
         status: ProjectStatus,
         error: str | None = None,
         **fields: object,
-    ) -> None:
-        """Finish a run: write the outcome and drop the lease.
+    ) -> bool:
+        """Finish a run: write the outcome and drop the lease. True if we still held it.
 
         `last_job_id` is set to the job just completed so a redelivery of the same
         message is recognised and skipped.
+
+        Gated on the same two conditions as `claim`, and for the same reason — a run
+        that started is not entitled to finish. Without `deleted_at IS NULL`, a
+        `DELETE` landing mid-index would find `embedding_collection` still NULL
+        (this statement is the only thing that writes it), skip Qdrant, and let the
+        in-flight worker then write both its points and its outcome onto the
+        soft-deleted row: the chunk text of a deleted repository would stay on the
+        instance permanently, unreachable by any code path (`docs/PRD.md` §5.1).
+        Without `lease_owner`, a worker whose lease expired and was reclaimed still
+        writes its outcome, so the surviving row can name a generation the winning
+        run has already deleted — a `ready` project with an empty index.
+
+        The caller must handle `False`: the points this run wrote are unreferenced.
         """
         now = datetime.now(UTC)
-        await self.session.execute(
+        result = await self.session.execute(
             update(Project)
-            .where(Project.id == project_id)
+            .where(
+                Project.id == project_id,
+                Project.deleted_at.is_(None),
+                Project.lease_owner == worker_id,
+            )
             .values(
                 status=status.value,
                 error=error,
@@ -173,6 +191,36 @@ class ProjectRepository(BaseRepository[Project]):
                 **fields,
             )
         )
+        return cast(CursorResult[Any], result).rowcount == 1
+
+    async def abandon(self, *, project_id: uuid.UUID, worker_id: str) -> bool:
+        """Give up a run without deciding its outcome. True if we still held it.
+
+        Expires the lease and clears `reindex_in_progress`, leaving `status`, `error`
+        and `last_job_id` alone: the retry-or-dead-letter decision belongs to the
+        consumer (spec §4.4), and writing `failed` here would lie about a job that is
+        coming back.
+
+        Clearing the flag is the point. `claim` is the only thing that sets it and
+        `release` the only thing that clears it, so a run ending through neither —
+        an unclassified exception — strands it at True, and `ProjectService.reindex`
+        then answers `enqueued: false` forever with no route, flag, or admin action
+        able to clear it.
+        """
+        now = datetime.now(UTC)
+        result = await self.session.execute(
+            update(Project)
+            .where(Project.id == project_id, Project.lease_owner == worker_id)
+            .values(
+                lease_owner=None,
+                lease_expires_at=now,
+                reindex_in_progress=False,
+                # Bulk UPDATE: `onupdate` does not fire on this path
+                # (.claude/rules/persistence.md).
+                updated_at=now,
+            )
+        )
+        return cast(CursorResult[Any], result).rowcount == 1
 
     async def find_stranded(self, *, pending_older_than_seconds: int) -> Sequence[Project]:
         """Projects whose job was lost: never picked up, or held by a dead worker.

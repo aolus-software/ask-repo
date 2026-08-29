@@ -44,6 +44,30 @@ update sets `updated_at` in the `values()` explicitly. Forgetting leaves rows wh
 `updated_at` predates their last change, which is the kind of bug found months later while
 debugging something else.
 
+## A leased write is guarded on the lease, and its `rowcount` is checked
+
+Any bulk `UPDATE` that finishes or abandons a job someone claimed —
+`ProjectRepository.release`, `.abandon`, `.renew_lease` — repeats the conditions the
+**claim** was granted under, and returns whether it matched:
+
+- `deleted_at IS NULL`, so a row soft-deleted mid-run is not written to. This is not
+  bookkeeping: `Project.embedding_collection` is written *by* `release`, so `ProjectService.delete`
+  reads it as `NULL` while a first index is running and correctly skips Qdrant. An unguarded
+  release then lets the worker write both its points and its outcome onto the deleted row, and the
+  chunk text of a deleted repository stays on the instance forever with nothing referencing it —
+  a `docs/PRD.md` §5.1 violation.
+- `lease_owner = :worker_id`, so a worker whose lease expired and was reclaimed cannot overwrite
+  the winner's outcome. Otherwise the surviving row can name a generation the winning run has
+  already deleted: a `ready` project whose every query returns nothing, silently.
+
+**A write that starts is not entitled to finish.** The window between claiming and releasing is
+minutes long — a clone plus a full embed — and anything can happen to the row inside it.
+
+The `rowcount` is a return value, never discarded. `False` means the run lost the right to
+record itself, and the caller has cleanup to do: `IngestionPipeline` drops the points it wrote
+when the project is gone, and deliberately leaves them when another worker owns the project,
+because that worker derives the same generation number and would lose its own points.
+
 ## `sort` is allowlisted, never interpolated
 
 A list repository exposes `SORTABLE_FIELDS: frozenset[str]` and raises `ValueError` for anything

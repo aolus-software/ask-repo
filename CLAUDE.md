@@ -19,9 +19,11 @@ routes. All three datastores are read.
 
 M1 has landed its stages and the pipeline that joins them — `app/ingestion/` holds the cloner,
 walker, chunker, embedder adapter, Qdrant vector store, and `IngestionPipeline`, and
-`ProjectService.delete` hard-deletes a project's points. **Nothing calls the pipeline yet:**
-`app/queue/` defines the message format, topics, and protocol but no broker, so there is no
-worker and no background execution until Tasks 16–20. There is still no RAG — that is M2.
+`ProjectService.delete` hard-deletes a project's points. The Kafka side is real too:
+`app/queue/` has the message format, topics, both protocols, and `KafkaIngestionQueue`, and the
+app lifespan creates the topics and starts the producer. **What is still missing is the
+consumer** — nothing reads those topics, so `POST /projects` publishes a job that no worker
+picks up. That is Tasks 17–20. There is still no RAG — that is M2.
 
 The frontend has not moved: it is still the landing page from scaffolding, with no API client
 and no auth screens. Do not assume a module exists because the PRD describes it — the PRD
@@ -86,8 +88,9 @@ refresh tokens, and projects; Redis is read by the login rate limiter
 `build_store_factory` in `app/api/routes/projects.py` — the M1 ingestion work made the vector
 layer real.
 
-The queue is the part still stubbed: `app/queue/` defines the message format, topics, and an
-in-memory implementation, but no broker is wired up until Task 16.
+Kafka is read too: `kafka_bootstrap_servers` drives `ensure_topics` and `KafkaIngestionQueue`
+from the app lifespan. `InMemoryIngestionQueue` remains the test double, so route and service
+tests still run with no broker. The consumer side is what does not exist yet (Tasks 17–20).
 
 ### Configuration flows one way
 

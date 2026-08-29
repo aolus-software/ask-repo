@@ -19,7 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import Settings
 from app.core.crypto import SecretBox, scrub
-from app.core.repo_url import ValidatedRepoUrl, validate_repo_url
+from app.core.repo_url import RepoUrlRejected, ValidatedRepoUrl, validate_repo_url
 from app.db.session import get_sessionmaker
 from app.ingestion.chunker import Chunk, Chunker, embedding_text
 from app.ingestion.cloner import CloneResult, clone
@@ -74,15 +74,21 @@ class IngestionPipeline:
             return
 
         pat = None
-        if project.encrypted_pat:
-            pat = SecretBox(self.settings.pat_encryption_key).decrypt(project.encrypted_pat)
-
+        # Still None if we failed before the clone returned, i.e. before anything was
+        # written under a generation at all.
+        generation: int | None = None
         # Where the clone is asked to land. The cloner is the authority on where it
         # actually landed, so the cleanup path is corrected once it returns.
         cleanup_path = self.settings.repo_scratch_dir / str(project_id)
         heartbeat = asyncio.create_task(self._renew_lease(project_id, worker_id))
 
         try:
+            # Inside the try deliberately: a rotated `PAT_ENCRYPTION_KEY` makes this
+            # raise, and outside it that exception would bypass every handler below
+            # and strand the lease and `reindex_in_progress`.
+            if project.encrypted_pat:
+                pat = SecretBox(self.settings.pat_encryption_key).decrypt(project.encrypted_pat)
+
             result = await self._clone(project.repo_url, project.branch, cleanup_path, pat)
             cleanup_path = result.path
             await self._advance_status(project_id, project.status)
@@ -100,9 +106,10 @@ class IngestionPipeline:
             )
 
             # Flip the pointer, then drop the superseded points.
-            await self.repository.release(
+            released = await self.repository.release(
                 project_id=project_id,
                 job_id=job_id,
+                worker_id=worker_id,
                 status=ProjectStatus.READY,
                 error=None,
                 last_indexed_commit=result.commit_sha,
@@ -114,26 +121,43 @@ class IngestionPipeline:
             )
             await self.session.commit()
 
-            if superseded_generation:
+            if not released:
+                await self._discard_unclaimed_generation(project_id, generation)
+            elif superseded_generation:
                 await self.store.delete_generation(
                     project_id=project_id, generation=superseded_generation
                 )
 
         except TerminalIngestionError as error:
-            await self.repository.release(
+            released = await self.repository.release(
                 project_id=project_id,
                 job_id=job_id,
+                worker_id=worker_id,
                 status=ProjectStatus.FAILED,
                 error=scrub(str(error), pat)[:MAX_RECORDED_ERROR_CHARS],
             )
             await self.session.commit()
+            if not released and generation is not None:
+                # A terminal failure can still land after some batches were written.
+                await self._discard_unclaimed_generation(project_id, generation)
             raise
         except RetryableIngestionError:
             # Drop the lease but leave the status alone — the job is coming back, and
-            # marking it `failed` would lie to anyone reading the list.
+            # marking it `failed` would lie to anyone reading the list. The points
+            # already written stay: the retry rewrites the same ids in the same
+            # generation, so they are overwritten rather than duplicated.
             await self.repository.renew_lease(
                 project_id=project_id, worker_id=worker_id, lease_seconds=-1
             )
+            await self.session.commit()
+            raise
+        except Exception:
+            # Unclassified, so the retry-or-dead-letter call is the consumer's to make
+            # (spec §4.4). What cannot wait for that call is the lease and
+            # `reindex_in_progress`: nothing else clears the flag, and a job that
+            # dead-letters never comes back to clear it.
+            await self.session.rollback()
+            await self.repository.abandon(project_id=project_id, worker_id=worker_id)
             await self.session.commit()
             raise
         finally:
@@ -146,9 +170,17 @@ class IngestionPipeline:
         self, repo_url: str, branch: str, destination: Path, pat: str | None
     ) -> CloneResult:
         """Validate and clone, pinning git to the address that was validated."""
-        validated: ValidatedRepoUrl = await validate_repo_url(
-            repo_url, allowlist=self.settings.repo_host_allowlist
-        )
+        try:
+            validated: ValidatedRepoUrl = await validate_repo_url(
+                repo_url, allowlist=self.settings.repo_host_allowlist
+            )
+        except RepoUrlRejected as rejected:
+            # Spec §4.4 lists a rejected URL as its first terminal example, and
+            # `RepoUrlRejected` is a plain `Exception` — unclassified, it would escape
+            # `run()` past both handlers. A URL the allowlist refuses now will be
+            # refused identically on every retry, so retrying only burns clones.
+            raise TerminalIngestionError(rejected.reason) from rejected
+
         return await self.clone_fn(
             validated,
             branch=branch,
@@ -201,6 +233,32 @@ class IngestionPipeline:
             vectors=vectors,
             commit_sha=commit_sha,
         )
+
+    async def _discard_unclaimed_generation(self, project_id: uuid.UUID, generation: int) -> None:
+        """Drop points whose run was refused the right to record them.
+
+        A refused `release` means one of two things. If the project is gone, it was
+        soft-deleted mid-run, and `ProjectService.delete` read `embedding_collection`
+        while it was still NULL — so it skipped Qdrant, and these points would stay on
+        the instance forever with no row referencing them (`docs/PRD.md` §5.1). They go.
+
+        If the project is still there, another worker reclaimed the expired lease. Its
+        run derives the same generation number from the same starting pointer, so
+        deleting that generation could destroy points *it* wrote. Leave them and say
+        so: the winning run's own swap supersedes them.
+        """
+        if await self.repository.get(project_id) is not None:
+            logger.error(
+                "lost the lease on project %s mid-run; leaving generation %s for its new owner",
+                project_id,
+                generation,
+            )
+            return
+
+        logger.warning(
+            "project %s was deleted mid-run; dropping generation %s", project_id, generation
+        )
+        await self.store.delete_generation(project_id=project_id, generation=generation)
 
     async def _advance_status(self, project_id: uuid.UUID, current_status: str) -> None:
         """Move a first index on to `indexing` once the clone is in.
