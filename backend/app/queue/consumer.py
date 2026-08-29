@@ -265,6 +265,34 @@ class IngestionConsumer:
         # arrive paused, or the keep-alive poll starts eating real work.
         self._job_in_flight = False
 
+    def _build_consumer(self, **overrides: object) -> AIOKafkaConsumer:
+        """The subscribed consumer this loop polls.
+
+        Separate from `run` for one reason: the pause pattern's whole justification is
+        that a job may outlast `max.poll.interval.ms`, and the only honest way to test
+        that is to shorten the interval until a test can outlast it too. `overrides`
+        is that seam — production passes nothing.
+
+        Deliberately not a `Settings` field. Raising the interval is the substitute
+        this design rejects (`.claude/rules/ingestion.md`), and a documented knob is an
+        invitation to reach for it.
+        """
+        consumer = AIOKafkaConsumer(
+            bootstrap_servers=self.settings.kafka_bootstrap_servers,
+            group_id=self.settings.kafka_consumer_group,
+            # The offset moves only after the work is done and durable.
+            enable_auto_commit=False,
+            auto_offset_reset="earliest",
+            **overrides,
+        )
+        # Subscribed here rather than in the constructor so a rebalance listener can
+        # be attached — see `_RepauseOnRebalance`.
+        consumer.subscribe(
+            topics=[self.settings.kafka_ingest_topic],
+            listener=_RepauseOnRebalance(consumer, lambda: self._job_in_flight),
+        )
+        return consumer
+
     async def run(self) -> None:
         """Poll, pause, process, commit, resume — forever."""
         # The worker may start before the API ever has, and broker auto-creation is
@@ -276,19 +304,7 @@ class IngestionConsumer:
             partitions=self.settings.kafka_ingest_partitions,
         )
 
-        consumer = AIOKafkaConsumer(
-            bootstrap_servers=self.settings.kafka_bootstrap_servers,
-            group_id=self.settings.kafka_consumer_group,
-            # The offset moves only after the work is done and durable.
-            enable_auto_commit=False,
-            auto_offset_reset="earliest",
-        )
-        # Subscribed here rather than in the constructor so a rebalance listener can
-        # be attached — see `_RepauseOnRebalance`.
-        consumer.subscribe(
-            topics=[self.settings.kafka_ingest_topic],
-            listener=_RepauseOnRebalance(consumer, lambda: self._job_in_flight),
-        )
+        consumer = self._build_consumer()
         await consumer.start()
         try:
             while True:

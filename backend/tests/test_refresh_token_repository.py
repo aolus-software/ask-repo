@@ -191,3 +191,56 @@ async def test_siblings_can_coexist_in_one_family(db_session: AsyncSession) -> N
         {"family": family},
     )
     assert result.scalar_one() == 2
+
+
+async def test_the_cleanup_deletes_expired_and_revoked_but_keeps_live_tokens(
+    db_session: AsyncSession,
+) -> None:
+    """The sweep `reconcile_loop` runs every minute.
+
+    `refresh_tokens` is the documented exception to soft delete (`docs/PRD.md` §5.1):
+    the lifecycle is `revoked_at` / `expires_at`, so a dead row is genuinely finished
+    and stays in the table forever unless something removes it. Deleting a *live*
+    token here would silently log a user out on the next tick, so the test pins both
+    directions rather than just the count.
+    """
+    user = await _make_user(db_session)
+    repository = RefreshTokenRepository(db_session)
+
+    live = await repository.create(
+        user_id=user.id, family_id=uuid.uuid4(), token_hash="1" * 64, expires_at=_expiry()
+    )
+    expired = await repository.create(
+        user_id=user.id,
+        family_id=uuid.uuid4(),
+        token_hash="2" * 64,
+        expires_at=datetime.now(UTC) - timedelta(days=1),
+    )
+    revoked = await repository.create(
+        user_id=user.id, family_id=uuid.uuid4(), token_hash="3" * 64, expires_at=_expiry()
+    )
+    await repository.revoke_one(revoked, reason="logout")
+    await db_session.commit()
+
+    deleted = await repository.delete_expired_and_revoked()
+    await db_session.commit()
+
+    assert deleted == 2
+    assert await repository.get_by_hash("1" * 64) is not None, "a live token was deleted"
+    assert await repository.get_by_hash("2" * 64) is None
+    assert await repository.get_by_hash("3" * 64) is None
+    assert live.id != expired.id
+
+
+async def test_the_cleanup_is_a_no_op_when_every_token_is_live(
+    db_session: AsyncSession,
+) -> None:
+    """It runs once a minute forever; it must not churn the table for nothing."""
+    user = await _make_user(db_session)
+    repository = RefreshTokenRepository(db_session)
+    await repository.create(
+        user_id=user.id, family_id=uuid.uuid4(), token_hash="4" * 64, expires_at=_expiry()
+    )
+    await db_session.commit()
+
+    assert await repository.delete_expired_and_revoked() == 0
