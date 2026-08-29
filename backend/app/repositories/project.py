@@ -17,6 +17,12 @@ from app.core.access import ProjectScope
 from app.models.project import Project, ProjectStatus
 from app.repositories.base import BaseRepository
 
+# How long a claim is good for. Declared beside the queries that grant and renew it so
+# the consumer (which claims) and the pipeline (which renews) cannot drift apart on it
+# — spec §4.2 makes five minutes safe only because renewal runs every sixty seconds.
+LEASE_SECONDS = 300
+LEASE_RENEWAL_SECONDS = 60
+
 
 class ProjectRepository(BaseRepository[Project]):
     """Reads and writes for projects. All reads exclude soft-deleted rows."""

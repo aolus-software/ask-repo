@@ -24,6 +24,11 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import Base, SoftDeleteMixin, TimestampMixin
 
+# `error` is String(4096); leave room rather than sitting on the boundary. Declared
+# beside the column it bounds, so the two cannot drift, and so the pipeline and the
+# consumer can each truncate without importing the other.
+MAX_RECORDED_ERROR_CHARS = 4000
+
 
 class ProjectStatus(StrEnum):
     """Lifecycle of an indexing run. Stored as text, not a Postgres enum:

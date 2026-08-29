@@ -27,15 +27,14 @@ from app.ingestion.embedder import Embedder
 from app.ingestion.errors import RetryableIngestionError, TerminalIngestionError
 from app.ingestion.vector_store import VectorStore
 from app.ingestion.walker import walk
-from app.models.project import ProjectStatus
-from app.repositories.project import ProjectRepository
+from app.models.project import MAX_RECORDED_ERROR_CHARS, ProjectStatus
+from app.repositories.project import (
+    LEASE_RENEWAL_SECONDS,
+    LEASE_SECONDS,
+    ProjectRepository,
+)
 
 logger = logging.getLogger(__name__)
-
-LEASE_SECONDS = 300
-LEASE_RENEWAL_SECONDS = 60
-# `Project.error` is String(4096); leave room rather than sitting on the boundary.
-MAX_RECORDED_ERROR_CHARS = 4000
 
 CloneFn = Callable[..., Awaitable[CloneResult]]
 

@@ -8,9 +8,11 @@ auth/accounts surface — admin-provisioned users, login, forced first-login pas
 change, session rotation, and login rate limiting.
 
 M1 is in progress. The project routes and the entire ingestion pipeline are here —
-clone, walk, chunk, embed, and write to Qdrant — along with the Kafka producer. What is
-missing is the consumer: **nothing runs the pipeline in the background yet**, so a new
-project stays `pending`. The Dev Knowledge / QA List / mock-data work starts at M2.
+clone, walk, chunk, embed, and write to Qdrant — along with the Kafka producer and the
+consumer that turns a queued message into an indexing run. What is missing is the
+**worker process that runs that consumer**, plus the delayed-retry consumer and the
+reconcile sweep, so a new project still stays `pending` today. The Dev Knowledge /
+QA List / mock-data work starts at M2.
 
 ## Requirements
 
@@ -145,8 +147,9 @@ backend/
 │   │   └── errors.py     # Terminal vs Retryable — what decides whether a job retries
 │   ├── queue/
 │   │   ├── topics.py     # IngestionMessage, the topic names, the retry ladder
-│   │   ├── protocol.py   # IngestionQueue + the in-memory double
-│   │   └── producer.py   # KafkaIngestionQueue + ensure_topics
+│   │   ├── protocol.py   # IngestionQueue + TopicProducer + the in-memory double
+│   │   ├── producer.py   # KafkaIngestionQueue + ensure_topics
+│   │   └── consumer.py   # handle_message, the routing ladder, the polling loop
 │   ├── models/            # SQLAlchemy models: User, RefreshToken, Project
 │   ├── repositories/      # the only layer that issues `select`
 │   ├── schemas/

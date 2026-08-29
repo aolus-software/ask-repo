@@ -28,22 +28,29 @@ from collections.abc import Callable
 from enum import StrEnum
 from typing import Protocol
 
-from aiokafka import AIOKafkaConsumer, ConsumerRecord, TopicPartition
+from aiokafka import (
+    AIOKafkaConsumer,
+    ConsumerRebalanceListener,
+    ConsumerRecord,
+    TopicPartition,
+)
+from aiokafka.errors import CommitFailedError, IllegalStateError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.config import Settings
 from app.ingestion.errors import RetryableIngestionError, TerminalIngestionError
-from app.ingestion.pipeline import MAX_RECORDED_ERROR_CHARS
-from app.models.project import ProjectStatus
+from app.models.project import MAX_RECORDED_ERROR_CHARS, ProjectStatus
 from app.queue.producer import ensure_topics
 from app.queue.protocol import TopicProducer
 from app.queue.topics import DLQ_TOPIC, IngestionMessage, next_destination
-from app.repositories.project import ProjectRepository
+from app.repositories.project import LEASE_SECONDS, ProjectRepository
 
 logger = logging.getLogger(__name__)
 
-LEASE_SECONDS = 300
 POLL_TIMEOUT_MS = 1000
+# A brief pause after an unhandled error, so a persistent broker fault backs off
+# instead of spinning the loop at full speed.
+ERROR_BACKOFF_SECONDS = 1.0
 
 
 class JobOutcome(StrEnum):
@@ -171,8 +178,12 @@ async def _route_failure(
         return JobOutcome.RETRY_SCHEDULED
 
     # Nothing else will pick this up, so the project must stop looking busy. This is
-    # also the only thing that clears `reindex_in_progress` on a failing run: the
-    # pipeline deliberately leaves it raised while a job is still coming back.
+    # the normal way `reindex_in_progress` comes down on a failing run — the pipeline
+    # deliberately leaves it raised while a job is still coming back — but it is not a
+    # guarantee: a crash between the produce above and this write leaves the flag up,
+    # and the redelivered message is refused by `claim` because `last_job_id` already
+    # names the job. Spec §4.5's reconcile sweep is what recovers that project, once
+    # the lease expires. Task 19 owes it.
     released = await repository.release(
         project_id=message.project_id,
         job_id=message.job_id,
@@ -189,6 +200,33 @@ async def _route_failure(
             message.project_id,
         )
     return JobOutcome.DEAD_LETTERED
+
+
+class _RepauseOnRebalance(ConsumerRebalanceListener):
+    """Re-applies the pause as part of the rebalance itself.
+
+    A rebalance rebuilds per-partition state **un-paused**, and re-pausing from the
+    keep-alive loop is a tick too late: a `getmany` already in flight when the
+    rebalance lands fetches from the freshly assigned partitions before the loop
+    comes round again, and the loop discards whatever it is handed. Those jobs are
+    never redelivered to this process.
+
+    `on_partitions_assigned` runs inside the rebalance, before any fetch, so there is
+    no window at all. This is the load-bearing re-pause; the one in the keep-alive
+    loop is a cheap backstop for an assignment gained without a callback.
+    """
+
+    def __init__(self, consumer: AIOKafkaConsumer, is_busy: Callable[[], bool]) -> None:
+        self._consumer = consumer
+        self._is_busy = is_busy
+
+    async def on_partitions_revoked(self, revoked: list[TopicPartition]) -> None:
+        """Nothing to do: the lease, not the offset, decides who runs a job."""
+
+    async def on_partitions_assigned(self, assigned: list[TopicPartition]) -> None:
+        """Pause anything handed to us while a job is still running."""
+        if assigned and self._is_busy():
+            self._consumer.pause(*assigned)
 
 
 class IngestionConsumer:
@@ -208,6 +246,9 @@ class IngestionConsumer:
         self.producer = producer
         self.build_pipeline = build_pipeline
         self.worker_id = worker_id
+        # Read by the rebalance listener: partitions handed to us mid-job must
+        # arrive paused, or the keep-alive poll starts eating real work.
+        self._job_in_flight = False
 
     async def run(self) -> None:
         """Poll, pause, process, commit, resume — forever."""
@@ -221,12 +262,17 @@ class IngestionConsumer:
         )
 
         consumer = AIOKafkaConsumer(
-            self.settings.kafka_ingest_topic,
             bootstrap_servers=self.settings.kafka_bootstrap_servers,
             group_id=self.settings.kafka_consumer_group,
             # The offset moves only after the work is done and durable.
             enable_auto_commit=False,
             auto_offset_reset="earliest",
+        )
+        # Subscribed here rather than in the constructor so a rebalance listener can
+        # be attached — see `_RepauseOnRebalance`.
+        consumer.subscribe(
+            topics=[self.settings.kafka_ingest_topic],
+            listener=_RepauseOnRebalance(consumer, lambda: self._job_in_flight),
         )
         await consumer.start()
         try:
@@ -234,9 +280,28 @@ class IngestionConsumer:
                 batches = await consumer.getmany(timeout_ms=POLL_TIMEOUT_MS, max_records=1)
                 for partition, records in batches.items():
                     for record in records:
-                        await self._process(consumer, partition, record)
+                        await self._process_guarded(consumer, partition, record)
         finally:
             await consumer.stop()
+
+    async def _process_guarded(
+        self,
+        consumer: AIOKafkaConsumer,
+        partition: TopicPartition,
+        record: ConsumerRecord[bytes, bytes],
+    ) -> None:
+        """Run one record, absorbing anything it raises.
+
+        A worker that dies on one record never makes progress: it restarts, reads the
+        same uncommitted offset, and dies again. Everything here is survivable because
+        the database lease, not the offset, is the deduplication boundary (spec §4.2)
+        — the worst a redelivery costs is one refused claim.
+        """
+        try:
+            await self._process(consumer, partition, record)
+        except Exception:
+            logger.exception("failed to process %s offset %s; continuing", partition, record.offset)
+            await asyncio.sleep(ERROR_BACKOFF_SECONDS)
 
     async def _process(
         self,
@@ -250,24 +315,80 @@ class IngestionConsumer:
         `max.poll.interval.ms`: the loop keeps calling `getmany`, which returns
         nothing while everything is paused, so the broker never concludes we died.
 
-        *Every* partition, not just this one. The keep-alive `getmany` discards what
-        it returns, and `commit()` would then persist the advanced position of a
-        partition whose records were thrown away — jobs lost with no redelivery. The
-        commit is likewise scoped to the offset actually processed.
+        *Every* partition, not just this one — the keep-alive poll discards what it
+        returns, so an unpaused sibling partition has its jobs read and thrown away,
+        and they are never redelivered to this process.
+
+        And re-paused on every tick. A rebalance rebuilds the assignment with fresh
+        per-partition state that starts un-paused, so a partition this worker keeps
+        across a rebalance silently loses its pause mid-job. `pause` is a no-op on a
+        partition already paused, which is what makes re-applying it cheap.
         """
-        message = IngestionMessage.from_bytes(record.value)
-        paused = list(consumer.assignment())
-        consumer.pause(*paused)
+        try:
+            message = IngestionMessage.from_bytes(record.value)
+        except (TypeError, ValueError, KeyError):
+            # Unparseable: no redelivery will fix it, and leaving the offset here makes
+            # this record a wall the worker restarts into forever. Move past it.
+            logger.exception(
+                "discarding unparseable record at %s offset %s", partition, record.offset
+            )
+            await self._commit(consumer, partition, record)
+            return
+
+        paused = self._pause_assigned(consumer)
+        self._job_in_flight = True
         try:
             job = asyncio.create_task(self._run_job(message))
             while not job.done():
+                self._pause_assigned(consumer)
                 # Keep polling so the group protocol stays satisfied. Returns nothing:
-                # everything is paused.
+                # everything assigned is paused.
                 await consumer.getmany(timeout_ms=POLL_TIMEOUT_MS)
             await job
-            await consumer.commit({partition: record.offset + 1})
+            await self._commit(consumer, partition, record)
         finally:
-            consumer.resume(*paused)
+            self._job_in_flight = False
+            self._resume(consumer, paused)
+
+    def _pause_assigned(self, consumer: AIOKafkaConsumer) -> list[TopicPartition]:
+        """Pause every currently assigned partition, and report which those were."""
+        assigned = list(consumer.assignment())
+        if assigned:
+            consumer.pause(*assigned)
+        return assigned
+
+    def _resume(self, consumer: AIOKafkaConsumer, paused: list[TopicPartition]) -> None:
+        """Resume only what we paused *and* still hold.
+
+        A rebalance can take a partition away mid-job, and `resume` raises
+        `IllegalStateError` for one that is no longer assigned — which would otherwise
+        escape a `finally` and end the polling loop.
+        """
+        still_ours = [partition for partition in paused if partition in consumer.assignment()]
+        if still_ours:
+            consumer.resume(*still_ours)
+
+    async def _commit(
+        self,
+        consumer: AIOKafkaConsumer,
+        partition: TopicPartition,
+        record: ConsumerRecord[bytes, bytes],
+    ) -> None:
+        """Move this partition's offset past the record, if it is still ours.
+
+        Losing the partition mid-job means the offset is not ours to move. Whoever
+        holds it now will be given the record again, and `ProjectRepository.claim`
+        refuses the duplicate because `last_job_id` already names the job (spec §4.2)
+        — which is exactly why a failed commit is survivable rather than a lost job.
+        """
+        try:
+            await consumer.commit({partition: record.offset + 1})
+        except (IllegalStateError, CommitFailedError):
+            logger.warning(
+                "could not commit %s offset %s: the partition is no longer ours",
+                partition,
+                record.offset,
+            )
 
     async def _run_job(self, message: IngestionMessage) -> JobOutcome:
         """One job, in its own session."""

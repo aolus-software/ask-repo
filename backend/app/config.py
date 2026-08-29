@@ -4,7 +4,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Literal, Self
 
-from pydantic import model_validator
+from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 PLACEHOLDER_SECRET_KEY = "dev-insecure-change-me"
@@ -81,19 +81,25 @@ class Settings(BaseSettings):
     embedding_model: str = "nomic-embed-text"
     embedding_base_url: str = "http://localhost:11434"
     embedding_api_key: str | None = None
-    embedding_batch_size: int = 64
+    # `ge=1` is load-bearing, not decoration: at 0 the pipeline's batching loop
+    # (`while len(batch) >= batch_size`) never drains, so it flushes empty batches
+    # forever while the lease keeps renewing — no log, no timeout, no failure.
+    embedding_batch_size: int = Field(default=64, ge=1)
 
     # Ingestion — repository cloning and chunking.
     # Must be a JSON array. Any host not listed is rejected before DNS resolution.
     repo_host_allowlist: list[str] = ["github.com", "gitlab.com"]
-    clone_timeout_seconds: int = 120
-    repo_max_size_mb: int = 500
+    # All three are resource controls, and a control set to zero or below is not
+    # one: a zero timeout kills every clone, a zero cap rejects every repository,
+    # and a zero file limit indexes nothing at all. Fail at startup instead.
+    clone_timeout_seconds: int = Field(default=120, ge=1)
+    repo_max_size_mb: int = Field(default=500, ge=1)
     # Scratch space, not a persistent volume: the working copy is deleted after
     # indexing, and reindex re-clones rather than pulling.
     repo_scratch_dir: Path = Path("/data/repos")
     chunk_size: int = 1200
     chunk_overlap: int = 150
-    max_indexed_file_bytes: int = 1_048_576
+    max_indexed_file_bytes: int = Field(default=1_048_576, ge=1)
 
     # Encrypts stored PATs at rest (docs/PRD.md §9). Backed up separately from
     # the database — a backup holding both is plaintext storage with extra steps.

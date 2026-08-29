@@ -20,10 +20,11 @@ routes. All three datastores are read.
 M1 has landed its stages and the pipeline that joins them — `app/ingestion/` holds the cloner,
 walker, chunker, embedder adapter, Qdrant vector store, and `IngestionPipeline`, and
 `ProjectService.delete` hard-deletes a project's points. The Kafka side is real too:
-`app/queue/` has the message format, topics, both protocols, and `KafkaIngestionQueue`, and the
-app lifespan creates the topics and starts the producer. **What is still missing is the
-consumer** — nothing reads those topics, so `POST /projects` publishes a job that no worker
-picks up. That is Tasks 17–20. There is still no RAG — that is M2.
+`app/queue/` has the message format, topics, both protocols, `KafkaIngestionQueue` and
+`IngestionConsumer`, and the app lifespan creates the topics and starts the producer.
+**What is still missing is the worker process** that runs that consumer, along with the
+delayed-retry consumer and the reconcile sweep — so `POST /projects` still publishes a job
+nothing picks up. That is Tasks 18–20. There is still no RAG — that is M2.
 
 The frontend has not moved: it is still the landing page from scaffolding, with no API client
 and no auth screens. Do not assume a module exists because the PRD describes it — the PRD
@@ -89,8 +90,9 @@ refresh tokens, and projects; Redis is read by the login rate limiter
 layer real.
 
 Kafka is read too: `kafka_bootstrap_servers` drives `ensure_topics` and `KafkaIngestionQueue`
-from the app lifespan. `InMemoryIngestionQueue` remains the test double, so route and service
-tests still run with no broker. The consumer side is what does not exist yet (Tasks 17–20).
+from the app lifespan, and `IngestionConsumer` reads the ingest topic. `InMemoryIngestionQueue`
+remains the test double for both protocols, so route, service and consumer tests all run with
+no broker. What does not exist yet is the worker process that runs the consumer (Tasks 18–20).
 
 ### Configuration flows one way
 

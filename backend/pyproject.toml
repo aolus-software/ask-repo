@@ -79,3 +79,12 @@ ignore_missing_imports = true
 # read those annotations. Nothing to do but trust the boundary in app/queue/.
 module = ["aiokafka", "aiokafka.*"]
 ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+# `ConsumerRebalanceListener` therefore arrives as `Any`, and the consumer has to
+# subclass it: `AIOKafkaConsumer.subscribe` rejects a listener that is not an instance
+# (consumer.py:1057). Scoped to this one module and this one rule rather than an inline
+# ignore, which would also hide a typo in the base class name.
+module = "app.queue.consumer"
+disallow_subclassing_any = false
+

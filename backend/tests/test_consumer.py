@@ -8,13 +8,20 @@ The producer here is `InMemoryIngestionQueue` rather than a local stub: it imple
 retry path instead of leaving that to be discovered by the integration test.
 """
 
+import asyncio
 import uuid
+from collections.abc import Awaitable, Callable
+from types import SimpleNamespace
 
+import pytest
+from aiokafka import ConsumerRebalanceListener, TopicPartition
+from aiokafka.errors import IllegalStateError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.ingestion.errors import RetryableIngestionError, TerminalIngestionError
 from app.models.project import ProjectStatus
-from app.queue.consumer import JobOutcome, Pipeline, handle_message
+from app.queue import consumer as consumer_module
+from app.queue.consumer import IngestionConsumer, JobOutcome, Pipeline, handle_message
 from app.queue.protocol import InMemoryIngestionQueue
 from app.queue.topics import DLQ_TOPIC, INGEST_TOPIC, RETRY_TOPICS, IngestionMessage
 from app.repositories.project import ProjectRepository
@@ -280,3 +287,174 @@ async def test_an_unexpected_errors_text_never_reaches_the_project(
     assert project.error is not None
     assert pat not in project.error
     assert "RuntimeError" in project.error
+
+
+class FakeConsumer:
+    """An `AIOKafkaConsumer` stand-in with aiokafka 0.14's real pause/commit rules.
+
+    The rules that matter, all confirmed against the installed client during the Task
+    17 review: `resume` and `commit` raise `IllegalStateError` for a partition that is
+    no longer assigned, and a rebalance rebuilds per-partition state **un-paused**, so
+    a pause does not survive one.
+    """
+
+    def __init__(self, assigned: set[TopicPartition]) -> None:
+        self._assigned = set(assigned)
+        self._paused: set[TopicPartition] = set()
+        self.listener: ConsumerRebalanceListener | None = None
+        self.committed: list[dict[TopicPartition, int]] = []
+        self.keep_alive_polls = 0
+        self.delivered_during_job: list[TopicPartition] = []
+
+    def subscribe(self, *, topics: list[str], listener: ConsumerRebalanceListener) -> None:
+        self.listener = listener
+
+    def assignment(self) -> set[TopicPartition]:
+        return set(self._assigned)
+
+    def pause(self, *partitions: TopicPartition) -> None:
+        for partition in partitions:
+            if partition not in self._assigned:
+                raise IllegalStateError(f"No current assignment for partition {partition}")
+            self._paused.add(partition)
+
+    def resume(self, *partitions: TopicPartition) -> None:
+        for partition in partitions:
+            if partition not in self._assigned:
+                raise IllegalStateError(f"No current assignment for partition {partition}")
+            self._paused.discard(partition)
+
+    async def rebalance_to(self, assigned: set[TopicPartition]) -> None:
+        """What the broker does mid-job: new assignment, all of it un-paused.
+
+        The listener callback is awaited as part of the rebalance, before any fetch
+        can happen — which is the whole reason it is the right place to re-pause.
+        """
+        self._assigned = set(assigned)
+        self._paused = set()
+        if self.listener is not None:
+            await self.listener.on_partitions_assigned(sorted(self._assigned))
+
+    async def getmany(
+        self, *, timeout_ms: int, max_records: int | None = None
+    ) -> dict[TopicPartition, list[object]]:
+        """Records arrive only from partitions that are assigned and not paused.
+
+        Yields to the event loop the way a real poll does — without that the
+        keep-alive loop spins and the job task is never scheduled.
+        """
+        await asyncio.sleep(0)
+        self.keep_alive_polls += 1
+        live = self._assigned - self._paused
+        self.delivered_during_job.extend(live)
+        return {}
+
+    async def commit(self, offsets: dict[TopicPartition, int]) -> None:
+        for partition in offsets:
+            if partition not in self._assigned:
+                raise IllegalStateError(f"Partition {partition} is not assigned")
+        self.committed.append(offsets)
+
+
+class LoopConsumer(IngestionConsumer):
+    """`IngestionConsumer` with the job replaced, so the loop mechanics are under test."""
+
+    def __init__(self, job: Callable[[], Awaitable[None]], consumer: FakeConsumer) -> None:
+        self._job = job
+        self._job_in_flight = False
+        consumer.subscribe(
+            topics=["t"],
+            listener=consumer_module._RepauseOnRebalance(consumer, lambda: self._job_in_flight),
+        )
+
+    async def _run_job(self, message: IngestionMessage) -> JobOutcome:
+        await self._job()
+        return JobOutcome.COMPLETED
+
+
+def record_for(message: IngestionMessage, *, offset: int = 7) -> SimpleNamespace:
+    return SimpleNamespace(value=message.to_bytes(), offset=offset)
+
+
+async def test_a_rebalance_during_a_job_does_not_kill_the_worker(
+    db_session: AsyncSession,
+) -> None:
+    """The partition can be taken away mid-job, and `resume` raises for one we lost.
+
+    Escaping the `finally` would unwind out of `run()`'s `while True` and end the
+    worker — for a job that had just spent minutes cloning and embedding.
+    """
+    kept, lost = TopicPartition("t", 1), TopicPartition("t", 0)
+    consumer = FakeConsumer({kept, lost})
+
+    async def job() -> None:
+        await consumer.rebalance_to({kept})
+
+    loop = LoopConsumer(job, consumer)
+    project_id = uuid.uuid4()
+    await loop._process(consumer, lost, record_for(message_for(project_id)))
+
+    # Survived, and did not claim an offset on a partition it no longer owns.
+    assert consumer.committed == []
+
+
+async def test_the_pause_is_reapplied_after_a_rebalance(db_session: AsyncSession) -> None:
+    """A rebalance rebuilds the assignment un-paused, and the keep-alive poll discards.
+
+    So a partition kept across a rebalance would start handing this loop real jobs
+    that it throws away — the exact defect the all-partitions pause exists to prevent,
+    reopened by the rebalance.
+    """
+    kept = TopicPartition("t", 0)
+    other = TopicPartition("t", 1)
+    consumer = FakeConsumer({kept, other})
+    ticks = 0
+
+    async def job() -> None:
+        nonlocal ticks
+        await consumer.rebalance_to({kept, other})
+        # Let the keep-alive loop run several times after the pause was dropped.
+        while ticks < 3:
+            ticks += 1
+            await asyncio.sleep(0)
+
+    loop = LoopConsumer(job, consumer)
+    await loop._process(consumer, kept, record_for(message_for(uuid.uuid4())))
+
+    assert consumer.keep_alive_polls > 0
+    assert consumer.delivered_during_job == [], (
+        "the keep-alive poll returned records it would have discarded"
+    )
+
+
+async def test_an_unparseable_record_is_committed_past(db_session: AsyncSession) -> None:
+    """Leaving the offset put makes the record a wall the worker restarts into."""
+    partition = TopicPartition("t", 0)
+    consumer = FakeConsumer({partition})
+
+    async def job() -> None:  # pragma: no cover - must never run
+        raise AssertionError("a malformed record must not reach the pipeline")
+
+    loop = LoopConsumer(job, consumer)
+    await loop._process(consumer, partition, SimpleNamespace(value=b"{not json", offset=3))
+
+    assert consumer.committed == [{partition: 4}]
+
+
+async def test_one_failing_record_does_not_end_the_polling_loop(
+    db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A worker that dies on one record restarts, re-reads it, and dies again."""
+    monkeypatch.setattr(consumer_module, "ERROR_BACKOFF_SECONDS", 0)
+    partition = TopicPartition("t", 0)
+    consumer = FakeConsumer({partition})
+
+    async def job() -> None:
+        raise RuntimeError("boom")
+
+    loop = LoopConsumer(job, consumer)
+    await loop._process_guarded(consumer, partition, record_for(message_for(uuid.uuid4())))
+
+    # Absorbed, and the offset stayed put so the record is redelivered — safe, because
+    # `claim` is the deduplication boundary, not the offset.
+    assert consumer.committed == []

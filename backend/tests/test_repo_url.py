@@ -63,6 +63,25 @@ async def test_userinfo_cannot_smuggle_a_host() -> None:
 
 
 @pytest.mark.parametrize(
+    "url",
+    [
+        "https://carol:ghp_secrettoken@github.com/acme/repo.git",
+        "https://ghp_secrettoken@github.com/acme/repo.git",
+    ],
+)
+async def test_credentials_in_the_url_are_rejected(url: str) -> None:
+    """docs/PRD.md §9: a token must never reach git's argv or a response body.
+
+    `.hostname` strips userinfo, so these validate cleanly on host and address and
+    would then be handed to git as a command-line argument — readable from `ps` by any
+    account on the box — and stored verbatim in `repo_url`, which `GET /projects`
+    returns to every authenticated user, projects being shared instance-wide.
+    """
+    with pytest.raises(RepoUrlRejected, match="must not be embedded"):
+        await validate_repo_url(url, allowlist=ALLOWLIST, resolve=resolver("140.82.121.4"))
+
+
+@pytest.mark.parametrize(
     "address",
     [
         "127.0.0.1",  # loopback

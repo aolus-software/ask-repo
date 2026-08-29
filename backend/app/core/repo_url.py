@@ -9,6 +9,15 @@ The subtle part is DNS rebinding. Validating an address and then invoking
 return a public address for the check and a private one a moment later. This module
 therefore returns the address it validated, and the cloner pins git to it via
 `http.curloptResolve` — see `app/ingestion/cloner.py`.
+
+The other subtle part is credentials in the URL. `.hostname` strips a `user:pass@`
+prefix, so a URL carrying one validates cleanly and then reaches **git's argv**, where
+any account on the host can read it out of `ps`. Worse, `repo_url` is stored verbatim
+and returned by `GET /projects` to every authenticated user, because projects are
+shared instance-wide in phase 1. A PAT belongs in the encrypted `pat` field, which
+reaches git through the environment (`docs/PRD.md` §9) — so userinfo is rejected
+outright rather than stripped, since stripping would silently discard a credential the
+caller believed they were supplying.
 """
 
 import asyncio
@@ -89,6 +98,15 @@ async def validate_repo_url(
     if host.lower() not in allowed:
         raise RepoUrlRejected(
             f"Host {host!r} is not allowed. Allowed hosts: {', '.join(sorted(allowed))}."
+        )
+
+    # After the allowlist check, deliberately: in `https://github.com@10.0.0.1/` the
+    # "github.com" is a *username*, and the honest rejection there is that 10.0.0.1 is
+    # not an allowed host, not a lecture about credentials.
+    if parts.username or parts.password:
+        raise RepoUrlRejected(
+            "Credentials must not be embedded in the repository URL. "
+            "Use the access-token field instead."
         )
 
     port = parts.port or HTTPS_PORT
