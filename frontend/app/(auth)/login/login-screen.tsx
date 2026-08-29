@@ -6,7 +6,13 @@ import { useState } from "react";
 
 import { FormError } from "@/components/form/form-error";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Field, FieldError, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { parseApiError } from "@/lib/api/errors";
@@ -17,7 +23,9 @@ export function LoginScreen() {
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [localErrors, setLocalErrors] = useState<{ email?: string; password?: string }>({});
+  const [localErrors, setLocalErrors] = useState<{ email?: string; password?: string }>(
+    {},
+  );
   const [error, setError] = useState<unknown>(null);
   const [isPending, setIsPending] = useState(false);
 
@@ -29,7 +37,8 @@ export function LoginScreen() {
     // rule (forms.md §4). The password policy lives in the backend alone.
     const next: { email?: string; password?: string } = {};
     if (!email.trim()) next.email = "Enter your email address.";
-    else if (!email.includes("@")) next.email = "That does not look like an email address.";
+    else if (!email.includes("@"))
+      next.email = "That does not look like an email address.";
     if (!password) next.password = "Enter your password.";
     setLocalErrors(next);
     if (Object.keys(next).length > 0) return;
@@ -47,14 +56,18 @@ export function LoginScreen() {
         return;
       }
 
-      const { user } = (await response.json()) as { user: { mustChangePassword: boolean } };
+      const { user } = (await response.json()) as {
+        user: { mustChangePassword: boolean };
+      };
       // A full navigation, not router.push: the shell layout must re-run on the server
       // with the new cookies in place.
       window.location.href = user.mustChangePassword
         ? "/change-password"
         : safeNext(searchParams.get("next"));
     } catch {
-      setError(new Error("Could not reach the server. Check your connection and try again."));
+      setError(
+        new Error("Could not reach the server. Check your connection and try again."),
+      );
     } finally {
       setIsPending(false);
     }
@@ -64,7 +77,9 @@ export function LoginScreen() {
     <Card className="w-full max-w-sm">
       <CardHeader>
         <CardTitle className="text-xl font-semibold">Sign in to AskRepo</CardTitle>
-        <CardDescription>Ask questions about your team&apos;s codebases.</CardDescription>
+        <CardDescription>
+          Ask questions about your team&apos;s codebases.
+        </CardDescription>
       </CardHeader>
       <CardContent>
         <form onSubmit={handleSubmit} noValidate>
@@ -102,7 +117,9 @@ export function LoginScreen() {
                 onChange={(event) => setPassword(event.target.value)}
                 aria-invalid={Boolean(localErrors.password)}
               />
-              {localErrors.password ? <FieldError>{localErrors.password}</FieldError> : null}
+              {localErrors.password ? (
+                <FieldError>{localErrors.password}</FieldError>
+              ) : null}
             </Field>
           </div>
 

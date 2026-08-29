@@ -3,8 +3,15 @@
 Next.js UI for AskRepo — the codebase-aware assistant described in
 [`docs/PRD.md`](../docs/PRD.md).
 
-Per the PRD this layer stays deliberately thin: the interesting work lives in the
-[backend](../backend/README.md). Right now it is the stock Next.js starter page.
+The M0–M2 screens are shipped: sign-in and the forced first-login password change, the
+dashboard, projects (list, detail, create, re-index, delete), Dev Knowledge with streamed
+answers, and admin user management.
+
+This layer is **not** a thin client. It acts as a backend-for-frontend: it holds the session in
+its own httpOnly cookies and calls the [backend](../backend/README.md) on the browser's behalf,
+so no token is ever readable by a script on the page. See
+[the design spec](../docs/superpowers/specs/2026-08-29-frontend-m0-m2-design.md) §2.1 for why
+that departs from the PRD's "keep it thin".
 
 ## Stack
 
@@ -34,6 +41,9 @@ Then open <http://localhost:3000>. It expects the API on
 | `bun lint`                | ESLint                                               |
 | `bunx tsc --noEmit`       | Typecheck without building                           |
 | `bunx prettier --write .` | Format (Tailwind class sorting included)             |
+| `bun run test`            | Vitest, single pass                                  |
+| `bun run test:watch`      | Vitest, watching                                     |
+| `bun run typecheck`       | `tsc --noEmit`                                       |
 
 Or from the repo root: `make dev-frontend`, `make build`, `make lint-frontend`,
 `make format-frontend`, `make typecheck`.
@@ -56,26 +66,42 @@ Two rules do most of the work — full set in
 
 Components come from shadcn on the Base UI base, installed via
 `npx shadcn@latest add <name>` into `components/ui/`. Composition uses
-`render={<Component />}`, **never `asChild`**. Nothing is installed yet — see the component
-inventory in `docs/design.md` for what lands at which milestone.
+`render={<Component />}`, **never `asChild`** — `asChild` does not exist on this base and fails
+silently. `components/ui/` is CLI-managed and never hand-edited; see the component inventory in
+`docs/design.md` for what lands at which milestone.
 
 ## Layout
 
 ```
 frontend/
+├── middleware.ts          # session gate + the refresh point for navigations
 ├── app/
-│   ├── layout.tsx      # root layout
-│   ├── page.tsx        # landing page
-│   └── globals.css     # Tailwind entry + theme tokens
-├── public/
+│   ├── layout.tsx         # fonts, theme, query provider, toaster
+│   ├── globals.css        # Tailwind entry + theme tokens (only file with raw hex)
+│   ├── (auth)/            # shell-less: /login, /change-password
+│   ├── (app)/             # the shell: dashboard, projects, ask, settings
+│   └── api/
+│       ├── [...path]/     # the API forwarding route the browser talks to
+│       └── auth/          # login, refresh, logout — the only cookie writers
+├── components/
+│   ├── ui/                # shadcn, CLI-managed
+│   ├── layout/ form/ feedback/
+│   └── projects/ ask/ users/
+├── hooks/                 # one file per resource
+├── lib/
+│   ├── api/               # types, endpoints, errors, both fetch clients
+│   ├── auth/              # cookie names + single-flight refresh
+│   ├── ask/               # SSE parser, pending-question carrier
+│   └── query/ nav.ts status.ts dates.ts can.ts
 └── .env.example
 ```
 
 ## Configuration
 
-Only one variable so far — see [`.env.example`](.env.example):
+Only one variable — see [`.env.example`](.env.example):
 
-- `NEXT_PUBLIC_API_URL` — base URL of the AskRepo API. `NEXT_PUBLIC_`-prefixed
-  vars are inlined into the client bundle at build time, so this must be an
-  address the **browser** can reach. Under Docker Compose that means
-  `http://localhost:8000` (the published port), not `http://backend:8000`.
+- `API_URL` — base URL of the AskRepo API, read on the **server** only: by the API forwarding
+  route, the middleware, and `serverFetch`. The browser never calls the API directly, so this
+  does not need to be reachable from a browser. Under Docker Compose it is the service name
+  `http://backend:8000`, **not** the published host port. (This inverts the old
+  `NEXT_PUBLIC_API_URL` rule, which was correct while the browser did the fetching.)

@@ -6,7 +6,13 @@ import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import type { UserResponse } from "@/lib/api/types";
 
 /** Geometry is fixed by `docs/design.md` → Layout and design-system.md §9. */
-export function AppShell({ user, children }: { user: UserResponse; children: React.ReactNode }) {
+export function AppShell({
+  user,
+  children,
+}: {
+  user: UserResponse;
+  children: React.ReactNode;
+}) {
   return (
     <SessionProvider user={user}>
       <SidebarProvider>

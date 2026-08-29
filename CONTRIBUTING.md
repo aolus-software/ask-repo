@@ -31,7 +31,8 @@ pieces directly — see [`README.md`](README.md) → "Starting without `make`".
 
 ## Checks
 
-From the repo root, `make check` runs everything CI would: lint, format check, typecheck, and
+From the repo root, `make check` runs everything CI would — for **both** apps: lint, format
+check, typecheck, and
 tests across both apps. **Run `make infra` first** — the backend suite runs against real
 Postgres and Redis rather than mocks or SQLite (see `backend/tests/conftest.py`), and
 `typecheck` now runs mypy over the backend as well as `tsc` over the frontend. The individual

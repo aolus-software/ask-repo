@@ -118,11 +118,14 @@ export function useAskStream(conversationId: string) {
         // only failures after the first event become stream state. Without this
         // split, PROJECT_NOT_READY and EMBEDDING_MODEL_CHANGED would be swallowed
         // into a generic "the answer stopped".
-        const response = await apiFetchRaw(endpoints.conversations.messages(conversationId), {
-          method: "POST",
-          body: JSON.stringify({ question }),
-          signal: controller.signal,
-        });
+        const response = await apiFetchRaw(
+          endpoints.conversations.messages(conversationId),
+          {
+            method: "POST",
+            body: JSON.stringify({ question }),
+            signal: controller.signal,
+          },
+        );
 
         if (!response.body) throw new Error("The server sent no answer stream.");
 

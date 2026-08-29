@@ -16,7 +16,10 @@ function loginRequest(): Request {
   return new Request("http://localhost:3000/api/auth/login", {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ email: "dev@example.com", password: "correct horse battery" }),
+    body: JSON.stringify({
+      email: "dev@example.com",
+      password: "correct horse battery",
+    }),
   });
 }
 
@@ -72,7 +75,9 @@ describe("POST /api/auth/login", () => {
       vi.fn(
         async () =>
           new Response(
-            JSON.stringify({ detail: { code: "RATE_LIMITED", message: "Too many attempts." } }),
+            JSON.stringify({
+              detail: { code: "RATE_LIMITED", message: "Too many attempts." },
+            }),
             { status: 429, headers: { "content-type": "application/json" } },
           ),
       ),
@@ -92,7 +97,10 @@ describe("POST /api/auth/login", () => {
         async () =>
           new Response(
             JSON.stringify({
-              detail: { code: "INVALID_CREDENTIALS", message: "Incorrect email or password." },
+              detail: {
+                code: "INVALID_CREDENTIALS",
+                message: "Incorrect email or password.",
+              },
             }),
             { status: 401, headers: { "content-type": "application/json" } },
           ),

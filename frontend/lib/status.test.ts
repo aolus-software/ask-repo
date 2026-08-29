@@ -7,7 +7,13 @@ const ALL: ProjectStatus[] = ["pending", "cloning", "indexing", "ready", "failed
 
 describe("statusTone", () => {
   it("maps every status to exactly one semantic tone", () => {
-    expect(ALL.map(statusTone)).toEqual(["warning", "warning", "warning", "success", "danger"]);
+    expect(ALL.map(statusTone)).toEqual([
+      "warning",
+      "warning",
+      "warning",
+      "success",
+      "danger",
+    ]);
   });
 
   it("covers every status with no fallthrough", () => {

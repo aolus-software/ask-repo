@@ -16,7 +16,11 @@ describe("visibleNavTree", () => {
   });
 
   it("hides a group entirely when all of its children are unreachable", () => {
-    expect(visibleNavTree(member).map((i) => i.href)).toEqual(["/", "/projects", "/ask"]);
+    expect(visibleNavTree(member).map((i) => i.href)).toEqual([
+      "/",
+      "/projects",
+      "/ask",
+    ]);
   });
 
   it("resolves the settings children for an admin", () => {

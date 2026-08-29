@@ -11,6 +11,8 @@ export function useUsers(params: ListParams) {
   return useQuery({
     queryKey: keys.users.list(params),
     queryFn: () =>
-      apiFetch<PaginatedResponse<UserResponse>>(`${endpoints.users.list}${listQueryString(params)}`),
+      apiFetch<PaginatedResponse<UserResponse>>(
+        `${endpoints.users.list}${listQueryString(params)}`,
+      ),
   });
 }

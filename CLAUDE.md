@@ -283,7 +283,37 @@ enforced there — if you add a convention, wire it into the config in the same 
 ## Frontend
 
 App Router, React 19, Tailwind CSS 4 (CSS-first `@theme`, no `tailwind.config.js` for tokens).
-One route so far — the landing page. No API client and no component library installed yet.
+The M0–M2 screens are shipped: `/login`, `/change-password`, `/` (dashboard), `/projects`,
+`/projects/[id]`, `/ask`, `/ask/[conversationId]`, and `/settings/users`.
+
+### Next is a backend-for-frontend, not a thin client
+
+`docs/PRD.md` §5 calls the frontend "minimal", and it has outgrown that deliberately —
+`docs/superpowers/specs/2026-08-29-frontend-m0-m2-design.md` §2.1 records why. **Next holds the
+session and calls the API on the browser's behalf**, so no token is ever readable by a script on
+the page.
+
+- **Two cookies, both set by Next, both httpOnly and `Path=/`**: `askrepo_access` (the JWT) and
+  `askrepo_session` (the backend's own refresh cookie, stored as a verbatim `name=value` pair
+  because `REFRESH_COOKIE_NAME` is operator-configurable). The `Path=/` differs from the
+  backend's `/auth` scope on purpose: middleware runs at `/projects` and is only sent cookies
+  whose path matches.
+- **`app/api/[...path]/route.ts` is the one route the browser talks to.** It attaches the bearer,
+  strips `set-cookie` from every backend response, and relays the body untouched. Only the three
+  `/api/auth/*` handlers write cookies.
+- **Refresh happens in two places, and that split is structural.** A Server Component cannot set
+  a cookie, so a token refreshed during render could never be persisted. Navigations refresh in
+  `middleware.ts`; browser fetches and the answer stream refresh inside the proxy, on the `401`
+  status line, before any body is read — which is what keeps it safe on the SSE route.
+- **The answer stream is piped through the proxy unbuffered**, preserving `text/event-stream`,
+  `Cache-Control: no-cache` and `X-Accel-Buffering: no`.
+- **`API_URL` is server-only** and replaces `NEXT_PUBLIC_API_URL`. Under Compose it is the
+  service name `http://backend:8000` — the inverse of the old rule, because the fetch now happens
+  server-side.
+
+Vitest runs in `make test` alongside pytest. The suite covers the pieces that fail silently: the
+nav filter, the error envelope, the SSE parser, single-flight refresh, the proxy's
+refresh-and-retry, the answer stream's ordering contract, and the form shells' error routing.
 
 **`docs/design.md` is the design reference**, and `frontend/app/globals.css` implements it.
 Palette values come from the Fexend design system; the structure is one semantic token per role,
@@ -300,9 +330,9 @@ Composition uses **`render={<Component />}`, never `asChild`** — `asChild` doe
 and fails silently. `docs/design.md` lists the intended component set per milestone; install a
 row when the screen needing it lands.
 
-`NEXT_PUBLIC_API_URL` is inlined into the client bundle at build time, so it must be an address
-the **browser** can reach — under Compose that is the published `http://localhost:8000`, never
-the `http://backend:8000` service name.
+`API_URL` is read on the **server** only — by the proxy, the middleware, and `serverFetch`. It
+does not need to be reachable from the browser, so under Compose it is the service name
+`http://backend:8000`, not the published host port.
 
 ## Phase 1 sharing is intended
 

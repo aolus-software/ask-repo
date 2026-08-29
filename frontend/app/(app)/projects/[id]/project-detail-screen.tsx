@@ -31,7 +31,9 @@ export function ProjectDetailScreen({ id }: { id: string }) {
     // A project you may not delete answers 403; one that does not exist answers 404.
     // Existence is deliberately public here (response-api.md), so 404 is the only miss.
     if (isApiError(query.error) && query.error.status === 404) {
-      return <NotFound message="That project does not exist, or it has been deleted." />;
+      return (
+        <NotFound message="That project does not exist, or it has been deleted." />
+      );
     }
     return <NotFound message={(query.error as Error).message} />;
   }
@@ -66,7 +68,9 @@ export function ProjectDetailScreen({ id }: { id: string }) {
 
       {isWorking ? (
         <div className="space-y-2">
-          <p className="text-muted-foreground text-sm font-medium">{statusLabel(project.status)}…</p>
+          <p className="text-muted-foreground text-sm font-medium">
+            {statusLabel(project.status)}…
+          </p>
           {/*
             Indeterminate on purpose: the API reports a phase, never a percentage.
             Rendering one would mean inventing it, and an invented bar sitting at 60%
@@ -89,7 +93,9 @@ export function ProjectDetailScreen({ id }: { id: string }) {
         <Alert className="border-danger">
           <AlertTitle className="text-danger">Indexing failed</AlertTitle>
           {/* Already scrubbed by the backend, so no token can be in it (docs/PRD.md §9). */}
-          <AlertDescription className="font-mono text-sm">{project.error}</AlertDescription>
+          <AlertDescription className="font-mono text-sm">
+            {project.error}
+          </AlertDescription>
         </Alert>
       ) : null}
 

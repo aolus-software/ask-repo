@@ -115,8 +115,9 @@ export function CreateProjectDialog({
           // API never returns a PAT, so a placeholder would be a lie an operator
           // submits thinking it is the real one (forms.md §9).
           <FieldDescription>
-            Only for a private repository. Leave blank to keep any stored token unchanged. Scope it
-            read-only — everyone on this instance can query what it indexes.
+            Only for a private repository. Leave blank to keep any stored token
+            unchanged. Scope it read-only — everyone on this instance can query what it
+            indexes.
           </FieldDescription>
         )}
       </Field>

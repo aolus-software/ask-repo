@@ -1,6 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { __resetRefreshFlight, extractSessionCookie, refreshSession } from "@/lib/auth/session";
+import {
+  __resetRefreshFlight,
+  extractSessionCookie,
+  refreshSession,
+} from "@/lib/auth/session";
 
 const ORIGINAL_API_URL = process.env.API_URL;
 
@@ -24,7 +28,8 @@ function refreshOk(): Response {
     status: 200,
     headers: {
       "content-type": "application/json",
-      "set-cookie": "askrepo_refresh=rotated; Path=/auth; HttpOnly; Secure; SameSite=lax",
+      "set-cookie":
+        "askrepo_refresh=rotated; Path=/auth; HttpOnly; Secure; SameSite=lax",
     },
   });
 }
@@ -76,7 +81,13 @@ describe("refreshSession", () => {
   it("returns null when the backend returns a 200 with a literal JSON null body", async () => {
     vi.stubGlobal(
       "fetch",
-      vi.fn(async () => new Response("null", { status: 200, headers: { "content-type": "application/json" } })),
+      vi.fn(
+        async () =>
+          new Response("null", {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          }),
+      ),
     );
     expect(await refreshSession("askrepo_refresh=old")).toBeNull();
   });

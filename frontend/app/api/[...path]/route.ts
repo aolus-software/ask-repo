@@ -59,7 +59,10 @@ async function handle(request: NextRequest, context: RouteContext): Promise<Resp
 
   // Read the body once — a NextRequest body cannot be consumed twice, and the retry
   // below needs it again.
-  const body = request.method === "GET" || request.method === "HEAD" ? undefined : await request.arrayBuffer();
+  const body =
+    request.method === "GET" || request.method === "HEAD"
+      ? undefined
+      : await request.arrayBuffer();
 
   let upstream = await forward(request, target, accessToken, body);
 
@@ -79,7 +82,10 @@ async function handle(request: NextRequest, context: RouteContext): Promise<Resp
   });
 
   // Body passed through untouched, so an SSE stream is never accumulated.
-  const response = new NextResponse(upstream.body, { status: upstream.status, headers });
+  const response = new NextResponse(upstream.body, {
+    status: upstream.status,
+    headers,
+  });
 
   if (refreshed) {
     response.cookies.set(
@@ -122,7 +128,12 @@ function forward(
 
 function unauthenticated(): NextResponse {
   const response = NextResponse.json(
-    { detail: { code: "INVALID_TOKEN", message: "Your session has expired. Please log in again." } },
+    {
+      detail: {
+        code: "INVALID_TOKEN",
+        message: "Your session has expired. Please log in again.",
+      },
+    },
     { status: 401 },
   );
   response.cookies.set(ACCESS_COOKIE, "", cookieOptions(0));

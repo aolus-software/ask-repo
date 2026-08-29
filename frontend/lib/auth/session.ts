@@ -68,7 +68,10 @@ async function performRefresh(sessionCookie: string): Promise<RefreshResult | nu
 
   if (typeof body !== "object" || body === null) return null;
 
-  const { accessToken, expiresIn } = body as { accessToken?: unknown; expiresIn?: unknown };
+  const { accessToken, expiresIn } = body as {
+    accessToken?: unknown;
+    expiresIn?: unknown;
+  };
   if (typeof accessToken !== "string" || typeof expiresIn !== "number") return null;
 
   return {

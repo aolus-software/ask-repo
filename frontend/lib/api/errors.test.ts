@@ -12,7 +12,10 @@ function jsonResponse(body: unknown, status: number): Response {
 describe("parseApiError", () => {
   it("reads the standard envelope", async () => {
     const error = await parseApiError(
-      jsonResponse({ detail: { code: "PROJECT_NOT_READY", message: "Not ready yet." } }, 409),
+      jsonResponse(
+        { detail: { code: "PROJECT_NOT_READY", message: "Not ready yet." } },
+        409,
+      ),
     );
     expect(error.status).toBe(409);
     expect(error.code).toBe("PROJECT_NOT_READY");
@@ -64,12 +67,16 @@ describe("parseApiError", () => {
 
 describe("fieldError", () => {
   it("returns the message for a named field", () => {
-    const error = new ApiError(422, "VALIDATION_ERROR", "Invalid.", { email: "Required." });
+    const error = new ApiError(422, "VALIDATION_ERROR", "Invalid.", {
+      email: "Required.",
+    });
     expect(fieldError(error, "email")).toBe("Required.");
   });
 
   it("returns undefined for an unnamed field, and for a non-ApiError", () => {
-    const error = new ApiError(422, "VALIDATION_ERROR", "Invalid.", { email: "Required." });
+    const error = new ApiError(422, "VALIDATION_ERROR", "Invalid.", {
+      email: "Required.",
+    });
     expect(fieldError(error, "name")).toBeUndefined();
     expect(fieldError(new Error("boom"), "email")).toBeUndefined();
     expect(fieldError(null, "email")).toBeUndefined();

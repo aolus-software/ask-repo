@@ -69,18 +69,23 @@ export function ConversationScreen({ conversationId }: { conversationId: string 
     }
   }
 
-  const lastQuestion = detail.messages.findLast((m) => m.role === "user")?.content ?? "";
+  const lastQuestion =
+    detail.messages.findLast((m) => m.role === "user")?.content ?? "";
 
   return (
     <div className="space-y-6">
-      <h1 className="text-3xl font-semibold tracking-tight">{detail.title ?? "New conversation"}</h1>
+      <h1 className="text-3xl font-semibold tracking-tight">
+        {detail.title ?? "New conversation"}
+      </h1>
 
       <MessageList messages={detail.messages} />
 
       {state ? (
         <div>
           {state.phase && state.isStreaming ? (
-            <p className="text-muted-foreground mb-2 text-sm">{PHASE_LABELS[state.phase]}</p>
+            <p className="text-muted-foreground mb-2 text-sm">
+              {PHASE_LABELS[state.phase]}
+            </p>
           ) : null}
 
           {/* Citations render while the answer types — that ordering is the contract. */}
@@ -116,7 +121,9 @@ export function ConversationScreen({ conversationId }: { conversationId: string 
 
       {/* Mounted only when there is an error: it queries the project to offer a
           re-index, and that request should not fire on every conversation view. */}
-      {askError ? <PreflightError error={askError} projectId={detail.projectId} /> : null}
+      {askError ? (
+        <PreflightError error={askError} projectId={detail.projectId} />
+      ) : null}
 
       <Composer
         onSubmit={(question) => void handleAsk(question)}

@@ -27,7 +27,8 @@ export function useCreateProject() {
 export function useReindexProject(id: string) {
   const invalidate = useProjectInvalidation();
   return useMutation({
-    mutationFn: () => apiFetch<ReindexResponse>(endpoints.projects.reindex(id), { method: "POST" }),
+    mutationFn: () =>
+      apiFetch<ReindexResponse>(endpoints.projects.reindex(id), { method: "POST" }),
     onSuccess: invalidate,
   });
 }
@@ -35,7 +36,8 @@ export function useReindexProject(id: string) {
 export function useDeleteProject(id: string) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: () => apiFetch<void>(endpoints.projects.detail(id), { method: "DELETE" }),
+    mutationFn: () =>
+      apiFetch<void>(endpoints.projects.detail(id), { method: "DELETE" }),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: keys.projects.all });
       // Deleting a project soft-deletes conversations against it, for every owner

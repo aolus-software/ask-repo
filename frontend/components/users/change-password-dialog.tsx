@@ -45,7 +45,11 @@ export function ChangePasswordDialog({
       error={mutation.error}
       onSubmit={handleSubmit}
     >
-      <ChangePasswordFields values={values} onChange={setValues} error={mutation.error} />
+      <ChangePasswordFields
+        values={values}
+        onChange={setValues}
+        error={mutation.error}
+      />
     </FormDialog>
   );
 }

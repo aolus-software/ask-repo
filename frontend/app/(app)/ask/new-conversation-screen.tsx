@@ -12,7 +12,9 @@ import { setPendingQuestion } from "@/lib/ask/pending";
 export function NewConversationScreen() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const [projectId, setProjectId] = useState<string | null>(searchParams.get("projectId"));
+  const [projectId, setProjectId] = useState<string | null>(
+    searchParams.get("projectId"),
+  );
   const create = useCreateConversation();
 
   function handleAsk(question: string) {
@@ -37,7 +39,8 @@ export function NewConversationScreen() {
       <div>
         <h1 className="text-3xl font-semibold tracking-tight">Ask</h1>
         <p className="text-muted-foreground mt-1 text-base">
-          Questions are answered from the indexed code, with citations. Only you can see them.
+          Questions are answered from the indexed code, with citations. Only you can see
+          them.
         </p>
       </div>
 
@@ -49,7 +52,9 @@ export function NewConversationScreen() {
         onSubmit={handleAsk}
         disabled={!projectId || create.isPending}
         placeholder={
-          projectId ? "How does the withdrawal calculation work?" : "Choose a project first"
+          projectId
+            ? "How does the withdrawal calculation work?"
+            : "Choose a project first"
         }
       />
     </div>

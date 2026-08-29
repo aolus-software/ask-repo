@@ -107,11 +107,17 @@ needing it lands.
 
 | Milestone | Components |
 | --- | --- |
-| M0 (auth) | `button`, `input`, `label`, `field`, `card`, `alert`, `form`, `sonner` |
+| M0 (auth) | `button`, `input`, `label`, `field`, `card`, `alert`, `dialog`, `sonner` |
 | M0 (shell) | `sidebar`, `breadcrumb`, `dropdown-menu`, `avatar`, `separator`, `skeleton` |
-| M1 (projects) | `table`, `badge`, `dialog`, `select`, `tooltip`, `progress` |
+| M1 (projects) | `table`, `badge`, `select`, `tooltip`, `progress` |
 | M2 (Dev Knowledge) | `textarea`, `scroll-area`, `collapsible`, `tabs` |
 | M4 (QA List) | `checkbox`, `command`, `popover`, `pagination` |
+
+`form` is deliberately absent: shadcn's `form` component wraps **react-hook-form**, which
+`.claude/rules/forms.md` §4 bans by name — validation is owned by the backend's `422` field map,
+and a client-side copy of a rule like the password policy cannot be kept honest. `field` is the
+composition primitive instead. `dialog` sits in the M0 row because every M0 form is a dialog by
+`forms.md` §1's count (create user, reset password, change own password).
 
 Hand-writing a component shadcn provides is a rule violation, not a shortcut — see
 `.claude/rules/design-system.md`.

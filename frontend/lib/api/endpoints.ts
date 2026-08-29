@@ -37,8 +37,18 @@ export const endpoints = {
  * 422 INVALID_SORT_FIELD. Reported, not fixed — see the design spec §2.7.
  */
 export const SORT = {
-  projects: { name: "name", status: "status", createdAt: "created_at", updatedAt: "updated_at" },
-  users: { name: "name", email: "email", createdAt: "created_at", lastLoginAt: "last_login_at" },
+  projects: {
+    name: "name",
+    status: "status",
+    createdAt: "created_at",
+    updatedAt: "updated_at",
+  },
+  users: {
+    name: "name",
+    email: "email",
+    createdAt: "created_at",
+    lastLoginAt: "last_login_at",
+  },
   conversations: { title: "title", createdAt: "created_at", updatedAt: "updated_at" },
 } as const;
 

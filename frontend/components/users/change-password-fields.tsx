@@ -34,7 +34,9 @@ export function ChangePasswordFields({
           type="password"
           autoComplete="current-password"
           value={values.currentPassword}
-          onChange={(event) => onChange({ ...values, currentPassword: event.target.value })}
+          onChange={(event) =>
+            onChange({ ...values, currentPassword: event.target.value })
+          }
           aria-invalid={Boolean(fieldError(error, "currentPassword"))}
         />
         {fieldError(error, "currentPassword") ? (

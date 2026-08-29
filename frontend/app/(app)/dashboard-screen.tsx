@@ -33,7 +33,9 @@ export function DashboardScreen() {
   return (
     <div className="mx-auto w-full max-w-7xl space-y-6">
       <div>
-        <h1 className="text-3xl font-semibold tracking-tight">Welcome back, {user.name}</h1>
+        <h1 className="text-3xl font-semibold tracking-tight">
+          Welcome back, {user.name}
+        </h1>
         <p className="text-muted-foreground mt-1 text-base">
           Ask questions about any codebase indexed on this instance.
         </p>
@@ -47,7 +49,9 @@ export function DashboardScreen() {
       <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
         <Card>
           <CardContent className="p-6">
-            <p className="text-muted-foreground text-sm font-medium">Projects on this instance</p>
+            <p className="text-muted-foreground text-sm font-medium">
+              Projects on this instance
+            </p>
             <p className="mt-1 text-3xl font-semibold">
               {projects.isLoading ? "—" : (projects.data?.totalCount ?? 0)}
             </p>
@@ -55,7 +59,9 @@ export function DashboardScreen() {
         </Card>
         <Card>
           <CardContent className="p-6">
-            <p className="text-muted-foreground text-sm font-medium">Your conversations</p>
+            <p className="text-muted-foreground text-sm font-medium">
+              Your conversations
+            </p>
             <p className="mt-1 text-3xl font-semibold">
               {conversations.isLoading ? "—" : (conversations.data?.totalCount ?? 0)}
             </p>
@@ -102,7 +108,9 @@ export function DashboardScreen() {
 
         <Card>
           <CardHeader className="flex-row items-center justify-between">
-            <CardTitle className="text-xl font-semibold">Your recent questions</CardTitle>
+            <CardTitle className="text-xl font-semibold">
+              Your recent questions
+            </CardTitle>
             <Button variant="ghost" size="sm" render={<Link href="/ask" />}>
               Ask
             </Button>
@@ -115,7 +123,9 @@ export function DashboardScreen() {
             ) : (conversations.data?.items.length ?? 0) === 0 ? (
               <div className="py-6 text-center">
                 <MessagesSquare className="text-muted-foreground mx-auto size-8" />
-                <p className="text-muted-foreground mt-2 text-base">Nothing asked yet.</p>
+                <p className="text-muted-foreground mt-2 text-base">
+                  Nothing asked yet.
+                </p>
                 <Button className="mt-3" render={<Link href="/ask" />}>
                   Ask a question
                 </Button>

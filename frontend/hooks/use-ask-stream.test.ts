@@ -8,12 +8,17 @@ function run(frames: { event: string; data: unknown }[]): AskState {
 
 describe("reduceAskEvent", () => {
   it("records the phase from a status event", () => {
-    expect(run([{ event: "status", data: { phase: "retrieving" } }]).phase).toBe("retrieving");
+    expect(run([{ event: "status", data: { phase: "retrieving" } }]).phase).toBe(
+      "retrieving",
+    );
   });
 
   it("accepts citations before the first token", () => {
     const state = run([
-      { event: "citations", data: { citations: [{ index: 1, filePath: "app/fees.py" }] } },
+      {
+        event: "citations",
+        data: { citations: [{ index: 1, filePath: "app/fees.py" }] },
+      },
       { event: "token", data: { text: "The" } },
     ]);
     expect(state.citations).toHaveLength(1);

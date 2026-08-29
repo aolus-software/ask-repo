@@ -6,7 +6,13 @@ import Link from "next/link";
 import type { FormShellProps } from "@/components/form/form-dialog";
 import { FormError } from "@/components/form/form-error";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 
 /** Same props as FormDialog, so moving a form between shells is a swap (forms.md §2). */
 export function FormPage({
@@ -22,7 +28,12 @@ export function FormPage({
   return (
     <div className="mx-auto w-full max-w-3xl">
       {backHref ? (
-        <Button variant="ghost" size="sm" className="mb-4" render={<Link href={backHref} />}>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="mb-4"
+          render={<Link href={backHref} />}
+        >
           <ArrowLeft className="size-4" />
           Back
         </Button>

@@ -27,7 +27,11 @@ export async function POST(request: Request): Promise<Response> {
     result.accessToken,
     cookieOptions(accessCookieMaxAge(result.expiresIn)),
   );
-  response.cookies.set(SESSION_COOKIE, result.sessionCookie, cookieOptions(SESSION_MAX_AGE_SECONDS));
+  response.cookies.set(
+    SESSION_COOKIE,
+    result.sessionCookie,
+    cookieOptions(SESSION_MAX_AGE_SECONDS),
+  );
   return response;
 }
 

@@ -33,7 +33,8 @@ export function UsersScreen() {
   // The route body is wrapped in its gate. Hiding the nav item is not gating the
   // route — an operator can type the URL (navigation.md §6). This mirrors the
   // backend's ADMIN_REQUIRED; it does not replace it.
-  if (!user.isAdmin) return <Forbidden message="Only administrators can manage accounts." />;
+  if (!user.isAdmin)
+    return <Forbidden message="Only administrators can manage accounts." />;
 
   return (
     <div className="mx-auto w-full max-w-7xl">

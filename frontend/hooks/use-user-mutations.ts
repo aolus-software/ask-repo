@@ -16,7 +16,12 @@ function useUserInvalidation() {
 export function useCreateUser() {
   const invalidate = useUserInvalidation();
   return useMutation({
-    mutationFn: (input: { name: string; email: string; password: string; isAdmin: boolean }) =>
+    mutationFn: (input: {
+      name: string;
+      email: string;
+      password: string;
+      isAdmin: boolean;
+    }) =>
       apiFetch<UserResponse>(endpoints.users.list, {
         method: "POST",
         body: JSON.stringify(input),

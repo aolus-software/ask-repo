@@ -27,7 +27,13 @@ export function UserRowActions({ user }: { user: UserResponse }) {
     <>
       <DropdownMenu>
         <DropdownMenuTrigger
-          render={<Button variant="ghost" size="icon" aria-label={`Actions for ${user.name}`} />}
+          render={
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label={`Actions for ${user.name}`}
+            />
+          }
         >
           <MoreHorizontal className="size-4" />
         </DropdownMenuTrigger>

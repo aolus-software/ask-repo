@@ -18,7 +18,13 @@ import { canManageProject } from "@/lib/can";
  * Mounted only when there IS an error, so the project query it needs for the re-index
  * button does not fire on every conversation view.
  */
-export function PreflightError({ error, projectId }: { error: unknown; projectId: string }) {
+export function PreflightError({
+  error,
+  projectId,
+}: {
+  error: unknown;
+  projectId: string;
+}) {
   const user = useSession();
   const project = useProject(projectId);
   const reindex = useReindexProject(projectId);
@@ -26,7 +32,9 @@ export function PreflightError({ error, projectId }: { error: unknown; projectId
   if (!isApiError(error)) {
     return (
       <Alert className="border-danger">
-        <AlertTitle className="text-danger">That question could not be answered</AlertTitle>
+        <AlertTitle className="text-danger">
+          That question could not be answered
+        </AlertTitle>
         <AlertDescription>
           {error instanceof Error ? error.message : "Something went wrong."}
         </AlertDescription>
@@ -41,9 +49,9 @@ export function PreflightError({ error, projectId }: { error: unknown; projectId
         <AlertTitle className="text-danger">This project needs re-indexing</AlertTitle>
         <AlertDescription className="space-y-3">
           <p>
-            It was indexed with a different embedding model, so its stored vectors cannot be
-            searched with the one this instance runs now. Re-index it and questions will work
-            again.
+            It was indexed with a different embedding model, so its stored vectors
+            cannot be searched with the one this instance runs now. Re-index it and
+            questions will work again.
           </p>
           {canManage ? (
             <Button
@@ -53,7 +61,9 @@ export function PreflightError({ error, projectId }: { error: unknown; projectId
                 reindex.mutate(undefined, {
                   onSuccess: (result) =>
                     toast.success(
-                      result.enqueued ? "Re-index started" : "A re-index is already running",
+                      result.enqueued
+                        ? "Re-index started"
+                        : "A re-index is already running",
                     ),
                 })
               }
@@ -83,7 +93,9 @@ export function PreflightError({ error, projectId }: { error: unknown; projectId
 
   return (
     <Alert className="border-danger">
-      <AlertTitle className="text-danger">That question could not be answered</AlertTitle>
+      <AlertTitle className="text-danger">
+        That question could not be answered
+      </AlertTitle>
       <AlertDescription>{error.message}</AlertDescription>
     </Alert>
   );

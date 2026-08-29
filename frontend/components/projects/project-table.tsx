@@ -62,7 +62,9 @@ export function ProjectTable({
                   : `${project.fileCount} files · ${project.chunkCount ?? 0} chunks`}
               </TableCell>
               <TableCell className="font-mono text-sm">
-                {project.lastIndexedCommit ? project.lastIndexedCommit.slice(0, 7) : "—"}
+                {project.lastIndexedCommit
+                  ? project.lastIndexedCommit.slice(0, 7)
+                  : "—"}
               </TableCell>
               <TableCell title={formatAbsolute(project.updatedAt)}>
                 {formatRelative(project.updatedAt)}

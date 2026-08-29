@@ -91,7 +91,8 @@ export function resolveBreadcrumbs(pathname: string, user: NavUser): Crumb[] {
     trail.push({ href: item.href, label: item.title });
 
     for (const child of item.children ?? []) {
-      if (pathname.startsWith(child.href)) trail.push({ href: child.href, label: child.title });
+      if (pathname.startsWith(child.href))
+        trail.push({ href: child.href, label: child.title });
     }
   }
 

@@ -26,7 +26,9 @@ function CodeBlock({ children }: { children: React.ReactNode }) {
       >
         {copied ? <Check className="size-4" /> : <Copy className="size-4" />}
       </Button>
-      <pre className="bg-muted overflow-x-auto rounded-md p-4 font-mono text-sm">{children}</pre>
+      <pre className="bg-muted overflow-x-auto rounded-md p-4 font-mono text-sm">
+        {children}
+      </pre>
     </div>
   );
 }
@@ -55,7 +57,9 @@ export function Answer({ content }: { content: string }) {
             className ? (
               <code className={className}>{children}</code>
             ) : (
-              <code className="bg-muted rounded px-1 py-0.5 font-mono text-sm">{children}</code>
+              <code className="bg-muted rounded px-1 py-0.5 font-mono text-sm">
+                {children}
+              </code>
             ),
           a: ({ href, children }) => (
             <a

@@ -48,11 +48,17 @@ export function ProjectPicker({
       }}
     >
       <SelectTrigger className="w-full max-w-sm" aria-label="Project">
-        <SelectValue placeholder={query.isLoading ? "Loading projects…" : "Choose a project"} />
+        <SelectValue
+          placeholder={query.isLoading ? "Loading projects…" : "Choose a project"}
+        />
       </SelectTrigger>
       <SelectContent>
         {projects.map((project) => (
-          <SelectItem key={project.id} value={project.id} disabled={project.status !== "ready"}>
+          <SelectItem
+            key={project.id}
+            value={project.id}
+            disabled={project.status !== "ready"}
+          >
             {project.name}
             {project.status === "ready" ? "" : ` · ${statusLabel(project.status)}`}
           </SelectItem>

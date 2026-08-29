@@ -41,7 +41,9 @@ export function useProject(id: string) {
     refetchInterval: (query) => {
       const project = query.state.data;
       if (!project) return false;
-      return !isTerminalStatus(project.status) || project.reindexInProgress ? 3000 : false;
+      return !isTerminalStatus(project.status) || project.reindexInProgress
+        ? 3000
+        : false;
     },
     refetchIntervalInBackground: false,
   });

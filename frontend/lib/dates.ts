@@ -15,7 +15,8 @@ const relative = new Intl.RelativeTimeFormat("en", { numeric: "auto" });
 export function formatRelative(iso: string): string {
   const elapsed = new Date(iso).getTime() - Date.now();
   for (const [unit, size] of UNITS) {
-    if (Math.abs(elapsed) >= size) return relative.format(Math.round(elapsed / size), unit);
+    if (Math.abs(elapsed) >= size)
+      return relative.format(Math.round(elapsed / size), unit);
   }
   return "just now";
 }

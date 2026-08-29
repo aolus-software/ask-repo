@@ -2,7 +2,11 @@
 
 import { ChevronDown } from "lucide-react";
 
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 import type { CitationPayload } from "@/lib/api/types";
 import { cn } from "@/lib/utils";
 
@@ -42,7 +46,8 @@ export function Sources({
                 isCited(citation) ? "bg-accent" : "text-muted-foreground",
               )}
             >
-              <span className="font-semibold">[{citation.index}]</span> {citation.filePath}
+              <span className="font-semibold">[{citation.index}]</span>{" "}
+              {citation.filePath}
               <span className="text-muted-foreground">
                 {" "}
                 lines {citation.startLine}–{citation.endLine}

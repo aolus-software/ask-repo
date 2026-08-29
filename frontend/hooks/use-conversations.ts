@@ -30,7 +30,8 @@ export function useConversations(params: ListParams & { projectId?: string }) {
 export function useConversation(id: string) {
   return useQuery({
     queryKey: keys.conversations.detail(id),
-    queryFn: () => apiFetch<ConversationDetailResponse>(endpoints.conversations.detail(id)),
+    queryFn: () =>
+      apiFetch<ConversationDetailResponse>(endpoints.conversations.detail(id)),
     enabled: Boolean(id),
   });
 }
@@ -43,14 +44,17 @@ export function useCreateConversation() {
         method: "POST",
         body: JSON.stringify(input),
       }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: keys.conversations.all }),
+    onSuccess: () =>
+      queryClient.invalidateQueries({ queryKey: keys.conversations.all }),
   });
 }
 
 export function useDeleteConversation(id: string) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: () => apiFetch<void>(endpoints.conversations.detail(id), { method: "DELETE" }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: keys.conversations.all }),
+    mutationFn: () =>
+      apiFetch<void>(endpoints.conversations.detail(id), { method: "DELETE" }),
+    onSuccess: () =>
+      queryClient.invalidateQueries({ queryKey: keys.conversations.all }),
   });
 }

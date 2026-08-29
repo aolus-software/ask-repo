@@ -42,7 +42,11 @@ export function ConfirmDialog({
         </DialogHeader>
         <FormError error={error} />
         <DialogFooter className="gap-2">
-          <Button variant="ghost" onClick={() => onOpenChange(false)} disabled={isPending}>
+          <Button
+            variant="ghost"
+            onClick={() => onOpenChange(false)}
+            disabled={isPending}
+          >
             Cancel
           </Button>
           <Button variant="destructive" onClick={onConfirm} disabled={isPending}>

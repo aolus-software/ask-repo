@@ -10,7 +10,8 @@ import { AlertTriangle } from "lucide-react";
 const MESSAGES: Record<string, string> = {
   no_context:
     "Nothing relevant was found in this project, so no answer was generated from its code.",
-  uncited_answer: "This answer does not cite any of the excerpts it was given. Treat it carefully.",
+  uncited_answer:
+    "This answer does not cite any of the excerpts it was given. Treat it carefully.",
   unknown_paths:
     "This answer names files that were not among the excerpts retrieved. Those references may not exist.",
 };
@@ -24,7 +25,9 @@ export function GroundingNotice({ warnings }: { warnings: string[] }) {
         <AlertTriangle className="text-warning mt-0.5 size-4 shrink-0" />
         <ul className="space-y-1 text-sm">
           {warnings.map((warning) => (
-            <li key={warning}>{MESSAGES[warning] ?? `Grounding warning: ${warning}`}</li>
+            <li key={warning}>
+              {MESSAGES[warning] ?? `Grounding warning: ${warning}`}
+            </li>
           ))}
         </ul>
       </div>

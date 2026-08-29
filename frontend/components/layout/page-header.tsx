@@ -11,7 +11,9 @@ export function PageHeader({
     <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
       <div>
         <h1 className="text-3xl font-semibold tracking-tight">{title}</h1>
-        {description ? <p className="text-muted-foreground mt-1 text-base">{description}</p> : null}
+        {description ? (
+          <p className="text-muted-foreground mt-1 text-base">{description}</p>
+        ) : null}
       </div>
       {action}
     </div>

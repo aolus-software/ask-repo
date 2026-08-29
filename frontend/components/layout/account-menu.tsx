@@ -46,7 +46,9 @@ export function AccountMenu() {
   return (
     <>
       <DropdownMenu>
-        <DropdownMenuTrigger render={<Button variant="ghost" size="icon" aria-label="Account" />}>
+        <DropdownMenuTrigger
+          render={<Button variant="ghost" size="icon" aria-label="Account" />}
+        >
           <Avatar className="size-8">
             <AvatarFallback>{initials(user.name)}</AvatarFallback>
           </Avatar>
@@ -73,7 +75,10 @@ export function AccountMenu() {
         </DropdownMenuContent>
       </DropdownMenu>
 
-      <ChangePasswordDialog open={changingPassword} onOpenChange={setChangingPassword} />
+      <ChangePasswordDialog
+        open={changingPassword}
+        onOpenChange={setChangingPassword}
+      />
     </>
   );
 }

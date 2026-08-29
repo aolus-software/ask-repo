@@ -1,6 +1,12 @@
 "use client";
 
-import { ExternalLink, MessagesSquare, MoreHorizontal, RefreshCw, Trash2 } from "lucide-react";
+import {
+  ExternalLink,
+  MessagesSquare,
+  MoreHorizontal,
+  RefreshCw,
+  Trash2,
+} from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -32,7 +38,13 @@ export function ProjectRowActions({ project }: { project: ProjectResponse }) {
     <>
       <DropdownMenu>
         <DropdownMenuTrigger
-          render={<Button variant="ghost" size="icon" aria-label={`Actions for ${project.name}`} />}
+          render={
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label={`Actions for ${project.name}`}
+            />
+          }
         >
           <MoreHorizontal className="size-4" />
         </DropdownMenuTrigger>
@@ -79,7 +91,9 @@ export function ProjectRowActions({ project }: { project: ProjectResponse }) {
               // The 202 carries an outcome flag precisely so a no-op is not reported
               // as an action (docs/PRD.md §5.1). Toasting success for both would
               // waste the flag at the last step.
-              toast.success(result.enqueued ? "Re-index started" : "A re-index is already running");
+              toast.success(
+                result.enqueued ? "Re-index started" : "A re-index is already running",
+              );
               setConfirmingReindex(false);
             },
           })
@@ -105,9 +119,12 @@ export function ProjectRowActions({ project }: { project: ProjectResponse }) {
               // same-operation hard delete (docs/PRD.md §5.1), and commits nothing if
               // it cannot. Without this message it looks like a silent no-op.
               if (isApiError(error) && error.code === "VECTOR_STORE_UNAVAILABLE") {
-                toast.error("The vector store is unreachable, so nothing was deleted.", {
-                  description: "The project is unchanged. Try again once it is back.",
-                });
+                toast.error(
+                  "The vector store is unreachable, so nothing was deleted.",
+                  {
+                    description: "The project is unchanged. Try again once it is back.",
+                  },
+                );
                 setConfirmingDelete(false);
               }
             },

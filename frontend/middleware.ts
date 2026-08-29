@@ -53,7 +53,11 @@ export async function middleware(request: NextRequest): Promise<NextResponse> {
     refreshed.accessToken,
     cookieOptions(accessCookieMaxAge(refreshed.expiresIn)),
   );
-  response.cookies.set(SESSION_COOKIE, refreshed.sessionCookie, cookieOptions(SESSION_MAX_AGE_SECONDS));
+  response.cookies.set(
+    SESSION_COOKIE,
+    refreshed.sessionCookie,
+    cookieOptions(SESSION_MAX_AGE_SECONDS),
+  );
   return response;
 }
 

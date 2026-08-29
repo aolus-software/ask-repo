@@ -92,7 +92,9 @@ export function CreateUserDialog({
         ) : (
           // Communicated out of band on purpose: a server-generated password would
           // have to travel in a response body (docs/PRD.md §4.0).
-          <FieldDescription>Share this with them directly. They must change it.</FieldDescription>
+          <FieldDescription>
+            Share this with them directly. They must change it.
+          </FieldDescription>
         )}
       </Field>
 
@@ -100,7 +102,9 @@ export function CreateUserDialog({
         <Checkbox
           id="isAdmin"
           checked={values.isAdmin}
-          onCheckedChange={(checked) => setValues({ ...values, isAdmin: checked === true })}
+          onCheckedChange={(checked) =>
+            setValues({ ...values, isAdmin: checked === true })
+          }
         />
         <FieldLabel htmlFor="isAdmin">Administrator</FieldLabel>
       </Field>

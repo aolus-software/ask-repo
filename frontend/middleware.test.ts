@@ -24,7 +24,10 @@ const ACCESS = "askrepo_access=jwt";
 describe("the middleware gate", () => {
   it("sends an anonymous visitor to login, remembering where they were going", async () => {
     const response = await middleware(request("/projects"));
-    const location = new URL(response.headers.get("location") ?? "", "http://localhost:3000");
+    const location = new URL(
+      response.headers.get("location") ?? "",
+      "http://localhost:3000",
+    );
 
     expect(response.status).toBe(307);
     expect(location.pathname).toBe("/login");
@@ -43,7 +46,10 @@ describe("the middleware gate", () => {
 
   it("sends an authenticated visitor away from login", async () => {
     const response = await middleware(request("/login", `${SESSION}; ${ACCESS}`));
-    const location = new URL(response.headers.get("location") ?? "", "http://localhost:3000");
+    const location = new URL(
+      response.headers.get("location") ?? "",
+      "http://localhost:3000",
+    );
     expect(location.pathname).toBe("/");
   });
 
@@ -53,7 +59,12 @@ describe("the middleware gate", () => {
       vi.fn(
         async () =>
           new Response(
-            JSON.stringify({ accessToken: "fresh", tokenType: "bearer", expiresIn: 900, user: {} }),
+            JSON.stringify({
+              accessToken: "fresh",
+              tokenType: "bearer",
+              expiresIn: 900,
+              user: {},
+            }),
             {
               status: 200,
               headers: {
@@ -68,7 +79,9 @@ describe("the middleware gate", () => {
     const response = await middleware(request("/projects", SESSION));
 
     expect(response.headers.get("location")).toBeNull();
-    expect(response.headers.getSetCookie().join("\n")).toContain("askrepo_access=fresh");
+    expect(response.headers.getSetCookie().join("\n")).toContain(
+      "askrepo_access=fresh",
+    );
   });
 
   it("clears the session and redirects when the refresh is refused", async () => {
@@ -78,7 +91,10 @@ describe("the middleware gate", () => {
     );
 
     const response = await middleware(request("/projects", SESSION));
-    const location = new URL(response.headers.get("location") ?? "", "http://localhost:3000");
+    const location = new URL(
+      response.headers.get("location") ?? "",
+      "http://localhost:3000",
+    );
 
     expect(location.pathname).toBe("/login");
     expect(response.headers.getSetCookie().join("\n")).toContain("askrepo_session=;");
@@ -86,7 +102,10 @@ describe("the middleware gate", () => {
 
   it("does not include a next param when the target is the dashboard", async () => {
     const response = await middleware(request("/"));
-    const location = new URL(response.headers.get("location") ?? "", "http://localhost:3000");
+    const location = new URL(
+      response.headers.get("location") ?? "",
+      "http://localhost:3000",
+    );
     expect(location.searchParams.get("next")).toBeNull();
   });
 });

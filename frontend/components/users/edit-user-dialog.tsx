@@ -71,7 +71,9 @@ export function EditUserDialog({
         <Checkbox
           id="edit-isAdmin"
           checked={values.isAdmin}
-          onCheckedChange={(checked) => setValues({ ...values, isAdmin: checked === true })}
+          onCheckedChange={(checked) =>
+            setValues({ ...values, isAdmin: checked === true })
+          }
         />
         <FieldLabel htmlFor="edit-isAdmin">Administrator</FieldLabel>
       </Field>

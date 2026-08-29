@@ -237,8 +237,10 @@ services:
     ports:
       - "${FRONTEND_PORT:-3000}:3000"
     environment:
-      # Resolved in the browser, so it points at the host-published API port.
-      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8000}
+      # Resolved on the SERVER — the frontend proxies the API, so the browser never
+      # calls it directly. That is why this is the service name and not the published
+      # host port: it is Next talking to the backend over the compose network.
+      API_URL: ${API_URL:-http://backend:8000}
       WATCHPACK_POLLING: "true"
     volumes:
       - ../frontend:/app

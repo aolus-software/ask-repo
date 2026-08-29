@@ -32,15 +32,23 @@ function jsonOk(body: unknown): Response {
 }
 
 function unauthorized(): Response {
-  return new Response(JSON.stringify({ detail: { code: "TOKEN_EXPIRED", message: "Expired." } }), {
-    status: 401,
-    headers: { "content-type": "application/json" },
-  });
+  return new Response(
+    JSON.stringify({ detail: { code: "TOKEN_EXPIRED", message: "Expired." } }),
+    {
+      status: 401,
+      headers: { "content-type": "application/json" },
+    },
+  );
 }
 
 function refreshOk(): Response {
   return new Response(
-    JSON.stringify({ accessToken: "fresh-jwt", tokenType: "bearer", expiresIn: 900, user: {} }),
+    JSON.stringify({
+      accessToken: "fresh-jwt",
+      tokenType: "bearer",
+      expiresIn: 900,
+      user: {},
+    }),
     {
       status: 200,
       headers: {
@@ -57,7 +65,10 @@ describe("the proxy", () => {
     vi.stubGlobal("fetch", spy);
 
     const response = await GET(
-      proxyRequest("/api/projects?page=2&search=api", "askrepo_access=jwt; askrepo_session=s%3D1"),
+      proxyRequest(
+        "/api/projects?page=2&search=api",
+        "askrepo_access=jwt; askrepo_session=s%3D1",
+      ),
       context(["projects"]),
     );
 
@@ -76,15 +87,22 @@ describe("the proxy", () => {
     vi.stubGlobal("fetch", spy);
 
     const response = await GET(
-      proxyRequest("/api/projects", "askrepo_access=stale; askrepo_session=askrepo_refresh%3Dold"),
+      proxyRequest(
+        "/api/projects",
+        "askrepo_access=stale; askrepo_session=askrepo_refresh%3Dold",
+      ),
       context(["projects"]),
     );
 
     expect(response.status).toBe(200);
     expect(spy).toHaveBeenCalledTimes(3);
     const retry = spy.mock.calls[2] as [string, RequestInit];
-    expect((retry[1].headers as Record<string, string>).authorization).toBe("Bearer fresh-jwt");
-    expect(response.headers.getSetCookie().join("\n")).toContain("askrepo_access=fresh-jwt");
+    expect((retry[1].headers as Record<string, string>).authorization).toBe(
+      "Bearer fresh-jwt",
+    );
+    expect(response.headers.getSetCookie().join("\n")).toContain(
+      "askrepo_access=fresh-jwt",
+    );
   });
 
   it("clears cookies and returns 401 when the retry also fails", async () => {
@@ -96,7 +114,10 @@ describe("the proxy", () => {
     vi.stubGlobal("fetch", spy);
 
     const response = await GET(
-      proxyRequest("/api/projects", "askrepo_access=stale; askrepo_session=askrepo_refresh%3Dold"),
+      proxyRequest(
+        "/api/projects",
+        "askrepo_access=stale; askrepo_session=askrepo_refresh%3Dold",
+      ),
       context(["projects"]),
     );
 
@@ -107,7 +128,10 @@ describe("the proxy", () => {
   });
 
   it("refreshes first when the access cookie is already gone", async () => {
-    const spy = vi.fn().mockResolvedValueOnce(refreshOk()).mockResolvedValueOnce(jsonOk({ ok: 1 }));
+    const spy = vi
+      .fn()
+      .mockResolvedValueOnce(refreshOk())
+      .mockResolvedValueOnce(jsonOk({ ok: 1 }));
     vi.stubGlobal("fetch", spy);
 
     const response = await GET(
@@ -123,7 +147,10 @@ describe("the proxy", () => {
     const spy = vi.fn();
     vi.stubGlobal("fetch", spy);
 
-    const response = await GET(proxyRequest("/api/projects", ""), context(["projects"]));
+    const response = await GET(
+      proxyRequest("/api/projects", ""),
+      context(["projects"]),
+    );
 
     expect(response.status).toBe(401);
     expect(spy).not.toHaveBeenCalled();
@@ -158,7 +185,10 @@ describe("the proxy", () => {
 
     const request = new NextRequest(new URL("http://localhost:3000/api/projects"), {
       method: "POST",
-      headers: { cookie: "askrepo_access=jwt; askrepo_session=s%3D1", "content-type": "application/json" },
+      headers: {
+        cookie: "askrepo_access=jwt; askrepo_session=s%3D1",
+        "content-type": "application/json",
+      },
       body: JSON.stringify({ repoUrl: "https://github.com/o/r" }),
     });
 
@@ -166,7 +196,9 @@ describe("the proxy", () => {
 
     const [, init] = spy.mock.calls[0] as unknown as [string, RequestInit];
     expect(init.method).toBe("POST");
-    expect((init.headers as Record<string, string>)["content-type"]).toBe("application/json");
+    expect((init.headers as Record<string, string>)["content-type"]).toBe(
+      "application/json",
+    );
   });
 
   it("preserves the SSE content type and anti-buffering headers", async () => {
@@ -186,7 +218,11 @@ describe("the proxy", () => {
     );
 
     const response = await POST(
-      proxyRequest("/api/conversations/c1/messages", "askrepo_access=jwt; askrepo_session=s%3D1", "POST"),
+      proxyRequest(
+        "/api/conversations/c1/messages",
+        "askrepo_access=jwt; askrepo_session=s%3D1",
+        "POST",
+      ),
       context(["conversations", "c1", "messages"]),
     );
 

@@ -44,7 +44,12 @@ export async function POST(request: Request): Promise<Response> {
   if (!sessionCookie) {
     // No refresh cookie means a session that dies in 15 minutes with no way to renew.
     return NextResponse.json(
-      { detail: { code: "INTERNAL_ERROR", message: "The server did not start a session." } },
+      {
+        detail: {
+          code: "INTERNAL_ERROR",
+          message: "The server did not start a session.",
+        },
+      },
       { status: 502 },
     );
   }
@@ -55,6 +60,10 @@ export async function POST(request: Request): Promise<Response> {
     payload.accessToken,
     cookieOptions(accessCookieMaxAge(payload.expiresIn)),
   );
-  response.cookies.set(SESSION_COOKIE, sessionCookie, cookieOptions(SESSION_MAX_AGE_SECONDS));
+  response.cookies.set(
+    SESSION_COOKIE,
+    sessionCookie,
+    cookieOptions(SESSION_MAX_AGE_SECONDS),
+  );
   return response;
 }

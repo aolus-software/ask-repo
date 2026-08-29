@@ -19,7 +19,9 @@ export function ProjectStats({ project }: { project: ProjectResponse }) {
       <Stat label="Chunks" value={project.chunkCount?.toLocaleString() ?? "—"} />
       <Card>
         <CardContent className="p-6">
-          <p className="text-muted-foreground text-sm font-medium">Last indexed commit</p>
+          <p className="text-muted-foreground text-sm font-medium">
+            Last indexed commit
+          </p>
           <p className="mt-1 font-mono text-xl font-semibold">
             {project.lastIndexedCommit?.slice(0, 7) ?? "—"}
           </p>

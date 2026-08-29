@@ -13,8 +13,16 @@ const TONE_CLASSES: Record<StatusTone, string> = {
   danger: "bg-danger text-danger-foreground",
 };
 
-export function StatusBadge({ status, className }: { status: ProjectStatus; className?: string }) {
+export function StatusBadge({
+  status,
+  className,
+}: {
+  status: ProjectStatus;
+  className?: string;
+}) {
   return (
-    <Badge className={cn(TONE_CLASSES[statusTone(status)], className)}>{statusLabel(status)}</Badge>
+    <Badge className={cn(TONE_CLASSES[statusTone(status)], className)}>
+      {statusLabel(status)}
+    </Badge>
   );
 }

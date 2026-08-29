@@ -4,7 +4,11 @@ import { ChevronRight } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 import {
   Sidebar,
   SidebarContent,
@@ -66,7 +70,11 @@ export function AppSidebar() {
             ) : (
               <SidebarMenuItem key={item.href}>
                 <SidebarMenuButton
-                  isActive={item.href === "/" ? pathname === "/" : pathname.startsWith(item.href)}
+                  isActive={
+                    item.href === "/"
+                      ? pathname === "/"
+                      : pathname.startsWith(item.href)
+                  }
                   render={<Link href={item.href} />}
                 >
                   <item.icon className="size-4" />

@@ -15,7 +15,13 @@ import { SORT } from "@/lib/api/endpoints";
 import { formatAbsolute, formatRelative } from "@/lib/dates";
 import { cn } from "@/lib/utils";
 
-function DeleteConversationButton({ id, onDeleted }: { id: string; onDeleted: () => void }) {
+function DeleteConversationButton({
+  id,
+  onDeleted,
+}: {
+  id: string;
+  onDeleted: () => void;
+}) {
   const [confirming, setConfirming] = useState(false);
   const remove = useDeleteConversation(id);
 
@@ -74,7 +80,7 @@ export function ConversationRail() {
   const conversations = query.data?.items ?? [];
 
   return (
-    <aside className="border-border w-full shrink-0 border-b pb-4 md:w-72 md:border-b-0 md:border-e md:pb-0 md:pe-4">
+    <aside className="border-border w-full shrink-0 border-b pb-4 md:w-72 md:border-e md:border-b-0 md:pe-4 md:pb-0">
       <div className="mb-4 flex items-center justify-between">
         <h2 className="text-sm font-medium">Conversations</h2>
         <Button

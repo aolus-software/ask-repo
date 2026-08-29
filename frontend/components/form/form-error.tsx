@@ -10,7 +10,8 @@ export function FormError({ error }: { error: unknown }) {
   if (!error) return null;
   if (isApiError(error) && Object.keys(error.fieldErrors).length > 0) return null;
 
-  const message = error instanceof Error && error.message ? error.message : "Something went wrong.";
+  const message =
+    error instanceof Error && error.message ? error.message : "Something went wrong.";
 
   return (
     <Alert role="alert" className="border-danger text-danger mb-4">

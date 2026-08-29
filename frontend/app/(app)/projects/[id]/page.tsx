@@ -8,7 +8,11 @@ import { keys } from "@/lib/query/keys";
 import { makeQueryClient } from "@/lib/query/provider";
 
 /** params is async in Next 16 and is always awaited. */
-export default async function ProjectDetailPage({ params }: { params: Promise<{ id: string }> }) {
+export default async function ProjectDetailPage({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}) {
   const { id } = await params;
 
   // Detail pages prefetch their own key, exactly as list pages do, so the first

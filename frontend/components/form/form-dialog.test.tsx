@@ -6,7 +6,9 @@ import { ApiError } from "@/lib/api/errors";
 
 describe("FormError", () => {
   it("renders the banner when the backend named no fields", () => {
-    render(<FormError error={new ApiError(409, "LAST_ADMIN", "That is the last admin.")} />);
+    render(
+      <FormError error={new ApiError(409, "LAST_ADMIN", "That is the last admin.")} />,
+    );
     expect(screen.getByRole("alert")).toHaveTextContent("That is the last admin.");
   });
 

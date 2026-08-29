@@ -64,7 +64,12 @@ describe("parseSseStream", () => {
       'event: token\ndata: {"text":"hi"}\n\n',
       'event: done\ndata: {"messageId":"m1"}\n\n',
     ]);
-    expect(events.map((e) => e.event)).toEqual(["status", "citations", "token", "done"]);
+    expect(events.map((e) => e.event)).toEqual([
+      "status",
+      "citations",
+      "token",
+      "done",
+    ]);
   });
 
   it("ignores an unknown event rather than throwing", async () => {
