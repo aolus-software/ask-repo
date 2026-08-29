@@ -30,9 +30,10 @@ M2 is complete too. `app/rag/` holds the retriever, the chat-model adapter, the 
 `POST /conversations/{id}/messages` streams the answer over Server-Sent Events. **There is no
 LangGraph yet** — the answerer is a plain sequence, and M3 replaces that one file with a graph.
 
-The frontend has not moved: it is still the landing page from scaffolding, with no API client
-and no auth screens. Do not assume a module exists because the PRD describes it — the PRD
-describes the destination.
+The M0–M2 frontend is shipped: auth screens, the app shell, projects, the streamed answer
+surface, and admin user management, with Next acting as a backend-for-frontend (see the
+Frontend section below). Later milestones are not built — do not assume a module exists
+because the PRD describes it; the PRD describes the destination.
 
 ## Commands
 
@@ -68,7 +69,9 @@ bun run build                             # catches type errors the dev server t
 bun lint
 
 # Whole stack — from infra/
-docker compose up --build                 # backend, worker, frontend, postgres, qdrant, redis, kafka, ollama
+docker compose --profile ollama up --build   # backend, worker, frontend, postgres, qdrant, redis, kafka, ollama
+#   ^ the profile is required: without it ollama never starts and the worker
+#     crash-loops probing embedding dimensions. `make up` adds it for you.
 docker compose config --quiet             # validate before committing compose changes
 docker compose logs -f backend
 ```

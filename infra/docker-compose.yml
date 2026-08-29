@@ -11,7 +11,7 @@
 # Postgres  localhost:5432          (projects, users, refresh tokens)
 # Redis     localhost:6379          (rate limiting)
 # Kafka     localhost:9092          (ingestion job queue, M1)
-# Ollama    localhost:11434         (embeddings + answers; `ollama` profile, on by default)
+# Ollama    localhost:11434         (embeddings + answers; behind the `ollama` profile)
 #
 # `worker` runs the ingestion consumers (2 replicas, one per ingest partition) and
 # publishes no port — it is reached through Kafka, not over HTTP.
@@ -217,10 +217,17 @@ services:
       - "${OLLAMA_PORT:-11434}:11434"
     volumes:
       - ollama_models:/root/.ollama
-    # On by default in `make up` and `make infra`: the shipped EMBEDDING_PROVIDER and
-    # CHAT_PROVIDER are both `ollama`, and a default pointing at a service nobody
-    # started is a broken out-of-box experience. An instance on a hosted provider
-    # drops the profile.
+    # Behind a profile so an instance on a hosted embedding/chat provider does not
+    # run a container it has no use for.
+    #
+    # The Makefile enables it for you (`COMPOSE := docker compose … --profile ollama`),
+    # so `make up` and `make infra` just work. Invoking compose DIRECTLY does not:
+    # without `--profile ollama` this service never starts, and since the shipped
+    # EMBEDDING_BASE_URL points at it, the worker dies at startup probing embedding
+    # dimensions with "Name or service not known" and restart-loops. Run either
+    #   make up
+    # or
+    #   docker compose --profile ollama up --build
     #
     # No model is pre-pulled. `ollama` fetches on first use, so the first question
     # after a fresh `make up` waits on a multi-gigabyte download of CHAT_MODEL.

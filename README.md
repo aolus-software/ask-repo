@@ -197,7 +197,7 @@ bunx prettier --write .                           # format
 **Whole stack in Docker**
 
 ```bash
-docker compose -f infra/docker-compose.yml up --build
+docker compose -f infra/docker-compose.yml --profile ollama up --build
 docker compose -f infra/docker-compose.yml logs -f backend
 docker compose -f infra/docker-compose.yml down
 ```

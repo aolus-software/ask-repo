@@ -19,7 +19,8 @@ export function makeQueryClient(): QueryClient {
         // Retrying a 403 three times produces three identical failures and delays
         // the message the operator needs.
         retry: (failureCount, error) => {
-          if (isApiError(error) && error.status >= 400 && error.status < 500) return false;
+          if (isApiError(error) && error.status >= 400 && error.status < 500)
+            return false;
           return failureCount < 1;
         },
         refetchOnWindowFocus: true,
