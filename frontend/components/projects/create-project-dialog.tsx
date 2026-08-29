@@ -4,6 +4,7 @@ import { useState } from "react";
 import { toast } from "sonner";
 
 import { FormDialog } from "@/components/form/form-dialog";
+import { PasswordInput } from "@/components/form/password-input";
 import { Field, FieldDescription, FieldError, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { useCreateProject } from "@/hooks/use-project-mutations";
@@ -100,9 +101,8 @@ export function CreateProjectDialog({
 
       <Field>
         <FieldLabel htmlFor="pat">Access token</FieldLabel>
-        <Input
+        <PasswordInput
           id="pat"
-          type="password"
           autoComplete="off"
           value={values.pat}
           onChange={(event) => setValues({ ...values, pat: event.target.value })}

@@ -32,6 +32,7 @@ export function FormPage({
           variant="ghost"
           size="sm"
           className="mb-4"
+          nativeButton={false}
           render={<Link href={backHref} />}
         >
           <ArrowLeft className="size-4" />

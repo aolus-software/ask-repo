@@ -1,7 +1,7 @@
 "use client";
 
 import { Field, FieldDescription, FieldError, FieldLabel } from "@/components/ui/field";
-import { Input } from "@/components/ui/input";
+import { PasswordInput } from "@/components/form/password-input";
 import { fieldError } from "@/lib/api/errors";
 
 export interface ChangePasswordValues {
@@ -29,9 +29,8 @@ export function ChangePasswordFields({
         <FieldLabel htmlFor="currentPassword">
           Current password <span className="text-danger">*</span>
         </FieldLabel>
-        <Input
+        <PasswordInput
           id="currentPassword"
-          type="password"
           autoComplete="current-password"
           value={values.currentPassword}
           onChange={(event) =>
@@ -48,9 +47,8 @@ export function ChangePasswordFields({
         <FieldLabel htmlFor="newPassword">
           New password <span className="text-danger">*</span>
         </FieldLabel>
-        <Input
+        <PasswordInput
           id="newPassword"
-          type="password"
           autoComplete="new-password"
           value={values.newPassword}
           onChange={(event) => onChange({ ...values, newPassword: event.target.value })}

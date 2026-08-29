@@ -4,6 +4,7 @@ import { useState } from "react";
 import { toast } from "sonner";
 
 import { FormDialog } from "@/components/form/form-dialog";
+import { PasswordInput } from "@/components/form/password-input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Field, FieldDescription, FieldError, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
@@ -79,9 +80,8 @@ export function CreateUserDialog({
         <FieldLabel htmlFor="password">
           Temporary password <span className="text-danger">*</span>
         </FieldLabel>
-        <Input
+        <PasswordInput
           id="password"
-          type="password"
           autoComplete="new-password"
           value={values.password}
           onChange={(event) => setValues({ ...values, password: event.target.value })}

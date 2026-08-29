@@ -57,7 +57,10 @@ export function ProjectDetailScreen({ id }: { id: string }) {
         </div>
         <div className="flex items-center gap-2">
           {project.status === "ready" ? (
-            <Button render={<Link href={`/ask?projectId=${project.id}`} />}>
+            <Button
+              nativeButton={false}
+              render={<Link href={`/ask?projectId=${project.id}`} />}
+            >
               <MessagesSquare className="size-4" />
               Ask about this project
             </Button>

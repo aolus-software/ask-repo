@@ -73,7 +73,12 @@ export function DashboardScreen() {
         <Card>
           <CardHeader className="flex-row items-center justify-between">
             <CardTitle className="text-xl font-semibold">Recent projects</CardTitle>
-            <Button variant="ghost" size="sm" render={<Link href="/projects" />}>
+            <Button
+              variant="ghost"
+              size="sm"
+              nativeButton={false}
+              render={<Link href="/projects" />}
+            >
               View all
             </Button>
           </CardHeader>
@@ -86,7 +91,11 @@ export function DashboardScreen() {
               <div className="py-6 text-center">
                 <FolderGit2 className="text-muted-foreground mx-auto size-8" />
                 <p className="text-muted-foreground mt-2 text-base">No projects yet.</p>
-                <Button className="mt-3" render={<Link href="/projects" />}>
+                <Button
+                  className="mt-3"
+                  nativeButton={false}
+                  render={<Link href="/projects" />}
+                >
                   <Plus className="size-4" />
                   Add one
                 </Button>
@@ -111,7 +120,12 @@ export function DashboardScreen() {
             <CardTitle className="text-xl font-semibold">
               Your recent questions
             </CardTitle>
-            <Button variant="ghost" size="sm" render={<Link href="/ask" />}>
+            <Button
+              variant="ghost"
+              size="sm"
+              nativeButton={false}
+              render={<Link href="/ask" />}
+            >
               Ask
             </Button>
           </CardHeader>
@@ -126,7 +140,11 @@ export function DashboardScreen() {
                 <p className="text-muted-foreground mt-2 text-base">
                   Nothing asked yet.
                 </p>
-                <Button className="mt-3" render={<Link href="/ask" />}>
+                <Button
+                  className="mt-3"
+                  nativeButton={false}
+                  render={<Link href="/ask" />}
+                >
                   Ask a question
                 </Button>
               </div>

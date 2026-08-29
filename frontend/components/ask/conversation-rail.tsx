@@ -87,6 +87,7 @@ export function ConversationRail() {
           variant="ghost"
           size="icon"
           aria-label="New conversation"
+          nativeButton={false}
           render={<Link href="/ask" />}
         >
           <Plus className="size-4" />

@@ -4,8 +4,8 @@ import { useState } from "react";
 import { toast } from "sonner";
 
 import { FormDialog } from "@/components/form/form-dialog";
+import { PasswordInput } from "@/components/form/password-input";
 import { Field, FieldDescription, FieldError, FieldLabel } from "@/components/ui/field";
-import { Input } from "@/components/ui/input";
 import { useResetPassword } from "@/hooks/use-user-mutations";
 import { fieldError } from "@/lib/api/errors";
 import type { UserResponse } from "@/lib/api/types";
@@ -52,9 +52,8 @@ export function ResetPasswordDialog({
         <FieldLabel htmlFor="reset-password">
           Temporary password <span className="text-danger">*</span>
         </FieldLabel>
-        <Input
+        <PasswordInput
           id="reset-password"
-          type="password"
           autoComplete="new-password"
           value={newPassword}
           onChange={(event) => setNewPassword(event.target.value)}
