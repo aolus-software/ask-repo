@@ -14,10 +14,11 @@ from app.ingestion.errors import RetryableIngestionError
 from app.ingestion.vector_store import InMemoryVectorStore, VectorStore, VectorStoreFactory
 from app.models.project import ProjectStatus
 from app.queue.protocol import InMemoryIngestionQueue
+from app.repositories.conversation import ConversationRepository
 from app.repositories.project import ProjectRepository
 from app.schemas.project import ProjectCreateRequest
 from app.services.project import ProjectService
-from tests.factories import create_project, create_user
+from tests.factories import create_conversation, create_project, create_user
 
 
 def actor_for(user_id: uuid.UUID, *, is_admin: bool = False) -> AuthenticatedUser:
@@ -248,3 +249,71 @@ async def test_delete_reports_503_when_the_vector_store_is_unreachable(
 
     await db_session.rollback()
     assert await ProjectRepository(db_session).get(project_id) is not None
+
+
+async def test_deleting_a_project_soft_deletes_its_conversations(
+    db_session: AsyncSession,
+) -> None:
+    """docs/PRD.md §4.2. Without this, deleting a project leaves conversations
+    pointing at a project that no longer exists, and every one of them fails on the
+    next question.
+
+    Both owners' conversations go: the project was shared, so the conversations
+    against it belong to several people.
+    """
+    owner = await create_user(db_session)
+    colleague = await create_user(db_session)
+    project = await create_project(db_session, created_by=owner.id)
+    await create_conversation(db_session, user_id=owner.id, project_id=project.id)
+    await create_conversation(db_session, user_id=colleague.id, project_id=project.id)
+    survivor = await create_conversation(db_session, user_id=owner.id)
+    await db_session.commit()
+    queue = InMemoryIngestionQueue()
+
+    await service_for(db_session, queue).delete(project.id, actor=actor_for(owner.id))
+
+    repository = ConversationRepository(db_session)
+    for user in (owner, colleague):
+        _, total = await repository.list_page(
+            owner_id=user.id, page=1, limit=25, sort="updated_at", descending=True
+        )
+        assert total == (1 if user is owner else 0)
+    assert await repository.get_for_owner(survivor.id, owner.id) is not None
+
+
+async def test_a_failed_vector_delete_rolls_the_conversation_sweep_back(
+    db_session: AsyncSession,
+) -> None:
+    """The sweep runs before the Qdrant delete and inside the same transaction, so a
+    503 must leave the conversations visible rather than deleting them for a project
+    that is still there."""
+    owner = await create_user(db_session)
+    project = await create_project(db_session, created_by=owner.id)
+    project.embedding_collection = "code_chunks__ollama__nomic__768"
+    conversation = await create_conversation(db_session, user_id=owner.id, project_id=project.id)
+    await db_session.commit()
+    # Captured before the rollback below: a rolled-back session expires its
+    # instances, and reading an attribute afterwards would lazily reload it —
+    # a sync database call inside an async test.
+    conversation_id = conversation.id
+    owner_id = owner.id
+    queue = InMemoryIngestionQueue()
+
+    def unreachable_store(collection: str) -> VectorStore:
+        return _UnreachableStore()
+
+    with pytest.raises(AppError) as caught:
+        await service_for(db_session, queue, store_factory=unreachable_store).delete(
+            project.id, actor=actor_for(owner_id)
+        )
+
+    assert caught.value.status_code == 503
+    await db_session.rollback()
+    assert await ConversationRepository(db_session).get_for_owner(conversation_id, owner_id)
+
+
+class _UnreachableStore(InMemoryVectorStore):
+    """A vector store that is down."""
+
+    async def delete_project(self, project_id: uuid.UUID) -> None:
+        raise RetryableIngestionError("qdrant is unreachable")

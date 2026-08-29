@@ -22,6 +22,7 @@ from app.ingestion.vector_store import VectorStoreFactory
 from app.models.project import Project, ProjectStatus
 from app.queue.protocol import IngestionQueue
 from app.queue.topics import INGEST_TOPIC, IngestionMessage
+from app.repositories.conversation import ConversationRepository
 from app.repositories.project import ProjectRepository
 from app.schemas.pagination import ListQuery, PaginatedResponse
 from app.schemas.project import ProjectCreateRequest, ProjectResponse, ReindexResponse
@@ -52,6 +53,7 @@ class ProjectService:
         self.queue = queue
         self.store_factory = store_factory
         self._repository = ProjectRepository(session)
+        self._conversations = ConversationRepository(session)
 
     async def create(
         self, payload: ProjectCreateRequest, *, actor: AuthenticatedUser
@@ -158,6 +160,19 @@ class ProjectService:
         project = await self._require_readable(project_id, actor)
         self._require_destructive_rights(project, actor)
         await self._repository.soft_delete(project)
+
+        # docs/PRD.md §4.2: deleting a project soft-deletes the conversations against
+        # it. Not scoped by owner — the project was shared, so the conversations
+        # belong to several people and all of them go. Messages need no sweep: they
+        # carry no `deleted_at` and are reachable only through their conversation.
+        #
+        # Before the Qdrant call deliberately, so it shares that call's fate: nothing
+        # is committed until the vector delete succeeds, and a 503 therefore leaves
+        # the conversations visible rather than deleting them for a project that is
+        # still there.
+        swept = await self._conversations.soft_delete_for_project(project.id)
+        if swept:
+            logger.info("Soft-deleted %d conversation(s) with project %s", swept, project.id)
 
         if project.embedding_collection:
             store = self.store_factory(project.embedding_collection)
