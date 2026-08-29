@@ -8,12 +8,15 @@
 #
 # Targets are grouped: setup, infra (datastores), dev, quality, docker, clean.
 
-COMPOSE := docker compose -f infra/docker-compose.yml
+# The ollama profile is on by default: the shipped EMBEDDING_PROVIDER is `ollama`,
+# so a stack without it has a default pointing at nothing. An instance on a hosted
+# embedding provider can override this to a bare `docker compose`.
+COMPOSE := docker compose -f infra/docker-compose.yml --profile ollama
 BACKEND  := backend
 FRONTEND := frontend
 
 # Datastore services — the ones you run in Docker while developing the apps locally.
-DATASTORES := postgres qdrant redis kafka
+DATASTORES := postgres qdrant redis kafka ollama
 
 .DEFAULT_GOAL := help
 .PHONY: help setup setup-backend setup-frontend \
@@ -49,9 +52,9 @@ setup-frontend: ## Install frontend dependencies
 
 ## ─── Datastores ────────────────────────────────────────────────────────────
 
-infra: ## Start postgres + qdrant + redis + kafka (detached), wait until healthy
+infra: ## Start postgres + qdrant + redis + kafka + ollama (detached), wait until healthy
 	$(COMPOSE) up -d --wait $(DATASTORES)
-	@echo "postgres :5432   qdrant :6333   redis :6379   kafka :9092"
+	@echo "postgres :5432   qdrant :6333   redis :6379   kafka :9092   ollama :11434"
 
 infra-stop: ## Stop the datastores, keep their data
 	$(COMPOSE) stop $(DATASTORES)
