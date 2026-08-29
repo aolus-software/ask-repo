@@ -11,7 +11,7 @@ import uuid
 from datetime import UTC, datetime
 from typing import Any, cast
 
-from sqlalchemy import update
+from sqlalchemy import update, delete, or_
 from sqlalchemy.engine import CursorResult
 
 from app.models.refresh_token import RefreshToken, RevokedReason
@@ -106,3 +106,19 @@ class RefreshTokenRepository(BaseRepository[RefreshToken]):
             statement.values(revoked_at=datetime.now(UTC), revoked_reason=reason)
         )
         return cast(CursorResult[Any], result).rowcount
+
+    async def delete_expired_and_revoked(self) -> int:
+        """Hard-delete dead refresh tokens. Returns how many went.
+
+        `refresh_tokens` is the documented exception to soft delete
+        (`docs/PRD.md` §5.1): its lifecycle is `revoked_at` / `expires_at`, and these
+        rows are genuinely finished.
+        """
+        now = datetime.now(UTC)
+        result = await self.session.execute(
+            delete(RefreshToken).where(
+                or_(RefreshToken.expires_at < now, RefreshToken.revoked_at.is_not(None))
+            )
+        )
+        return result.rowcount
+
