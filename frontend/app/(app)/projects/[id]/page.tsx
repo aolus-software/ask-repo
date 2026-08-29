@@ -5,7 +5,7 @@ import { endpoints } from "@/lib/api/endpoints";
 import { serverFetch } from "@/lib/api/server";
 import type { ProjectResponse } from "@/lib/api/types";
 import { keys } from "@/lib/query/keys";
-import { makeQueryClient } from "@/lib/query/provider";
+import { makeQueryClient } from "@/lib/query/client";
 
 /** params is async in Next 16 and is always awaited. */
 export default async function ProjectDetailPage({

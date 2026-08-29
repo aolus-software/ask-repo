@@ -6,7 +6,7 @@ import { SORT, endpoints, listQueryString } from "@/lib/api/endpoints";
 import { serverFetch } from "@/lib/api/server";
 import type { ListParams, PaginatedResponse, ProjectResponse } from "@/lib/api/types";
 import { keys } from "@/lib/query/keys";
-import { makeQueryClient } from "@/lib/query/provider";
+import { makeQueryClient } from "@/lib/query/client";
 
 /**
  * Prefetches the EXACT key the client screen will use, so the first paint has data
