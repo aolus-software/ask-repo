@@ -52,3 +52,22 @@ def resolve_project_scope(user: AuthenticatedUser) -> ProjectScope:
     Phase 2 replaces this body with a membership lookup. Nothing that calls it changes.
     """
     return ProjectScope.all()
+
+
+def resolve_conversation_owner(user: AuthenticatedUser) -> uuid.UUID:
+    """Whose conversations this caller may read. Phase 1: only their own.
+
+    The counterpart to `resolve_project_scope`, and deliberately in the same file so
+    the contrast is visible rather than folklore: projects are shared instance-wide,
+    conversations are private to one user.
+
+    `is_admin` is **not** consulted. It gates destructive operations on *shared*
+    resources; conversations are not shared, and `docs/PRD.md` §4.2 states their
+    privacy to users without qualification. An administrator who could read a
+    colleague's conversation would make that statement false.
+
+    `docs/PRD.md` §4.2 lists sharing a conversation as out of scope *for v1*, which
+    marks it as a change someone will eventually make. This is the one body they
+    change.
+    """
+    return user.id

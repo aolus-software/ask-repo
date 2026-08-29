@@ -7,9 +7,10 @@ suite that passes on SQLite while production breaks is worse than no suite.
 `make infra` must be running. See CONTRIBUTING.md.
 """
 
+import asyncio
 import subprocess
 import uuid
-from collections.abc import AsyncIterator, Iterator
+from collections.abc import AsyncIterator, Callable, Iterator
 from pathlib import Path
 
 import asyncpg
@@ -23,8 +24,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import get_settings
 from app.core.security import create_access_token, hash_password
 from app.db.session import get_sessionmaker, reset_engine
+from app.ingestion.embedder import FakeEmbedder
+from app.ingestion.vector_store import InMemoryVectorStore
 from app.models import Base, User
 from app.queue.protocol import InMemoryIngestionQueue
+from app.rag.answerer import Answerer
+from app.rag.retriever import CodeRetriever
+from tests.fakes import ScriptedChatModel
 
 BACKEND_ROOT = Path(__file__).resolve().parent.parent
 TEST_DB_NAME = "askrepo_test"
@@ -152,13 +158,75 @@ def ingestion_queue() -> InMemoryIngestionQueue:
 
 
 @pytest.fixture
-def app_with_queue(ingestion_queue: InMemoryIngestionQueue) -> FastAPI:
-    """The app with the broker replaced, so route tests need no Kafka."""
-    from app.api.routes.projects import get_ingestion_queue
+def vector_store() -> InMemoryVectorStore:
+    """The store every conversation test retrieves from. Seed it, then ask."""
+    return InMemoryVectorStore(dimensions=8)
+
+
+@pytest.fixture
+def chat_model() -> ScriptedChatModel:
+    """The answering model every conversation test streams from.
+
+    Its answer cites `[1]` and names only a retrieved path on purpose: an uncited or
+    unrecognised-path answer would trip a grounding warning in every route test and
+    bury the real ones.
+    """
+    return ScriptedChatModel(
+        tokens=["Validation lives in ", "[1]", " app/core/repo_url.py."],
+        invoke_result="How is the repository URL validated?",
+    )
+
+
+def _fake_answerer_factory(
+    store: InMemoryVectorStore, chat_model: ScriptedChatModel
+) -> Callable[[str], Answerer]:
+    """Ignores the collection name — the in-memory store is the only one there is.
+
+    No `min_score`: `FakeEmbedder` derives its vectors from text length and carries
+    no semantic meaning, so a relevance floor over them would admit or reject chunks
+    at random. The floor is exercised in `tests/test_retriever.py` with an embedder
+    built for it.
+    """
+
+    def answerer_for(collection: str) -> Answerer:
+        return Answerer(
+            retriever=CodeRetriever(
+                store=store, embedder=FakeEmbedder(dimensions=8), top_k=12, max_chars=24_000
+            ),
+            chat_model=chat_model,
+            model_id="test-model",
+            semaphore=asyncio.Semaphore(2),
+            timeout_seconds=30,
+        )
+
+    return answerer_for
+
+
+@pytest.fixture
+def app_with_queue(
+    ingestion_queue: InMemoryIngestionQueue,
+    vector_store: InMemoryVectorStore,
+    chat_model: ScriptedChatModel,
+) -> FastAPI:
+    """The app with every out-of-process dependency replaced — broker, vector store,
+    embedder, and chat model — so route tests need no Kafka, no Qdrant, no Ollama.
+
+    The name is understated for historical reasons: it replaced only the broker when
+    M1 shipped it.
+    """
+    from app.api.routes.conversations import get_answerer_factory
+    from app.api.routes.projects import get_ingestion_queue, get_store_factory
     from app.main import create_app
 
     application = create_app()
     application.dependency_overrides[get_ingestion_queue] = lambda: ingestion_queue
+    application.dependency_overrides[get_answerer_factory] = lambda: _fake_answerer_factory(
+        vector_store, chat_model
+    )
+    # The delete path is the only route that reaches the vector store. Without this
+    # override, deleting an indexed project opens a real Qdrant connection and fails
+    # with 503 against a collection the fake never created.
+    application.dependency_overrides[get_store_factory] = lambda: lambda collection: vector_store
     return application
 
 

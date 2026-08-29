@@ -11,13 +11,16 @@ network.
 Built as a learning project for RAG, LangChain/LangGraph, prompt engineering, and context
 management — against real repositories rather than tutorial data.
 
-> **Status: M0 and M1 shipped (backend).** Auth & accounts are implemented —
+> **Status: M0, M1 and M2 shipped (backend).** Auth & accounts are implemented —
 > admin-provisioned users, login, forced first-login password change, and login rate
 > limiting — as are the project routes and the whole ingestion pipeline: clone, walk,
 > chunk, embed, Qdrant, driven by a Kafka job queue and a separate worker process.
 > `POST /projects` enqueues a repository and a worker indexes it in the background.
-> The frontend is still scaffolding. See [Roadmap](#roadmap) for what lands when, and
-> [`docs/PRD.md`](docs/PRD.md) for the full specification.
+> M2 added Dev Knowledge: ask a question about a ready project and the answer streams
+> back token by token over Server-Sent Events, cited to real files and line ranges,
+> with conversations private to whoever had them. There is no LangGraph yet — that is
+> M3. The frontend is still scaffolding. See [Roadmap](#roadmap) for what lands when,
+> and [`docs/PRD.md`](docs/PRD.md) for the full specification.
 
 ## Features (planned)
 
@@ -205,7 +208,7 @@ Milestones from [`docs/PRD.md`](docs/PRD.md) §6, built in order:
 
 - [x] **M0** — Auth & accounts: admin-provisioned users, login, forced first-login password change, rate limiting
 - [x] **M1** — Project ingestion: clone + index, status tracking, re-index, Kafka job queue
-- [ ] **M2** — Dev Knowledge: RAG Q&A against a ready project, private conversations
+- [x] **M2** — Dev Knowledge: streaming RAG Q&A against a ready project, private conversations
 - [ ] **M3** — LangGraph: intent routing + self-critique loop
 - [ ] **M4** — QA List: shared storage, save / view / filter / re-run
 - [ ] **M5** — Mock Data Generator: synthetic Q&A + eval scoring

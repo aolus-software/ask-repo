@@ -117,3 +117,27 @@ async def test_downgrade_then_upgrade_is_clean() -> None:
     """A migration that cannot be reversed cannot be iterated on safely."""
     for args in (["downgrade", "base"], ["upgrade", "head"]):
         subprocess.run(["uv", "run", "alembic", *args], cwd=BACKEND_ROOT, check=True)
+
+
+async def test_conversations_and_messages_exist_with_the_right_delete_semantics(
+    db_session: AsyncSession,
+) -> None:
+    """`conversations` soft-deletes; `messages` deliberately does not.
+
+    A message is created by one turn of one conversation and reachable only
+    through it, so its deletion is entirely expressed by the parent's
+    `deleted_at`. A column here would be a second state nothing ever sets —
+    the same argument docs/PRD.md §5.1 already makes for refresh_tokens.
+    """
+    columns = await db_session.execute(
+        text(
+            "SELECT table_name, column_name FROM information_schema.columns "
+            "WHERE table_name IN ('conversations', 'messages')"
+        )
+    )
+    found = {(row.table_name, row.column_name) for row in columns}
+
+    assert ("conversations", "deleted_at") in found
+    assert ("messages", "deleted_at") not in found
+    assert ("messages", "finish_reason") in found
+    assert ("messages", "citations") in found

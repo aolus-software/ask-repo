@@ -39,6 +39,19 @@ def chunk(index: int = 0, path: str = "app/main.py") -> Chunk:
     )
 
 
+def _chunk(path: str, index: int, start: int, end: int) -> Chunk:
+    """A chunk whose text is its own line numbers, so merges are readable."""
+    return Chunk(
+        file_path=path,
+        start_line=start,
+        end_line=end,
+        language="python",
+        symbol=None,
+        chunk_index=index,
+        text="\n".join(f"line {number}" for number in range(start, end + 1)),
+    )
+
+
 def test_collection_name_encodes_provider_model_and_dimensions() -> None:
     """A collection's vector size is fixed at creation, so switching provider must
     target a different collection rather than corrupt the existing one."""
@@ -399,3 +412,60 @@ async def test_a_matching_width_is_accepted_and_indexes_both_filtered_fields() -
     client = store._client
     assert isinstance(client, WidthReportingClient)
     assert client.created_indexes == ["project_id", "generation"]
+
+
+async def test_search_filters_by_project_and_generation() -> None:
+    """Both filters, always.
+
+    Mid-reindex, generations N and N+1 coexist in the collection by design. An
+    unfiltered search returns a mix of two index generations of the same repo:
+    every chunk is real, so nothing errors, but the line ranges in the citations
+    come from two different commits and roughly half point at the wrong lines.
+    """
+    store = InMemoryVectorStore(dimensions=3)
+    wanted = uuid.uuid4()
+    other = uuid.uuid4()
+
+    await store.upsert(
+        project_id=wanted,
+        generation=2,
+        chunks=[_chunk("app/a.py", 0, 1, 5)],
+        vectors=[[1.0, 0.0, 0.0]],
+        commit_sha="aaa",
+    )
+    await store.upsert(
+        project_id=wanted,
+        generation=1,
+        chunks=[_chunk("app/old.py", 0, 1, 5)],
+        vectors=[[1.0, 0.0, 0.0]],
+        commit_sha="bbb",
+    )
+    await store.upsert(
+        project_id=other,
+        generation=2,
+        chunks=[_chunk("app/elsewhere.py", 0, 1, 5)],
+        vectors=[[1.0, 0.0, 0.0]],
+        commit_sha="ccc",
+    )
+
+    hits = await store.search(project_id=wanted, generation=2, vector=[1.0, 0.0, 0.0], limit=10)
+
+    assert [hit.payload["file_path"] for hit in hits] == ["app/a.py"]
+
+
+async def test_search_returns_the_closest_first_and_honours_the_limit() -> None:
+    store = InMemoryVectorStore(dimensions=3)
+    project = uuid.uuid4()
+    await store.upsert(
+        project_id=project,
+        generation=0,
+        chunks=[_chunk("far.py", 0, 1, 5), _chunk("near.py", 0, 1, 5)],
+        vectors=[[0.0, 1.0, 0.0], [1.0, 0.0, 0.0]],
+        commit_sha="aaa",
+    )
+
+    hits = await store.search(project_id=project, generation=0, vector=[1.0, 0.0, 0.0], limit=1)
+
+    assert len(hits) == 1
+    assert hits[0].payload["file_path"] == "near.py"
+    assert hits[0].score > 0.9

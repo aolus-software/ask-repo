@@ -118,3 +118,27 @@ def test_resource_limits_reject_zero(build: Callable[[], Settings]) -> None:
     """
     with pytest.raises(ValidationError):
         build()
+
+
+def test_m2_retrieval_bounds_reject_zero() -> None:
+    """A zero here does not fail loudly — it retrieves nothing and the model
+    answers from its training data in a confident tone. Fail at startup instead."""
+    with pytest.raises(ValidationError):
+        Settings(rag_top_k=0)
+    with pytest.raises(ValidationError):
+        Settings(chat_max_concurrency=0)
+    with pytest.raises(ValidationError):
+        Settings(chat_timeout_seconds=0)
+
+
+def test_history_turns_may_be_zero() -> None:
+    """Unlike the others, zero is a meaningful setting: it disables multi-turn."""
+    assert Settings(rag_history_turns=0).rag_history_turns == 0
+
+
+def test_chat_defaults_match_the_prd_stack_table() -> None:
+    settings = Settings()
+
+    assert settings.chat_provider == "ollama"
+    assert settings.chat_model == "qwen2.5-coder:14b"
+    assert settings.rag_top_k == 12

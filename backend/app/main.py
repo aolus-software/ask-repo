@@ -1,5 +1,6 @@
 """FastAPI application factory."""
 
+import asyncio
 import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
@@ -7,29 +8,45 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.routes import auth, health, index, projects, users
+from app.api.routes import auth, conversations, health, index, projects, users
 from app.config import get_settings
 from app.core.errors import register_exception_handlers
 from app.core.middleware import AuthContextMiddleware
+from app.ingestion.embedder import build_embedder
 from app.queue.producer import KafkaIngestionQueue, ensure_topics
+from app.rag.chat import build_chat_model
 
 logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-    """Own the Kafka producer's lifetime.
+    """Own the process-wide dependencies: the Kafka producer, and M2's RAG objects.
 
-    The queue lands on `app.state.ingestion_queue` rather than in a module global,
-    because that is where `get_ingestion_queue` (app/api/routes/projects.py) reads it
-    and it is what lets tests override the dependency without opening a socket.
+    They land on `app.state` rather than in module globals, because that is where the
+    route dependencies read them (`get_ingestion_queue`, `get_embedder`,
+    `get_chat_model`, `get_answer_semaphore`) and it is what lets tests override them
+    without opening a socket.
 
-    The `APP_ENV=test` guard is deliberately the first thing here, ahead of anything
-    that could touch a socket. The suite builds the real app and there is no broker
-    in the test environment: an unguarded start blocks on the bootstrap address
-    rather than failing, so the suite would hang rather than report.
+    The `APP_ENV=test` guard is deliberately the first thing that could touch a
+    socket. The suite builds the real app and there is no broker in the test
+    environment: an unguarded start blocks on the bootstrap address rather than
+    failing, so the suite would hang rather than report. The RAG objects are built
+    above it because constructing them opens no connection — `build_embedder` and
+    `build_chat_model` only configure a client — and the suite needs them present.
     """
     settings = get_settings()
+
+    # Built before the test guard below: constructing these opens no socket, and the
+    # suite builds the real app, so the conversation dependencies must find them on
+    # app.state even when the broker is skipped.
+    app.state.embedder = build_embedder(settings)
+    app.state.chat_model = build_chat_model(settings)
+    # One permit pool for the whole process. Ollama serialises inference internally,
+    # so uncapped concurrency makes every answer slower rather than the queue shorter
+    # (`docs/PRD.md` §9).
+    app.state.answer_semaphore = asyncio.Semaphore(settings.chat_max_concurrency)
+
     if settings.app_env == "test":
         logger.debug("APP_ENV=test: skipping the Kafka producer")
         yield
@@ -82,6 +99,7 @@ def create_app() -> FastAPI:
     app.include_router(auth.router)
     app.include_router(users.router)
     app.include_router(projects.router)
+    app.include_router(conversations.router)
 
     return app
 

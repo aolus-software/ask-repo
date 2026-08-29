@@ -12,17 +12,23 @@ organization runs one instance on its own internal network.
 the security model. It outranks every other doc and outranks the code. When code and the PRD
 disagree, that is a contradiction to report — not a doc to quietly rewrite.
 
-**Status: M0 and M1 (backend) shipped.** The backend serves an index route, health checks, the
-full auth/accounts surface (admin-provisioned users, login, forced first-login password change,
-session rotation, login rate limiting), and the project CRUD routes. **All four datastores are
-read** — Postgres, Redis, Qdrant, and Kafka.
+**Status: M0, M1 and M2 (backend) shipped.** The backend serves an index route, health checks,
+the full auth/accounts surface (admin-provisioned users, login, forced first-login password
+change, session rotation, login rate limiting), the project CRUD routes, and the conversation
+routes that answer questions about an indexed project. **All four datastores are read** —
+Postgres, Redis, Qdrant, and Kafka.
 
 M1 is complete end to end. `app/ingestion/` holds the cloner, walker, chunker, embedder adapter,
 Qdrant vector store, and `IngestionPipeline`; `app/queue/` holds the message format, topics, both
 protocols, `KafkaIngestionQueue`, `IngestionConsumer`, and the delayed-retry `RetryConsumer`; and
 `app/worker.py` is the separate process that runs them, plus the reconcile sweep that recovers
 jobs the broker never received. `POST /projects` publishes a job and a worker picks it up.
-There is still no RAG — that is M2.
+
+M2 is complete too. `app/rag/` holds the retriever, the chat-model adapter, the prompts, the
+`Answerer` that sequences rewrite → retrieve → generate, and the grounding guardrails;
+`app/services/conversation.py` and `app/api/routes/conversations.py` put it behind five routes.
+`POST /conversations/{id}/messages` streams the answer over Server-Sent Events. **There is no
+LangGraph yet** — the answerer is a plain sequence, and M3 replaces that one file with a graph.
 
 The frontend has not moved: it is still the landing page from scaffolding, with no API client
 and no auth screens. Do not assume a module exists because the PRD describes it — the PRD
@@ -107,8 +113,11 @@ translation happens in exactly one class — `ApiModel` in `app/schemas/base.py`
 Pydantic's `to_camel` alias generator. Every request and response schema inherits it.
 
 A schema on plain `BaseModel` silently ships `snake_case` keys. That is a defect, not a style
-choice, and `tests/test_api_model.py` exists to catch it — no route shipped so far has a
-multi-word field, so nothing else would.
+choice, and `tests/test_api_model.py` exists to catch it. It matters most for the **SSE event
+payloads** in `app/schemas/conversation.py`: those never pass through a `response_model`, so
+FastAPI validates nothing about them, and the `SSE_EVENT_MODELS` tuple that test walks is the
+only thing holding them to the rule. An event added to the stream but not to the tuple ships
+unchecked.
 
 ### Access: shared now, per-project later
 
@@ -240,7 +249,7 @@ map keyed by the `camelCase` field name.
 
 ## Rules
 
-Eleven rule files in `.claude/rules/`. Read the ones your change touches.
+Twelve rule files in `.claude/rules/`. Read the ones your change touches.
 
 | Rule | Read it when |
 | --- | --- |
@@ -251,6 +260,7 @@ Eleven rule files in `.claude/rules/`. Read the ones your change touches.
 | `router.md` | Any `APIRouter` — layout, dependencies, the CRUD shape, access scoping |
 | `persistence.md` | Any model, repository, migration, or session code |
 | `ingestion.md` | Anything under `app/ingestion/` or `app/queue/` — leases, pausing, error classes, collections |
+| `rag.md` | Anything under `app/rag/`, or the conversation service/routes — generation filters, grounding, the SSE contract, the shielded write |
 | `design-system.md` | Any `.tsx` or `.css` — tokens, shadcn, dark mode, spacing |
 | `forms.md` | Any form — dialog vs page, validation ownership, field composition |
 | `navigation.md` | Sidebar, breadcrumbs, or adding a route |

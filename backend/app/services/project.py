@@ -6,7 +6,6 @@ and `delete` cannot drift apart (`.claude/rules/router.md`).
 
 import logging
 import uuid
-from collections.abc import Callable
 from urllib.parse import urlsplit
 
 from fastapi import status
@@ -19,10 +18,11 @@ from app.core.errors import AppError, ErrorCode
 from app.core.middleware import AuthenticatedUser
 from app.core.repo_url import RepoUrlRejected, validate_repo_url
 from app.ingestion.errors import IngestionError
-from app.ingestion.vector_store import VectorStore
+from app.ingestion.vector_store import VectorStoreFactory
 from app.models.project import Project, ProjectStatus
 from app.queue.protocol import IngestionQueue
 from app.queue.topics import INGEST_TOPIC, IngestionMessage
+from app.repositories.conversation import ConversationRepository
 from app.repositories.project import ProjectRepository
 from app.schemas.pagination import ListQuery, PaginatedResponse
 from app.schemas.project import ProjectCreateRequest, ProjectResponse, ReindexResponse
@@ -30,15 +30,6 @@ from app.schemas.project import ProjectCreateRequest, ProjectResponse, ReindexRe
 logger = logging.getLogger(__name__)
 
 DEFAULT_SORT = "created_at"
-
-VectorStoreFactory = Callable[[str], VectorStore]
-"""Collection name in, a store for that collection out.
-
-A factory rather than one pre-built store, because the only honest source of a
-collection's vector width is the startup probe (spec §6.3) and a request handler has
-no probed width to build a store with. Deleting a project therefore has to target the
-collection the project itself recorded, which is only known once its row is loaded.
-"""
 
 # A run is in flight in these states, so a second trigger is a no-op.
 BUSY_STATUSES = frozenset(
@@ -62,6 +53,7 @@ class ProjectService:
         self.queue = queue
         self.store_factory = store_factory
         self._repository = ProjectRepository(session)
+        self._conversations = ConversationRepository(session)
 
     async def create(
         self, payload: ProjectCreateRequest, *, actor: AuthenticatedUser
@@ -168,6 +160,19 @@ class ProjectService:
         project = await self._require_readable(project_id, actor)
         self._require_destructive_rights(project, actor)
         await self._repository.soft_delete(project)
+
+        # docs/PRD.md §4.2: deleting a project soft-deletes the conversations against
+        # it. Not scoped by owner — the project was shared, so the conversations
+        # belong to several people and all of them go. Messages need no sweep: they
+        # carry no `deleted_at` and are reachable only through their conversation.
+        #
+        # Before the Qdrant call deliberately, so it shares that call's fate: nothing
+        # is committed until the vector delete succeeds, and a 503 therefore leaves
+        # the conversations visible rather than deleting them for a project that is
+        # still there.
+        swept = await self._conversations.soft_delete_for_project(project.id)
+        if swept:
+            logger.info("Soft-deleted %d conversation(s) with project %s", swept, project.id)
 
         if project.embedding_collection:
             store = self.store_factory(project.embedding_collection)

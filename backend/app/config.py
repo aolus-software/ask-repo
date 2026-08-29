@@ -101,6 +101,34 @@ class Settings(BaseSettings):
     chunk_overlap: int = 150
     max_indexed_file_bytes: int = Field(default=1_048_576, ge=1)
 
+    # Chat model — the answering LLM (docs/PRD.md §5). Separate from the embedding
+    # provider on purpose: the two are different models with different endpoints,
+    # and an instance commonly runs a local embedder with a hosted answerer.
+    chat_provider: Literal["ollama", "openai"] = "ollama"
+    chat_model: str = "qwen2.5-coder:14b"
+    chat_base_url: str = "http://localhost:11434"
+    chat_api_key: str | None = None
+    # Low but not zero: code answers should be reproducible, not creative.
+    chat_temperature: float = Field(default=0.1, ge=0.0, le=2.0)
+    chat_timeout_seconds: int = Field(default=180, ge=1)
+    # Ollama serialises inference internally, so uncapped concurrency does not make
+    # answers arrive faster — it makes every answer slower and can exhaust a box
+    # already running Postgres, Qdrant, Redis and Kafka (docs/PRD.md §9).
+    chat_max_concurrency: int = Field(default=2, ge=1)
+
+    # Retrieval. Every bound is `ge=`-guarded for the same reason
+    # `embedding_batch_size` is: a zero does not fail, it silently sends an empty
+    # context and the model answers from memory in the same confident tone.
+    rag_top_k: int = Field(default=12, ge=1)
+    rag_context_max_chars: int = Field(default=24_000, ge=1000)
+    # Zero is legitimate here — it disables multi-turn memory entirely.
+    rag_history_turns: int = Field(default=6, ge=0)
+    # Cosine similarity a chunk must reach to be shown to the model at all. Below
+    # this the embedder is saying "unrelated", and answering from unrelated code is
+    # how a fluent, confident, entirely wrong answer gets produced. 0.0 disables the
+    # floor; raise it if answers cite plausible-looking but irrelevant files.
+    rag_min_score: float = Field(default=0.25, ge=0.0, le=1.0)
+
     # Encrypts stored PATs at rest (docs/PRD.md §9). Backed up separately from
     # the database — a backup holding both is plaintext storage with extra steps.
     pat_encryption_key: str = PLACEHOLDER_PAT_KEY

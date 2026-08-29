@@ -28,6 +28,8 @@ does and doesn't cover.
   shouldn't be able to.
 - Leakage of one user's private conversations to another.
 - Secrets appearing in logs, tracebacks, or API responses.
+- Prompt injection through indexed repository content — mitigated, not eliminated; see the
+  operator note below.
 
 **Out of scope:**
 
@@ -77,6 +79,18 @@ A few properties are your responsibility, not the code's:
   dev configuration — the Kafka listener is `PLAINTEXT` and anyone who can reach it can
   publish ingestion jobs, which means making the instance clone an arbitrary URL, or read
   the job stream. Kafka must never be reachable beyond the internal network.
+- **An indexed repository can influence what the assistant says about it.** Repository
+  content is fed to a language model when someone asks a question, so a file containing text
+  shaped like an instruction — "ignore previous instructions", an imitation system prompt —
+  is an input the model may act on. The prompt marks that content as data rather than
+  instructions, which helps but is not a guarantee: this class of defence is probabilistic.
+
+  What limits the damage is that the answering model has no tools, no write access, and no
+  network reach. It can be made to *say* something wrong; it cannot be made to *do* anything.
+  Two practical consequences: keep `REPO_HOST_ALLOWLIST` tight so only repositories you
+  intend can be indexed, and treat an answer about a repository you do not control as
+  untrusted output rather than an authoritative statement about the code.
+
 - **Ollama runs no auth either.** It is an embedding backend on the internal network; treat
   reaching it as equivalent to reaching the worker. If you point `EMBEDDING_PROVIDER` at a
   hosted API instead, `EMBEDDING_API_KEY` becomes a secret to manage like the others.

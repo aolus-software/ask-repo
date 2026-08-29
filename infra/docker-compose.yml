@@ -11,7 +11,7 @@
 # Postgres  localhost:5432          (projects, users, refresh tokens)
 # Redis     localhost:6379          (rate limiting)
 # Kafka     localhost:9092          (ingestion job queue, M1)
-# Ollama    localhost:11434         (embeddings; `ollama` profile, on by default)
+# Ollama    localhost:11434         (embeddings + answers; `ollama` profile, on by default)
 #
 # `worker` runs the ingestion consumers (2 replicas, one per ingest partition) and
 # publishes no port — it is reached through Kafka, not over HTTP.
@@ -34,6 +34,16 @@ x-app-env: &app-env
   # Encrypts stored PATs at rest. The API writes them and the worker reads them, so
   # a mismatch here is a clone that fails with a decryption error, not a warning.
   PAT_ENCRYPTION_KEY: ${PAT_ENCRYPTION_KEY:-dev-insecure-change-me}
+  # Shared, not worker-only: the worker embeds documents at index time and the API
+  # embeds the question at query time. They must agree, because the collection name
+  # is derived from provider + model + width — disagree and the API searches a
+  # collection the worker never wrote to.
+  EMBEDDING_PROVIDER: ${EMBEDDING_PROVIDER:-ollama}
+  EMBEDDING_MODEL: ${EMBEDDING_MODEL:-nomic-embed-text}
+  # Points at the `ollama` service below. `localhost:11434` inside a container is
+  # that container, not the model server.
+  EMBEDDING_BASE_URL: ${EMBEDDING_BASE_URL:-http://ollama:11434}
+  EMBEDDING_API_KEY: ${EMBEDDING_API_KEY:-}
 
 services:
   postgres:
@@ -146,6 +156,12 @@ services:
       BOOTSTRAP_ADMIN_PASSWORD: ${BOOTSTRAP_ADMIN_PASSWORD}
       # Nothing sits in front of the API in the dev stack, so trust the socket address.
       TRUSTED_PROXY_HOPS: ${TRUSTED_PROXY_HOPS:-0}
+      # API-only: the worker indexes, it never answers a question. Same reasoning as
+      # EMBEDDING_BASE_URL for the host — `localhost` here is this container.
+      CHAT_PROVIDER: ${CHAT_PROVIDER:-ollama}
+      CHAT_MODEL: ${CHAT_MODEL:-qwen2.5-coder:14b}
+      CHAT_BASE_URL: ${CHAT_BASE_URL:-http://ollama:11434}
+      CHAT_API_KEY: ${CHAT_API_KEY:-}
     volumes:
       # Source bind-mount for hot reload. The venv lives in /opt/venv, so it survives.
       - ../backend:/app
@@ -181,11 +197,6 @@ services:
       replicas: 2
     environment:
       <<: *app-env
-      # Points at the `ollama` service below, matching EMBEDDING_PROVIDER's default.
-      EMBEDDING_PROVIDER: ${EMBEDDING_PROVIDER:-ollama}
-      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-nomic-embed-text}
-      EMBEDDING_BASE_URL: ${EMBEDDING_BASE_URL:-http://ollama:11434}
-      EMBEDDING_API_KEY: ${EMBEDDING_API_KEY:-}
     volumes:
       - ../backend:/app
       # Scratch, deliberately not a named volume: the working copy is deleted after
@@ -206,9 +217,16 @@ services:
       - "${OLLAMA_PORT:-11434}:11434"
     volumes:
       - ollama_models:/root/.ollama
-    # On by default in `make up` and `make infra`: the shipped EMBEDDING_PROVIDER is
-    # `ollama`, and a default pointing at a service nobody started is a broken
-    # out-of-box experience. An instance on a hosted provider drops the profile.
+    # On by default in `make up` and `make infra`: the shipped EMBEDDING_PROVIDER and
+    # CHAT_PROVIDER are both `ollama`, and a default pointing at a service nobody
+    # started is a broken out-of-box experience. An instance on a hosted provider
+    # drops the profile.
+    #
+    # No model is pre-pulled. `ollama` fetches on first use, so the first question
+    # after a fresh `make up` waits on a multi-gigabyte download of CHAT_MODEL.
+    # Pull ahead of time with:
+    #   docker compose exec ollama ollama pull qwen2.5-coder:14b
+    #   docker compose exec ollama ollama pull nomic-embed-text
     profiles: ["ollama"]
 
   frontend:
