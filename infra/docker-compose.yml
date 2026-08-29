@@ -8,9 +8,32 @@
 # Frontend  http://localhost:3000
 # API       http://localhost:8000   (docs at /docs)
 # Qdrant    http://localhost:6333/dashboard
-# Redis     localhost:6379          (rate limiting at M0, job queue at M1)
+# Postgres  localhost:5432          (projects, users, refresh tokens)
+# Redis     localhost:6379          (rate limiting)
+# Kafka     localhost:9092          (ingestion job queue, M1)
+# Ollama    localhost:11434         (embeddings; `ollama` profile, on by default)
+#
+# `worker` runs the ingestion consumers (2 replicas, one per ingest partition) and
+# publishes no port — it is reached through Kafka, not over HTTP.
 
 name: askrepo
+
+# Shared by `backend` and `worker`. They run the same image from the same build and
+# must agree on every datastore and secret — the worker writes the vectors the API
+# deletes, and reads the PATs the API encrypted. Two hand-maintained copies of this
+# block would drift, and the first symptom would be a worker that cannot decrypt.
+x-app-env: &app-env
+  APP_ENV: ${APP_ENV:-development}
+  DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-askrepo}:${POSTGRES_PASSWORD:-askrepo}@postgres:5432/${POSTGRES_DB:-askrepo}
+  QDRANT_URL: http://qdrant:6333
+  REDIS_URL: redis://redis:6379/0
+  # The in-network listener, not the host-published one: `localhost:9092` inside
+  # this container is this container.
+  KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+  SECRET_KEY: ${SECRET_KEY:-dev-insecure-change-me}
+  # Encrypts stored PATs at rest. The API writes them and the worker reads them, so
+  # a mismatch here is a clone that fails with a decryption error, not a warning.
+  PAT_ENCRYPTION_KEY: ${PAT_ENCRYPTION_KEY:-dev-insecure-change-me}
 
 services:
   postgres:
@@ -50,8 +73,9 @@ services:
   redis:
     image: redis:8-alpine
     restart: unless-stopped
-    # appendonly so queued ingestion jobs (M1+) survive a restart. Rate-limit
-    # counters don't need durability, but the queue does.
+    # appendonly is kept even though the job queue moved to Kafka at M1: the
+    # rate-limit counters don't need durability, but losing them on every restart
+    # would reset every lockout.
     command: ["redis-server", "--appendonly", "yes"]
     ports:
       - "${REDIS_PORT:-6379}:6379"
@@ -64,6 +88,46 @@ services:
       retries: 5
       start_period: 5s
 
+  kafka:
+    image: apache/kafka:3.9.1
+    restart: unless-stopped
+    environment:
+      # Single-node KRaft: this one container is both the broker and the controller,
+      # so the quorum voter list points at itself and there is no ZooKeeper.
+      CLUSTER_ID: ${KAFKA_CLUSTER_ID:-TxqebIstTHqeFT1rjwosQQ}
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,HOST:PLAINTEXT,INTERNAL:PLAINTEXT
+      # Two client listeners because the same broker is reached under two names: the
+      # host-published one (local `make dev`) must advertise localhost, and the
+      # in-network one (the backend container) must advertise `kafka`. Advertising a
+      # single address would break whichever side it isn't.
+      KAFKA_LISTENERS: CONTROLLER://0.0.0.0:9093,HOST://0.0.0.0:9092,INTERNAL://0.0.0.0:29092
+      KAFKA_ADVERTISED_LISTENERS: HOST://localhost:${KAFKA_PORT:-9092},INTERNAL://kafka:29092
+      KAFKA_INTER_BROKER_LISTENER_NAME: INTERNAL
+      # These three default to 3. A one-broker cluster cannot satisfy that, and the
+      # broker never finishes starting — it is not a warning, it is a hang.
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      # Topics are created explicitly at startup (app/queue/producer.py) so they get
+      # the 2 partitions the concurrency cap depends on; an auto-created topic would
+      # get 1 and silently halve it.
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
+      KAFKA_LOG_DIRS: /var/lib/kafka/data
+    ports:
+      - "${KAFKA_PORT:-9092}:9092"
+    volumes:
+      - kafka_data:/var/lib/kafka/data
+    healthcheck:
+      test: ["CMD", "/opt/kafka/bin/kafka-broker-api-versions.sh", "--bootstrap-server", "localhost:9092"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+      start_period: 20s
+
   backend:
     build:
       context: ../backend
@@ -72,14 +136,10 @@ services:
     ports:
       - "${BACKEND_PORT:-8000}:8000"
     environment:
+      <<: *app-env
       APP_NAME: ${APP_NAME:-AskRepo API}
-      APP_ENV: ${APP_ENV:-development}
       DEBUG: ${DEBUG:-true}
       CORS_ORIGINS: '["http://localhost:${FRONTEND_PORT:-3000}"]'
-      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-askrepo}:${POSTGRES_PASSWORD:-askrepo}@postgres:5432/${POSTGRES_DB:-askrepo}
-      QDRANT_URL: http://qdrant:6333
-      REDIS_URL: redis://redis:6379/0
-      SECRET_KEY: ${SECRET_KEY:-dev-insecure-change-me}
       # No fallback: a committed placeholder here would be a valid, publicly-known
       # password every reader of this file already has. Set it in the environment or
       # in infra/.env before the first `make up` / `make seed`.
@@ -96,12 +156,60 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      kafka:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health/live')"]
       interval: 15s
       timeout: 5s
       retries: 5
       start_period: 20s
+
+  worker:
+    # The same image as the API, run with a different entrypoint, so the worker
+    # shares Settings, the ORM models, the repositories and the access resolver
+    # rather than growing a parallel copy of any of them.
+    build:
+      context: ../backend
+      dockerfile: ../infra/backend.Dockerfile
+    command: ["uv", "run", "python", "-m", "app.worker"]
+    restart: unless-stopped
+    # Two replicas against the two ingest partitions. That is what makes the
+    # concurrency cap of 2 in docs/PRD.md §4.1 structural rather than a setting:
+    # a third worker would sit idle with no partition to own.
+    deploy:
+      replicas: 2
+    environment:
+      <<: *app-env
+      # Points at the `ollama` service below, matching EMBEDDING_PROVIDER's default.
+      EMBEDDING_PROVIDER: ${EMBEDDING_PROVIDER:-ollama}
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-nomic-embed-text}
+      EMBEDDING_BASE_URL: ${EMBEDDING_BASE_URL:-http://ollama:11434}
+      EMBEDDING_API_KEY: ${EMBEDDING_API_KEY:-}
+    volumes:
+      - ../backend:/app
+      # Scratch, deliberately not a named volume: the working copy is deleted after
+      # indexing and a reindex re-clones, so nothing here needs to survive a restart.
+      - repo_scratch:/data/repos
+    depends_on:
+      postgres:
+        condition: service_healthy
+      qdrant:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+
+  ollama:
+    image: ollama/ollama
+    restart: unless-stopped
+    ports:
+      - "${OLLAMA_PORT:-11434}:11434"
+    volumes:
+      - ollama_models:/root/.ollama
+    # On by default in `make up` and `make infra`: the shipped EMBEDDING_PROVIDER is
+    # `ollama`, and a default pointing at a service nobody started is a broken
+    # out-of-box experience. An instance on a hosted provider drops the profile.
+    profiles: ["ollama"]
 
   frontend:
     build:
@@ -128,3 +236,6 @@ volumes:
   pgdata:
   qdrant_data:
   redis_data:
+  kafka_data:
+  ollama_models:
+  repo_scratch:

@@ -35,4 +35,5 @@ ERROR_RESPONSES: dict[int, dict[str, object]] = {
     409: {"model": ErrorResponse, "description": "Valid request, wrong state"},
     422: {"model": ValidationErrorResponse, "description": "Request validation failed"},
     429: {"model": ErrorResponse, "description": "Rate limited"},
+    503: {"model": ErrorResponse, "description": "A dependency is unreachable"},
 }

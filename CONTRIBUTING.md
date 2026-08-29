@@ -12,7 +12,7 @@ planned, what's deliberately out of scope for v1, and which questions are still 
 ```bash
 git clone <your-fork> && cd ask-repo
 make setup    # uv sync + bun install
-make infra    # postgres + qdrant + redis
+make infra    # postgres + qdrant + redis + kafka + ollama
 make dev      # both dev servers
 ```
 
@@ -44,8 +44,29 @@ cd backend
 uv run ruff check .      # lint
 uv run ruff format .     # format
 uv run mypy .            # typecheck
-uv run pytest            # tests
+uv run pytest            # tests (integration tests excluded)
 ```
+
+### Integration tests
+
+Most of the suite fakes the broker, so `make check` needs no Kafka. A small set of tests
+cannot be faked — a consumer being evicted mid-job, a redelivery, a rejoin — and those run
+against a **real broker** behind the `integration` marker, which `pytest`'s default
+`addopts` deselects:
+
+```bash
+make infra              # a real Kafka and Qdrant must be up
+make test-integration   # cd backend && uv run pytest -m integration -v
+```
+
+Expect it to take around 40 seconds. That is not slowness to optimise away: one test
+deliberately runs a job past `max.poll.interval.ms` to prove the worker keeps its place in
+the consumer group, so the wall-clock time *is* the assertion.
+
+If you add a test to that marker, check it fails when you break the thing it tests. Several
+of these safety properties are invisible to the obvious assertion — an eviction mid-job does
+not cause a second index, because the database lease refuses the redelivery. See
+[`.claude/rules/ingestion.md`](.claude/rules/ingestion.md).
 
 **Frontend**
 

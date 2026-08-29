@@ -8,6 +8,7 @@ suite that passes on SQLite while production breaks is worse than no suite.
 """
 
 import subprocess
+import uuid
 from collections.abc import AsyncIterator, Iterator
 from pathlib import Path
 
@@ -20,8 +21,10 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
+from app.core.security import create_access_token, hash_password
 from app.db.session import get_sessionmaker, reset_engine
-from app.models import Base
+from app.models import Base, User
+from app.queue.protocol import InMemoryIngestionQueue
 
 BACKEND_ROOT = Path(__file__).resolve().parent.parent
 TEST_DB_NAME = "askrepo_test"
@@ -48,6 +51,7 @@ def _test_environment() -> Iterator[None]:
         patch.setenv("REDIS_URL", _swap_database(dev.redis_url, str(TEST_REDIS_DB)))
         patch.setenv("SECRET_KEY", "test-secret-key-not-used-anywhere-real")
         patch.setenv("BCRYPT_COST", "4")  # keep the suite fast; cost is not under test
+        patch.setenv("PAT_ENCRYPTION_KEY", "Hu25IBLmyXgJmARywo5aj5DQrr3yGs3RPgqyC7_kVDo=")
         get_settings.cache_clear()
         yield
     get_settings.cache_clear()
@@ -138,4 +142,90 @@ async def client(app: FastAPI) -> AsyncIterator[AsyncClient]:
     the event loop with the database fixtures."""
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as async_client:
+        yield async_client
+
+
+@pytest.fixture
+def ingestion_queue() -> InMemoryIngestionQueue:
+    """The queue every route test enqueues into. Assert against `.messages`."""
+    return InMemoryIngestionQueue()
+
+
+@pytest.fixture
+def app_with_queue(ingestion_queue: InMemoryIngestionQueue) -> FastAPI:
+    """The app with the broker replaced, so route tests need no Kafka."""
+    from app.api.routes.projects import get_ingestion_queue
+    from app.main import create_app
+
+    application = create_app()
+    application.dependency_overrides[get_ingestion_queue] = lambda: ingestion_queue
+    return application
+
+
+async def _authenticated_client(
+    app_with_queue: FastAPI, db_session: AsyncSession, *, is_admin: bool
+) -> AsyncIterator[AsyncClient]:
+    """An `AsyncClient` authenticated as a freshly created, ready-to-use user.
+
+    `must_change_password=False`, or the forced-password-change gate returns
+    `403 PASSWORD_CHANGE_REQUIRED` on every `/projects` call. Every call creates a
+    distinct account, so fixtures built on this represent genuinely different users.
+    """
+    user = User(
+        id=uuid.uuid4(),
+        name="Dev",
+        email=f"{uuid.uuid4().hex}@example.com",
+        password_hash=hash_password("a-perfectly-fine-passphrase", cost=4),
+        is_admin=is_admin,
+        must_change_password=False,
+    )
+    db_session.add(user)
+    await db_session.commit()
+
+    settings = get_settings()
+    token, _ = create_access_token(
+        user.id, secret=settings.secret_key, ttl_minutes=settings.access_token_ttl_minutes
+    )
+    headers = {"Authorization": f"Bearer {token}"}
+
+    transport = ASGITransport(app=app_with_queue)
+    async with AsyncClient(
+        transport=transport, base_url="http://test", headers=headers
+    ) as async_client:
+        yield async_client
+
+
+@pytest.fixture
+async def authed_client(
+    app_with_queue: FastAPI, db_session: AsyncSession
+) -> AsyncIterator[AsyncClient]:
+    """An `AsyncClient` authenticated as a freshly created, ready-to-use user."""
+    async for async_client in _authenticated_client(app_with_queue, db_session, is_admin=False):
+        yield async_client
+
+
+@pytest.fixture
+async def client_for_user_a(
+    app_with_queue: FastAPI, db_session: AsyncSession
+) -> AsyncIterator[AsyncClient]:
+    """A distinct authenticated user — the project creator in sharing/gating tests."""
+    async for async_client in _authenticated_client(app_with_queue, db_session, is_admin=False):
+        yield async_client
+
+
+@pytest.fixture
+async def client_for_user_b(
+    app_with_queue: FastAPI, db_session: AsyncSession
+) -> AsyncIterator[AsyncClient]:
+    """A second, distinct authenticated user — the reader/attacker in those tests."""
+    async for async_client in _authenticated_client(app_with_queue, db_session, is_admin=False):
+        yield async_client
+
+
+@pytest.fixture
+async def client_for_admin(
+    app_with_queue: FastAPI, db_session: AsyncSession
+) -> AsyncIterator[AsyncClient]:
+    """A distinct authenticated admin, who overrides the destructive gate."""
+    async for async_client in _authenticated_client(app_with_queue, db_session, is_admin=True):
         yield async_client

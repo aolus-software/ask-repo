@@ -5,8 +5,14 @@ FastAPI service for AskRepo — the codebase-aware assistant described in
 
 M0 is shipped: the service identifies itself, reports health, and serves the full
 auth/accounts surface — admin-provisioned users, login, forced first-login password
-change, session rotation, and login rate limiting. The RAG / LangGraph work (project
-ingestion, Dev Knowledge, QA List, mock data generation) starts at M1.
+change, session rotation, and login rate limiting.
+
+M1 is complete. The project routes and the entire ingestion pipeline are here — clone,
+walk, chunk, embed, and write to Qdrant — along with the Kafka producer, the consumer
+that turns a queued message into an indexing run, the delayed-retry consumers, and
+`app/worker.py`: the separate process that runs all of them and sweeps up jobs the
+broker never received. `POST /projects` enqueues and a worker indexes. The Dev
+Knowledge / QA List / mock-data work starts at M2.
 
 ## Requirements
 
@@ -15,8 +21,10 @@ ingestion, Dev Knowledge, QA List, mock data generation) starts at M1.
 
 ## Running locally
 
-Postgres and Redis must be up first — `make infra` from the repo root, or
-`docker compose -f infra/docker-compose.yml up -d --wait postgres qdrant redis`.
+The datastores must be up first — `make infra` from the repo root, or
+`docker compose -f infra/docker-compose.yml up -d --wait postgres qdrant redis kafka`.
+Postgres and Redis are enough to run the test suite; Qdrant is needed to index, Kafka to
+enqueue, and Ollama to embed (unless `EMBEDDING_PROVIDER` points at a hosted API).
 
 ```bash
 cd backend
@@ -32,13 +40,29 @@ The API is then on <http://localhost:8000>, with interactive docs at
 <http://localhost:8000/docs>. Log in as `superuser@example.com` or `admin@example.com`
 with the password you set; both are seeded with `must_change_password` set.
 
+### The ingestion worker
+
+The API only *enqueues* indexing jobs. Nothing indexes until a worker is running, so a
+new project sits at `pending` until you start one — in a second terminal:
+
+```bash
+cd backend
+uv run python -m app.worker
+```
+
+It is the same codebase with a different entrypoint, so it reads the same `Settings` and
+the same `.env`. One process runs the ingest consumer, one consumer per retry rung, and a
+sweep every 60 seconds that re-enqueues jobs whose produce failed or whose worker died,
+and prunes expired refresh tokens. Run more than one and they share the ingest topic's
+partitions — two is the configured cap (`KAFKA_INGEST_PARTITIONS`).
+
 ## Running in Docker
 
 ```bash
 cd infra && docker compose up --build
 ```
 
-That brings up the API alongside Postgres, Qdrant, Redis, and the frontend.
+That brings up the API alongside Postgres, Qdrant, Redis, Kafka, and the frontend.
 Source is bind-mounted, so `--reload` picks up your edits.
 
 ## Routes
@@ -55,10 +79,10 @@ curl -s localhost:8000/ | jq
 curl -s localhost:8000/health | jq
 ```
 
-`/health/ready` exists so datastore probes (Postgres, Qdrant) can be added to
+`/health/ready` exists so datastore probes (Postgres, Qdrant, Kafka) can be added to
 `checks` later without changing the response shape — a dependency going down
-flips `status` to `degraded` while `/health/live` stays `ok`. No probes have been
-wired in yet; M0 added Postgres/Redis reads elsewhere in the app but not here.
+flips `status` to `degraded` while `/health/live` stays `ok`. **No probes have been
+wired in yet**, even though all four datastores are now read elsewhere in the app.
 
 ### Auth
 
@@ -82,6 +106,23 @@ wired in yet; M0 added Postgres/Redis reads elsewhere in the app but not here.
 | `DELETE` | `/users/{id}` | admin | Deactivate, revoking sessions |
 | `POST` | `/users/{id}/reset-password` | admin | Set a temporary password |
 
+### Projects
+
+Every authenticated user can list and read **every** project — phase-1 sharing is intended, not
+a leak (`docs/PRD.md` §4.1). Only the project's `created_by` or an admin may reindex or delete.
+
+| Method | Path | Auth | Description |
+| --- | --- | --- | --- |
+| `GET` | `/projects` | any user | List all projects, paginated |
+| `GET` | `/projects/{id}` | any user | One project |
+| `POST` | `/projects` | any user | Register a repository and enqueue its first index |
+| `POST` | `/projects/{id}/reindex` | creator or admin | Re-index; a run already in flight is a no-op |
+| `DELETE` | `/projects/{id}` | creator or admin | Soft-delete the row and hard-delete its vectors |
+
+`DELETE` is the one route that can return **`503 VECTOR_STORE_UNAVAILABLE`**: it must reach
+Qdrant to satisfy `docs/PRD.md` §5.1's same-operation hard delete, and if Qdrant is down nothing
+is committed, so the project stays visible and the call can be retried.
+
 ## Layout
 
 ```
@@ -91,51 +132,61 @@ backend/
 ├── alembic/versions/     # migrations
 ├── .env.example
 ├── app/
-│   ├── main.py           # create_app(): middleware, CORS, router mounting
+│   ├── main.py           # create_app(): middleware, CORS, routers, Kafka lifespan
 │   ├── config.py         # Settings (pydantic-settings) + get_settings()
 │   ├── cli.py            # `python -m app.cli seed-admins`
 │   ├── api/
 │   │   ├── deps.py       # CurrentUser / AdminUser dependencies
 │   │   └── routes/
-│   │       ├── index.py  # GET /
-│   │       ├── health.py # GET /health, /health/live, /health/ready
-│   │       ├── auth.py   # POST /auth/login, /refresh, /change-password, ...
-│   │       └── users.py  # /users CRUD + reset-password
+│   │       ├── index.py    # GET /
+│   │       ├── health.py   # GET /health, /health/live, /health/ready
+│   │       ├── auth.py     # POST /auth/login, /refresh, /change-password, ...
+│   │       ├── users.py    # /users CRUD + reset-password
+│   │       └── projects.py # /projects CRUD + reindex; build_store_factory
 │   ├── core/
 │   │   ├── access.py     # the phase-2 access-resolver seam
+│   │   ├── crypto.py     # SecretBox (PAT encryption at rest) + scrub
 │   │   ├── errors.py     # AppError, ErrorCode, exception handlers
 │   │   ├── middleware.py # AuthContextMiddleware — identity + the password-change gate
 │   │   ├── passwords.py  # password policy (length, common-password blocklist)
 │   │   ├── rate_limit.py # Redis-backed login rate limiting
+│   │   ├── repo_url.py   # clone-URL validation: https, allowlist, private-address refusal
 │   │   └── security.py   # hashing, JWT access tokens, opaque refresh tokens
 │   ├── db/session.py     # async engine + sessionmaker
-│   ├── models/            # SQLAlchemy models: User, RefreshToken
+│   ├── ingestion/        # one indexing run, stage by stage
+│   │   ├── pipeline.py   # clone → walk → chunk → embed → upsert → generation swap
+│   │   ├── cloner.py     # DNS-pinned git clone with size and time caps
+│   │   ├── walker.py     # which files are worth indexing
+│   │   ├── chunker.py    # language-aware splitting, line ranges preserved
+│   │   ├── embedder/     # Ollama / OpenAI / Voyage behind one protocol
+│   │   ├── vector_store.py # Qdrant: model-named collections, generation-scoped points
+│   │   └── errors.py     # Terminal vs Retryable — what decides whether a job retries
+│   ├── queue/
+│   │   ├── topics.py     # IngestionMessage, the topic names, the retry ladder
+│   │   ├── protocol.py   # IngestionQueue + TopicProducer + the in-memory double
+│   │   ├── producer.py   # KafkaIngestionQueue + ensure_topics
+│   │   ├── consumer.py   # handle_message, the routing ladder, the polling loop
+│   │   └── retry.py      # holds a delayed message until it is due, then re-queues it
+│   ├── worker.py          # the worker entrypoint: consumers + the reconcile sweep
+│   ├── models/            # SQLAlchemy models: User, RefreshToken, Project
 │   ├── repositories/      # the only layer that issues `select`
 │   ├── schemas/
 │   │   ├── base.py       # ApiModel — the snake_case → camelCase boundary
 │   │   ├── auth.py
 │   │   ├── errors.py
 │   │   ├── pagination.py
+│   │   ├── project.py
 │   │   └── user.py
-│   └── services/          # AuthService, UserService — orchestration + business rules
+│   └── services/          # AuthService, UserService, ProjectService
 └── tests/
     ├── conftest.py           # app/client/db_session fixtures, real Postgres + Redis
+    ├── factories.py          # create_user / create_project
     ├── test_api_model.py     # the camelCase wire contract
-    ├── test_meta_routes.py
-    ├── test_config.py
-    ├── test_schema.py
-    ├── test_security.py
-    ├── test_passwords.py
-    ├── test_errors.py
+    ├── test_route_coverage.py
     ├── test_access.py
-    ├── test_auth_middleware.py
-    ├── test_rate_limit.py
-    ├── test_user_repository.py
-    ├── test_refresh_token_repository.py
-    ├── test_auth_api.py
-    ├── test_users_api.py
-    ├── test_cli.py
-    └── test_m0_acceptance.py # PRD §7's success criterion, end to end
+    ├── ...                   # one file per module; `ls tests/` is the current list
+    ├── test_m0_acceptance.py # PRD §7's M0 success criterion, end to end
+    └── test_m1_acceptance.py # PRD §7's M1 access/gating/scoping criteria
 ```
 
 Settings come from the environment, falling back to `.env`, falling back to the
@@ -150,8 +201,24 @@ See [`.env.example`](.env.example). A few notes:
   comma-separated string — pydantic-settings parses complex types as JSON.
 - `DATABASE_URL` is read via the repository layer (`app/repositories/`) for users and
   refresh tokens, and `REDIS_URL` by the login rate limiter (`app/core/rate_limit.py`).
-  `QDRANT_URL` remains wired but unread until M1 (vectors), as does the Redis-backed
-  ingestion queue.
+  `QDRANT_URL` is read by `app/ingestion/vector_store.py` and by `build_store_factory`
+  in `app/api/routes/projects.py`, which reaches the collection a project recorded so
+  a delete can hard-delete its points.
+- `KAFKA_BOOTSTRAP_SERVERS` is read by both processes: `ensure_topics` and
+  `KafkaIngestionQueue` from the API lifespan, and the consumers from `app/worker.py`.
+  `KAFKA_INGEST_PARTITIONS` (default 2) *is* the ingestion concurrency cap — worker
+  replicas beyond the partition count sit idle. `KAFKA_MAX_ATTEMPTS` bounds the retry
+  ladder before a job is dead-lettered.
+- `EMBEDDING_PROVIDER` / `EMBEDDING_MODEL` / `EMBEDDING_BASE_URL` / `EMBEDDING_API_KEY`
+  are read by the **worker only**. The vector width is probed at worker startup, never
+  configured — it forms part of the Qdrant collection name, so guessing it wrong would
+  mix incompatible vectors.
+- `PAT_ENCRYPTION_KEY` encrypts stored personal access tokens at rest. The API writes
+  them and the worker reads them, so both processes must share the value — a mismatch
+  surfaces as a clone that fails to decrypt, not as a warning. Back it up **separately
+  from the database**.
+- `REPO_SCRATCH_DIR` (default `/data/repos`) is scratch, not a volume to preserve: the
+  working copy is deleted after indexing and a reindex re-clones.
 - Auth, password-policy, and bootstrap-admin settings are documented inline in
   `.env.example` — that file is the canonical list. `BOOTSTRAP_ADMIN_PASSWORD` has no
   default on purpose: seeding refuses to run without it rather than inventing one.

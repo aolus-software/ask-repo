@@ -54,6 +54,12 @@ def create_project(...) -> ProjectResponse: ...
 | `HTTPException(409)` | `409` | Valid request, wrong state — querying a project that isn't `ready`, re-registering an existing email |
 | `HTTPException(429)` | `429` | Rate or quota limit |
 | Unhandled | `500` | A bug. Must be logged with `exc_info=True` and must not leak internals to the client |
+| `AppError(503, ...)` | `503` | A **dependency** is unreachable and the request can be retried unchanged — Qdrant down during a delete. Not a bug, so not a `500`. Log it with `logger.exception` and leave nothing half-committed |
+
+`503` is for someone else's outage; `500` is for our mistake. Reaching for `500` when a
+datastore is simply down tells the operator to go looking for a bug that does not exist. The
+distinction only holds if the handler commits nothing — a `503` on a request that already wrote
+half its changes is worse than either code, so raise it **before** the commit.
 
 ## The error body has one shape
 

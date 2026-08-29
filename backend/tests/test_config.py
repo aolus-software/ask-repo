@@ -5,6 +5,8 @@ default here is invisible until deployment. The production validators exist beca
 `SECURITY.md:54` promises operators that a real `SECRET_KEY` is required.
 """
 
+from collections.abc import Callable
+
 import pytest
 from pydantic import ValidationError
 
@@ -56,6 +58,7 @@ def test_production_accepts_a_complete_configuration() -> None:
         app_env="production",
         secret_key="a-real-secret-value-for-testing-only",
         trusted_proxy_hops=1,
+        pat_encryption_key="Hu25IBLmyXgJmARywo5aj5DQrr3yGs3RPgqyC7_kVDo=",
     )
 
     assert settings.app_env == "production"
@@ -69,3 +72,49 @@ def test_production_rejects_zero_trusted_proxy_hops() -> None:
             secret_key="a-real-secret-value-for-testing-only",
             trusted_proxy_hops=0,
         )
+
+
+def test_production_refuses_placeholder_pat_key(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """PATs encrypted with a known key are not encrypted."""
+    monkeypatch.setenv("APP_ENV", "production")
+    monkeypatch.setenv("SECRET_KEY", "a-real-secret-key-value")
+    monkeypatch.setenv("TRUSTED_PROXY_HOPS", "1")
+    monkeypatch.delenv("PAT_ENCRYPTION_KEY", raising=False)
+
+    with pytest.raises(ValidationError, match="PAT_ENCRYPTION_KEY"):
+        Settings()
+
+
+def test_ingestion_defaults_match_the_prd() -> None:
+    """Ingestion settings default to the PRD values."""
+    settings = Settings()
+    assert settings.clone_timeout_seconds == 120
+    assert settings.repo_max_size_mb == 500
+    assert settings.repo_host_allowlist == ["github.com", "gitlab.com"]
+    assert settings.kafka_ingest_partitions == 2
+    assert settings.embedding_batch_size == 64
+
+
+@pytest.mark.parametrize(
+    "build",
+    [
+        lambda: Settings(embedding_batch_size=0),
+        lambda: Settings(clone_timeout_seconds=0),
+        lambda: Settings(repo_max_size_mb=0),
+        lambda: Settings(max_indexed_file_bytes=0),
+    ],
+    ids=["embedding_batch_size", "clone_timeout_seconds", "repo_max_size_mb", "file_bytes"],
+)
+def test_resource_limits_reject_zero(build: Callable[[], Settings]) -> None:
+    """A resource control set to zero is not a control, and one of them hangs a worker.
+
+    `EMBEDDING_BATCH_SIZE=0` makes the pipeline's batching loop
+    (`while len(batch) >= batch_size`) flush empty batches forever while the lease
+    keeps renewing — no log, no timeout, and no failure anyone would see. The other
+    three are quieter but equally wrong: a zero timeout kills every clone, a zero size
+    cap rejects every repository, and a zero file limit indexes nothing.
+    """
+    with pytest.raises(ValidationError):
+        build()

@@ -12,12 +12,21 @@ organization runs one instance on its own internal network.
 the security model. It outranks every other doc and outranks the code. When code and the PRD
 disagree, that is a contradiction to report — not a doc to quietly rewrite.
 
-**Status: M0 (backend) shipped.** The backend serves an index route, health checks, and the
-full auth/accounts surface: admin-provisioned users, login, forced first-login password
-change, session rotation, and login rate limiting. Postgres and Redis are read. There is still
-no ingestion, no RAG, and no Qdrant use — those land at M1. The frontend has not moved: it is
-still the landing page from scaffolding, with no API client and no auth screens. Do not assume
-a module exists because the PRD describes it — the PRD describes the destination.
+**Status: M0 and M1 (backend) shipped.** The backend serves an index route, health checks, the
+full auth/accounts surface (admin-provisioned users, login, forced first-login password change,
+session rotation, login rate limiting), and the project CRUD routes. **All four datastores are
+read** — Postgres, Redis, Qdrant, and Kafka.
+
+M1 is complete end to end. `app/ingestion/` holds the cloner, walker, chunker, embedder adapter,
+Qdrant vector store, and `IngestionPipeline`; `app/queue/` holds the message format, topics, both
+protocols, `KafkaIngestionQueue`, `IngestionConsumer`, and the delayed-retry `RetryConsumer`; and
+`app/worker.py` is the separate process that runs them, plus the reconcile sweep that recovers
+jobs the broker never received. `POST /projects` publishes a job and a worker picks it up.
+There is still no RAG — that is M2.
+
+The frontend has not moved: it is still the landing page from scaffolding, with no API client
+and no auth screens. Do not assume a module exists because the PRD describes it — the PRD
+describes the destination.
 
 ## Commands
 
@@ -25,7 +34,7 @@ The `Makefile` at the root wraps everything; `make help` lists all targets.
 
 ```bash
 make setup            # install backend + frontend dependencies
-make infra            # start postgres + qdrant + redis only, wait until healthy
+make infra            # start postgres + qdrant + redis + kafka + ollama, wait until healthy
 make dev              # both dev servers together (needs `make infra` first)
 make check            # lint + format-check + typecheck + test, as CI would
 make test-one T=tests/test_api_model.py
@@ -53,7 +62,7 @@ bun run build                             # catches type errors the dev server t
 bun lint
 
 # Whole stack — from infra/
-docker compose up --build                 # backend, frontend, postgres, qdrant, redis
+docker compose up --build                 # backend, worker, frontend, postgres, qdrant, redis, kafka, ollama
 docker compose config --quiet             # validate before committing compose changes
 docker compose logs -f backend
 ```
@@ -63,19 +72,27 @@ docker compose logs -f backend
 
 ## Architecture
 
-Two apps, three datastores, one Compose file. `backend/` is FastAPI + Python 3.13 (uv);
+Two apps, a worker, four datastores, one Compose file. `backend/` is FastAPI + Python 3.13 (uv);
 `frontend/` is Next.js 16 + React 19 + Tailwind 4 (bun); `infra/` holds both Dockerfiles and
 `docker-compose.yml`.
 
 The parts below are the ones you cannot infer from any single file.
 
-### Postgres and Redis are read; Qdrant is not yet
+### All four datastores are read
 
-`Settings` declares `database_url`, `qdrant_url`, and `redis_url`, and Compose points them at
-live services. Postgres is read through the repository layer (`app/repositories/`) for users
-and refresh tokens; Redis is read by the login rate limiter (`app/core/rate_limit.py`).
-`qdrant_url` remains declared and unread until M1, along with the Redis-backed job queue — a
-missing vector layer is the current state, not a bug to fix on sight.
+`Settings` declares `database_url`, `qdrant_url`, `redis_url`, and `kafka_bootstrap_servers`,
+and Compose points them at live services. Postgres is read through the repository layer
+(`app/repositories/`) for users, refresh tokens, and projects; Redis is read by the login rate
+limiter (`app/core/rate_limit.py`) and by nothing else — **it does not back the job queue**.
+`qdrant_url` is read by `app/ingestion/vector_store.py` and by `build_store_factory` in
+`app/api/routes/projects.py`.
+
+Kafka is read from both processes: the API lifespan calls `ensure_topics` and starts
+`KafkaIngestionQueue`, and the worker (`app/worker.py`) runs `IngestionConsumer` on the ingest
+topic plus one `RetryConsumer` per retry rung. `InMemoryIngestionQueue` remains the test double
+for both protocols, so route, service, consumer and retry tests all run with no broker — the
+only suite needing a real one is `tests/test_ingestion_integration.py`, behind the `integration`
+marker.
 
 ### Configuration flows one way
 
@@ -131,9 +148,63 @@ hard-delete, in the same operation.**
 
 `POST /projects` returns immediately and the clone+index runs in the background. The cloned
 working copy is **deleted after indexing**, so `/data/repos` is scratch space, not a persistent
-volume — and reindex re-clones rather than `git pull`. Jobs move from
-`BackgroundTasks` to Redis + ARQ at M1, because a restart mid-index otherwise leaves a project
-stuck at `indexing` forever.
+volume — and reindex re-clones rather than `git pull`.
+
+**M1's job queue is Kafka, not Redis + ARQ.** Earlier PRD drafts argued against Kafka by name,
+and that technical argument was never disputed — it was **overridden for a non-technical
+reason**: `docs/PRD.md` §1 names learning as the project's primary goal, and §2's goal list now
+carries event streaming. This is settled, not a live contradiction: `docs/PRD.md` §5's job-queue note
+now records the decision, the accepted costs, and their mitigations. Do not "fix" the code
+toward ARQ, and do not reintroduce Redis as a queue — Redis backs login rate limiting only.
+
+### The lease is the deduplication boundary
+
+Kafka delivers at least once, so the same job can arrive twice — a rebalance, a redelivered
+uncommitted offset, a reconcile sweep racing a retry. **What stops two workers indexing the same
+project is a database lease on the project row** (`ProjectRepository.claim`), not the offset and
+not the partition key. The service-level "is it already running?" check is a fast path for a nicer
+API response; removing the lease because "the service already checks" is a defect, not a
+simplification.
+
+Two consequences: a worker that dies holding a lease is recovered when the lease expires (the
+reconcile sweep in `app/worker.py` re-enqueues it), and a duplicate delivery is *supposed* to be
+cheap — it costs one refused claim. That is why the consumer can safely absorb an error and leave
+the offset uncommitted.
+
+### A long job pauses its partitions and keeps polling
+
+aiokafka measures liveness as *fetcher idle time*: go longer than `max.poll.interval.ms` without
+calling `getmany` and the client leaves the group on its own. An index can run for twenty minutes.
+So the consumer pauses every assigned partition and **keeps polling throughout the job** — each
+poll returns nothing but holds the member's seat. Every partition, not just the one being worked,
+because a keep-alive poll discards what it returns and an unpaused sibling would have its jobs
+read and thrown away.
+
+Raising `max.poll.interval.ms` instead is not an acceptable substitute, and there is deliberately
+no setting for it. The same pattern serves the retry ladder: Kafka has no delay primitive, so
+`RetryConsumer` holds the partition head until it is due rather than sleeping.
+
+### The collection name carries the embedding model
+
+Qdrant collections are named `code_chunks__provider__model__dimensions` (`collection_name` in
+`app/ingestion/vector_store.py`), and the width is **probed at worker startup**, never declared.
+A model change therefore lands in a different collection instead of silently mixing incompatible
+vectors. Each project records the collection it wrote to, which is how `DELETE /projects/{id}`
+knows where its points live. Never hardcode a collection name.
+
+### Reindex is a generation swap
+
+A reindex does not empty the project's points and refill them — that would take a `ready` project
+offline for the length of a clone-and-embed. New vectors are written under an incremented
+`active_generation`, the project switches to reading it only on success, and the old generation is
+deleted afterwards. **A reindex that fails part-way leaves the previous index intact and still
+serving.**
+
+### Nothing derived from clone output is stored or logged unscrubbed
+
+A PAT is embedded in the clone URL, so it can surface in git's stderr, an exception message, or a
+traceback. Everything on that path goes through `scrub` before it is written to `Project.error`
+or a log line. `docs/PRD.md` §9: a token must not survive into anything an operator can read.
 
 `repo_url` is user-supplied and fetched from **inside** a private network, where `10.0.x.x` and
 internal service names resolve. Validation (https-only, host allowlist, private-address
@@ -169,7 +240,7 @@ map keyed by the `camelCase` field name.
 
 ## Rules
 
-Ten rule files in `.claude/rules/`. Read the ones your change touches.
+Eleven rule files in `.claude/rules/`. Read the ones your change touches.
 
 | Rule | Read it when |
 | --- | --- |
@@ -179,6 +250,7 @@ Ten rule files in `.claude/rules/`. Read the ones your change touches.
 | `response-api.md` | Any route, schema, or status code |
 | `router.md` | Any `APIRouter` — layout, dependencies, the CRUD shape, access scoping |
 | `persistence.md` | Any model, repository, migration, or session code |
+| `ingestion.md` | Anything under `app/ingestion/` or `app/queue/` — leases, pausing, error classes, collections |
 | `design-system.md` | Any `.tsx` or `.css` — tokens, shadcn, dark mode, spacing |
 | `forms.md` | Any form — dialog vs page, validation ownership, field composition |
 | `navigation.md` | Sidebar, breadcrumbs, or adding a route |

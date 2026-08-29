@@ -2,24 +2,27 @@
 #
 #   make help        list every target
 #   make setup       install backend + frontend dependencies
-#   make infra       start postgres, qdrant and redis only
+#   make infra       start postgres, qdrant, redis and kafka only
 #   make dev         run both dev servers (needs `make infra` first)
 #   make check       lint + typecheck + test everything, as CI would
 #
 # Targets are grouped: setup, infra (datastores), dev, quality, docker, clean.
 
-COMPOSE := docker compose -f infra/docker-compose.yml
+# The ollama profile is on by default: the shipped EMBEDDING_PROVIDER is `ollama`,
+# so a stack without it has a default pointing at nothing. An instance on a hosted
+# embedding provider can override this to a bare `docker compose`.
+COMPOSE := docker compose -f infra/docker-compose.yml --profile ollama
 BACKEND  := backend
 FRONTEND := frontend
 
 # Datastore services — the ones you run in Docker while developing the apps locally.
-DATASTORES := postgres qdrant redis
+DATASTORES := postgres qdrant redis kafka ollama
 
 .DEFAULT_GOAL := help
 .PHONY: help setup setup-backend setup-frontend \
         infra infra-stop infra-down infra-logs infra-status migrate seed \
-        docker-start-pg docker-start-redis docker-start-qdrant \
-        docker-stop-pg docker-stop-redis docker-stop-qdrant \
+        docker-start-pg docker-start-redis docker-start-qdrant docker-start-kafka \
+        docker-stop-pg docker-stop-redis docker-stop-qdrant docker-stop-kafka \
         psql redis-cli \
         dev dev-backend dev-frontend \
         build build-frontend \
@@ -49,9 +52,9 @@ setup-frontend: ## Install frontend dependencies
 
 ## ─── Datastores ────────────────────────────────────────────────────────────
 
-infra: ## Start postgres + qdrant + redis (detached), wait until healthy
+infra: ## Start postgres + qdrant + redis + kafka + ollama (detached), wait until healthy
 	$(COMPOSE) up -d --wait $(DATASTORES)
-	@echo "postgres :5432   qdrant :6333   redis :6379"
+	@echo "postgres :5432   qdrant :6333   redis :6379   kafka :9092   ollama :11434"
 
 infra-stop: ## Stop the datastores, keep their data
 	$(COMPOSE) stop $(DATASTORES)
@@ -80,6 +83,9 @@ docker-start-redis: ## Start redis only
 docker-start-qdrant: ## Start qdrant only
 	$(COMPOSE) up -d --wait qdrant
 
+docker-start-kafka: ## Start kafka only
+	$(COMPOSE) up -d --wait kafka
+
 docker-stop-pg: ## Stop postgres
 	$(COMPOSE) stop postgres
 
@@ -88,6 +94,9 @@ docker-stop-redis: ## Stop redis
 
 docker-stop-qdrant: ## Stop qdrant
 	$(COMPOSE) stop qdrant
+
+docker-stop-kafka: ## Stop kafka
+	$(COMPOSE) stop kafka
 
 psql: ## Open a psql shell on the running postgres
 	$(COMPOSE) exec postgres psql -U askrepo -d askrepo
@@ -150,6 +159,9 @@ test-one: ## Run one test file or -k expression (T=...)
 test-watch: ## Re-run backend tests on change
 	cd $(BACKEND) && uv run pytest -f 2>/dev/null || \
 		echo "pytest-watch not installed: uv add --dev pytest-watcher, then use 'ptw'"
+
+test-integration:  ## Run integration tests (needs `make infra`)
+	cd backend && uv run pytest -m integration -v
 
 build: build-frontend ## Production build
 

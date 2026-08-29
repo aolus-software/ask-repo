@@ -15,6 +15,12 @@ dependencies = [
     "bcrypt>=4.2.0",
     "pyjwt>=2.10.0",
     "redis>=5.2.0",
+    "aiokafka>=0.12.0",
+    "qdrant-client>=1.12.0",
+    "cryptography>=44.0.0",
+    "langchain-text-splitters>=0.3.0",
+    "httpx>=0.28.0",
+    "pathspec>=0.12.0",
 ]
 
 [tool.uv]
@@ -23,7 +29,6 @@ package = false
 
 [dependency-groups]
 dev = [
-    "httpx>=0.28.0",
     "mypy>=1.14.0",
     "pytest>=8.3.0",
     "pytest-asyncio>=0.25.0",
@@ -44,6 +49,11 @@ select = ["E", "F", "I", "UP", "B", "ANN", "T20", "LOG", "G", "RUF"]
 "tests/**" = ["ANN401"]
 
 [tool.pytest.ini_options]
+markers = [
+    "integration: needs a real Kafka broker and Qdrant; excluded from `make check`",
+]
+# Integration tests are opt-in: otherwise CI needs a broker in order to lint a docstring.
+addopts = "-m 'not integration'"
 testpaths = ["tests"]
 asyncio_mode = "auto"
 # Session scope: the engine fixture is session-scoped, and a function-scoped
@@ -68,3 +78,18 @@ strict = true
 # test harness (backend/tests/conftest.py) to create the test database.
 module = "asyncpg"
 ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+# aiokafka is annotated internally but ships no py.typed marker, so mypy refuses to
+# read those annotations. Nothing to do but trust the boundary in app/queue/.
+module = ["aiokafka", "aiokafka.*"]
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+# `ConsumerRebalanceListener` therefore arrives as `Any`, and the consumer has to
+# subclass it: `AIOKafkaConsumer.subscribe` rejects a listener that is not an instance
+# (consumer.py:1057). Scoped to this one module and this one rule rather than an inline
+# ignore, which would also hide a typo in the base class name.
+module = "app.queue.consumer"
+disallow_subclassing_any = false
+

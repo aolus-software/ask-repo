@@ -11,9 +11,12 @@ network.
 Built as a learning project for RAG, LangChain/LangGraph, prompt engineering, and context
 management — against real repositories rather than tutorial data.
 
-> **Status: M0 shipped.** Auth & accounts are implemented — admin-provisioned users, login,
-> forced first-login password change, and login rate limiting. M1 (project ingestion) has
-> not started. See [Roadmap](#roadmap) for what lands when, and
+> **Status: M0 and M1 shipped (backend).** Auth & accounts are implemented —
+> admin-provisioned users, login, forced first-login password change, and login rate
+> limiting — as are the project routes and the whole ingestion pipeline: clone, walk,
+> chunk, embed, Qdrant, driven by a Kafka job queue and a separate worker process.
+> `POST /projects` enqueues a repository and a worker indexes it in the background.
+> The frontend is still scaffolding. See [Roadmap](#roadmap) for what lands when, and
 > [`docs/PRD.md`](docs/PRD.md) for the full specification.
 
 ## Features (planned)
@@ -30,7 +33,7 @@ management — against real repositories rather than tutorial data.
 
 **Backend** FastAPI · Python 3.13 · uv · SQLAlchemy + Alembic · LangGraph · LangChain
 **Frontend** Next.js 16 · React 19 · TypeScript · Tailwind CSS 4 · Bun
-**Data** Postgres 17 · Qdrant · Redis
+**Data** Postgres 17 · Qdrant · Redis · Kafka
 **Models** Ollama (qwen2.5-coder, qwen3) with a hosted-API adapter for comparison
 **Infra** Docker Compose · Caddy · VPN/Tailscale only, not internet-facing
 
@@ -80,7 +83,7 @@ The usual development loop — hot reload on both apps, datastores containerized
 
 ```bash
 make setup                                        # uv sync + bun install
-make infra                                        # postgres + qdrant + redis, waits until healthy
+make infra                                        # postgres + qdrant + redis + kafka, waits until healthy
 make migrate                                       # apply database migrations
 BOOTSTRAP_ADMIN_PASSWORD=<a real passphrase> make seed  # create the bootstrap admins
 make dev                                           # both dev servers, Ctrl-C stops both
@@ -93,6 +96,13 @@ make dev                                           # both dev servers, Ctrl-C st
 | Qdrant dashboard | <http://localhost:6333/dashboard> |
 | Postgres | `localhost:5432` |
 | Redis | `localhost:6379` |
+| Kafka | `localhost:9092` |
+| Ollama | `localhost:11434` (embeddings) |
+
+The **ingestion worker** publishes no port — it is reached through Kafka, not HTTP.
+`make up` runs two replicas of it, one per ingest partition. Running the apps locally
+with `make dev` does *not* start a worker; see
+[`backend/README.md`](backend/README.md#the-ingestion-worker) for how to run one.
 
 Every environment value has a fallback, so this comes up with no `.env` file. To customize,
 create `infra/.env` — the variable names are in
@@ -120,7 +130,7 @@ clears that flag.
 | Target | Does |
 | --- | --- |
 | `make setup` | Install backend + frontend dependencies |
-| `make infra` | Start postgres + qdrant + redis, wait until healthy |
+| `make infra` | Start postgres + qdrant + redis + kafka, wait until healthy |
 | `make migrate` | Apply database migrations |
 | `make seed` | Create the bootstrap admin accounts (idempotent) |
 | `make dev` | Both dev servers together |
@@ -135,8 +145,8 @@ clears that flag.
 | `make psql` / `make redis-cli` | Shell into a running datastore |
 | `make clean` | Remove caches and build output |
 
-Individual datastores: `make docker-start-pg`, `docker-start-redis`, `docker-start-qdrant`, and
-the matching `docker-stop-*`.
+Individual datastores: `make docker-start-pg`, `docker-start-redis`, `docker-start-qdrant`,
+`docker-start-kafka`, and the matching `docker-stop-*`.
 
 ## Starting without `make`
 
@@ -145,9 +155,9 @@ the matching `docker-stop-*`.
 **Datastores only**
 
 ```bash
-docker compose -f infra/docker-compose.yml up -d --wait postgres qdrant redis
+docker compose -f infra/docker-compose.yml up -d --wait postgres qdrant redis kafka
 docker compose -f infra/docker-compose.yml ps          # check health
-docker compose -f infra/docker-compose.yml stop postgres qdrant redis
+docker compose -f infra/docker-compose.yml stop postgres qdrant redis kafka
 ```
 
 **Backend** (from `backend/`)
@@ -194,7 +204,7 @@ run them from inside `infra/`.
 Milestones from [`docs/PRD.md`](docs/PRD.md) §6, built in order:
 
 - [x] **M0** — Auth & accounts: admin-provisioned users, login, forced first-login password change, rate limiting
-- [ ] **M1** — Project ingestion: clone + index, status tracking, re-index, Redis + ARQ job queue
+- [x] **M1** — Project ingestion: clone + index, status tracking, re-index, Kafka job queue
 - [ ] **M2** — Dev Knowledge: RAG Q&A against a ready project, private conversations
 - [ ] **M3** — LangGraph: intent routing + self-critique loop
 - [ ] **M4** — QA List: shared storage, save / view / filter / re-run
