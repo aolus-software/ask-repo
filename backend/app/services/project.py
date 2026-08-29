@@ -6,7 +6,6 @@ and `delete` cannot drift apart (`.claude/rules/router.md`).
 
 import logging
 import uuid
-from collections.abc import Callable
 from urllib.parse import urlsplit
 
 from fastapi import status
@@ -19,7 +18,7 @@ from app.core.errors import AppError, ErrorCode
 from app.core.middleware import AuthenticatedUser
 from app.core.repo_url import RepoUrlRejected, validate_repo_url
 from app.ingestion.errors import IngestionError
-from app.ingestion.vector_store import VectorStore
+from app.ingestion.vector_store import VectorStoreFactory
 from app.models.project import Project, ProjectStatus
 from app.queue.protocol import IngestionQueue
 from app.queue.topics import INGEST_TOPIC, IngestionMessage
@@ -30,15 +29,6 @@ from app.schemas.project import ProjectCreateRequest, ProjectResponse, ReindexRe
 logger = logging.getLogger(__name__)
 
 DEFAULT_SORT = "created_at"
-
-VectorStoreFactory = Callable[[str], VectorStore]
-"""Collection name in, a store for that collection out.
-
-A factory rather than one pre-built store, because the only honest source of a
-collection's vector width is the startup probe (spec §6.3) and a request handler has
-no probed width to build a store with. Deleting a project therefore has to target the
-collection the project itself recorded, which is only known once its row is loaded.
-"""
 
 # A run is in flight in these states, so a second trigger is a no-op.
 BUSY_STATUSES = frozenset(

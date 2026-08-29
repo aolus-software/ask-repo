@@ -13,7 +13,7 @@ import asyncio
 import logging
 import re
 import uuid
-from collections.abc import AsyncIterator
+from collections.abc import AsyncGenerator
 
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import BaseMessage
@@ -106,7 +106,7 @@ class Answerer:
         project_id: uuid.UUID,
         generation: int,
         message_id: uuid.UUID,
-    ) -> AsyncIterator[StreamEvent]:
+    ) -> AsyncGenerator[StreamEvent]:
         """Rewrite, retrieve, generate — emitting events throughout.
 
         `message_id` is supplied by the caller rather than generated here so the

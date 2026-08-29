@@ -11,12 +11,12 @@ from app.core.errors import AppError, ErrorCode
 from app.core.middleware import AuthenticatedUser
 from app.ingestion.chunker import Chunk
 from app.ingestion.errors import RetryableIngestionError
-from app.ingestion.vector_store import InMemoryVectorStore, VectorStore
+from app.ingestion.vector_store import InMemoryVectorStore, VectorStore, VectorStoreFactory
 from app.models.project import ProjectStatus
 from app.queue.protocol import InMemoryIngestionQueue
 from app.repositories.project import ProjectRepository
 from app.schemas.project import ProjectCreateRequest
-from app.services.project import ProjectService, VectorStoreFactory
+from app.services.project import ProjectService
 from tests.factories import create_project, create_user
 
 

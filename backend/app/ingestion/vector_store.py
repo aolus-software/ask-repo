@@ -27,12 +27,14 @@ Four things here are load-bearing and easy to get wrong:
 import math
 import re
 import uuid
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any, Protocol
 
 from qdrant_client import AsyncQdrantClient, models
 from qdrant_client.http.exceptions import UnexpectedResponse
 
+from app.config import Settings
 from app.ingestion.chunker import Chunk
 from app.ingestion.errors import (
     IngestionError,
@@ -434,3 +436,27 @@ class InMemoryVectorStore:
         self.points = [
             point for point in self.points if point["payload"]["project_id"] != str(project_id)
         ]
+
+
+VectorStoreFactory = Callable[[str], VectorStore]
+"""Collection name in, a store for that collection out.
+
+A factory rather than one pre-built store, because the only honest source of a
+collection's vector width is the startup probe, and a request handler has none to
+offer. Both the delete path and the query path target the collection the project
+itself recorded, which is not known until its row is loaded.
+"""
+
+
+def build_store_factory(settings: Settings) -> VectorStoreFactory:
+    """Reach whichever collection a project recorded its points in.
+
+    No store is constructed here, deliberately: an unindexed project costs no Qdrant
+    client at all, and a project indexed before a provider switch legitimately lives
+    in a collection that current settings would not name.
+    """
+
+    def store_for(collection: str) -> VectorStore:
+        return QdrantVectorStore(url=settings.qdrant_url, collection=collection)
+
+    return store_for

@@ -12,12 +12,12 @@ from fastapi import APIRouter, Depends, Query, Request, status
 
 from app.api.deps import CurrentUser, SessionDep
 from app.config import Settings, get_settings
-from app.ingestion.vector_store import QdrantVectorStore, VectorStore
+from app.ingestion.vector_store import build_store_factory
 from app.queue.protocol import IngestionQueue
 from app.schemas.errors import ERROR_RESPONSES
 from app.schemas.pagination import ListQuery, PaginatedResponse
 from app.schemas.project import ProjectCreateRequest, ProjectResponse, ReindexResponse
-from app.services.project import ProjectService, VectorStoreFactory
+from app.services.project import ProjectService
 
 router = APIRouter(prefix="/projects", tags=["Projects"])
 
@@ -32,21 +32,6 @@ def get_ingestion_queue(request: Request) -> IngestionQueue:
     if queue is None:
         raise RuntimeError("ingestion queue is not configured; check the app lifespan")
     return queue
-
-
-def build_store_factory(settings: Settings) -> VectorStoreFactory:
-    """A way to reach whichever collection a project recorded its points in.
-
-    No store is constructed here, and that is the point: the width a collection was
-    created with is probed once at worker startup (spec §6.3), so a request handler
-    has none to offer. Deleting a project builds a store for the collection named on
-    its own row — and only then, so an unindexed project costs no Qdrant client at all.
-    """
-
-    def store_for(collection: str) -> VectorStore:
-        return QdrantVectorStore(url=settings.qdrant_url, collection=collection)
-
-    return store_for
 
 
 def get_project_service(
