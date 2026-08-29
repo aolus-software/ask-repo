@@ -12,7 +12,7 @@ from fastapi import APIRouter, Depends, Query, Request, status
 
 from app.api.deps import CurrentUser, SessionDep
 from app.config import Settings, get_settings
-from app.ingestion.vector_store import build_store_factory
+from app.ingestion.vector_store import VectorStoreFactory, build_store_factory
 from app.queue.protocol import IngestionQueue
 from app.schemas.errors import ERROR_RESPONSES
 from app.schemas.pagination import ListQuery, PaginatedResponse
@@ -34,13 +34,27 @@ def get_ingestion_queue(request: Request) -> IngestionQueue:
     return queue
 
 
+def get_store_factory(
+    settings: Annotated[Settings, Depends(get_settings)],
+) -> VectorStoreFactory:
+    """How this process reaches a project's Qdrant collection.
+
+    A dependency rather than a direct call, for the same reason the queue is one:
+    it is the seam a test overrides so that deleting a project needs no Qdrant. The
+    delete path is the only route that talks to the vector store, and without this
+    every route test that deletes an indexed project opens a real connection.
+    """
+    return build_store_factory(settings)
+
+
 def get_project_service(
     session: SessionDep,
     settings: Annotated[Settings, Depends(get_settings)],
     queue: Annotated[IngestionQueue, Depends(get_ingestion_queue)],
+    store_factory: Annotated[VectorStoreFactory, Depends(get_store_factory)],
 ) -> ProjectService:
     """Provide the service with a request-scoped session."""
-    return ProjectService(session, settings, queue, store_factory=build_store_factory(settings))
+    return ProjectService(session, settings, queue, store_factory=store_factory)
 
 
 ProjectServiceDep = Annotated[ProjectService, Depends(get_project_service)]
