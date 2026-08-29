@@ -7,7 +7,7 @@ should be this function's body and this file — nothing else.
 
 import uuid
 
-from app.core.access import ProjectScope, resolve_project_scope
+from app.core.access import ProjectScope, resolve_conversation_owner, resolve_project_scope
 from app.core.middleware import AuthenticatedUser
 
 
@@ -68,3 +68,11 @@ def test_a_scope_is_immutable() -> None:
 
     with pytest.raises(dataclasses.FrozenInstanceError):
         scope.unrestricted = True  # type: ignore[misc]  # asserting immutability
+
+
+def test_an_admin_does_not_widen_conversation_access() -> None:
+    """is_admin gates destructive operations on shared resources. Conversations are
+    not shared, and §4.2's privacy guarantee is stated without qualification."""
+    admin = _user(is_admin=True)
+
+    assert resolve_conversation_owner(admin) == admin.id

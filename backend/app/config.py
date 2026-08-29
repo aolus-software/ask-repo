@@ -124,7 +124,6 @@ class Settings(BaseSettings):
     # Zero is legitimate here — it disables multi-turn memory entirely.
     rag_history_turns: int = Field(default=6, ge=0)
 
-
     # Encrypts stored PATs at rest (docs/PRD.md §9). Backed up separately from
     # the database — a backup holding both is plaintext storage with extra steps.
     pat_encryption_key: str = PLACEHOLDER_PAT_KEY

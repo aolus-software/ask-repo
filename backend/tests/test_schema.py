@@ -118,6 +118,7 @@ async def test_downgrade_then_upgrade_is_clean() -> None:
     for args in (["downgrade", "base"], ["upgrade", "head"]):
         subprocess.run(["uv", "run", "alembic", *args], cwd=BACKEND_ROOT, check=True)
 
+
 async def test_conversations_and_messages_exist_with_the_right_delete_semantics(
     db_session: AsyncSession,
 ) -> None:

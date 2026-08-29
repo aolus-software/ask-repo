@@ -5,6 +5,7 @@ import uuid
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.security import hash_password
+from app.models.conversation import Conversation
 from app.models.project import Project, ProjectStatus
 from app.models.user import User
 
@@ -48,3 +49,23 @@ async def create_project(
     session.add(project)
     await session.flush()
     return project
+
+
+async def create_conversation(
+    session: AsyncSession,
+    *,
+    user_id: uuid.UUID | None = None,
+    project_id: uuid.UUID | None = None,
+    title: str | None = None,
+) -> Conversation:
+    """A conversation owned by `user_id`, against `project_id`."""
+    if user_id is None:
+        user_id = (await create_user(session)).id
+    if project_id is None:
+        project_id = (await create_project(session)).id
+    conversation = Conversation(
+        id=uuid.uuid4(), user_id=user_id, project_id=project_id, title=title
+    )
+    session.add(conversation)
+    await session.flush()
+    return conversation

@@ -119,6 +119,7 @@ def test_resource_limits_reject_zero(build: Callable[[], Settings]) -> None:
     with pytest.raises(ValidationError):
         build()
 
+
 def test_m2_retrieval_bounds_reject_zero() -> None:
     """A zero here does not fail loudly — it retrieves nothing and the model
     answers from its training data in a confident tone. Fail at startup instead."""
