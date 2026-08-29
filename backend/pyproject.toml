@@ -49,6 +49,11 @@ select = ["E", "F", "I", "UP", "B", "ANN", "T20", "LOG", "G", "RUF"]
 "tests/**" = ["ANN401"]
 
 [tool.pytest.ini_options]
+markers = [
+    "integration: needs a real Kafka broker and Qdrant; excluded from `make check`",
+]
+# Integration tests are opt-in: otherwise CI needs a broker in order to lint a docstring.
+addopts = "-m 'not integration'"
 testpaths = ["tests"]
 asyncio_mode = "auto"
 # Session scope: the engine fixture is session-scoped, and a function-scoped

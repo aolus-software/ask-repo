@@ -157,6 +157,9 @@ test-watch: ## Re-run backend tests on change
 	cd $(BACKEND) && uv run pytest -f 2>/dev/null || \
 		echo "pytest-watch not installed: uv add --dev pytest-watcher, then use 'ptw'"
 
+test-integration:  ## Run integration tests (needs `make infra`)
+	cd backend && uv run pytest -m integration -v
+
 build: build-frontend ## Production build
 
 build-frontend: ## next build
