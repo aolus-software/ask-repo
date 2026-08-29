@@ -16,6 +16,7 @@ from pydantic import Field
 from app.core.errors import ErrorCode
 from app.models.conversation import FinishReason, MessageRole
 from app.schemas.base import ApiModel
+from app.schemas.pagination import ListQuery
 
 # Sent during any gap. Caddy sits in front of the API (docs/PRD.md §5), and an idle
 # SSE connection is exactly what a reverse proxy reaps.
@@ -39,6 +40,23 @@ class CitationPayload(ApiModel):
     commit_sha: str
     score: float
     cited: bool | None = None
+
+
+class ConversationListQuery(ListQuery):
+    """`ListQuery` plus the project filter.
+
+    A field on the model rather than a sibling `Query(...)` parameter, and that is
+    load-bearing: FastAPI flattens a Pydantic model used as `Annotated[Model,
+    Query()]` into individual query parameters only while it is the **sole** query
+    parameter of the route. Put a scalar beside it and the flattening stops — the
+    model starts demanding a literal `?query=` — and every request to the route
+    fails validation with `{"request": "Field required"}`, which names nothing that
+    appears in the signature.
+
+    `ApiModel` supplies the `projectId` alias, so nothing has to spell it out.
+    """
+
+    project_id: uuid.UUID | None = None
 
 
 class ConversationCreateRequest(ApiModel):
