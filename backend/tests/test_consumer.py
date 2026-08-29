@@ -11,6 +11,7 @@ retry path instead of leaving that to be discovered by the integration test.
 import asyncio
 import uuid
 from collections.abc import Awaitable, Callable
+from datetime import UTC, datetime
 from types import SimpleNamespace
 
 import pytest
@@ -123,6 +124,35 @@ async def test_a_retryable_failure_goes_to_the_one_minute_topic(db_session: Asyn
     assert routed.job_id != original.job_id
 
 
+async def test_a_scheduled_retry_holds_the_lease_until_it_is_due(
+    db_session: AsyncSession,
+) -> None:
+    """Spec §4.5's sweep and `claim` read the same column, so the lease sets both.
+
+    Expiring the lease at once would make the project look abandoned for the whole
+    retry delay, and the reconcile sweep would enqueue a second job for one already
+    scheduled. Held to the due moment, `lease_expires_at < now` is false for the sweep
+    and becomes true exactly when the retry arrives.
+    """
+    project = await create_project(db_session, status=ProjectStatus.PENDING)
+    await db_session.commit()
+
+    outcome = await handle(
+        db_session,
+        message_for(project.id, attempt=0),
+        pipeline=StubPipeline(RetryableIngestionError("network")),
+        producer=InMemoryIngestionQueue(),
+    )
+    assert outcome is JobOutcome.RETRY_SCHEDULED
+
+    await db_session.refresh(project)
+    assert project.lease_expires_at is not None
+    held_for = (project.lease_expires_at - datetime.now(UTC)).total_seconds()
+    # RETRY_TOPICS[0] is the one-minute rung; the lease covers it and no more.
+    assert 0 < held_for <= RETRY_TOPICS[0][1]
+    assert not await ProjectRepository(db_session).find_stranded(pending_older_than_seconds=0)
+
+
 async def test_a_retry_can_actually_be_claimed(db_session: AsyncSession) -> None:
     """The forwarded attempt needs a job id `claim` has not already recorded.
 
@@ -145,8 +175,7 @@ async def test_a_retry_can_actually_be_claimed(db_session: AsyncSession) -> None
     )
     assert first is JobOutcome.RETRY_SCHEDULED
 
-    # What the real pipeline's retryable handler does on the way out: expire the
-    # lease, and leave everything else for the retry to decide.
+    # Time passes and the retry falls due; the lease the consumer held now expires.
     await ProjectRepository(db_session).renew_lease(
         project_id=project.id, worker_id="w0", lease_seconds=-1
     )

@@ -193,18 +193,21 @@ async def test_a_pat_never_reaches_the_recorded_error(
     assert REDACTION in project.error
 
 
-async def test_a_retryable_failure_leaves_the_project_claimable(
+async def test_a_retryable_failure_leaves_the_lease_to_the_consumer(
     db_session: AsyncSession, tmp_path: Path
 ) -> None:
-    """The consumer will re-enqueue it, so the pipeline must not mark it failed.
+    """The job is coming back, so the pipeline must not mark it failed — or release it.
 
-    Claimability, not a cleared `lease_owner`, is the guarantee: spec §4.2 clears the
-    owner on *terminal* completion, and `ProjectRepository.claim` gates on the lease
-    having expired rather than on who last held it.
+    Only the consumer knows when the retry is due, so only the consumer can say how
+    long the lease should be held. If the pipeline expired it here, the project would
+    look abandoned to spec §4.5's reconcile sweep for the whole retry delay and the
+    sweep would enqueue a second job for one already scheduled.
     """
     project = await create_project(db_session, status=ProjectStatus.PENDING)
     await db_session.commit()
     job_id = await claim_for(db_session, project.id)
+    await db_session.refresh(project)
+    held_until = project.lease_expires_at
 
     pipeline = pipeline_for(
         db_session,
@@ -218,9 +221,10 @@ async def test_a_retryable_failure_leaves_the_project_claimable(
 
     await db_session.refresh(project)
     assert project.status != ProjectStatus.FAILED
-    assert project.lease_expires_at is not None
-    assert project.lease_expires_at < datetime.now(UTC)
-    assert await ProjectRepository(db_session).claim(
+    assert project.lease_owner == "w0"
+    assert project.lease_expires_at == held_until, "the pipeline moved a lease it does not own"
+    # Still ours, so a second worker cannot take it while the retry is scheduled.
+    assert not await ProjectRepository(db_session).claim(
         project_id=project.id, job_id=uuid.uuid4(), worker_id="w1", lease_seconds=300
     )
 

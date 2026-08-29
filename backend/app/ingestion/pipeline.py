@@ -141,14 +141,14 @@ class IngestionPipeline:
                 await self._discard_unclaimed_generation(project_id, generation)
             raise
         except RetryableIngestionError:
-            # Drop the lease but leave the status alone — the job is coming back, and
-            # marking it `failed` would lie to anyone reading the list. The points
-            # already written stay: the retry rewrites the same ids in the same
-            # generation, so they are overwritten rather than duplicated.
-            await self.repository.renew_lease(
-                project_id=project_id, worker_id=worker_id, lease_seconds=-1
-            )
-            await self.session.commit()
+            # The lease is deliberately left alone, and the status with it: the job is
+            # coming back, and marking it `failed` would lie to anyone reading the
+            # list. Only the consumer knows *when* the retry is due, so only the
+            # consumer can say how long to hold the lease — expiring it here would
+            # make the project look abandoned to the reconcile sweep for the whole
+            # delay, and the sweep would re-enqueue a job that is already scheduled.
+            # The points already written stay: the retry rewrites the same ids in the
+            # same generation, so they are overwritten rather than duplicated.
             raise
         except Exception:
             # Unclassified, so the retry-or-dead-letter call is the consumer's to make

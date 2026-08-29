@@ -172,18 +172,32 @@ async def _route_failure(
         not_before_ms=int(time.time() * 1000) + delay_seconds * 1000,
         original_topic=message.original_topic,
     )
-    await producer.produce_to(topic, forwarded)
-
     if topic != DLQ_TOPIC:
+        # Hold the lease until the retry is actually due, rather than expiring it. The
+        # pipeline leaves the lease alone precisely so this decision lands here, where
+        # the delay is known. Expiring it now would make the project look abandoned to
+        # spec §4.5's reconcile sweep for the whole delay, and the sweep would enqueue
+        # a second job for one already scheduled. Held to the due moment instead, the
+        # same `lease_expires_at < now` test serves both readers: `claim` lets the
+        # retry in the instant it arrives, and the sweep only notices a retry that is
+        # genuinely overdue — a produce that failed, or a retry consumer that died.
+        await repository.renew_lease(
+            project_id=message.project_id, worker_id=worker_id, lease_seconds=delay_seconds
+        )
+        await session.commit()
+        await producer.produce_to(topic, forwarded)
         return JobOutcome.RETRY_SCHEDULED
 
     # Nothing else will pick this up, so the project must stop looking busy. This is
     # the normal way `reindex_in_progress` comes down on a failing run — the pipeline
-    # deliberately leaves it raised while a job is still coming back — but it is not a
-    # guarantee: a crash between the produce above and this write leaves the flag up,
-    # and the redelivered message is refused by `claim` because `last_job_id` already
-    # names the job. Spec §4.5's reconcile sweep is what recovers that project, once
-    # the lease expires. Task 19 owes it.
+    # deliberately leaves it raised while a job is still coming back.
+    #
+    # Written *before* the dead-letter message is produced, deliberately. Either
+    # ordering has a crash window; this one fails towards "recorded failed, no DLQ
+    # record", where the user sees the truth and only the operator's audit trail is
+    # short. The reverse fails towards a project stuck looking busy forever, because
+    # the redelivered message is refused by `claim` — `last_job_id` already names the
+    # job — so nothing re-runs it and only §4.5's sweep recovers it.
     released = await repository.release(
         project_id=message.project_id,
         job_id=message.job_id,
@@ -199,6 +213,7 @@ async def _route_failure(
             "dead-lettered project %s but could not record the outcome: no longer ours",
             message.project_id,
         )
+    await producer.produce_to(topic, forwarded)
     return JobOutcome.DEAD_LETTERED
 
 
