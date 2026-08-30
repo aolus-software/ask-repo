@@ -99,6 +99,25 @@ describe("reduceAskEvent", () => {
   });
 });
 
+function openSseResponse(): {
+  response: Response;
+  push: (frame: string) => void;
+  close: () => void;
+} {
+  const encoder = new TextEncoder();
+  let controller!: ReadableStreamDefaultController<Uint8Array>;
+  const body = new ReadableStream<Uint8Array>({
+    start(c) {
+      controller = c;
+    },
+  });
+  return {
+    response: { body } as Response,
+    push: (frame: string) => controller.enqueue(encoder.encode(frame)),
+    close: () => controller.close(),
+  };
+}
+
 function sseResponse(frames: string[]): Response {
   const encoder = new TextEncoder();
   return {
@@ -207,6 +226,49 @@ describe("useAskStream reconciliation", () => {
     await pending;
 
     await waitFor(() => expect(result.current.state?.reconciled).toBe(true));
+  });
+
+  it("refetches the conversation while the answer is still streaming", async () => {
+    // The user's message is persisted by the pre-flight, so the server has it before
+    // the first byte. Without a refetch here the composer has cleared, the stored row
+    // has not been fetched, and the question is on screen nowhere until the answer
+    // finishes — which reads as pressing Enter having thrown it away.
+    //
+    // The assertion is deliberately "during", not "at least twice": a refetch that
+    // only happens at the reconciliation point is the bug, and it would satisfy a
+    // call-count check.
+    const stream = openSseResponse();
+    apiFetchRaw.mockResolvedValue(stream.response);
+
+    const detailFn = vi.fn(() => Promise.resolve({ id: "c1", messages: [] }));
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const { result } = renderHook(
+      () => {
+        useQuery({ queryKey: keys.conversations.detail("c1"), queryFn: detailFn });
+        return useAskStream("c1");
+      },
+      {
+        wrapper: ({ children }: { children: React.ReactNode }) =>
+          createElement(QueryClientProvider, { client }, children),
+      },
+    );
+
+    await waitFor(() => expect(detailFn).toHaveBeenCalled()); // the mount fetch
+    detailFn.mockClear();
+
+    const pending = result.current.ask("why is the lease needed?");
+    stream.push('event: token\ndata: {"text":"because"}\n\n');
+
+    await waitFor(() => {
+      expect(result.current.state?.isStreaming).toBe(true);
+      expect(detailFn).toHaveBeenCalled();
+    });
+
+    stream.push(
+      'event: done\ndata: {"messageId":"m1","model":"qwen","finishReason":"stop","citedIndexes":[],"groundingWarnings":[]}\n\n',
+    );
+    stream.close();
+    await pending;
   });
 
   it("does not reconcile a pre-flight failure — nothing was streamed", async () => {

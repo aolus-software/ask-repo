@@ -111,6 +111,7 @@ class ConversationService:
             rows, total = await self._conversations.list_page(
                 owner_id=access.resolve_conversation_owner(actor),
                 project_id=project_id,
+                search=query.search,
                 page=query.page,
                 limit=query.limit,
                 sort=query.sort or DEFAULT_SORT,

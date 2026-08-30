@@ -36,12 +36,25 @@ class ConversationRepository(BaseRepository[Conversation]):
         return result.scalar_one_or_none()
 
     def _owned(
-        self, owner_id: uuid.UUID, project_id: uuid.UUID | None
+        self,
+        owner_id: uuid.UUID,
+        project_id: uuid.UUID | None,
+        search: str | None = None,
     ) -> Select[tuple[Conversation]]:
         """The base query both the page and its count are built from."""
         statement = self.active_select().where(Conversation.user_id == owner_id)
         if project_id is not None:
             statement = statement.where(Conversation.project_id == project_id)
+        if search:
+            # The title is the only text a conversation carries — messages are not
+            # searched, because a conversation's body is the model's prose rather
+            # than something the operator wrote and would recognise.
+            #
+            # `title` is NULL until the backend derives one from the first question,
+            # and `ilike` on NULL is NULL rather than false. An untitled conversation
+            # is therefore excluded from every search, which is the wanted behaviour:
+            # it has no text to have matched.
+            statement = statement.where(Conversation.title.ilike(f"%{search.strip()}%"))
         return statement
 
     async def list_page(
@@ -53,18 +66,21 @@ class ConversationRepository(BaseRepository[Conversation]):
         sort: str,
         descending: bool,
         project_id: uuid.UUID | None = None,
+        search: str | None = None,
     ) -> tuple[list[Conversation], int]:
         """One page of this owner's conversations, plus the unpaginated total."""
         if sort not in self.SORTABLE_FIELDS:
             raise ValueError(f"cannot sort conversations by {sort!r}")
 
         column = getattr(Conversation, sort)
-        statement = self._owned(owner_id, project_id).order_by(
+        statement = self._owned(owner_id, project_id, search).order_by(
             column.desc() if descending else column.asc()
         )
         rows = await self.session.execute(statement.offset((page - 1) * limit).limit(limit))
+        # The count applies the SAME filters as the rows, so the last page is never
+        # empty and the pager never promises a page that does not exist.
         total = await self.session.execute(
-            select(func.count()).select_from(self._owned(owner_id, project_id).subquery())
+            select(func.count()).select_from(self._owned(owner_id, project_id, search).subquery())
         )
         return list(rows.scalars().all()), total.scalar_one()
 

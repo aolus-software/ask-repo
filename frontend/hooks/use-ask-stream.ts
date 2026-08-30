@@ -141,6 +141,24 @@ export function useAskStream(conversationId: string) {
         setState(current);
         started = true;
 
+        // The user's message is persisted by the pre-flight, BEFORE the first byte of
+        // the stream — so by now the server already has it and the client does not.
+        // Without this refetch the composer has cleared, the stored row has not been
+        // fetched, and the question is on screen nowhere for the length of the answer:
+        // it looks like pressing Enter threw it away.
+        //
+        // Refetched rather than held in this state as an optimistic copy, because the
+        // query refetches on window focus (staleTime 30s, and an answer routinely runs
+        // longer than that). An optimistic copy plus that refetch is the same question
+        // rendered twice — the exact duplication `reconciled` exists to prevent for the
+        // answer. The answer still needs that treatment; the question does not, because
+        // it is already stored.
+        //
+        // Not awaited: the answer must start rendering now, not after a round trip.
+        void queryClient.invalidateQueries({
+          queryKey: keys.conversations.detail(conversationId),
+        });
+
         for await (const event of parseSseStream(response.body, controller.signal)) {
           current = reduceAskEvent(current, event);
           if (event.event === "token") schedule();

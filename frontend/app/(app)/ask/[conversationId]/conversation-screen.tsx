@@ -85,7 +85,12 @@ export function ConversationScreen({ conversationId }: { conversationId: string 
 
   return (
     <div className="space-y-6">
-      <div>
+      {/* Pinned under the navbar so the question you are reading always says which
+          conversation and which project it belongs to. `top-16` is the navbar's 4rem
+          (`docs/design.md` → Layout); the opaque background and the rule beneath it are
+          what stop the answer from appearing to slice through the title as it scrolls
+          under. z-10 sits below the navbar's z-50 and the sidebar's. */}
+      <div className="bg-background border-border sticky top-16 z-10 border-b pb-4">
         <h1 className="text-3xl font-semibold tracking-tight">
           {detail.title ?? "New conversation"}
         </h1>

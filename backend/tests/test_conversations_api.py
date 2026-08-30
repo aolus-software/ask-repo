@@ -11,7 +11,7 @@ from app.ingestion.chunker import Chunk
 from app.ingestion.embedder import FakeEmbedder
 from app.ingestion.vector_store import InMemoryVectorStore
 from app.models.project import ProjectStatus
-from tests.factories import create_project, create_user
+from tests.factories import create_conversation, create_project, create_user
 
 
 def sse_events(body: str) -> list[tuple[str, dict[str, object]]]:
@@ -258,3 +258,78 @@ async def test_deleting_a_conversation_hides_it(
     assert (await authed_client.delete(f"/conversations/{conversation_id}")).status_code == 204
     assert (await authed_client.get(f"/conversations/{conversation_id}")).status_code == 404
     assert (await authed_client.get("/conversations")).json()["totalCount"] == 0
+
+
+async def test_listing_filters_by_search_and_by_project(
+    authed_client: AsyncClient, db_session: AsyncSession
+) -> None:
+    """Both filters, separately and together — and the total honours them.
+
+    A count that ignored the filters would promise pages that do not exist, so it is
+    asserted rather than assumed.
+    """
+    owner_id = uuid.UUID((await authed_client.get("/auth/me")).json()["id"])
+    project_a = await create_project(db_session, created_by=owner_id)
+    project_b = await create_project(db_session, created_by=owner_id)
+    await create_conversation(
+        db_session, user_id=owner_id, project_id=project_a.id, title="How does the lease work?"
+    )
+    await create_conversation(
+        db_session,
+        user_id=owner_id,
+        project_id=project_b.id,
+        title="How does the retry ladder work?",
+    )
+    await db_session.commit()
+
+    unfiltered = await authed_client.get("/conversations")
+    assert unfiltered.json()["totalCount"] == 2
+
+    # Case-insensitive, and on a substring rather than a prefix.
+    searched = await authed_client.get("/conversations", params={"search": "LEASE"})
+    assert [item["title"] for item in searched.json()["items"]] == ["How does the lease work?"]
+    assert searched.json()["totalCount"] == 1
+
+    scoped = await authed_client.get("/conversations", params={"projectId": str(project_b.id)})
+    assert [item["title"] for item in scoped.json()["items"]] == [
+        "How does the retry ladder work?"
+    ]
+    assert scoped.json()["totalCount"] == 1
+
+    together = await authed_client.get(
+        "/conversations", params={"search": "work", "projectId": str(project_a.id)}
+    )
+    assert [item["title"] for item in together.json()["items"]] == ["How does the lease work?"]
+
+
+async def test_search_excludes_a_conversation_that_has_no_title_yet(
+    authed_client: AsyncClient, db_session: AsyncSession
+) -> None:
+    """`title` is NULL until the first question derives one, and `ilike` on NULL is
+    NULL rather than false — so an untitled conversation drops out of a search
+    instead of matching every one of them."""
+    owner_id = uuid.UUID((await authed_client.get("/auth/me")).json()["id"])
+    project = await create_project(db_session, created_by=owner_id)
+    await create_conversation(db_session, user_id=owner_id, project_id=project.id, title=None)
+    await db_session.commit()
+
+    assert (await authed_client.get("/conversations")).json()["totalCount"] == 1
+    assert (
+        await authed_client.get("/conversations", params={"search": "anything"})
+    ).json()["totalCount"] == 0
+
+
+async def test_search_does_not_leak_another_users_conversation(
+    authed_client: AsyncClient, db_session: AsyncSession
+) -> None:
+    """Ownership is applied before the search, not alongside it."""
+    stranger = await create_user(db_session)
+    project = await create_project(db_session, created_by=stranger.id)
+    await create_conversation(
+        db_session, user_id=stranger.id, project_id=project.id, title="How does the lease work?"
+    )
+    await db_session.commit()
+
+    response = await authed_client.get("/conversations", params={"search": "lease"})
+
+    assert response.json()["totalCount"] == 0
