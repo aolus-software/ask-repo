@@ -15,8 +15,10 @@ import { canManageProject } from "@/lib/can";
  * in the conversation where the question was asked, not as a toast — they are about
  * this turn (design spec §9.8).
  *
- * Mounted only when there IS an error, so the project query it needs for the re-index
- * button does not fire on every conversation view.
+ * Still mounted only when there IS an error, but the project query it needs for the
+ * re-index button is no longer the reason: the screen now shows the project in its
+ * header, so `useProject(projectId)` is already in cache by the time this renders and
+ * this reads it rather than issuing a request.
  */
 export function PreflightError({
   error,

@@ -28,6 +28,14 @@ export interface AskState {
   citedIndexes: number[];
   groundingWarnings: string[];
   errorMessage: string | null;
+  /**
+   * The stored message has arrived in the conversation query.
+   *
+   * Until it does, the answer exists only in `text` and the screen is the only place
+   * rendering it. After it does, the same text exists in both — so the screen stops
+   * rendering this copy. Without it the answer appears twice until a reload.
+   */
+  reconciled: boolean;
 }
 
 export function initialAskState(): AskState {
@@ -41,6 +49,7 @@ export function initialAskState(): AskState {
     citedIndexes: [],
     groundingWarnings: [],
     errorMessage: null,
+    reconciled: false,
   };
 }
 
@@ -170,11 +179,24 @@ export function useAskStream(conversationId: string) {
         if (started) setState(current);
 
         // After ANY of the three terminations: the refetch is the reconciliation
-        // point. The optimistic message is replaced by the stored one, which is where
+        // point. The streamed answer is replaced by the stored one, which is where
         // the real messageId and the resolved `cited` flags come from.
-        void queryClient.invalidateQueries({
+        //
+        // Awaited, not fired and forgotten, because the screen has to know WHEN the
+        // stored row lands. Before it, this state is the only copy of the answer;
+        // after it, the same text is in the message list too, and something has to
+        // stop rendering — `reconciled` is that signal. Fired and forgotten, both
+        // copies render until the page is reloaded.
+        await queryClient.invalidateQueries({
           queryKey: keys.conversations.detail(conversationId),
         });
+
+        // Guarded on the controller: a newer ask() owns the state by now, and marking
+        // ITS state reconciled would blank an answer that is still streaming.
+        if (started && abortRef.current === controller) {
+          setState({ ...current, reconciled: true });
+        }
+
         // The backend derives the title from the first question, so the rail is stale too.
         void queryClient.invalidateQueries({ queryKey: keys.conversations.all });
       }
