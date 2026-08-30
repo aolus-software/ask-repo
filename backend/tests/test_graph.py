@@ -51,6 +51,18 @@ def test_status_event_accepts_the_new_phases() -> None:
     assert StatusEvent(phase="grading").phase == "grading"
 
 
+def test_status_event_rejects_the_retired_rewriting_phase() -> None:
+    """`rewriting` is gone: the node classifies as well as rewrites, and leaving the
+    old name would have the frontend carrying a label the backend never sends."""
+    import pytest
+    from pydantic import ValidationError
+
+    from app.schemas.conversation import StatusEvent
+
+    with pytest.raises(ValidationError):
+        StatusEvent(phase="rewriting")  # type: ignore[arg-type]  # deliberately retired value
+
+
 def test_done_event_reports_the_path_the_turn_took() -> None:
     """Not recomputable from the stored message, so if it is not reported here it is
     gone — see spec §2.4."""

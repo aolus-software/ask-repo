@@ -1,8 +1,11 @@
 """What the model is actually asked.
 
-Two templates. The answer prompt is the one that decides whether AskRepo is useful
-or merely fluent; its most important instruction is the refusal one, because a code
-assistant that invents a plausible file path is worse than one that admits it does
+Four templates, one per graph call: `ANSWER_PROMPT` writes the answer, `CLASSIFY_PROMPT`
+routes the question and rewrites it for retrieval in one call, `GRADE_PROMPT` judges
+whether the retrieved excerpts are enough, and `HISTORY_ANSWER_PROMPT` answers a message
+about the conversation itself. The answer prompt is the one that decides whether AskRepo
+is useful or merely fluent; its most important instruction is the refusal one, because a
+code assistant that invents a plausible file path is worse than one that admits it does
 not know — the fabrication is checkable only by someone who already knows the answer.
 """
 
@@ -112,17 +115,6 @@ question directly: name what you would need to look up. Do not describe code fro
 memory, and do not guess at a file path, a symbol, or a behaviour. You have not read \
 the repository in this turn."""
 
-REWRITE_SYSTEM = """\
-You rewrite a follow-up question into a standalone search query for a code search \
-engine.
-
-Use the conversation to resolve pronouns and implied subjects, then output the \
-query and nothing else. No preamble, no explanation, no quotes. Keep it short.
-
-Example. Conversation: "How does the clone URL get validated?" / "It goes through \
-validate_repo_url." Follow-up: "What about the error case?" Output: "What happens \
-when clone URL validation fails?\""""
-
 
 @dataclass(frozen=True, slots=True)
 class Turn:
@@ -163,14 +155,6 @@ ANSWER_PROMPT = ChatPromptTemplate.from_messages(
         ("system", ANSWER_SYSTEM),
         MessagesPlaceholder("history"),
         ("human", "{question}"),
-    ]
-)
-
-REWRITE_PROMPT = ChatPromptTemplate.from_messages(
-    [
-        ("system", REWRITE_SYSTEM),
-        MessagesPlaceholder("history"),
-        ("human", "Follow-up: {question}"),
     ]
 )
 

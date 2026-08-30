@@ -112,15 +112,13 @@ class StreamEvent(ApiModel):
 class StatusEvent(StreamEvent):
     """Where the turn has got to. May be emitted any number of times, including none.
 
-    `classifying` and `grading` are the graph's phases, added alongside the
-    pre-M3 `rewriting` rather than replacing it: the hand-written answerer in
-    `app/rag/answerer.py` still emits `rewriting` until the graph's nodes replace it
-    (M3 task 13), and removing the value now would break every event that file
-    sends in the meantime.
+    `rewriting` retired with M3 task 13: the graph's `classify` node classifies and
+    rewrites in one call, so `classifying` covers what `rewriting` used to name, and
+    nothing emits the old value any more.
     """
 
     event_name: ClassVar[str] = "status"
-    phase: Literal["queued", "classifying", "rewriting", "retrieving", "grading", "generating"]
+    phase: Literal["queued", "classifying", "retrieving", "grading", "generating"]
 
 
 class CitationsEvent(StreamEvent):

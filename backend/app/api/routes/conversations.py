@@ -102,6 +102,7 @@ def get_answerer_factory(
             model_id=settings.chat_model,
             semaphore=semaphore,
             timeout_seconds=settings.chat_timeout_seconds,
+            settings=settings,
         )
 
     return answerer_for
