@@ -18,8 +18,8 @@ from collections.abc import Awaitable, Callable
 from langchain_core.language_models import BaseChatModel
 from langgraph.config import get_stream_writer
 
-from app.rag.graph.state import Classification, Intent, TurnState
-from app.rag.prompts import CLASSIFY_PROMPT, to_langchain_history
+from app.rag.graph.state import Classification, EvidenceVerdict, Intent, TurnState
+from app.rag.prompts import CLASSIFY_PROMPT, GRADE_PROMPT, format_spans, to_langchain_history
 from app.rag.retriever import RetrievedChunk, Retriever
 from app.schemas.conversation import CitationPayload, CitationsEvent, StatusEvent, StreamEvent
 
@@ -133,3 +133,52 @@ def build_retrieve(retriever: Retriever) -> Node:
         return {"spans": spans, "attempts": state["attempts"] + 1}
 
     return retrieve
+
+
+def build_grade(chat_model: BaseChatModel, *, enabled: bool) -> Node:
+    """Judge whether the retrieved excerpts can answer the question.
+
+    Biased toward `sufficient`, and its failure path says `sufficient` too. The
+    asymmetry is deliberate: a wrong "insufficient" spends another retrieval and can
+    only end at the weak-evidence path, while a wrong "sufficient" produces exactly
+    the behaviour this system had before the grader existed. A grader that can block
+    an answer is a regression, not a guardrail.
+    """
+
+    async def grade(state: TurnState) -> dict[str, object]:
+        if not enabled:
+            return {"evidence_ok": True}
+
+        emit(StatusEvent(phase="grading"))
+        try:
+            async with asyncio.timeout(UTILITY_TIMEOUT_SECONDS):
+                result = await chat_model.with_structured_output(EvidenceVerdict).ainvoke(
+                    GRADE_PROMPT.format_messages(
+                        context=format_spans(state["spans"]), question=state["question"]
+                    )
+                )
+        except Exception:
+            logger.warning(
+                "Evidence grading failed; answering on what was retrieved", exc_info=True
+            )
+            return {"evidence_ok": True}
+
+        verdict = EvidenceVerdict.model_validate(result)
+        if verdict.sufficient:
+            return {"evidence_ok": True}
+
+        # An empty `better_query` must not blank the search: the next attempt would
+        # embed an empty string and retrieve noise.
+        next_query = verdict.better_query.strip() or state["search_query"]
+        logger.info(
+            "Evidence graded insufficient after attempt %d (%s); re-searching",
+            state["attempts"],
+            verdict.gap or "no gap given",
+        )
+        return {
+            "evidence_ok": False,
+            "gap": verdict.gap or None,
+            "search_query": next_query,
+        }
+
+    return grade
