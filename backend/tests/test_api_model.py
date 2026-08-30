@@ -12,7 +12,7 @@ import uuid
 
 import pytest
 
-from app.models.conversation import FinishReason
+from app.models.conversation import FinishReason, Intent
 from app.schemas.base import ApiModel
 from app.schemas.conversation import (
     SSE_EVENT_MODELS,
@@ -81,6 +81,7 @@ def test_encoded_events_carry_camel_case_keys() -> None:
             model="qwen2.5-coder:14b",
             finish_reason=FinishReason.STOP,
             cited_indexes=[1, 3],
+            intent=Intent.CODEBASE_QUESTION,
         )
     )
 

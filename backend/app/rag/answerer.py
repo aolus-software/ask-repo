@@ -19,7 +19,7 @@ from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import BaseMessage
 
 from app.core.errors import ErrorCode
-from app.models.conversation import FinishReason
+from app.models.conversation import FinishReason, Intent
 from app.rag.grounding import NO_CONTEXT_ANSWER, grounding_warnings
 from app.rag.prompts import ANSWER_PROMPT, REWRITE_PROMPT, Turn, format_spans, to_langchain_history
 from app.rag.retriever import RetrievedChunk, Retriever
@@ -146,6 +146,8 @@ class Answerer:
                     finish_reason=FinishReason.STOP,
                     cited_indexes=[],
                     grounding_warnings=grounding_warnings(answer="", spans=spans, cited_count=0),
+                    intent=Intent.CODEBASE_QUESTION,
+                    retrieval_attempts=1,
                 )
                 return
 
@@ -199,6 +201,8 @@ class Answerer:
                 finish_reason=FinishReason.STOP,
                 cited_indexes=cited,
                 grounding_warnings=warnings,
+                intent=Intent.CODEBASE_QUESTION,
+                retrieval_attempts=1,
             )
 
     async def _rewrite(self, question: str, history: list[Turn]) -> str:

@@ -29,3 +29,34 @@ def test_evidence_verdict_defaults_are_empty_strings() -> None:
 
     assert verdict.gap == ""
     assert verdict.better_query == ""
+
+
+def test_status_event_accepts_the_new_phases() -> None:
+    from app.schemas.conversation import StatusEvent
+
+    assert StatusEvent(phase="classifying").phase == "classifying"
+    assert StatusEvent(phase="grading").phase == "grading"
+
+
+def test_done_event_reports_the_path_the_turn_took() -> None:
+    """Not recomputable from the stored message, so if it is not reported here it is
+    gone — see spec §2.4."""
+    import json
+    import uuid
+
+    from app.models.conversation import FinishReason
+    from app.rag.graph.state import Intent
+    from app.schemas.conversation import DoneEvent
+
+    event = DoneEvent(
+        message_id=uuid.uuid4(),
+        model="test-model",
+        finish_reason=FinishReason.STOP,
+        cited_indexes=[1],
+        intent=Intent.CONVERSATIONAL,
+        retrieval_attempts=0,
+    )
+    payload = json.loads(event.model_dump_json(by_alias=True))
+
+    assert payload["intent"] == "conversational"
+    assert payload["retrievalAttempts"] == 0
