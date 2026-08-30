@@ -530,3 +530,78 @@ async def test_an_exhausted_loop_tells_the_model_what_was_missing() -> None:
     system_message = next(m for m in sent if isinstance(m, SystemMessage))
     assert isinstance(system_message.content, str)
     assert "no tests found" in system_message.content
+
+
+async def test_the_conversational_route_emits_empty_citations_before_its_tokens() -> None:
+    """The ordering contract has no per-route exception: a client must not need to
+    know which route it got in order to parse the stream."""
+    from app.rag.graph.nodes import build_answer_from_history
+    from app.schemas.conversation import CitationsEvent, TokenEvent
+    from tests.fakes import ScriptedChatModel
+
+    events, final = await run_node(
+        build_answer_from_history(ScriptedChatModel(tokens=["You", " asked"]), timeout_seconds=30),
+        base_state(intent=Intent.CONVERSATIONAL),
+    )
+
+    citations = [i for i, e in enumerate(events) if isinstance(e, CitationsEvent)]
+    first_token = next(i for i, e in enumerate(events) if isinstance(e, TokenEvent))
+
+    assert len(citations) == 1
+    citations_event = events[citations[0]]
+    assert isinstance(citations_event, CitationsEvent)
+    assert citations_event.citations == []
+    assert citations[0] < first_token
+    assert final["answer"] == "You asked"
+
+
+async def test_the_conversational_route_never_retrieves() -> None:
+    """The whole point of the route: no embedding call, no Qdrant search.
+
+    `build_answer_from_history` has no `Retriever` dependency to call in the first
+    place -- there is no parameter to hand one through -- so the strongest evidence
+    available at this signature is that the retrieval-only state fields it was
+    handed (`spans`, `attempts`) come back completely unchanged rather than merely
+    matching their empty defaults. Asserting only the empty-default values (as the
+    plan draft does) would pass even for a node that reset them, which proves
+    nothing; threading non-default sentinel values through and asserting they
+    survive proves the node never touches them.
+    """
+    from app.rag.graph.nodes import build_answer_from_history
+    from tests.fakes import ScriptedChatModel
+    from tests.test_retriever import _span
+
+    sentinel_spans = [_span("a.py", 0, 1, 10)]
+    _, final = await run_node(
+        build_answer_from_history(ScriptedChatModel(tokens=["ok"]), timeout_seconds=30),
+        base_state(intent=Intent.CONVERSATIONAL, spans=sentinel_spans, attempts=3),
+    )
+
+    assert final["spans"] == sentinel_spans
+    assert final["attempts"] == 3
+
+
+async def test_the_refusal_makes_no_model_call_at_all() -> None:
+    """One classify call and nothing else -- the cheapest path in the system.
+
+    `build_refuse` takes no chat model at all: there is no parameter to pass one
+    through, so the guarantee is structural rather than something a runtime
+    assertion needs to establish -- the node has no reference to any model object
+    and so cannot possibly invoke one.
+    """
+    from app.rag.graph.nodes import build_refuse
+    from app.rag.grounding import OUT_OF_SCOPE_ANSWER
+    from app.schemas.conversation import CitationsEvent, TokenEvent
+
+    events, final = await run_node(build_refuse(), base_state(intent=Intent.OUT_OF_SCOPE))
+
+    tokens = "".join(e.text for e in events if isinstance(e, TokenEvent))
+    citations = [e for e in events if isinstance(e, CitationsEvent)]
+    first_token = next(i for i, e in enumerate(events) if isinstance(e, TokenEvent))
+    citations_index = next(i for i, e in enumerate(events) if isinstance(e, CitationsEvent))
+
+    assert tokens == OUT_OF_SCOPE_ANSWER
+    assert final["answer"] == OUT_OF_SCOPE_ANSWER
+    assert len(citations) == 1
+    assert citations[0].citations == []
+    assert citations_index < first_token

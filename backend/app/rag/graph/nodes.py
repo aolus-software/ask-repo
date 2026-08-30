@@ -21,10 +21,12 @@ from langgraph.config import get_stream_writer
 
 from app.models.conversation import FinishReason
 from app.rag.graph.state import Classification, EvidenceVerdict, Intent, TurnState
+from app.rag.grounding import OUT_OF_SCOPE_ANSWER
 from app.rag.prompts import (
     ANSWER_PROMPT,
     CLASSIFY_PROMPT,
     GRADE_PROMPT,
+    HISTORY_ANSWER_PROMPT,
     format_spans,
     to_langchain_history,
 )
@@ -263,3 +265,66 @@ def build_generate(chat_model: BaseChatModel, *, timeout_seconds: float) -> Node
         return {"answer": "".join(parts), "failure": None}
 
     return generate
+
+
+def build_answer_from_history(chat_model: BaseChatModel, *, timeout_seconds: float) -> Node:
+    """Answer a message about the conversation rather than about the code.
+
+    No retrieval at all -- that is the saving this route exists for: a follow-up
+    like "thanks" or "say that again" is answered from the prior turns alone. The
+    empty `citations` event is not a formality: the ordering contract
+    (`.claude/rules/rag.md`) has no per-route exception, and a client must not need
+    to know which route it got in order to parse the stream.
+
+    Shares `build_generate`'s partial-answer guarantee: the tokens streamed so far
+    are kept on every exit path, including a timeout or a mid-stream model failure.
+    `CancelledError` is a `BaseException` and is deliberately not caught here, for
+    the same reason as in `build_generate` -- a disconnected client should stop the
+    turn, not fall back to a partial answer nobody will read.
+    """
+
+    async def answer_from_history(state: TurnState) -> dict[str, object]:
+        emit(CitationsEvent(citations=[]))
+        emit(StatusEvent(phase="generating"))
+        messages = HISTORY_ANSWER_PROMPT.format_messages(
+            history=to_langchain_history(state["history"]), question=state["question"]
+        )
+
+        parts: list[str] = []
+        try:
+            async with asyncio.timeout(timeout_seconds):
+                async for chunk in chat_model.astream(messages):
+                    text = text_of(chunk)
+                    if text:
+                        parts.append(text)
+                        emit(TokenEvent(text=text))
+        except TimeoutError:
+            logger.warning("The model did not finish within %ss; ending the turn", timeout_seconds)
+            return {"answer": "".join(parts), "failure": FinishReason.TIMEOUT}
+        except Exception:
+            logger.exception("The model failed partway through a conversational reply")
+            return {"answer": "".join(parts), "failure": FinishReason.ERROR}
+
+        return {"answer": "".join(parts), "failure": None}
+
+    return answer_from_history
+
+
+def build_refuse() -> Node:
+    """Decline a question that is not about this repository.
+
+    No model call, no retrieval, no dependency of any kind -- that is the saving
+    this route exists for, making an out-of-scope question the cheapest path in the
+    system: one classify call and nothing else. The fixed refusal is streamed as
+    ordinary tokens rather than a distinct event type, following the
+    `NO_CONTEXT_ANSWER` precedent: a client renders a refusal exactly as it renders
+    an answer, and the machine-readable distinction rides in the `done` event's
+    `intent`.
+    """
+
+    async def refuse(state: TurnState) -> dict[str, object]:
+        emit(CitationsEvent(citations=[]))
+        emit(TokenEvent(text=OUT_OF_SCOPE_ANSWER))
+        return {"answer": OUT_OF_SCOPE_ANSWER, "failure": None}
+
+    return refuse
