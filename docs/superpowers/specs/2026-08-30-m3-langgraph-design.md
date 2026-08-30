@@ -295,12 +295,33 @@ they are today and nothing is reverse-engineered out of a provider-shaped event.
 writes one `TokenEvent` per chunk as it streams; `classify` and `grade` use `ainvoke` and write
 nothing.
 
+### 4.1 `emit()`, and why nodes are not plain unit-testable functions
+
+`get_stream_writer()` resolves the writer from LangGraph's runnable context and raises
+`RuntimeError: Called get_config outside of a runnable context` when there is none. A node that
+calls it is therefore **not** callable as a bare function in a test.
+
+Nodes call a one-line module helper rather than the LangGraph API directly:
+
+```python
+def emit(event: StreamEvent) -> None:
+    """Write one event to the turn's stream."""
+    get_stream_writer()(event)
+```
+
+The indirection keeps the LangGraph import in one place, so a later change of streaming
+mechanism touches one function rather than six nodes. It does not make nodes context-free, and
+deliberately so: a node tested outside the runtime would be tested in a state it never runs in.
+§10 gives the `run_node` harness that runs a single node inside a throwaway one-node graph and
+returns both the emitted events and the resulting state — which is what makes each node
+independently testable without weakening what the test proves.
+
 `stream_mode` as a list yields `(mode, chunk)` tuples. The adapter forwards every `custom` chunk
 verbatim and keeps the last `values` chunk as the final state, from which it builds exactly one
 terminator: `ErrorEvent` when `failure` is set, `DoneEvent` otherwise. Grounding warnings are
 computed there, once, from the final state.
 
-### 4.1 The ordering contract holds per route
+### 4.2 The ordering contract holds per route
 
 `.claude/rules/rag.md` requires `citations` exactly once, before the first `token`. This has no
 per-route exception. **`CitationsEvent` is emitted on all three routes**, empty on the two that
@@ -413,7 +434,7 @@ question and no excerpts. The prompt is told to decline and suggest asking about
 question turns out to need the codebase after all — the safety net under a `classify` miss, and
 the second half of the asymmetry argued in §5.1.
 
-Emits an empty `CitationsEvent` before its first token, per §4.1.
+Emits an empty `CitationsEvent` before its first token, per §4.2.
 
 ### 5.6 `refuse`
 
@@ -489,8 +510,10 @@ fallbacks in §5.1 and §5.3 — one code path, exercised by both.
 not against an operator's preference, and `chat_timeout_seconds` remains the budget for
 generation itself.
 
-`langgraph>=0.2.0` is added to `backend/pyproject.toml`. It is currently absent — the project has
-`langchain-core`, `langchain-ollama`, `langchain-openai` and `langchain-text-splitters` only.
+`langgraph>=1.0` is added to `backend/pyproject.toml`. It is currently absent — the project has
+`langchain-core`, `langchain-ollama`, `langchain-openai` and `langchain-text-splitters` only. The
+floor is `1.0`, not `0.2`: LangGraph is at **1.2.11**, and a `0.2` floor would both understate the
+API this design uses and admit pre-1.0 releases whose graph API differs.
 
 ---
 
@@ -542,6 +565,28 @@ New user-visible strings:
 `tests/test_answerer.py` survives largely intact — the payoff of §2.7. Its `ScriptedChatModel`
 and `RecordingRetriever` doubles still apply; assertions move from "the rewrite ran" to "classify
 ran, and retrieval saw the rewritten query".
+
+Node tests use a `run_node` harness, required by §4.1 — a node calling `emit()` cannot be
+invoked as a bare function. It compiles a throwaway single-node graph and returns what the node
+emitted alongside the state it produced:
+
+```python
+async def run_node(node: Callable, state: TurnState) -> tuple[list[StreamEvent], TurnState]:
+    """Run one node inside a throwaway one-node graph."""
+    graph = StateGraph(TurnState)
+    graph.add_node("n", node)
+    graph.add_edge(START, "n")
+    graph.add_edge("n", END)
+    app = graph.compile()
+    events: list[StreamEvent] = []
+    final: TurnState | None = None
+    async for mode, chunk in app.astream(state, stream_mode=["custom", "values"]):
+        if mode == "custom":
+            events.append(chunk)
+        else:
+            final = chunk
+    return events, final
+```
 
 New `tests/test_graph.py` covers what fails silently:
 
@@ -595,7 +640,7 @@ stream-ordering tests.
   LangGraph yet — that is M3", and the roadmap checkbox at `README.md:237` reads "**M3** —
   LangGraph: intent routing + self-critique loop", which needs the same correction as
   `docs/PRD.md:472` about what the loop critiques.
-- **`backend/pyproject.toml`** — `langgraph>=0.2.0`.
+- **`backend/pyproject.toml`** — `langgraph>=1.0` (resolves to 1.2.11).
 
 ---
 
