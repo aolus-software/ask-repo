@@ -1,10 +1,13 @@
 """The graph: routing, the corrective retrieval loop, and the streaming contract."""
 
-from collections.abc import Awaitable, Callable
+from typing import cast
 
+from langchain_core.runnables import RunnableLambda
 from langgraph.graph import END, START, StateGraph
 
+from app.rag.graph.nodes import Node
 from app.rag.graph.state import Classification, EvidenceVerdict, Intent, TurnState
+from app.schemas.conversation import StreamEvent
 
 
 def test_intent_serialises_as_its_value() -> None:
@@ -23,7 +26,10 @@ def test_classification_rejects_an_unknown_intent() -> None:
     from pydantic import ValidationError
 
     with pytest.raises(ValidationError):
-        Classification(intent="something_else", search_query="q")
+        Classification(
+            intent="something_else",  # type: ignore[arg-type]  # invalid, proves rejection
+            search_query="q",
+        )
 
 
 def test_evidence_verdict_defaults_are_empty_strings() -> None:
@@ -82,6 +88,8 @@ async def test_the_fake_returns_scripted_structured_results_in_order() -> None:
     first = await model.with_structured_output(Classification).ainvoke("anything")
     second = await model.with_structured_output(EvidenceVerdict).ainvoke("anything")
 
+    assert isinstance(first, Classification)
+    assert isinstance(second, EvidenceVerdict)
     assert first.intent == "codebase_question"
     assert second.sufficient is False
     assert second.better_query == "better"
@@ -130,13 +138,13 @@ async def test_two_scripted_model_instances_do_not_share_a_structured_queue() ->
     first_result = await first_model.with_structured_output(Classification).ainvoke("x")
     second_result = await second_model.with_structured_output(Classification).ainvoke("x")
 
+    assert isinstance(first_result, Classification)
+    assert isinstance(second_result, Classification)
     assert first_result.search_query == "a"
     assert second_result.search_query == "b"
 
 
-async def run_node(
-    node: Callable[[TurnState], Awaitable[dict]], state: TurnState
-) -> tuple[list, TurnState]:
+async def run_node(node: Node, state: TurnState) -> tuple[list[StreamEvent], TurnState]:
     """Run one node inside a throwaway one-node graph.
 
     Required, not preferred: nodes call `emit()`, which resolves LangGraph's stream
@@ -144,18 +152,20 @@ async def run_node(
     node invoked as a bare function would be tested in a state it never runs in.
     """
     graph = StateGraph(TurnState)
-    graph.add_node("n", node)
+    graph.add_node("n", RunnableLambda(node))
     graph.add_edge(START, "n")
     graph.add_edge("n", END)
     app = graph.compile()
 
-    events: list = []
+    events: list[StreamEvent] = []
     final: TurnState | None = None
     async for mode, chunk in app.astream(state, stream_mode=["custom", "values"]):
         if mode == "custom":
+            assert isinstance(chunk, StreamEvent)
             events.append(chunk)
         else:
-            final = chunk
+            assert isinstance(chunk, dict)
+            final = cast(TurnState, chunk)
     assert final is not None
     return events, final
 
