@@ -150,3 +150,55 @@ and the flattening stops: the model starts demanding a literal `?query=`, and ev
 fails with `{"request": "Field required"}` — naming nothing that appears in the signature.
 
 Extra filters go on a subclass of `ListQuery` (see `ConversationListQuery`), never beside it.
+
+## The graph degrades, and the grader never blocks
+
+Every node in `app/rag/graph/` falls back rather than failing the turn. `classify`
+falls back to `codebase_question` plus the raw question; `grade` falls back to
+`sufficient`.
+
+The grader's fallback is deliberately asymmetric and it is the one to get right. A
+wrong "insufficient" spends one more retrieval and ends at `weak_evidence`; a grader
+that can refuse an answer is a regression against the behaviour that shipped without
+it. **A helper node may never be the reason a question goes unanswered.**
+
+`CancelledError` is a `BaseException` and is not caught by these handlers, on
+purpose: a client that disconnected mid-classification should stop the turn, not fall
+back and carry on answering nobody.
+
+## Empty spans do not mean `no_context`
+
+`grounding_warnings()` returns `[NO_CONTEXT]` for any empty span list. That was
+correct when retrieval was the only path.
+
+The `conversational` and `out_of_scope` routes have empty spans because they never
+searched. Reporting "nothing in the index matched closely enough" there describes a
+search that did not happen, and the frontend renders it to the user as a warning.
+Both routes report `groundingWarnings: []`, and `intent` in `done` carries the
+explanation. The branch lives in `Answerer._warnings_for`, not in
+`grounding_warnings()`.
+
+## The ordering contract holds per route, and per attempt
+
+`citations` is emitted exactly once on **every** route — empty on the two that never
+retrieve — and always before the first `token`. A client must not need to know which
+route it got in order to parse the stream.
+
+Within the retrieval loop it is emitted on the **first** attempt only. The accepted
+consequence is that after a re-retrieval the live sources panel shows the first
+attempt's spans while the answer comes from the second; the stored message uses the
+final spans, so a reload reconciles it. Deferring the event until the loop settles
+would hold the sources panel behind up to two grader calls.
+
+## Nodes are context-bound, and that is not an accident
+
+`emit()` resolves LangGraph's stream writer from the runnable context and raises
+outside one, so a node cannot be called as a bare function in a test. Use the
+`run_node` harness in `tests/test_graph.py`, which compiles a throwaway one-node
+graph. A node tested outside the runtime would be tested in a state it never runs in.
+
+## The terminator is built by the adapter, never by a node
+
+`Answerer._terminate` is the only place a `DoneEvent` or `ErrorEvent` is constructed.
+No node can emit one, which is what makes "exactly one terminator per stream"
+structural rather than a rule six nodes each have to remember.

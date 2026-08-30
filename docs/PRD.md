@@ -272,6 +272,8 @@ class Project(BaseModel):
 - Deleting a project soft-deletes conversations against it, for every owner — not only the person who pressed delete.
 - **A broken stream keeps what arrived.** If the client disconnects or the model fails partway, the tokens already produced are persisted with a `finish_reason` of `disconnected` / `error` / `timeout`, so reopening the conversation shows what was received rather than a question with no reply.
 - **No evidence, no answer.** If retrieval returns nothing above the relevance floor, the model is not called at all; a fixed refusal is returned and `done` reports `groundingWarnings: ["no_context"]`. After generation, file paths named in the answer are checked against the paths actually retrieved, and any that appear in neither are reported as `unknown_paths`. These make an ungrounded answer *visible*; they do not make the model honest.
+- **Questions are routed before they are retrieved.** A question about the code retrieves and answers with citations; a conversational follow-up ("thanks", "say that again") is answered from the conversation with no retrieval at all; a question not about this repository is refused without a second model call. Ambiguous questions route to the codebase path — answering a code question from memory is worse than retrieving for one that did not need it.
+- **Retrieval grades itself.** When the retrieved excerpts do not answer the question, a grader supplies a better search query and retrieval runs again, bounded by `RAG_MAX_RETRIEVAL_ATTEMPTS`. If the budget runs out and the evidence is still weak, the answer is generated anyway, told what was missing, and reported with `groundingWarnings: ["weak_evidence"]` — a judgement about sufficiency annotates an answer, it does not veto one. `no_context` remains a hard block: with nothing retrieved at all, no answer is generated.
 
 **Schema**
 
@@ -389,7 +391,7 @@ class QAPair(BaseModel):
 | ------------------- | ---------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
 | Hosting             | VPS / on-prem box, Docker Compose                          | One instance per organization; self-hosted                                                |
 | API layer           | FastAPI                                                    | Python-native for LangChain/LangGraph                                                     |
-| Orchestration       | LangGraph                                                  | State graph for classify → retrieve → generate → critique/loop                            |
+| Orchestration       | LangGraph                                                  | State graph for classify → retrieve → grade/loop → generate                               |
 | LLM framework       | LangChain                                                  | Prompt templates, output parsers, document loaders/splitters                              |
 | Auth                | bcrypt hashing + JWT access / opaque refresh tokens        | Access token stateless (15 min); refresh token hashed in Postgres so it is revocable      |
 | ORM / migrations    | SQLAlchemy 2.0 + Alembic                                   | users, projects, qa_pairs, conversations, messages, refresh_tokens                        |
@@ -474,7 +476,7 @@ Redis stays in the stack for login rate limiting only. It does not back the queu
 0. **M0 — Auth & accounts:** admin-provisioned users, login with access/refresh tokens, forced first-login password change, admin password reset, login rate limiting, seeded bootstrap admins. Nothing else can be attributed until this exists.
 1. **M1 — Project ingestion:** `POST /projects` with repo link → clone + index, status tracking, manual re-index, URL validation, `created_by` gating. Moves ingestion out of the API process into a Kafka-driven worker (§5).
 2. **M2 — Dev Knowledge core (shipped):** RAG Q&A against a ready project (no graph yet), with private conversations, SSE streaming, history-aware query rewriting, and the grounding guardrails above.
-3. **M3 — LangGraph wrap:** turn the chain into a graph with intent routing + self-critique loop.
+3. **M3 — LangGraph wrap (shipped):** turn the chain into a graph with intent routing (codebase question / conversational / out of scope) and a self-critique loop that **grades retrieval before generating** — when the excerpts do not answer the question, the grader supplies a better query and retrieval runs again. The critique deliberately sits before generation rather than after it: a critic that can reject a finished answer can only run on an answer that finished, which means either buffering the whole draft (reintroducing the silence §4.2 added streaming to remove) or visibly retracting a streamed one. See `docs/superpowers/specs/2026-08-30-m3-langgraph-design.md` §2.1.
 4. **M4 — QA List:** shared `qa_pairs` storage + save/view/filter/re-run.
 5. **M5 — Mock Data Generator:** generate synthetic Q&A + basic eval scoring.
 6. **M6 — Local vs hosted comparison:** benchmark qwen2.5-coder/qwen3 vs hosted model across nodes.

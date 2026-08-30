@@ -12,11 +12,11 @@ organization runs one instance on its own internal network.
 the security model. It outranks every other doc and outranks the code. When code and the PRD
 disagree, that is a contradiction to report — not a doc to quietly rewrite.
 
-**Status: M0, M1 and M2 (backend) shipped.** The backend serves an index route, health checks,
-the full auth/accounts surface (admin-provisioned users, login, forced first-login password
-change, session rotation, login rate limiting), the project CRUD routes, and the conversation
-routes that answer questions about an indexed project. **All four datastores are read** —
-Postgres, Redis, Qdrant, and Kafka.
+**Status: M0, M1, M2, and M3 (backend) shipped.** The backend serves an index route, health
+checks, the full auth/accounts surface (admin-provisioned users, login, forced first-login
+password change, session rotation, login rate limiting), the project CRUD routes, and the
+conversation routes that answer questions about an indexed project. **All four datastores are
+read** — Postgres, Redis, Qdrant, and Kafka.
 
 M1 is complete end to end. `app/ingestion/` holds the cloner, walker, chunker, embedder adapter,
 Qdrant vector store, and `IngestionPipeline`; `app/queue/` holds the message format, topics, both
@@ -25,10 +25,18 @@ protocols, `KafkaIngestionQueue`, `IngestionConsumer`, and the delayed-retry `Re
 jobs the broker never received. `POST /projects` publishes a job and a worker picks it up.
 
 M2 is complete too. `app/rag/` holds the retriever, the chat-model adapter, the prompts, the
-`Answerer` that sequences rewrite → retrieve → generate, and the grounding guardrails;
-`app/services/conversation.py` and `app/api/routes/conversations.py` put it behind five routes.
-`POST /conversations/{id}/messages` streams the answer over Server-Sent Events. **There is no
-LangGraph yet** — the answerer is a plain sequence, and M3 replaces that one file with a graph.
+`Answerer` adapter, and the grounding guardrails; `app/services/conversation.py` and
+`app/api/routes/conversations.py` put it behind five routes. `POST /conversations/{id}/messages`
+streams the answer over Server-Sent Events.
+
+M3 is shipped too. `app/rag/graph/` holds the state graph — `nodes.py` for each node,
+`build.py` for the compiled graph, `state.py` for the shared `TurnState` — and `answerer.py` is
+now the adapter that runs it and turns its stream writes into SSE events. The sequencing is
+intent routing (codebase question / conversational / out of scope) followed, on the codebase
+path, by a corrective retrieval loop: a grader checks the retrieved excerpts and asks for a
+better search query when they fall short, bounded by `RAG_MAX_RETRIEVAL_ATTEMPTS`. The loop
+grades retrieval, not the finished answer — see `docs/PRD.md` §5's Orchestration row and §6's
+M3 line for why.
 
 The M0–M2 frontend is shipped: auth screens, the app shell, projects, the streamed answer
 surface, and admin user management, with Next acting as a backend-for-frontend (see the
