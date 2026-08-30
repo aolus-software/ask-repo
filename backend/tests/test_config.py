@@ -142,3 +142,21 @@ def test_chat_defaults_match_the_prd_stack_table() -> None:
     assert settings.chat_provider == "ollama"
     assert settings.chat_model == "qwen2.5-coder:14b"
     assert settings.rag_top_k == 12
+
+
+def test_retrieval_attempts_cannot_be_zero() -> None:
+    """`ge=1`, not `ge=0`. Zero would not raise — retrieval would simply never run,
+    and every question on the instance would get a no-context refusal about a
+    project that is indexed correctly. `docs/configuration.md` keeps a section for
+    exactly this class of silent-failure bound."""
+    with pytest.raises(ValidationError):
+        Settings(rag_max_retrieval_attempts=0)
+
+
+def test_the_graph_nodes_are_on_by_default() -> None:
+    """The toggles exist for M6's per-node benchmark, not as a soft launch."""
+    settings = Settings()
+
+    assert settings.rag_max_retrieval_attempts == 2
+    assert settings.rag_grade_evidence is True
+    assert settings.rag_classify_intent is True

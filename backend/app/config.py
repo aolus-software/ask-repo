@@ -128,6 +128,17 @@ class Settings(BaseSettings):
     # how a fluent, confident, entirely wrong answer gets produced. 0.0 disables the
     # floor; raise it if answers cite plausible-looking but irrelevant files.
     rag_min_score: float = Field(default=0.25, ge=0.0, le=1.0)
+    # How many times retrieval may run for one question: the first attempt plus any
+    # the grader asks for. `ge=1` rather than `ge=0` because zero does not fail — it
+    # would skip retrieval entirely and refuse every question on the instance with
+    # `no_context`, against an index that is perfectly healthy.
+    rag_max_retrieval_attempts: int = Field(default=2, ge=1)
+    # Both default on. They exist so `docs/PRD.md` §6's per-node local-vs-hosted
+    # benchmark can run the graph with a node disabled and measure what it buys;
+    # disabled, each short-circuits to the same value its failure path produces, so
+    # there is one code path rather than two.
+    rag_grade_evidence: bool = True
+    rag_classify_intent: bool = True
 
     # Encrypts stored PATs at rest (docs/PRD.md §9). Backed up separately from
     # the database — a backup holding both is plaintext storage with extra steps.

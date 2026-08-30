@@ -258,6 +258,9 @@ already running Postgres, Qdrant, Redis and Kafka.
 | `RAG_CONTEXT_MAX_CHARS` | `24000` | Character budget for retrieved code in the prompt. Lowest-scoring spans are dropped first, so the cap can never discard the best hit. Must be ≥ 1000 |
 | `RAG_HISTORY_TURNS` | `6` | Prior turns replayed into the prompt. `0` disables multi-turn memory |
 | `RAG_MIN_SCORE` | `0.25` | Cosine similarity a chunk must reach to be shown to the model at all. `0.0` disables the floor |
+| `RAG_MAX_RETRIEVAL_ATTEMPTS` | `2` | How many times retrieval may run for one question — the first attempt plus any the evidence grader asks for. Raise it if answers often miss code you know is indexed; each extra attempt costs one model call before the answer starts. Must be at least 1. |
+| `RAG_GRADE_EVIDENCE` | `true` | Whether a model call judges the retrieved excerpts before answering, and re-searches on a better query when they fall short. Turning it off removes one model call per question and makes the answer path identical to M2's. |
+| `RAG_CLASSIFY_INTENT` | `true` | Whether a model call routes the question — code question, conversational follow-up, or out of scope — before retrieving. Turning it off sends every question down the retrieval path, including "thanks". |
 
 `RAG_MIN_SCORE` is the setting most worth tuning. Below the floor the embedder is saying
 "unrelated", and answering from unrelated code is how a fluent, confident, entirely wrong
