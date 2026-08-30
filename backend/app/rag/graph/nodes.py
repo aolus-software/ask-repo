@@ -20,7 +20,8 @@ from langgraph.config import get_stream_writer
 
 from app.rag.graph.state import Classification, Intent, TurnState
 from app.rag.prompts import CLASSIFY_PROMPT, to_langchain_history
-from app.schemas.conversation import StatusEvent, StreamEvent
+from app.rag.retriever import RetrievedChunk, Retriever
+from app.schemas.conversation import CitationPayload, CitationsEvent, StatusEvent, StreamEvent
 
 logger = logging.getLogger(__name__)
 
@@ -89,3 +90,46 @@ def build_classify(chat_model: BaseChatModel, *, enabled: bool) -> Node:
         return {"intent": intent, "search_query": query, "attempts": 0}
 
     return classify
+
+
+def to_citations(chunks: list[RetrievedChunk]) -> list[CitationPayload]:
+    """Number the spans as the prompt labels them: 1-based, best score first."""
+    return [
+        CitationPayload(
+            index=index,
+            file_path=chunk.file_path,
+            start_line=chunk.start_line,
+            end_line=chunk.end_line,
+            language=chunk.language,
+            symbol=chunk.symbol,
+            commit_sha=chunk.commit_sha,
+            score=chunk.score,
+        )
+        for index, chunk in enumerate(chunks, start=1)
+    ]
+
+
+def build_retrieve(retriever: Retriever) -> Node:
+    """Find the spans this question should be answered from.
+
+    `citations` is emitted on the **first** attempt only. The contract says exactly
+    once (`.claude/rules/rag.md`), and a client renders its sources panel while the
+    answer types, so deferring it until the loop settles would hold the panel behind
+    up to two grader calls. The consequence is accepted: after a re-retrieval the
+    live panel shows the first attempt's spans while the answer comes from the
+    second. The stored message uses the final spans, so reloading the conversation
+    reconciles it.
+    """
+
+    async def retrieve(state: TurnState) -> dict[str, object]:
+        emit(StatusEvent(phase="retrieving"))
+        spans = await retriever.retrieve(
+            state["search_query"],
+            project_id=state["project_id"],
+            generation=state["generation"],
+        )
+        if state["attempts"] == 0:
+            emit(CitationsEvent(citations=to_citations(spans)))
+        return {"spans": spans, "attempts": state["attempts"] + 1}
+
+    return retrieve

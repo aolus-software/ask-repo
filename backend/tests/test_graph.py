@@ -279,3 +279,44 @@ async def test_a_disabled_classifier_makes_no_model_call() -> None:
 
     assert final["intent"] is Intent.CODEBASE_QUESTION
     assert final["search_query"] == "q"
+
+
+async def test_retrieve_emits_citations_once_on_the_first_attempt() -> None:
+    """The ordering contract has no per-route and no per-attempt exception. A second
+    citations event would break every client that renders its sources panel once."""
+    from app.rag.graph.nodes import build_retrieve
+    from app.schemas.conversation import CitationsEvent
+    from tests.test_answerer import RecordingRetriever
+
+    node = build_retrieve(RecordingRetriever())
+
+    first_events, first_state = await run_node(node, base_state(search_query="q"))
+    second_events, second_state = await run_node(node, base_state(search_query="q", attempts=1))
+
+    assert len([e for e in first_events if isinstance(e, CitationsEvent)]) == 1
+    assert [e for e in second_events if isinstance(e, CitationsEvent)] == []
+    assert first_state["attempts"] == 1
+    assert second_state["attempts"] == 2
+
+
+async def test_retrieve_searches_the_rewritten_query() -> None:
+    """Embedding "what about the error case?" verbatim produces a vector for a
+    generic phrase about errors, unrelated to this repository at all."""
+    from app.rag.graph.nodes import build_retrieve
+    from tests.test_answerer import RecordingRetriever
+
+    retriever = RecordingRetriever()
+
+    await run_node(build_retrieve(retriever), base_state(search_query="REWRITTEN"))
+
+    assert retriever.queries == ["REWRITTEN"]
+
+
+async def test_retrieve_emits_the_retrieving_phase() -> None:
+    from app.rag.graph.nodes import build_retrieve
+    from app.schemas.conversation import StatusEvent
+    from tests.test_answerer import RecordingRetriever
+
+    events, _ = await run_node(build_retrieve(RecordingRetriever()), base_state())
+
+    assert any(isinstance(e, StatusEvent) and e.phase == "retrieving" for e in events)
