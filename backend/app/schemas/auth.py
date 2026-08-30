@@ -40,6 +40,24 @@ class ChangePasswordRequest(ApiModel):
         return value
 
 
+class PasswordPolicyResponse(ApiModel):
+    """The rules a new password must satisfy, so a client can show them.
+
+    This exists so the frontend never hard-codes the policy. The values come from
+    `Settings`, which is the same source `validate_password` enforces against, so an
+    operator who raises `PASSWORD_MIN_LENGTH` gets a UI that follows rather than a UI
+    that confidently states the old number.
+
+    The common-password blocklist is deliberately **not** exposed: it is a large
+    wordlist, and shipping it to the browser would be both wasteful and a hint sheet.
+    A client can therefore check length locally but never conclude a password is
+    acceptable — only the API decides that.
+    """
+
+    min_length: int
+    max_bytes: int
+
+
 class AccessTokenResponse(ApiModel):
     """What login and refresh return. The refresh token is in the cookie, not here."""
 

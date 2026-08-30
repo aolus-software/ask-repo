@@ -114,6 +114,13 @@ The field is `password_hash`, not `password`. The plaintext exists only in the r
   `Secure`, `SameSite=Lax` cookie** scoped to `/auth`. The refresh token never appears in a
   response body: a 30-day credential in `localStorage` is readable by any script on the page.
   Because the cookie is `Secure`, the instance requires TLS — Caddy (§5) is not optional.
+- **The frontend mirrors the session into its own cookies.** Next sets `askrepo_access` (the
+  JWT) and `askrepo_session` (the backend's refresh cookie, stored as a verbatim `name=value`
+  pair so an operator's `REFRESH_COOKIE_NAME` override cannot silently break it) on the frontend
+  origin at `Path=/`, both `httpOnly`, `SameSite=Lax`, and `Secure` in production. The path
+  differs from this cookie's `/auth` scope because Next's middleware runs at paths like
+  `/projects` and is only sent cookies whose path matches. **The access token is never returned
+  to the browser in a response body** — the login route hands back the user and nothing else.
 - When `must_change_password` is set, login succeeds but **every route outside `/auth`** returns `403` with the machine-readable code `PASSWORD_CHANGE_REQUIRED`, so the frontend can force the change. The whole `/auth` surface stays reachable: the user needs `GET /auth/me` to see who they are, `POST /auth/refresh` because the access token expires in 15 minutes while they are typing, and `POST /auth/logout` / `logout-all` to abandon the flow or kill other sessions first.
 - `POST /auth/change-password` accepts `{current_password, new_password}`, clears
   `must_change_password`, and revokes all _other_ refresh tokens for that user. It returns no
@@ -390,7 +397,7 @@ class QAPair(BaseModel):
 | Chat model          | Ollama (qwen2.5-coder:14b, qwen3:14b) + hosted adapter     | Answers questions. Separate setting from the embedder — commonly local embed, hosted answer |
 | Storage             | Postgres                                                   | Users, projects, qa_pairs, conversations, refresh tokens, encrypted PATs                  |
 | Secrets             | Env-provided encryption key (AES-GCM / Fernet)             | Encrypts PATs at rest; key never committed, rotatable                                     |
-| Frontend            | Minimal Next.js                                            | Not the focus; keep thin                                                                  |
+| Frontend            | Next.js (App Router) acting as a backend-for-frontend      | Holds the session in its own httpOnly cookies and calls the API on the browser's behalf, so no token is readable by a script on the page. This is more than the "keep thin" this row originally called for — see `docs/superpowers/specs/2026-08-29-frontend-m0-m2-design.md` §2.1 for the reasoning and the costs |
 | Networking          | VPN / Tailscale only — no public exposure                  | The instance is internal. Admin access to Postgres/Qdrant dashboards likewise             |
 
 **Bcrypt over argon2id.** argon2id requires 64 MiB per hash by design, a real cost on the single shared VPS that hosts Postgres, Qdrant, Redis, and possibly Ollama. bcrypt keeps the property that matters: each password guess costs real time, and the time is configurable (cost factor). The security difference is negligible in a private network where the attacker is a compromised laptop or an insider with database access.

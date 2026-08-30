@@ -67,6 +67,27 @@ def _present_cookie(client: AsyncClient, value: str) -> None:
     client.cookies.set(get_settings().refresh_cookie_name, value)
 
 
+async def test_password_policy_reports_the_configured_bounds(client: AsyncClient) -> None:
+    """The frontend renders these instead of hard-coding them, so they must be the
+    same values `validate_password` enforces — not a second copy that can drift."""
+    response = await client.get("/auth/password-policy")
+
+    assert response.status_code == 200
+    body = response.json()
+    settings = get_settings()
+    assert body == {
+        "minLength": settings.password_min_length,
+        "maxBytes": settings.password_max_bytes,
+    }
+
+
+async def test_password_policy_needs_no_credentials(client: AsyncClient) -> None:
+    """The forced-password-change screen reads it while the caller is still gated."""
+    response = await client.get("/auth/password-policy")
+
+    assert response.status_code == 200
+
+
 async def test_login_returns_an_access_token_and_the_user(
     client: AsyncClient, db_session: AsyncSession
 ) -> None:

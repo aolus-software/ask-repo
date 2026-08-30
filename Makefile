@@ -28,7 +28,7 @@ DATASTORES := postgres qdrant redis kafka ollama
         build build-frontend \
         lint lint-backend lint-frontend \
         format format-check format-backend format-frontend \
-        test test-backend test-one test-watch \
+        test test-backend test-frontend test-one test-watch \
         typecheck check \
         up down restart logs ps compose-config rebuild \
         clean clean-backend clean-frontend
@@ -147,10 +147,13 @@ typecheck: ## Static types, both apps
 	cd $(BACKEND) && uv run mypy .
 	cd $(FRONTEND) && bunx tsc --noEmit
 
-test: test-backend ## Run the test suites
+test: test-backend test-frontend ## Run the test suites
 
 test-backend: ## pytest
 	cd $(BACKEND) && uv run pytest
+
+test-frontend: ## vitest
+	cd $(FRONTEND) && bun run test
 
 # Usage: make test-one T=tests/test_api_model.py  |  make test-one T=-k\ camel_case
 test-one: ## Run one test file or -k expression (T=...)
