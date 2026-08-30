@@ -24,6 +24,14 @@ UNCITED_ANSWER = "uncited_answer"
 UNKNOWN_PATHS = "unknown_paths"
 """The answer named a file that appears in no retrieved excerpt."""
 
+WEAK_EVIDENCE = "weak_evidence"
+"""Retrieval was graded insufficient and the attempt budget was spent.
+
+Distinct from `NO_CONTEXT`, which means retrieval returned nothing above the
+relevance floor and no answer was generated at all. This one means an answer *was*
+generated, from excerpts a grader judged incomplete.
+"""
+
 NO_CONTEXT_ANSWER = (
     "I could not find code in this project that answers that question. Nothing in "
     "the index matched closely enough to answer from, and I will not guess. Try "
@@ -35,6 +43,18 @@ NO_CONTEXT_ANSWER = (
 Streamed as ordinary tokens rather than a distinct event type, so a client renders
 a refusal exactly as it renders an answer. The machine-readable distinction is
 `NO_CONTEXT` in `groundingWarnings`.
+"""
+
+OUT_OF_SCOPE_ANSWER = (
+    "I only answer questions about the code in this project. Ask me about a file, a "
+    "function, or how something in this repository works, and I will answer from the "
+    "indexed code."
+)
+"""What the user sees for a question that is not about this repository.
+
+Streamed as ordinary tokens rather than a distinct event type, following
+`NO_CONTEXT_ANSWER`: a client renders a refusal exactly as it renders an answer, and
+the machine-readable distinction rides in the `done` event's `intent`.
 """
 
 # A path-shaped token: at least one directory separator, and a dotted extension.
