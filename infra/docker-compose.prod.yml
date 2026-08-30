@@ -1,0 +1,292 @@
+# AskRepo — production stack.
+#
+#   make setup-prod     check this box is ready
+#   make build-prod     build both production images
+#   make migrate-prod   apply migrations
+#   make seed-prod      create the bootstrap admins
+#   make up-prod        start everything
+#
+# See docs/deployment.md for the full procedure, and SECURITY.md for what remains
+# your responsibility after this file has done its part.
+#
+# **This is a standalone file, not an overlay on docker-compose.yml.** Layering the
+# two with `-f … -f …` does not work: Compose merges `volumes` by target path rather
+# than replacing the list, so the development bind-mounts of the working copy over
+# /app would survive into the merged config and the deployed code would be whatever
+# is checked out on the box.
+#
+# Differences from the development stack, all deliberate:
+#   - Production images (infra/*.prod.Dockerfile): no --reload, no `next dev`,
+#     non-root, and no migrations in the container start command.
+#   - Nothing is bind-mounted. The image is the artifact.
+#   - No datastore ports are published. Redis, Kafka and Ollama have no
+#     authentication whatsoever; Kafka in particular lets anyone who reaches it
+#     enqueue a clone of a URL of their choosing.
+#   - backend and frontend publish to 127.0.0.1 only. Caddy terminates TLS and is
+#     the only thing that should reach them (docs/deployment.md §3).
+#   - APP_ENV is pinned to `production`, which turns four settings into startup
+#     checks rather than advice. It is not overridable here on purpose.
+#   - Secrets have no fallbacks. `${VAR:?message}` fails the command with that
+#     message rather than starting a stack with a publicly-known key.
+
+name: askrepo-prod
+
+# Deliberately a different project name from the development stack, so running both
+# on one machine cannot attach the production services to development volumes.
+
+# Container logs are unbounded by default and a busy worker is chatty. Left alone,
+# this fills the disk on a long-lived box — which takes Postgres down with it.
+x-logging: &logging
+  logging:
+    driver: json-file
+    options:
+      max-size: "10m"
+      max-file: "5"
+
+# Shared by `backend` and `worker`. They run the same image and must agree on every
+# datastore and secret — the worker writes the vectors the API deletes, and reads the
+# PATs the API encrypted. Two hand-maintained copies of this block would drift, and
+# the first symptom would be a worker that cannot decrypt.
+x-app-env: &app-env
+  # Pinned, not `${APP_ENV:-production}`. This value is what makes the placeholder
+  # secrets, REFRESH_COOKIE_SECURE=false and TRUSTED_PROXY_HOPS=0 hard startup
+  # failures instead of a stack that boots and looks fine.
+  APP_ENV: production
+  DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-askrepo}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in infra/.env}@postgres:5432/${POSTGRES_DB:-askrepo}
+  QDRANT_URL: http://qdrant:6333
+  REDIS_URL: redis://redis:6379/0
+  KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+  # Generate: openssl rand -hex 32
+  SECRET_KEY: ${SECRET_KEY:?set SECRET_KEY in infra/.env — openssl rand -hex 32}
+  # Encrypts stored PATs at rest. The API writes them and the worker reads them, so
+  # a mismatch here is a clone that fails with a decryption error, not a warning.
+  # Back this up SEPARATELY from the database.
+  # Generate: python -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())'
+  PAT_ENCRYPTION_KEY: ${PAT_ENCRYPTION_KEY:?set PAT_ENCRYPTION_KEY in infra/.env}
+  # Shared, not worker-only: the worker embeds documents at index time and the API
+  # embeds the question at query time. They must agree, because the collection name
+  # is derived from provider + model + width — disagree and the API searches a
+  # collection the worker never wrote to.
+  EMBEDDING_PROVIDER: ${EMBEDDING_PROVIDER:-ollama}
+  EMBEDDING_MODEL: ${EMBEDDING_MODEL:-nomic-embed-text}
+  EMBEDDING_BASE_URL: ${EMBEDDING_BASE_URL:-http://ollama:11434}
+  EMBEDDING_API_KEY: ${EMBEDDING_API_KEY:-}
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    <<: *logging
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-askrepo}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in infra/.env}
+      POSTGRES_DB: ${POSTGRES_DB:-askrepo}
+    # No `ports:`. Reached over the compose network only. `make psql-prod` gets you
+    # a shell without exposing 5432 to the host.
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-askrepo} -d ${POSTGRES_DB:-askrepo}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  qdrant:
+    image: qdrant/qdrant:v1.15.1
+    restart: unless-stopped
+    <<: *logging
+    volumes:
+      - qdrant_data:/qdrant/storage
+    healthcheck:
+      # The image has no curl/wget; use Qdrant's own binary as the probe.
+      test: ["CMD", "/qdrant/qdrant", "--version"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  redis:
+    image: redis:8-alpine
+    restart: unless-stopped
+    <<: *logging
+    # The rate-limit counters don't need durability, but losing them on every
+    # restart would reset every lockout.
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+
+  kafka:
+    image: apache/kafka:3.9.1
+    restart: unless-stopped
+    <<: *logging
+    environment:
+      # Single-node KRaft: this one container is both the broker and the controller,
+      # so the quorum voter list points at itself and there is no ZooKeeper. This is
+      # a development-scale broker running in production (docs/PRD.md §5) — losing
+      # it loses queued jobs, and the reconcile sweep recovers the projects.
+      CLUSTER_ID: ${KAFKA_CLUSTER_ID:-TxqebIstTHqeFT1rjwosQQ}
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,INTERNAL:PLAINTEXT
+      # One client listener, not two. The development stack advertises a second
+      # `HOST://localhost` listener so `make dev` can reach the broker from outside
+      # Docker; nothing here runs outside Docker, and advertising it would publish a
+      # reachable, unauthenticated broker.
+      KAFKA_LISTENERS: CONTROLLER://0.0.0.0:9093,INTERNAL://0.0.0.0:29092
+      KAFKA_ADVERTISED_LISTENERS: INTERNAL://kafka:29092
+      KAFKA_INTER_BROKER_LISTENER_NAME: INTERNAL
+      # These three default to 3. A one-broker cluster cannot satisfy that, and the
+      # broker never finishes starting — it is not a warning, it is a hang.
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      # Topics are created explicitly at startup so they get the 2 partitions the
+      # concurrency cap depends on; an auto-created topic would get 1 and halve it.
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "false"
+      KAFKA_LOG_DIRS: /var/lib/kafka/data
+    volumes:
+      - kafka_data:/var/lib/kafka/data
+    healthcheck:
+      test: ["CMD", "/opt/kafka/bin/kafka-broker-api-versions.sh", "--bootstrap-server", "kafka:29092"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+      start_period: 20s
+
+  backend:
+    build:
+      context: ../backend
+      dockerfile: ../infra/backend.prod.Dockerfile
+    image: askrepo-backend:${VERSION:-latest}
+    restart: unless-stopped
+    <<: *logging
+    # 127.0.0.1 only. Caddy proxies to it; nothing else should reach it. Publishing
+    # 0.0.0.0 here would make the reverse proxy — and therefore TLS — bypassable.
+    ports:
+      - "127.0.0.1:${BACKEND_PORT:-8000}:8000"
+    environment:
+      <<: *app-env
+      APP_NAME: ${APP_NAME:-AskRepo API}
+      DEBUG: "false"
+      # The browser talks to the frontend, which proxies the API server-side, so this
+      # is only exercised if you expose the API directly. It still has to be right.
+      CORS_ORIGINS: '["${PUBLIC_ORIGIN:?set PUBLIC_ORIGIN in infra/.env, e.g. https://askrepo.internal.example.com}"]'
+      BOOTSTRAP_ADMIN_PASSWORD: ${BOOTSTRAP_ADMIN_PASSWORD:?set BOOTSTRAP_ADMIN_PASSWORD in infra/.env}
+      # One Caddy in front. Left at 0, every request's socket address is Caddy's, so
+      # the per-IP login limit becomes a single instance-wide limit — which is why a
+      # production boot with 0 is refused outright (app/config.py).
+      TRUSTED_PROXY_HOPS: ${TRUSTED_PROXY_HOPS:-1}
+      # API-only: the worker indexes, it never answers a question.
+      CHAT_PROVIDER: ${CHAT_PROVIDER:-ollama}
+      CHAT_MODEL: ${CHAT_MODEL:-qwen2.5-coder:14b}
+      CHAT_BASE_URL: ${CHAT_BASE_URL:-http://ollama:11434}
+      CHAT_API_KEY: ${CHAT_API_KEY:-}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      qdrant:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health/live')"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  worker:
+    # The same image as the API with a different entrypoint, so the worker shares
+    # Settings, the ORM models, the repositories and the access resolver rather than
+    # growing a parallel copy of any of them.
+    build:
+      context: ../backend
+      dockerfile: ../infra/backend.prod.Dockerfile
+    image: askrepo-backend:${VERSION:-latest}
+    command: ["python", "-m", "app.worker"]
+    restart: unless-stopped
+    <<: *logging
+    # Two replicas against the two ingest partitions. That is what makes the
+    # concurrency cap of 2 in docs/PRD.md §4.1 structural rather than a setting:
+    # a third worker would sit idle with no partition to own. Raising throughput
+    # means raising KAFKA_INGEST_PARTITIONS and this number together.
+    deploy:
+      replicas: ${WORKER_REPLICAS:-2}
+    environment:
+      <<: *app-env
+    volumes:
+      # Scratch: the working copy is deleted after indexing and a reindex re-clones,
+      # so nothing here needs to survive a restart.
+      - repo_scratch:/data/repos
+    # There is deliberately no healthcheck. The worker exposes no endpoint and has no
+    # liveness signal to probe — its failure mode (dying at startup while probing
+    # embedding dimensions against an unreachable model server) shows up as a restart
+    # loop in `make ps-prod`, which is what to watch for.
+    depends_on:
+      postgres:
+        condition: service_healthy
+      qdrant:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+      # Not for the API itself — for ordering. Workers must not start against a
+      # schema that `make migrate-prod` has not been run against yet.
+      backend:
+        condition: service_healthy
+
+  ollama:
+    # Pinned. The development stack leaves this untagged, which floats to :latest
+    # and can change the model runtime under you on an unrelated rebuild.
+    image: ollama/ollama:${OLLAMA_VERSION:-0.33.2}
+    restart: unless-stopped
+    <<: *logging
+    volumes:
+      - ollama_models:/root/.ollama
+    # Behind a profile so an instance answering with a hosted provider does not run a
+    # container it has no use for. The Makefile enables it for every -prod target;
+    # drop `--profile ollama` there, and point EMBEDDING_BASE_URL / CHAT_BASE_URL
+    # elsewhere, to run without it.
+    #
+    # No model is pre-pulled — the first question waits on a multi-gigabyte download:
+    #   make pull-models-prod
+    profiles: ["ollama"]
+
+  frontend:
+    build:
+      context: ../frontend
+      dockerfile: ../infra/frontend.prod.Dockerfile
+    image: askrepo-frontend:${VERSION:-latest}
+    restart: unless-stopped
+    <<: *logging
+    # 127.0.0.1 only — this is what Caddy proxies to.
+    ports:
+      - "127.0.0.1:${FRONTEND_PORT:-3000}:3000"
+    environment:
+      # Resolved on the SERVER. The frontend proxies the API, so the browser never
+      # calls it directly — which is why this is the service name and not a public
+      # URL, and why it does not need to be reachable from a browser at all.
+      API_URL: http://backend:8000
+    depends_on:
+      # service_healthy, not service_started: the development stack accepts a UI that
+      # is up before the API can answer, a deployment should not.
+      backend:
+        condition: service_healthy
+
+volumes:
+  pgdata:
+  qdrant_data:
+  redis_data:
+  kafka_data:
+  ollama_models:
+  repo_scratch:

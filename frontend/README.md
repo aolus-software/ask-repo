@@ -98,7 +98,8 @@ frontend/
 
 ## Configuration
 
-Only one variable — see [`.env.example`](.env.example):
+Only one variable — see [`.env.example`](.env.example), and
+[`../docs/configuration.md`](../docs/configuration.md#frontend) for the reasoning:
 
 - `API_URL` — base URL of the AskRepo API, read on the **server** only: by the API forwarding
   route, the middleware, and `serverFetch`. The browser never calls the API directly, so this

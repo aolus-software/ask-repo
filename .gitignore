@@ -50,3 +50,6 @@ skills-lock.json
 *.local.json
 *.local.*
 .local
+
+# make backup-prod output
+backups/
