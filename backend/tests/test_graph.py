@@ -217,14 +217,18 @@ async def test_a_failing_classifier_falls_back_to_retrieval() -> None:
 
 
 async def test_an_overlong_query_falls_back_to_the_raw_question() -> None:
-    """Past this the model has returned a preamble or an explanation, not a query."""
+    """Past this the model has returned a preamble or an explanation, not a query. A
+    malformed query discards the model's intent verdict too -- a response that is
+    half garbage is not a response to trust for routing, so the intent is scripted
+    as `conversational` here to prove the fallback overrides it rather than merely
+    matching it by coincidence."""
     from app.rag.graph.nodes import MAX_QUERY_CHARS, build_classify
     from app.rag.graph.state import Classification
     from tests.fakes import ScriptedChatModel
 
     model = ScriptedChatModel(
         structured_results=[
-            Classification(intent="codebase_question", search_query="x" * (MAX_QUERY_CHARS + 1))
+            Classification(intent="conversational", search_query="x" * (MAX_QUERY_CHARS + 1))
         ]
     )
 
@@ -235,12 +239,16 @@ async def test_an_overlong_query_falls_back_to_the_raw_question() -> None:
 
 
 async def test_an_empty_query_falls_back_to_the_raw_question() -> None:
+    """A malformed query discards the model's intent verdict too -- a response that
+    is half garbage is not a response to trust for routing, so the intent is
+    scripted as `conversational` here to prove the fallback overrides it rather than
+    merely matching it by coincidence."""
     from app.rag.graph.nodes import build_classify
     from app.rag.graph.state import Classification
     from tests.fakes import ScriptedChatModel
 
     model = ScriptedChatModel(
-        structured_results=[Classification(intent="codebase_question", search_query="   ")]
+        structured_results=[Classification(intent="conversational", search_query="   ")]
     )
 
     _, final = await run_node(build_classify(model, enabled=True), base_state(question="q"))
