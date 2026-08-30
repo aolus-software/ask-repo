@@ -191,7 +191,7 @@ async def test_a_broken_stream_persists_the_partial_answer(db_session: AsyncSess
         chat_model=ScriptedChatModel(tokens=["half ", "an ", "answer"], fail_after=2),
         model_id="test-model",
         semaphore=asyncio.Semaphore(2),
-        timeout_seconds=30,
+        settings=get_settings(),
     )
 
     async for _ in stream_turn(
@@ -227,7 +227,7 @@ async def test_a_client_disconnect_persists_the_partial_and_releases_the_permit(
         chat_model=ScriptedChatModel(tokens=["a", "b", "c"], stall_seconds=0.05),
         model_id="test-model",
         semaphore=semaphore,
-        timeout_seconds=30,
+        settings=get_settings(),
     )
 
     stream = stream_turn(

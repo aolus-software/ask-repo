@@ -62,21 +62,13 @@ class Answerer:
         chat_model: BaseChatModel,
         model_id: str,
         semaphore: asyncio.Semaphore,
-        timeout_seconds: float,
-        settings: Settings | None = None,
+        settings: Settings,
     ) -> None:
-        # `timeout_seconds` is accepted, not stored: the generate node's timeout now
-        # comes from `settings.chat_timeout_seconds`, which `get_answerer_factory`
-        # always derives from the same settings object it passes here, so the two
-        # values never diverge in production. The parameter stays for the callers
-        # that still construct an `Answerer` directly and pass it -- narrowing the
-        # constructor now would be an edit to files this milestone deliberately
-        # leaves untouched.
         self.model_id = model_id
         self.semaphore = semaphore
-        self.settings = settings if settings is not None else Settings()
+        self.settings = settings
         self.graph = build_answer_graph(
-            retriever=retriever, chat_model=chat_model, settings=self.settings
+            retriever=retriever, chat_model=chat_model, settings=settings
         )
 
     async def answer(

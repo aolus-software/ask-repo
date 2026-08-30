@@ -205,7 +205,6 @@ def _fake_answerer_factory(
             chat_model=chat_model,
             model_id="test-model",
             semaphore=asyncio.Semaphore(2),
-            timeout_seconds=30,
             settings=Settings(),
         )
 

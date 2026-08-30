@@ -47,7 +47,6 @@ def build(
     retriever: Retriever | None = None,
     *,
     concurrency: int = 2,
-    timeout_seconds: float = 30,
     settings: Settings | None = None,
 ) -> Answerer:
     """An answerer over fakes. Explicit parameters rather than `**kwargs`, so a
@@ -57,7 +56,6 @@ def build(
         chat_model=chat_model,
         model_id="test-model",
         semaphore=asyncio.Semaphore(concurrency),
-        timeout_seconds=timeout_seconds,
         settings=settings if settings is not None else Settings(),
     )
 
@@ -160,9 +158,9 @@ async def test_a_mid_stream_failure_keeps_the_tokens_already_sent() -> None:
 
 async def test_a_timeout_terminates_with_its_own_finish_reason() -> None:
     """Distinct from `error` so a client can tell "retry might work" from
-    "something broke". The generate node's timeout comes from
-    `settings.chat_timeout_seconds` now, not the answerer's own `timeout_seconds` —
-    see the comment on `Answerer.__init__`."""
+    "something broke". The generate node's timeout is sized from
+    `settings.chat_timeout_seconds` -- there is no separate answerer-level timeout
+    any more."""
     model = ScriptedChatModel(
         tokens=["a", "b"], stall_seconds=1.1, structured_results=_codebase_question_script()
     )
@@ -182,7 +180,6 @@ async def test_a_contended_semaphore_announces_the_wait() -> None:
         chat_model=ScriptedChatModel(tokens=["a"], structured_results=_codebase_question_script()),
         model_id="test-model",
         semaphore=semaphore,
-        timeout_seconds=30,
         settings=Settings(),
     )
 
