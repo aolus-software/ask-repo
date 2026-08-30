@@ -1,6 +1,10 @@
 """The graph: routing, the corrective retrieval loop, and the streaming contract."""
 
-from app.rag.graph.state import Classification, EvidenceVerdict, Intent
+from collections.abc import Awaitable, Callable
+
+from langgraph.graph import END, START, StateGraph
+
+from app.rag.graph.state import Classification, EvidenceVerdict, Intent, TurnState
 
 
 def test_intent_serialises_as_its_value() -> None:
@@ -128,3 +132,130 @@ async def test_two_scripted_model_instances_do_not_share_a_structured_queue() ->
 
     assert first_result.search_query == "a"
     assert second_result.search_query == "b"
+
+
+async def run_node(
+    node: Callable[[TurnState], Awaitable[dict]], state: TurnState
+) -> tuple[list, TurnState]:
+    """Run one node inside a throwaway one-node graph.
+
+    Required, not preferred: nodes call `emit()`, which resolves LangGraph's stream
+    writer from the runnable context and raises `RuntimeError` when there is none. A
+    node invoked as a bare function would be tested in a state it never runs in.
+    """
+    graph = StateGraph(TurnState)
+    graph.add_node("n", node)
+    graph.add_edge(START, "n")
+    graph.add_edge("n", END)
+    app = graph.compile()
+
+    events: list = []
+    final: TurnState | None = None
+    async for mode, chunk in app.astream(state, stream_mode=["custom", "values"]):
+        if mode == "custom":
+            events.append(chunk)
+        else:
+            final = chunk
+    assert final is not None
+    return events, final
+
+
+def base_state(**overrides: object) -> TurnState:
+    """A turn state with every key present, so a node reading one never KeyErrors."""
+    import uuid
+
+    state: TurnState = {
+        "question": "how does validation work",
+        "history": [],
+        "project_id": uuid.uuid4(),
+        "generation": 0,
+        "intent": Intent.CODEBASE_QUESTION,
+        "search_query": "",
+        "spans": [],
+        "attempts": 0,
+        "gap": None,
+        "evidence_ok": False,
+        "answer": "",
+        "failure": None,
+    }
+    state.update(overrides)  # type: ignore[typeddict-item]  # test helper takes arbitrary overrides
+    return state
+
+
+async def test_classify_routes_and_rewrites_in_one_call() -> None:
+    from app.rag.graph.nodes import build_classify
+    from app.rag.graph.state import Classification
+    from app.schemas.conversation import StatusEvent
+    from tests.fakes import ScriptedChatModel
+
+    model = ScriptedChatModel(
+        structured_results=[
+            Classification(intent="conversational", search_query="how does it work")
+        ]
+    )
+
+    events, final = await run_node(build_classify(model, enabled=True), base_state())
+
+    assert final["intent"] is Intent.CONVERSATIONAL
+    assert final["search_query"] == "how does it work"
+    assert any(isinstance(e, StatusEvent) and e.phase == "classifying" for e in events)
+
+
+async def test_a_failing_classifier_falls_back_to_retrieval() -> None:
+    """Degrades toward evidence. Trading a worse answer for no answer is the wrong
+    trade for an optimisation, and the safe default is the path that retrieves."""
+    from app.rag.graph.nodes import build_classify
+    from tests.fakes import FailingChatModel
+
+    _, final = await run_node(
+        build_classify(FailingChatModel(), enabled=True),
+        base_state(question="what about errors"),
+    )
+
+    assert final["intent"] is Intent.CODEBASE_QUESTION
+    assert final["search_query"] == "what about errors"
+
+
+async def test_an_overlong_query_falls_back_to_the_raw_question() -> None:
+    """Past this the model has returned a preamble or an explanation, not a query."""
+    from app.rag.graph.nodes import MAX_QUERY_CHARS, build_classify
+    from app.rag.graph.state import Classification
+    from tests.fakes import ScriptedChatModel
+
+    model = ScriptedChatModel(
+        structured_results=[
+            Classification(intent="codebase_question", search_query="x" * (MAX_QUERY_CHARS + 1))
+        ]
+    )
+
+    _, final = await run_node(build_classify(model, enabled=True), base_state(question="q"))
+
+    assert final["search_query"] == "q"
+
+
+async def test_an_empty_query_falls_back_to_the_raw_question() -> None:
+    from app.rag.graph.nodes import build_classify
+    from app.rag.graph.state import Classification
+    from tests.fakes import ScriptedChatModel
+
+    model = ScriptedChatModel(
+        structured_results=[Classification(intent="codebase_question", search_query="   ")]
+    )
+
+    _, final = await run_node(build_classify(model, enabled=True), base_state(question="q"))
+
+    assert final["search_query"] == "q"
+
+
+async def test_a_disabled_classifier_makes_no_model_call() -> None:
+    """Short-circuits to the same values the failure path produces — one code path,
+    not two. This is what makes PRD §6's per-node benchmark measure a real delta."""
+    from app.rag.graph.nodes import build_classify
+    from tests.fakes import ScriptedChatModel
+
+    model = ScriptedChatModel(structured_results=[])  # would raise if called
+
+    _, final = await run_node(build_classify(model, enabled=False), base_state(question="q"))
+
+    assert final["intent"] is Intent.CODEBASE_QUESTION
+    assert final["search_query"] == "q"
