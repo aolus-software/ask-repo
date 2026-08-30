@@ -138,6 +138,18 @@ class ScriptedChatModel(BaseChatModel):
     # which would leak one instance's script into another's.
     _structured_cursor: int = PrivateAttr(default=0)
 
+    # Every input handed to the runnable returned by `with_structured_output`, in
+    # call order. Lets a test prove what a node actually sent the model -- not just
+    # what the model handed back -- which matters for a prompt-injection regression
+    # guard. Instance-level for the same reason as the cursor above: a class
+    # attribute would leak one test's captured calls into another's model.
+    _captured_messages: list[object] = PrivateAttr(default_factory=list)
+
+    @property
+    def captured_messages(self) -> list[object]:
+        """Every input passed to `with_structured_output`'s runnable, in call order."""
+        return list(self._captured_messages)
+
     @property
     def _llm_type(self) -> str:
         return "scripted"
@@ -180,7 +192,8 @@ class ScriptedChatModel(BaseChatModel):
         than each getting a fresh copy of the whole list.
         """
 
-        def _next(_: object) -> BaseModel:
+        def _next(messages: object) -> BaseModel:
+            self._captured_messages.append(messages)
             assert self._structured_cursor < len(self.structured_results), (
                 "the scripted model ran out of structured results"
             )

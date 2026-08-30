@@ -75,6 +75,11 @@ def build_classify(chat_model: BaseChatModel, *, enabled: bool) -> Node:
             logger.warning("Classification failed; retrieving on the raw question", exc_info=True)
             return fallback
 
+        # `with_structured_output(..., include_raw=False)` composes the Pydantic
+        # parser into the chain, so a malformed response raises inside the awaited
+        # `ainvoke()` above -- inside the `try`. This call only narrows the type for
+        # the type checker; it is not a second failure surface, and must not be
+        # widened into one by broadening the `except` above.
         classification = Classification.model_validate(result)
         query = classification.search_query.strip()
         if not query or len(query) > MAX_QUERY_CHARS:
@@ -163,6 +168,9 @@ def build_grade(chat_model: BaseChatModel, *, enabled: bool) -> Node:
             )
             return {"evidence_ok": True}
 
+        # Same reasoning as `build_classify` above: the structured-output chain
+        # validates internally and raises inside the awaited call, so this is a type
+        # narrowing step, not a second failure surface.
         verdict = EvidenceVerdict.model_validate(result)
         if verdict.sufficient:
             return {"evidence_ok": True}
