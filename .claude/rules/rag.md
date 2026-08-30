@@ -5,9 +5,9 @@ Everything under `app/rag/`, plus `app/services/conversation.py` and
 they own status codes and the wire contract; this file owns what is specific to retrieval,
 generation, and streaming.
 
-Seven invariants here cannot be caught by lint, and each one fails **silently** when broken:
+Every invariant here is one lint cannot catch, and most of them fail **silently** when broken:
 no exception, no failing request, just worse answers that still look like answers. That is
-what makes them a rule rather than a preference.
+what makes them rules rather than preferences.
 
 ## Retrieval filters on `project_id` **and** `generation`, always
 
