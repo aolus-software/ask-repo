@@ -2,11 +2,14 @@
 
 from typing import cast
 
+from langchain_core.language_models import BaseChatModel
 from langchain_core.runnables import RunnableLambda
 from langgraph.graph import END, START, StateGraph
+from langgraph.graph.state import CompiledStateGraph
 
 from app.rag.graph.nodes import Node
 from app.rag.graph.state import Classification, EvidenceVerdict, Intent, TurnState
+from app.rag.retriever import Retriever
 from app.schemas.conversation import StreamEvent
 
 
@@ -605,3 +608,160 @@ async def test_the_refusal_makes_no_model_call_at_all() -> None:
     assert len(citations) == 1
     assert citations[0].citations == []
     assert citations_index < first_token
+
+
+def graph_for(
+    chat_model: BaseChatModel, retriever: Retriever | None = None, *, max_attempts: int = 2
+) -> CompiledStateGraph[TurnState, None, TurnState, TurnState]:
+    """A compiled graph over fakes, with settings overridden per test."""
+    from app.config import Settings
+    from app.rag.graph import build_answer_graph
+    from tests.test_answerer import RecordingRetriever
+
+    return build_answer_graph(
+        retriever=retriever if retriever is not None else RecordingRetriever(),
+        chat_model=chat_model,
+        settings=Settings(rag_max_retrieval_attempts=max_attempts),
+    )
+
+
+async def drain(
+    graph: CompiledStateGraph[TurnState, None, TurnState, TurnState], state: TurnState
+) -> tuple[list[StreamEvent], TurnState]:
+    """Run a whole turn, splitting the stream from the final state."""
+    events: list[StreamEvent] = []
+    final: TurnState | None = None
+    async for mode, chunk in graph.astream(state, stream_mode=["custom", "values"]):
+        if mode == "custom":
+            assert isinstance(chunk, StreamEvent)
+            events.append(chunk)
+        else:
+            assert isinstance(chunk, dict)
+            final = cast(TurnState, chunk)
+    assert final is not None
+    return events, final
+
+
+async def test_a_codebase_question_takes_the_full_path() -> None:
+    from app.schemas.conversation import CitationsEvent, TokenEvent
+    from tests.fakes import ScriptedChatModel
+
+    model = ScriptedChatModel(
+        tokens=["Validation ", "[1]"],
+        structured_results=[
+            Classification(intent="codebase_question", search_query="validation"),
+            EvidenceVerdict(sufficient=True),
+        ],
+    )
+
+    events, final = await drain(graph_for(model), base_state())
+
+    assert final["intent"] is Intent.CODEBASE_QUESTION
+    assert final["attempts"] == 1
+    assert final["answer"] == "Validation [1]"
+    assert len([e for e in events if isinstance(e, CitationsEvent)]) == 1
+    assert any(isinstance(e, TokenEvent) for e in events)
+
+
+async def test_the_loop_re_retrieves_on_the_graders_query() -> None:
+    """The whole point of the corrective loop: the second search must not repeat the
+    first, or the loop costs a model call and changes nothing."""
+    from tests.fakes import ScriptedChatModel
+    from tests.test_answerer import RecordingRetriever
+
+    retriever = RecordingRetriever()
+    model = ScriptedChatModel(
+        tokens=["ok"],
+        structured_results=[
+            Classification(intent="codebase_question", search_query="first"),
+            EvidenceVerdict(sufficient=False, gap="missing", better_query="second"),
+            EvidenceVerdict(sufficient=True),
+        ],
+    )
+
+    _, final = await drain(graph_for(model, retriever), base_state())
+
+    assert retriever.queries == ["first", "second"]
+    assert final["attempts"] == 2
+
+
+async def test_the_loop_is_bounded_by_the_attempt_budget() -> None:
+    """Without the bound a stubborn grader loops until LangGraph's recursion limit,
+    burning a model call each time while the user waits.
+
+    Three insufficient verdicts are scripted but the budget is two attempts, so if
+    the bound were missing or miscounted the graph would keep looping -- either
+    hitting LangGraph's own recursion limit (a different failure than asserted
+    here) or, if the script were exactly sized to the bound, exhausting the fake
+    without proving the bound stopped anything. Scripting *more* verdicts than the
+    budget allows and asserting the exact retrieval count is what makes this
+    discriminating: a broken bound either raises (recursion limit, extra retrieval
+    call the retriever fake would happily serve) or leaves `attempts` past 2."""
+    from tests.fakes import ScriptedChatModel
+    from tests.test_answerer import RecordingRetriever
+
+    retriever = RecordingRetriever()
+    model = ScriptedChatModel(
+        tokens=["ok"],
+        structured_results=[
+            Classification(intent="codebase_question", search_query="q1"),
+            EvidenceVerdict(sufficient=False, gap="g", better_query="q2"),
+            EvidenceVerdict(sufficient=False, gap="g", better_query="q3"),
+        ],
+    )
+
+    _, final = await drain(graph_for(model, retriever, max_attempts=2), base_state())
+
+    assert len(retriever.queries) == 2
+    assert final["attempts"] == 2
+    assert final["evidence_ok"] is False
+    assert final["answer"] == "ok"  # generated anyway, per spec §2.6
+
+
+async def test_nothing_retrieved_skips_grading_and_generation() -> None:
+    """`.claude/rules/rag.md`: no evidence, no generation. There is nothing to grade
+    either, so the grader must not be called on an empty span list."""
+    from tests.fakes import ScriptedChatModel
+    from tests.test_answerer import RecordingRetriever
+
+    model = ScriptedChatModel(
+        tokens=["should not run"],
+        structured_results=[Classification(intent="codebase_question", search_query="q")],
+    )
+
+    _, final = await drain(graph_for(model, RecordingRetriever(spans=[])), base_state())
+
+    assert final["spans"] == []
+    assert final["answer"] == ""
+
+
+async def test_a_conversational_question_never_retrieves() -> None:
+    from tests.fakes import ScriptedChatModel
+    from tests.test_answerer import RecordingRetriever
+
+    retriever = RecordingRetriever()
+    model = ScriptedChatModel(
+        tokens=["You asked about validation."],
+        structured_results=[Classification(intent="conversational", search_query="thanks")],
+    )
+
+    _, final = await drain(graph_for(model, retriever), base_state(question="thanks"))
+
+    assert retriever.queries == []
+    assert final["intent"] is Intent.CONVERSATIONAL
+
+
+async def test_an_out_of_scope_question_makes_exactly_one_model_call() -> None:
+    from app.rag.grounding import OUT_OF_SCOPE_ANSWER
+    from tests.fakes import ScriptedChatModel
+    from tests.test_answerer import RecordingRetriever
+
+    retriever = RecordingRetriever()
+    model = ScriptedChatModel(
+        structured_results=[Classification(intent="out_of_scope", search_query="capital of France")]
+    )
+
+    _, final = await drain(graph_for(model, retriever), base_state(question="capital of France"))
+
+    assert retriever.queries == []
+    assert final["answer"] == OUT_OF_SCOPE_ANSWER
