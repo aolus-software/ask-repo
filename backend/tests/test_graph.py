@@ -231,6 +231,7 @@ async def test_an_overlong_query_falls_back_to_the_raw_question() -> None:
     _, final = await run_node(build_classify(model, enabled=True), base_state(question="q"))
 
     assert final["search_query"] == "q"
+    assert final["intent"] is Intent.CODEBASE_QUESTION
 
 
 async def test_an_empty_query_falls_back_to_the_raw_question() -> None:
@@ -245,6 +246,7 @@ async def test_an_empty_query_falls_back_to_the_raw_question() -> None:
     _, final = await run_node(build_classify(model, enabled=True), base_state(question="q"))
 
     assert final["search_query"] == "q"
+    assert final["intent"] is Intent.CODEBASE_QUESTION
 
 
 async def test_a_disabled_classifier_makes_no_model_call() -> None:

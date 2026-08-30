@@ -78,10 +78,11 @@ def build_classify(chat_model: BaseChatModel, *, enabled: bool) -> Node:
         query = classification.search_query.strip()
         if not query or len(query) > MAX_QUERY_CHARS:
             logger.warning(
-                "Classification returned a %d-character query; using the raw question",
+                "Classification returned a %d-character query; retrieving on the raw "
+                "question instead of trusting the rest of the response",
                 len(query),
             )
-            query = question
+            return fallback
 
         intent = Intent(classification.intent)
         logger.info("Routed the question as %s", intent.value)
