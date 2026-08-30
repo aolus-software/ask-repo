@@ -156,6 +156,7 @@ class Answerer:
                 context=format_spans(spans),
                 history=to_langchain_history(history),
                 question=question,
+                evidence_note="",
             )
 
             parts: list[str] = []
