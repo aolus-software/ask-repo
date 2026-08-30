@@ -10,6 +10,15 @@ ENV PYTHONUNBUFFERED=1 \
     UV_PROJECT_ENVIRONMENT=/opt/venv \
     PATH="/opt/venv/bin:$PATH"
 
+# git is a runtime dependency, not a build one: `app/ingestion/cloner.py` shells out
+# to `git clone --depth 1` for every indexing run. The uv base is bookworm-slim and
+# ships without it, so leaving this out lets the API start and the worker consume
+# jobs, and then fails every clone with FileNotFoundError: 'git' — after the job has
+# already been claimed.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends git \
+    && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /app
 
 # Dependencies first, so editing source doesn't invalidate the install layer.
