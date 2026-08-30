@@ -150,7 +150,7 @@ export interface ListParams {
 /* --- SSE payloads (spec §9.5). Mirrors `SSE_EVENT_MODELS`. --- */
 
 export interface StatusEventPayload {
-  phase: "queued" | "rewriting" | "retrieving" | "generating";
+  phase: "queued" | "classifying" | "retrieving" | "grading" | "generating";
 }
 export interface CitationsEventPayload {
   citations: CitationPayload[];
@@ -164,6 +164,8 @@ export interface DoneEventPayload {
   finishReason: FinishReason;
   citedIndexes: number[];
   groundingWarnings: string[];
+  intent: "codebase_question" | "conversational" | "out_of_scope";
+  retrievalAttempts: number;
 }
 export interface ErrorEventPayload {
   messageId: string;
