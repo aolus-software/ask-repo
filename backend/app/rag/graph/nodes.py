@@ -16,12 +16,26 @@ import logging
 from collections.abc import Awaitable, Callable
 
 from langchain_core.language_models import BaseChatModel
+from langchain_core.messages import BaseMessage
 from langgraph.config import get_stream_writer
 
+from app.models.conversation import FinishReason
 from app.rag.graph.state import Classification, EvidenceVerdict, Intent, TurnState
-from app.rag.prompts import CLASSIFY_PROMPT, GRADE_PROMPT, format_spans, to_langchain_history
+from app.rag.prompts import (
+    ANSWER_PROMPT,
+    CLASSIFY_PROMPT,
+    GRADE_PROMPT,
+    format_spans,
+    to_langchain_history,
+)
 from app.rag.retriever import RetrievedChunk, Retriever
-from app.schemas.conversation import CitationPayload, CitationsEvent, StatusEvent, StreamEvent
+from app.schemas.conversation import (
+    CitationPayload,
+    CitationsEvent,
+    StatusEvent,
+    StreamEvent,
+    TokenEvent,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -190,3 +204,62 @@ def build_grade(chat_model: BaseChatModel, *, enabled: bool) -> Node:
         }
 
     return grade
+
+
+def text_of(message: BaseMessage) -> str:
+    """The plain text of a message, whichever content shape the provider used."""
+    content = message.content
+    if isinstance(content, str):
+        return content
+    return "".join(part for part in content if isinstance(part, str))
+
+
+def build_generate(chat_model: BaseChatModel, *, timeout_seconds: float) -> Node:
+    """Write the answer from the retrieved excerpts, streaming as it goes.
+
+    When the attempt budget ran out on weak evidence, the grader's stated gap is
+    passed into the prompt: an answer that names what it could not determine is
+    useful, one that hedges vaguely is not.
+
+    The tokens streamed so far are kept on every exit path, including a timeout or
+    a mid-stream model failure -- that is the partial-answer guarantee M2 built
+    `stream_turn`'s shielded termination write around, and it carries over
+    unchanged. `CancelledError` is a `BaseException` and is deliberately not caught
+    here: a disconnected client should stop the turn, not fall back to a partial
+    answer nobody will read.
+    """
+
+    async def generate(state: TurnState) -> dict[str, object]:
+        emit(StatusEvent(phase="generating"))
+        note = ""
+        if not state["evidence_ok"] and state["gap"]:
+            note = (
+                "The retrieved excerpts were judged incomplete for this question. "
+                f"What appears to be missing: {state['gap']}. Answer from what is "
+                "here, and state plainly what you could not determine from it."
+            )
+        messages = ANSWER_PROMPT.format_messages(
+            context=format_spans(state["spans"]),
+            history=to_langchain_history(state["history"]),
+            question=state["question"],
+            evidence_note=note,
+        )
+
+        parts: list[str] = []
+        try:
+            async with asyncio.timeout(timeout_seconds):
+                async for chunk in chat_model.astream(messages):
+                    text = text_of(chunk)
+                    if text:
+                        parts.append(text)
+                        emit(TokenEvent(text=text))
+        except TimeoutError:
+            logger.warning("The model did not finish within %ss; ending the turn", timeout_seconds)
+            return {"answer": "".join(parts), "failure": FinishReason.TIMEOUT}
+        except Exception:
+            logger.exception("The model failed partway through an answer")
+            return {"answer": "".join(parts), "failure": FinishReason.ERROR}
+
+        return {"answer": "".join(parts), "failure": None}
+
+    return generate

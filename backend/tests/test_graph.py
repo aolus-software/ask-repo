@@ -451,3 +451,82 @@ async def test_an_excerpt_claiming_sufficiency_does_not_flip_the_grader() -> Non
     excerpts_end = content.index("</excerpts>")
     hostile_index = content.index(hostile_text)
     assert excerpts_start < hostile_index < excerpts_end
+
+
+async def test_generate_streams_tokens_and_records_the_answer() -> None:
+    from app.rag.graph.nodes import build_generate
+    from app.schemas.conversation import StatusEvent, TokenEvent
+    from tests.fakes import ScriptedChatModel
+    from tests.test_retriever import _span
+
+    model = ScriptedChatModel(tokens=["Val", "idation ", "[1]"])
+
+    events, final = await run_node(
+        build_generate(model, timeout_seconds=30), base_state(spans=[_span("a.py", 0, 1, 10)])
+    )
+
+    assert [e.text for e in events if isinstance(e, TokenEvent)] == ["Val", "idation ", "[1]"]
+    assert final["answer"] == "Validation [1]"
+    assert final["failure"] is None
+    assert any(isinstance(e, StatusEvent) and e.phase == "generating" for e in events)
+
+
+async def test_a_mid_stream_failure_keeps_the_tokens_already_sent() -> None:
+    """The partial-answer guarantee: what arrived is persisted, and the failure is
+    reported rather than the turn vanishing."""
+    from app.models.conversation import FinishReason
+    from app.rag.graph.nodes import build_generate
+    from app.schemas.conversation import TokenEvent
+    from tests.fakes import ScriptedChatModel
+    from tests.test_retriever import _span
+
+    model = ScriptedChatModel(tokens=["kept ", "also kept ", "never"], fail_after=2)
+
+    events, final = await run_node(
+        build_generate(model, timeout_seconds=30), base_state(spans=[_span("a.py", 0, 1, 10)])
+    )
+
+    assert [e.text for e in events if isinstance(e, TokenEvent)] == ["kept ", "also kept "]
+    assert final["answer"] == "kept also kept "
+    assert final["failure"] is FinishReason.ERROR
+
+
+async def test_a_timeout_has_its_own_finish_reason() -> None:
+    """A client needs to tell "retry might work" from "something broke"."""
+    from app.models.conversation import FinishReason
+    from app.rag.graph.nodes import build_generate
+    from tests.fakes import ScriptedChatModel
+    from tests.test_retriever import _span
+
+    model = ScriptedChatModel(tokens=["a", "b"], stall_seconds=0.05)
+
+    _, final = await run_node(
+        build_generate(model, timeout_seconds=0.01), base_state(spans=[_span("a.py", 0, 1, 10)])
+    )
+
+    assert final["failure"] is FinishReason.TIMEOUT
+
+
+async def test_an_exhausted_loop_tells_the_model_what_was_missing() -> None:
+    """The model is told the specific gap, not merely that something was missing —
+    an answer that names what it could not determine is useful; one that hedges
+    vaguely is not."""
+    from langchain_core.messages import SystemMessage
+
+    from app.rag.graph.nodes import build_generate
+    from tests.fakes import ScriptedChatModel
+    from tests.test_retriever import _span
+
+    model = ScriptedChatModel(tokens=["x"])
+
+    await run_node(
+        build_generate(model, timeout_seconds=30),
+        base_state(spans=[_span("a.py", 0, 1, 10)], evidence_ok=False, gap="no tests found"),
+    )
+
+    assert len(model.captured_stream_messages) == 1
+    sent = model.captured_stream_messages[0]
+    assert isinstance(sent, list)
+    system_message = next(m for m in sent if isinstance(m, SystemMessage))
+    assert isinstance(system_message.content, str)
+    assert "no tests found" in system_message.content

@@ -150,6 +150,18 @@ class ScriptedChatModel(BaseChatModel):
         """Every input passed to `with_structured_output`'s runnable, in call order."""
         return list(self._captured_messages)
 
+    # Every `messages` list handed to `_astream`, in call order. Kept separate from
+    # `_captured_messages` above rather than merged into one list: the two record
+    # different call kinds (structured-output calls vs. the streamed answer call),
+    # and merging them would make a reader's assertion depend on knowing which
+    # entries came from which method.
+    _captured_stream_messages: list[object] = PrivateAttr(default_factory=list)
+
+    @property
+    def captured_stream_messages(self) -> list[object]:
+        """Every `messages` list passed to `_astream`, in call order."""
+        return list(self._captured_stream_messages)
+
     @property
     def _llm_type(self) -> str:
         return "scripted"
@@ -161,6 +173,7 @@ class ScriptedChatModel(BaseChatModel):
         run_manager: object | None = None,
         **kwargs: object,
     ) -> AsyncIterator[ChatGenerationChunk]:
+        self._captured_stream_messages.append(messages)
         for index, token in enumerate(self.tokens):
             if self.fail_after is not None and index == self.fail_after:
                 raise RuntimeError("scripted model failure")
