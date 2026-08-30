@@ -6,12 +6,22 @@
 #   make dev         run both dev servers (needs `make infra` first)
 #   make check       lint + typecheck + test everything, as CI would
 #
-# Targets are grouped: setup, infra (datastores), dev, quality, docker, clean.
+# Targets are grouped: setup, infra (datastores), dev, quality, docker, prod, clean.
+#
+# Bare target names are the development stack. Production targets carry a `-prod`
+# suffix, use infra/docker-compose.prod.yml, and are documented in
+# docs/deployment.md. Start with `make setup-prod`, which checks a box is ready.
 
 # The ollama profile is on by default: the shipped EMBEDDING_PROVIDER is `ollama`,
 # so a stack without it has a default pointing at nothing. An instance on a hosted
 # embedding provider can override this to a bare `docker compose`.
 COMPOSE := docker compose -f infra/docker-compose.yml --profile ollama
+
+# The production stack is a STANDALONE file, never layered onto the development one:
+# Compose merges `volumes` by target path rather than replacing the list, so
+# `-f … -f …` would keep the dev bind-mounts of the working copy over /app.
+COMPOSE_PROD := docker compose -f infra/docker-compose.prod.yml --profile ollama
+
 BACKEND  := backend
 FRONTEND := frontend
 
@@ -31,6 +41,9 @@ DATASTORES := postgres qdrant redis kafka ollama
         test test-backend test-frontend test-one test-watch \
         typecheck check \
         up down restart logs ps compose-config rebuild \
+        setup-prod build-prod rebuild-prod compose-config-prod \
+        up-prod down-prod restart-prod logs-prod ps-prod \
+        migrate-prod seed-prod psql-prod pull-models-prod backup-prod \
         clean clean-backend clean-frontend
 
 ## ─── Help ──────────────────────────────────────────────────────────────────
@@ -192,6 +205,90 @@ ps: ## Show all services
 
 compose-config: ## Validate docker-compose.yml
 	$(COMPOSE) config --quiet && echo "compose config valid"
+
+## ─── Production ────────────────────────────────────────────────────────────
+#
+# Full procedure: docs/deployment.md. Order on a fresh box:
+#   make setup-prod && make build-prod && make migrate-prod && make seed-prod && make up-prod
+#
+# There is deliberately no `down -v` equivalent here. Deleting production volumes
+# should not be one typo away from a target you run every day.
+
+setup-prod: ## Check this box is ready to deploy (reads infra/.env, changes nothing)
+	@ok=1; \
+	pass() { printf '  \033[32m✓\033[0m %s\n' "$$1"; }; \
+	fail() { printf '  \033[31m✗\033[0m %s\n' "$$1"; ok=0; }; \
+	printf '\n  Preflight — production\n\n'; \
+	if docker compose version >/dev/null 2>&1; then pass "docker + compose v2 present"; \
+	else fail "docker compose v2 not found"; fi; \
+	if [ -f infra/.env ]; then pass "infra/.env exists"; \
+	else fail "infra/.env missing — cp infra/.env.example infra/.env"; fi; \
+	set -a; [ -f infra/.env ] && . ./infra/.env; set +a; \
+	if [ -n "$$SECRET_KEY" ] && [ "$$SECRET_KEY" != dev-insecure-change-me ]; then pass "SECRET_KEY set"; \
+	else fail "SECRET_KEY unset or placeholder — openssl rand -hex 32"; fi; \
+	if [ -n "$$PAT_ENCRYPTION_KEY" ] && [ "$$PAT_ENCRYPTION_KEY" != dev-insecure-change-me ]; then pass "PAT_ENCRYPTION_KEY set"; \
+	else fail "PAT_ENCRYPTION_KEY unset or placeholder — python -c 'from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())'"; fi; \
+	if [ -n "$$POSTGRES_PASSWORD" ] && [ "$$POSTGRES_PASSWORD" != askrepo ]; then pass "POSTGRES_PASSWORD set"; \
+	else fail "POSTGRES_PASSWORD unset or still the default 'askrepo'"; fi; \
+	if [ -n "$$BOOTSTRAP_ADMIN_PASSWORD" ]; then pass "BOOTSTRAP_ADMIN_PASSWORD set"; \
+	else fail "BOOTSTRAP_ADMIN_PASSWORD unset — seeding refuses to run without it"; fi; \
+	case "$$PUBLIC_ORIGIN" in \
+	  https://*) pass "PUBLIC_ORIGIN is https" ;; \
+	  "") fail "PUBLIC_ORIGIN unset — e.g. https://askrepo.internal.example.com" ;; \
+	  *) fail "PUBLIC_ORIGIN must be https: the refresh cookie is Secure and will not be sent over http" ;; \
+	esac; \
+	if [ -n "$$TRUSTED_PROXY_HOPS" ] && [ "$$TRUSTED_PROXY_HOPS" != 0 ]; then pass "TRUSTED_PROXY_HOPS=$$TRUSTED_PROXY_HOPS"; \
+	else fail "TRUSTED_PROXY_HOPS is 0 or unset — set it to the number of proxies in front of the API (1 with Caddy)"; fi; \
+	printf '\n'; \
+	if [ $$ok -eq 1 ]; then printf '  ready — next: make build-prod\n\n'; \
+	else printf '  not ready. See docs/deployment.md\n\n'; exit 1; fi
+
+build-prod: ## Build both production images
+	$(COMPOSE_PROD) build
+
+rebuild-prod: ## Rebuild the production images without cache
+	$(COMPOSE_PROD) build --no-cache
+
+compose-config-prod: ## Validate docker-compose.prod.yml
+	$(COMPOSE_PROD) config --quiet && echo "prod compose config valid"
+
+migrate-prod: ## Apply migrations (a deploy step, not a container start command)
+	$(COMPOSE_PROD) run --rm backend alembic upgrade head
+
+seed-prod: ## Create the bootstrap admins (idempotent)
+	$(COMPOSE_PROD) run --rm backend python -m app.cli seed-admins
+
+up-prod: ## Start the production stack (detached), wait until healthy
+	$(COMPOSE_PROD) up -d --wait
+	@echo "frontend 127.0.0.1:3000   api 127.0.0.1:8000   — put Caddy in front, see docs/deployment.md"
+
+down-prod: ## Stop the production stack, keep volumes
+	$(COMPOSE_PROD) down
+
+restart-prod: down-prod up-prod ## Recreate the production stack
+
+logs-prod: ## Tail production logs
+	$(COMPOSE_PROD) logs -f
+
+ps-prod: ## Show production services
+	$(COMPOSE_PROD) ps
+
+psql-prod: ## Postgres shell, without publishing 5432
+	@set -a; [ -f infra/.env ] && . ./infra/.env; set +a; \
+	$(COMPOSE_PROD) exec postgres psql -U $${POSTGRES_USER:-askrepo} -d $${POSTGRES_DB:-askrepo}
+
+pull-models-prod: ## Pre-pull the Ollama models, so the first question doesn't wait on a download
+	@set -a; [ -f infra/.env ] && . ./infra/.env; set +a; \
+	$(COMPOSE_PROD) exec ollama ollama pull $${EMBEDDING_MODEL:-nomic-embed-text}; \
+	$(COMPOSE_PROD) exec ollama ollama pull $${CHAT_MODEL:-qwen2.5-coder:14b}
+
+backup-prod: ## Dump Postgres to backups/askrepo-<timestamp>.sql.gz
+	@mkdir -p backups
+	@set -a; [ -f infra/.env ] && . ./infra/.env; set +a; \
+	f=backups/askrepo-$$(date +%Y%m%d-%H%M%S).sql.gz; \
+	$(COMPOSE_PROD) exec -T postgres pg_dump -U $${POSTGRES_USER:-askrepo} $${POSTGRES_DB:-askrepo} | gzip > $$f; \
+	echo "wrote $$f"; \
+	echo "PAT_ENCRYPTION_KEY is NOT in this file and must be backed up separately — a backup holding both is plaintext storage with extra steps"
 
 ## ─── Clean ─────────────────────────────────────────────────────────────────
 

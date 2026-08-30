@@ -45,7 +45,8 @@ make infra            # start postgres + qdrant + redis + kafka + ollama, wait u
 make dev              # both dev servers together (needs `make infra` first)
 make check            # lint + format-check + typecheck + test, as CI would
 make test-one T=tests/test_api_model.py
-make up               # whole stack in Docker, apps included
+make up               # whole stack in Docker, apps included (development)
+make setup-prod       # preflight a deploy box; then build-prod / migrate-prod / up-prod
 ```
 
 Single-service datastore control: `make docker-start-pg`, `docker-start-redis`,
@@ -82,8 +83,14 @@ docker compose logs -f backend
 ## Architecture
 
 Two apps, a worker, four datastores, one Compose file. `backend/` is FastAPI + Python 3.13 (uv);
-`frontend/` is Next.js 16 + React 19 + Tailwind 4 (bun); `infra/` holds both Dockerfiles and
-`docker-compose.yml`.
+`frontend/` is Next.js 16 + React 19 + Tailwind 4 (bun); `infra/` holds four Dockerfiles —
+`{backend,frontend}.Dockerfile` for development and `{backend,frontend}.prod.Dockerfile` for
+production — plus `docker-compose.yml` and the standalone `docker-compose.prod.yml`.
+
+**The production compose file is standalone, never an overlay.** Compose merges `volumes` by
+target path rather than replacing the list, so `-f docker-compose.yml -f docker-compose.prod.yml`
+would keep the development bind-mounts of the working copy over `/app`. Every `-prod` Make
+target passes the production file alone. The procedure is `docs/deployment.md`.
 
 The parts below are the ones you cannot infer from any single file.
 
@@ -108,6 +115,10 @@ marker.
 `app/config.py` defines `Settings` (pydantic-settings). Precedence is environment → `.env` →
 the defaults in the class. `get_settings()` is `lru_cache`d and injected with `Depends`, so
 tests override it rather than mutating the environment. Nothing else reads `os.environ`.
+
+**`docs/configuration.md` documents every setting**; the `.env.example` files carry names and
+defaults only, grouped, with no inline prose. A new `Settings` field lands in all three
+(`config.py`, `backend/.env.example`, `docs/configuration.md`) in the same change.
 
 ### The wire boundary: `snake_case` in, `camelCase` out
 

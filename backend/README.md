@@ -63,7 +63,8 @@ cd infra && docker compose --profile ollama up --build
 ```
 
 That brings up the API alongside Postgres, Qdrant, Redis, Kafka, and the frontend.
-Source is bind-mounted, so `--reload` picks up your edits.
+Source is bind-mounted, so `--reload` picks up your edits — which is also why this image is
+**not** a production one. See [`../docs/deployment.md`](../docs/deployment.md).
 
 ## Routes
 
@@ -237,45 +238,33 @@ backend/
     └── test_m1_acceptance.py # PRD §7's M1 access/gating/scoping criteria
 ```
 
-Settings come from the environment, falling back to `.env`, falling back to the
-defaults in `config.py`. `get_settings()` is `lru_cache`d and injected via
-`Depends`, so tests can override it.
-
 ## Configuration
 
-See [`.env.example`](.env.example). A few notes:
+Settings come from the environment, falling back to `.env`, falling back to the defaults in
+`config.py`. Every value has a default, so `.env` is optional. `get_settings()` is
+`lru_cache`d and injected via `Depends`, so tests override it rather than mutating the
+environment.
 
-- `CORS_ORIGINS` must be a **JSON array** (`["http://localhost:3000"]`), not a
-  comma-separated string — pydantic-settings parses complex types as JSON.
-- `DATABASE_URL` is read via the repository layer (`app/repositories/`) for users and
-  refresh tokens, and `REDIS_URL` by the login rate limiter (`app/core/rate_limit.py`).
-  `QDRANT_URL` is read by `app/ingestion/vector_store.py` through `build_store_factory`,
-  which reaches the collection a project recorded — so a delete can hard-delete its
-  points and a question can search them.
-- `CHAT_*` configures the answering model, separately from `EMBEDDING_*`: an instance
-  commonly embeds locally and answers with a hosted model, or the reverse.
-  `CHAT_MAX_CONCURRENCY` caps answers generated at once instance-wide — Ollama
-  serialises inference internally, so raising it makes every answer slower rather than
-  the queue shorter. `RAG_MIN_SCORE` is the relevance floor below which no answer is
-  generated at all.
-- `KAFKA_BOOTSTRAP_SERVERS` is read by both processes: `ensure_topics` and
-  `KafkaIngestionQueue` from the API lifespan, and the consumers from `app/worker.py`.
-  `KAFKA_INGEST_PARTITIONS` (default 2) *is* the ingestion concurrency cap — worker
-  replicas beyond the partition count sit idle. `KAFKA_MAX_ATTEMPTS` bounds the retry
-  ladder before a job is dead-lettered.
-- `EMBEDDING_PROVIDER` / `EMBEDDING_MODEL` / `EMBEDDING_BASE_URL` / `EMBEDDING_API_KEY`
-  are read by the **worker only**. The vector width is probed at worker startup, never
-  configured — it forms part of the Qdrant collection name, so guessing it wrong would
-  mix incompatible vectors.
-- `PAT_ENCRYPTION_KEY` encrypts stored personal access tokens at rest. The API writes
-  them and the worker reads them, so both processes must share the value — a mismatch
-  surfaces as a clone that fails to decrypt, not as a warning. Back it up **separately
-  from the database**.
-- `REPO_SCRATCH_DIR` (default `/data/repos`) is scratch, not a volume to preserve: the
-  working copy is deleted after indexing and a reindex re-clones.
-- Auth, password-policy, and bootstrap-admin settings are documented inline in
-  `.env.example` — that file is the canonical list. `BOOTSTRAP_ADMIN_PASSWORD` has no
-  default on purpose: seeding refuses to run without it rather than inventing one.
+- [`.env.example`](.env.example) — the variable names and their defaults, grouped. Copy it to
+  `.env`.
+- [`../docs/configuration.md`](../docs/configuration.md) — what each one does, which ones fail
+  silently when set wrong, and the four the app refuses to boot without under
+  `APP_ENV=production`.
+
+The four things worth knowing before you touch any of it:
+
+- **Complex types are JSON.** `CORS_ORIGINS`, `REPO_HOST_ALLOWLIST` and
+  `BOOTSTRAP_ADMIN_EMAILS` must be JSON arrays (`["http://localhost:3000"]`), not
+  comma-separated strings — pydantic-settings parses complex types as JSON.
+- **The API and the worker share one configuration.** Both run the same image and must agree
+  on every datastore, on `PAT_ENCRYPTION_KEY` (the API encrypts a PAT, the worker decrypts it
+  to clone), and on `EMBEDDING_*` (the worker embeds documents, the API embeds the question —
+  and the collection name is derived from provider + model + width). A mismatch is a runtime
+  failure, not a startup one.
+- **`KAFKA_INGEST_PARTITIONS` is the ingestion concurrency cap**, not a tuning knob beside
+  one. Worker replicas beyond the partition count sit idle.
+- **`RAG_MIN_SCORE` is the relevance floor below which no answer is generated at all** — the
+  turn ends with a fixed refusal rather than a model call.
 
 ## Conventions
 

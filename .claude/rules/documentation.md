@@ -18,9 +18,13 @@ alone.
 | `README.md` (root) | setup, the quick-start commands, the service/port table, the stack, the repo layout, or the roadmap checkboxes change |
 | `backend/README.md` | a route is added/changed/removed, a config value changes, the layout changes, or a dev command changes. The route table must be exhaustive |
 | `frontend/README.md` | scripts, env vars, or the app layout change |
-| `backend/.env.example` | **any** new or renamed `Settings` field in `app/config.py`. A setting with no example entry is undiscoverable |
-| `frontend/.env.example` | any new `NEXT_PUBLIC_*` variable |
+| `docs/installation.md` | a setup step, a `make` target used in setup, a prerequisite version, or a first-boot behaviour changes |
+| `docs/deployment.md` | the Dockerfiles, the Compose topology, a production-only setting, or an operator obligation changes |
+| `docs/configuration.md` | **any** new, renamed, or re-defaulted `Settings` field, or a new `infra/.env` variable. This is where a setting's meaning lives — the `.env.example` files carry names and defaults only |
+| `backend/.env.example` | **any** new or renamed `Settings` field in `app/config.py`, in its group, with the same default and no inline prose. A setting with no example entry is undiscoverable |
+| `frontend/.env.example` | any new frontend environment variable. There are no `NEXT_PUBLIC_*` variables any more — `API_URL` is read server-side, and re-adding the prefix would inline it into the client bundle |
 | `infra/docker-compose.yml` header comment | a service is added/removed, or a published port changes — the URL list at the top must match the services below |
+| `infra/docker-compose.prod.yml` | any change to the development compose file that is not development-specific. The two drift silently — nothing builds or starts the production stack during `make check` |
 | `SECURITY.md` | the threat model changes, or a new operator responsibility appears (a new secret, a new published port) |
 | `CONTRIBUTING.md` | a convention, a check command, or the out-of-scope list changes |
 | `CLAUDE.md` | a rule file is added/renamed/deleted, the layout changes, or a stated fact (commands, milestone, route list) goes stale. **Keep counts exact** |

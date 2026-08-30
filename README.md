@@ -49,15 +49,21 @@ management — against real repositories rather than tutorial data.
 ask-repo/
 ├── backend/            FastAPI service — see backend/README.md
 ├── frontend/           Next.js UI — see frontend/README.md
-├── infra/              Dockerfiles + docker-compose.yml
+├── infra/              Dockerfiles + compose files (dev and prod)
 ├── docs/
 │   ├── PRD.md          Product requirements — the source of truth
+│   ├── installation.md   Step-by-step local setup
+│   ├── deployment.md     Running it for a team
+│   ├── configuration.md  Every setting, what it does, what to change for production
 │   └── design.md       Design tokens, layout geometry, component inventory
 ├── .claude/            Rules, commands and skills for AI agents
 └── Makefile            Task runner — `make help`
 ```
 
 ## Quick start
+
+The short version is below; [`docs/installation.md`](docs/installation.md) is the same thing
+step by step, with a troubleshooting section.
 
 **Requirements:** Docker with Compose v2, plus [uv](https://docs.astral.sh/uv/) and
 [Bun](https://bun.sh) if you want to run the apps outside containers.
@@ -111,8 +117,8 @@ with `make dev` does *not* start a worker; see
 [`backend/README.md`](backend/README.md#the-ingestion-worker) for how to run one.
 
 Every environment value has a fallback, so this comes up with no `.env` file. To customize,
-create `infra/.env` — the variable names are in
-[`infra/docker-compose.yml`](infra/docker-compose.yml).
+create `infra/.env` — every variable it accepts is listed in
+[`docs/configuration.md`](docs/configuration.md#docker-compose-infraenv).
 
 Verify the API is alive, then log in as a seeded admin (replace the password with the one you
 set in `BOOTSTRAP_ADMIN_PASSWORD`):
@@ -136,7 +142,7 @@ clears that flag.
 | Target | Does |
 | --- | --- |
 | `make setup` | Install backend + frontend dependencies |
-| `make infra` | Start postgres + qdrant + redis + kafka, wait until healthy |
+| `make infra` | Start postgres + qdrant + redis + kafka + ollama, wait until healthy |
 | `make migrate` | Apply database migrations |
 | `make seed` | Create the bootstrap admin accounts (idempotent) |
 | `make dev` | Both dev servers together |
@@ -146,7 +152,9 @@ clears that flag.
 | `make test` | Backend test suite |
 | `make test-one T=tests/test_api_model.py` | One test file, or `T=-k\ camel_case` |
 | `make build` | Production frontend build |
-| `make up` / `make down` | Whole stack in Docker |
+| `make up` / `make down` | Whole stack in Docker (development) |
+| `make setup-prod` | Check a box is ready to deploy; changes nothing |
+| `make build-prod` / `make up-prod` | Production images and stack — see [`docs/deployment.md`](docs/deployment.md) |
 | `make infra-down` | Stop datastores **and delete their volumes** |
 | `make psql` / `make redis-cli` | Shell into a running datastore |
 | `make clean` | Remove caches and build output |
@@ -205,6 +213,19 @@ docker compose -f infra/docker-compose.yml down
 Run the Compose commands from anywhere with `-f infra/docker-compose.yml`, or drop the flag and
 run them from inside `infra/`.
 
+## Configuration
+
+Nothing needs configuring to run locally — every setting has a default and both `.env` files
+are optional. The `.env.example` files list the variable names and defaults:
+
+- [`backend/.env.example`](backend/.env.example) → `backend/.env`
+- [`frontend/.env.example`](frontend/.env.example) → `frontend/.env.local`
+- [`infra/.env.example`](infra/.env.example) → `infra/.env` for the Compose stack
+
+**[`docs/configuration.md`](docs/configuration.md) explains what each one does**, which values
+fail silently when set wrong, and the four the app refuses to boot without when
+`APP_ENV=production`.
+
 ## Roadmap
 
 Milestones from [`docs/PRD.md`](docs/PRD.md) §6, built in order:
@@ -228,6 +249,7 @@ AskRepo stores repository access credentials and clones user-supplied URLs from 
 private network. Both are handled deliberately — see [`SECURITY.md`](SECURITY.md) and
 [`docs/PRD.md`](docs/PRD.md) §9. Do not expose an instance to the public internet: it has
 no self-service account flows and its threat model assumes trusted, authenticated users.
+[`docs/deployment.md`](docs/deployment.md) covers what a real deployment needs.
 
 ## Contributing
 
@@ -237,8 +259,11 @@ See [`CONTRIBUTING.md`](CONTRIBUTING.md). Bug reports and feature requests go th
 ## Documentation
 
 - [`docs/PRD.md`](docs/PRD.md) — product requirements, schemas, milestones, security model
+- [`docs/installation.md`](docs/installation.md) — step-by-step local setup, all three paths, and troubleshooting
+- [`docs/deployment.md`](docs/deployment.md) — running it for a team: production images, TLS, secrets, backups
+- [`docs/configuration.md`](docs/configuration.md) — every setting, what it does, and what to change before production
 - [`docs/design.md`](docs/design.md) — design tokens, typography, layout geometry, component inventory
 - [`backend/README.md`](backend/README.md) — API setup, routes, configuration
 - [`frontend/README.md`](frontend/README.md) — UI setup and scripts
 - [`CLAUDE.md`](CLAUDE.md) — architecture notes and the conventions that bite, for AI agents and humans alike
-- [`.claude/rules/`](.claude/rules) — ten enforceable conventions (Python, persistence, API contract, design system, forms, navigation)
+- [`.claude/rules/`](.claude/rules) — twelve enforceable conventions (Python, persistence, API contract, ingestion, RAG, design system, forms, navigation)
