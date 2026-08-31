@@ -111,6 +111,30 @@ def test_the_classify_prompt_breaks_ties_toward_retrieval() -> None:
     assert "doubt" in CLASSIFY_SYSTEM.lower() or "unsure" in CLASSIFY_SYSTEM.lower()
 
 
+def test_the_classify_prompt_denies_conversational_the_catch_all_role() -> None:
+    """Measured against a real qwen2.5-coder:7b, four of six out-of-scope questions
+    routed to `conversational` rather than `out_of_scope` — the model used it as the
+    "not a code question" bucket. `conversational` must be tied to the prior turns,
+    and `out_of_scope` named as the choice when a question is about neither the
+    repository nor the conversation."""
+    from app.rag.prompts import CLASSIFY_SYSTEM
+
+    lowered = CLASSIFY_SYSTEM.lower()
+
+    assert "already said" in lowered
+    assert "catch-all" in lowered
+    assert "out_of_scope" in lowered
+
+
+def test_the_classify_prompt_shows_what_out_of_scope_looks_like() -> None:
+    """The three intents were described but only `codebase_question` was
+    exemplified, and the two the model got wrong were the two with no example.
+    General programming knowledge is the case it missed most."""
+    from app.rag.prompts import CLASSIFY_SYSTEM
+
+    assert "tuple" in CLASSIFY_SYSTEM.lower()
+
+
 def test_the_answer_prompt_carries_an_evidence_note_slot() -> None:
     """Filled with the grader's stated gap when attempts ran out, so the model is
     told what was missing rather than merely that something was."""
@@ -141,3 +165,19 @@ def test_the_history_answer_prompt_takes_no_excerpts() -> None:
 
     assert "context" not in HISTORY_ANSWER_PROMPT.input_variables
     assert "question" in HISTORY_ANSWER_PROMPT.input_variables
+
+
+def test_the_history_answer_prompt_declines_what_belongs_to_neither() -> None:
+    """The net under a `classify` miss, in the direction that had none.
+
+    The prompt already declines a question that needs the code — the net for a
+    `codebase_question` misrouted here. It had nothing for an `out_of_scope`
+    question misrouted here, so a real 7b wrote the poem, explained Python, and
+    named the capital of France instead of refusing.
+    """
+    from app.rag.prompts import HISTORY_ANSWER_SYSTEM
+
+    lowered = HISTORY_ANSWER_SYSTEM.lower()
+
+    assert "neither" in lowered
+    assert "decline" in lowered

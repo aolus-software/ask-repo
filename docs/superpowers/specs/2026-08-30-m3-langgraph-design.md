@@ -1,7 +1,7 @@
 # M3 — LangGraph wrap: Design
 
-Status: approved, not yet implemented.
-Date: 2026-08-30.
+Status: implemented and shipped. §12 records what the merge-gate spot check changed.
+Date: 2026-08-30. Last amended: 2026-08-31.
 Covers: replacing the plain rewrite → retrieve → generate sequence in `app/rag/answerer.py`
 with a LangGraph state graph carrying intent routing and a corrective retrieval loop, against a
 backend where M0, M1 and M2 are shipped.
@@ -654,9 +654,25 @@ stream-ordering tests.
   panel behind up to two grader calls.
 - **First-turn latency increases.** Turn one goes from one model call to three (§2.2). On a local
   14b with `chat_max_concurrency=2` this is real, user-visible time before the first token.
-- **The classifier is unmeasured.** Nothing in this milestone proves the routing is accurate;
-  M5's eval set is what will. Until then the tie-breaker in §5.1 is the safeguard, and it is
-  deliberately biased toward the expensive-but-grounded path.
+- **The classifier is measured only by hand, on one model.** A spot check against a real
+  `qwen2.5-coder:7b` (2026-08-31, the merge gate) found the first version of `CLASSIFY_SYSTEM`
+  routed four of six out-of-scope questions to `conversational` rather than `out_of_scope`: the
+  model used `conversational` as the "not a code question" bucket, because the three intents were
+  described independently and only the tie-break toward `codebase_question` was stated. Those
+  questions reached `answer_from_history`, which answered them — a poem, a Python tutorial, the
+  capital of France — making §4.2's "refused without a second model call" false in practice.
+  `CLASSIFY_SYSTEM` was rewritten as an ordered cascade (code → this conversation → neither),
+  after which held-out routing was 6/6 out-of-scope, 4/4 codebase and 2/3 conversational, the one
+  miss falling the safe way §5.1 describes. This is a hand-built sample of thirteen questions on
+  one model, not an eval: M5 is still what measures the routing, and nothing here says how the
+  default 14b behaves.
+- **The `answer_from_history` net is weak.** §5.5 gives the conversational route a prompt-level
+  net for a misroute, and on a 7b it mostly does not hold: of seven held-out out-of-scope
+  questions sent directly to that node, one was declined and six were answered. Strengthening the
+  instruction with worked examples made it strictly worse — zero declines, plus an over-refusal
+  of a legitimate code follow-up and a fragment of the prompt leaking into an answer — so the
+  weaker wording was kept deliberately. The net is defence in depth behind a classifier that now
+  routes these correctly; it is not a boundary, and it should not be treated as one.
 - **No post-generation critique.** An answer that is fluent, cited, and wrong about what the code
   does is not caught here. §2.1 chose evidence quality over prose quality; that trade should be
   revisited if M5's scoring shows generation, not retrieval, is where answers fail.
