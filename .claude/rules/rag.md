@@ -166,6 +166,25 @@ it. **A helper node may never be the reason a question goes unanswered.**
 purpose: a client that disconnected mid-classification should stop the turn, not fall
 back and carry on answering nobody.
 
+## The spans answered from are the spans that were graded
+
+`route_after_retrieval` sends **every** non-empty retrieval to `grade`, including the
+last one the attempt budget allows. The budget bounds how many times the graph
+*searches* — that is `route_after_grading`'s job — not whether the excerpts an answer
+is built from were ever judged.
+
+Skipping the final grade looks like a free optimisation: the verdict cannot send the
+graph back around, so why pay for it? Because two things downstream read that verdict,
+and both then describe excerpts that no longer exist. `weak_evidence` is raised from
+`evidence_ok`, so a re-retrieval that found exactly the right code is still reported as
+weak — and a warning that fires on good answers is one users learn to ignore, which
+costs the warnings that are real. Worse, `gap` is interpolated into the answer prompt,
+so the model is told what was missing from the excerpts it was *not* given. That is
+specific, confident, and wrong, which is harder to spot than saying nothing.
+
+Nothing errors either way. The only symptom is a warning that does not match the
+answer, on the turns that were already the slowest.
+
 ## Empty spans do not mean `no_context`
 
 `grounding_warnings()` returns `[NO_CONTEXT]` for any empty span list. That was

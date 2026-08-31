@@ -697,6 +697,55 @@ async def test_the_loop_re_retrieves_on_the_graders_query() -> None:
     assert final["attempts"] == 2
 
 
+async def test_a_successful_re_retrieval_is_not_flagged_weak() -> None:
+    """The spans the answer is generated from are the spans that get graded.
+
+    The bug this pins: when the last retrieval was not graded, `evidence_ok` kept
+    the verdict on the excerpts that were then thrown away, so a re-retrieval that
+    actually found the right code was still reported `weak_evidence`. A warning
+    that fires on a good answer is one users learn to ignore, which costs the
+    warning that is real.
+    """
+    from tests.fakes import ScriptedChatModel
+    from tests.test_answerer import RecordingRetriever
+
+    model = ScriptedChatModel(
+        tokens=["ok"],
+        structured_results=[
+            Classification(intent="codebase_question", search_query="first"),
+            EvidenceVerdict(sufficient=False, gap="missing", better_query="second"),
+            EvidenceVerdict(sufficient=True),
+        ],
+    )
+
+    _, final = await drain(graph_for(model, RecordingRetriever(), max_attempts=2), base_state())
+
+    assert final["attempts"] == 2
+    assert final["evidence_ok"] is True
+
+
+async def test_the_evidence_note_describes_the_spans_the_answer_used() -> None:
+    """`gap` reaches the answer prompt, so a stale one tells the model what was
+    missing from excerpts it no longer has — worse than saying nothing, because it
+    is specific and wrong."""
+    from tests.fakes import ScriptedChatModel
+    from tests.test_answerer import RecordingRetriever
+
+    model = ScriptedChatModel(
+        tokens=["ok"],
+        structured_results=[
+            Classification(intent="codebase_question", search_query="first"),
+            EvidenceVerdict(sufficient=False, gap="stale gap", better_query="second"),
+            EvidenceVerdict(sufficient=False, gap="final gap", better_query="third"),
+        ],
+    )
+
+    _, final = await drain(graph_for(model, RecordingRetriever(), max_attempts=2), base_state())
+
+    assert final["gap"] == "final gap"
+    assert final["evidence_ok"] is False
+
+
 async def test_the_loop_is_bounded_by_the_attempt_budget() -> None:
     """Without the bound a stubborn grader loops until LangGraph's recursion limit,
     burning a model call each time while the user waits.

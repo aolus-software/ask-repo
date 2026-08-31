@@ -32,18 +32,24 @@ def route_intent(state: TurnState) -> str:
     return "retrieve"
 
 
-def route_after_retrieval(state: TurnState, max_attempts: int) -> str:
-    """Grade, generate, or stop.
+def route_after_retrieval(state: TurnState) -> str:
+    """Grade what was retrieved, or stop.
 
     Nothing retrieved means no generation at all -- with no evidence, one prompt
     sentence is the only thing between the user and a confident fabrication, and the
     refusal is the adapter's job rather than a node's. There is also nothing to
     grade, so the grader is not called on an empty span list.
+
+    Every non-empty retrieval is graded, including the last one the budget allows.
+    Skipping that grade would save a model call and leave `evidence_ok` and `gap`
+    describing excerpts that were then replaced: a re-retrieval that found the right
+    code would still be reported `weak_evidence`, and `generate` would be told what
+    was missing from spans it no longer has. The budget bounds how many times the
+    graph *searches*, which is `route_after_grading`'s job -- not whether the
+    excerpts an answer is built from were ever judged.
     """
     if not state["spans"]:
         return END
-    if state["attempts"] >= max_attempts:
-        return "generate"
     return "grade"
 
 
@@ -99,8 +105,8 @@ def build_answer_graph(
     )
     graph.add_conditional_edges(
         "retrieve",
-        lambda state: route_after_retrieval(state, max_attempts),
-        {"grade": "grade", "generate": "generate", END: END},
+        route_after_retrieval,
+        {"grade": "grade", END: END},
     )
     graph.add_conditional_edges(
         "grade",
