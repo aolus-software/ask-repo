@@ -31,6 +31,7 @@ from app.rag.answerer import Answerer
 from app.repositories.conversation import ConversationRepository, MessageRepository
 from app.repositories.project import ProjectRepository
 from app.repositories.qa_pair import QAPairRepository
+from app.repositories.user import UserRepository
 from app.schemas.conversation import (
     KEEP_ALIVE,
     CitationPayload,
@@ -52,6 +53,7 @@ from app.schemas.qa_pair import (
     QAPairStatusRequest,
     QAPairUpdateRequest,
 )
+from app.services.qa_export import build_workbook
 
 logger = logging.getLogger(__name__)
 
@@ -99,6 +101,7 @@ class QAPairService:
         self._conversations = ConversationRepository(session)
         self._messages = MessageRepository(session)
         self._projects = ProjectRepository(session)
+        self._users = UserRepository(session)
 
     async def create(
         self, payload: QAPairCreateRequest, *, actor: AuthenticatedUser
@@ -182,6 +185,58 @@ class QAPairService:
         note `ConversationService` carries.
         """
         return await self._pairs.distinct_tags(scope=access.resolve_project_scope(actor))
+
+    async def export(self, query: QAPairListQuery, *, actor: AuthenticatedUser) -> bytes:
+        """The current filtered list as a workbook.
+
+        The same `QAPairListQuery` as the list route, with pagination ignored: you
+        export what you are looking at, and a second filter implementation would
+        drift from the first.
+        """
+        cap = self.settings.qa_export_max_rows
+        try:
+            rows = await self._pairs.list_all(
+                scope=access.resolve_project_scope(actor),
+                sort=query.sort or DEFAULT_SORT,
+                descending=query.sort_direction == "desc",
+                project_id=query.project_id,
+                module=query.module,
+                tag=query.tag,
+                source=query.source.value if query.source else None,
+                status=query.status.value if query.status else None,
+                created_by=query.created_by,
+                search=query.search,
+                cap=cap,
+            )
+        except ValueError as error:
+            raise AppError(
+                status.HTTP_400_BAD_REQUEST, ErrorCode.INVALID_SORT_FIELD, str(error)
+            ) from error
+
+        # `list_all` fetched cap + 1 precisely so this comparison needs no second
+        # COUNT over the same filters.
+        if len(rows) > cap:
+            raise AppError(
+                status.HTTP_409_CONFLICT,
+                ErrorCode.EXPORT_TOO_LARGE,
+                f"More than {cap} pairs match. Narrow the filters and try again.",
+            )
+        return build_workbook(rows, names=await self._display_names(rows))
+
+    async def _display_names(self, rows: builtins.list[QAPair]) -> dict[uuid.UUID, str]:
+        """User and project ids to names, in two queries rather than 2N."""
+        user_ids = {row.created_by for row in rows} | {
+            row.reviewed_by for row in rows if row.reviewed_by
+        }
+        project_ids = {row.project_id for row in rows}
+        names: dict[uuid.UUID, str] = {}
+        if user_ids:
+            for user in await self._users.by_ids(user_ids):
+                names[user.id] = user.name
+        if project_ids:
+            for project in await self._projects.by_ids(project_ids):
+                names[project.id] = project.name
+        return names
 
     # ---- guards -------------------------------------------------------------
 

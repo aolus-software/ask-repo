@@ -140,6 +140,11 @@ class Settings(BaseSettings):
     rag_grade_evidence: bool = True
     rag_classify_intent: bool = True
 
+    # Rows above which the export refuses rather than building a workbook in
+    # memory. `openpyxl` allocates the whole book even in write-only mode, so this
+    # cap is the only thing bounding it.
+    qa_export_max_rows: int = 5000
+
     # Encrypts stored PATs at rest (docs/PRD.md §9). Backed up separately from
     # the database — a backup holding both is plaintext storage with extra steps.
     pat_encryption_key: str = PLACEHOLDER_PAT_KEY

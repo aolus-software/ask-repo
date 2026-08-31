@@ -29,6 +29,8 @@ from app.services.qa_pair import QAPairService, stream_rerun
 
 router = APIRouter(prefix="/qa-pairs", tags=["QA List"])
 
+XLSX_MEDIA_TYPE = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+
 
 def get_qa_pair_service(
     session: SessionDep, settings: Annotated[Settings, Depends(get_settings)]
@@ -73,6 +75,29 @@ async def list_qa_pairs(
 async def list_tags(current_user: CurrentUser, service: QAPairServiceDep) -> list[str]:
     """Distinct tags across the caller's scope, for the filter combobox."""
     return await service.tags(actor=current_user)
+
+
+# Also declared BEFORE `/{pair_id}`, for the same reason as `/tags`: FastAPI would
+# otherwise match `/export` as a malformed `pair_id` and 422 every request.
+@router.get(
+    "/export",
+    status_code=status.HTTP_200_OK,
+    summary="Export the filtered list as a spreadsheet",
+    response_class=Response,
+    responses={code: ERROR_RESPONSES[code] for code in (400, 401, 403, 409, 422)},
+)
+async def export_qa_pairs(
+    current_user: CurrentUser,
+    service: QAPairServiceDep,
+    query: Annotated[QAPairListQuery, Query()],
+) -> Response:
+    """The same filters as the list route, with pagination ignored."""
+    content = await service.export(query, actor=current_user)
+    return Response(
+        content=content,
+        media_type=XLSX_MEDIA_TYPE,
+        headers={"Content-Disposition": 'attachment; filename="qa-pairs.xlsx"'},
+    )
 
 
 @router.get(

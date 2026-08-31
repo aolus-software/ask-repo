@@ -57,6 +57,17 @@ class UserRepository(BaseRepository[User]):
         rows = await self.session.execute(statement)
         return rows.scalars().all(), total
 
+    async def by_ids(self, ids: set[uuid.UUID]) -> Sequence[User]:
+        """Every live user among `ids`, in one query rather than N.
+
+        Used by the QA export to resolve `created_by`/`reviewed_by` to names — a
+        5,000-row export otherwise costs 10,000 round trips if this were a loop.
+        """
+        if not ids:
+            return []
+        result = await self.session.execute(self.active_select().where(User.id.in_(ids)))
+        return result.scalars().all()
+
     async def count_active_admins(self, excluding: uuid.UUID | None = None) -> int:
         """How many live admins exist, optionally ignoring one.
 

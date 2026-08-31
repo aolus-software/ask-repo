@@ -12,12 +12,16 @@ from app.models.user import User
 
 
 async def create_user(
-    session: AsyncSession, *, email: str | None = None, is_admin: bool = False
+    session: AsyncSession,
+    *,
+    email: str | None = None,
+    is_admin: bool = False,
+    name: str = "Test User",
 ) -> User:
     """A live account that has already changed its password."""
     user = User(
         id=uuid.uuid4(),
-        name="Test User",
+        name=name,
         email=email or f"user-{uuid.uuid4().hex[:8]}@example.com",
         # Cost 4 comes from the suite's BCRYPT_COST override; cost is not under test.
         password_hash=hash_password("correct-horse-battery", cost=4),
