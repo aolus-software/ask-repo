@@ -6,6 +6,7 @@ from app.models.conversation import Conversation, FinishReason, Message, Message
 from app.models.project import Project, ProjectStatus
 from app.models.refresh_token import RefreshToken, RevokedReason
 from app.models.user import User
+from app.models.qa_pair import QAPair, QASource, QAStatus
 
 __all__ = [
     "Base",
@@ -20,4 +21,7 @@ __all__ = [
     "SoftDeleteMixin",
     "TimestampMixin",
     "User",
+    "QAPair",
+    "QASource",
+    "QAStatus",
 ]
