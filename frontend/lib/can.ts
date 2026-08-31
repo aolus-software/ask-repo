@@ -11,3 +11,15 @@ export function canManageProject(
 ): boolean {
   return user.isAdmin || project.createdBy === user.id;
 }
+
+/**
+ * Mirrors the backend's gate on editing, deleting and re-running a pair. It does
+ * NOT cover setting the status — that is open to every user by design
+ * (`docs/PRD.md:338`), so do not reuse this to hide the status control.
+ */
+export function canManageQAPair(
+  user: { id: string; isAdmin: boolean },
+  pair: { createdBy: string },
+): boolean {
+  return user.isAdmin || pair.createdBy === user.id;
+}

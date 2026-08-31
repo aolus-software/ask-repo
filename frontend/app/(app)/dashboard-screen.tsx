@@ -3,7 +3,7 @@
 import { FolderGit2, MessagesSquare, Plus } from "lucide-react";
 import Link from "next/link";
 
-import { StatusBadge } from "@/components/feedback/status-badge";
+import { ProjectStatusBadge } from "@/components/feedback/status-badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -108,7 +108,7 @@ export function DashboardScreen() {
                   className="hover:bg-accent flex items-center justify-between rounded-md p-2"
                 >
                   <span className="truncate font-medium">{project.name}</span>
-                  <StatusBadge status={project.status} />
+                  <ProjectStatusBadge status={project.status} />
                 </Link>
               ))
             )}

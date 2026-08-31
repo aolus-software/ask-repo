@@ -2,7 +2,7 @@
 
 import { useMemo } from "react";
 
-import { StatusBadge } from "@/components/feedback/status-badge";
+import { ProjectStatusBadge } from "@/components/feedback/status-badge";
 import {
   Combobox,
   ComboboxContent,
@@ -75,7 +75,7 @@ export function ProjectPicker({
             >
               <span className="truncate">{project.name}</span>
               {project.status === "ready" ? null : (
-                <StatusBadge status={project.status} />
+                <ProjectStatusBadge status={project.status} />
               )}
             </ComboboxItem>
           )}

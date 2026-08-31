@@ -11,9 +11,23 @@ const TONE_CLASSES: Record<StatusTone, string> = {
   success: "bg-success text-success-foreground",
   warning: "bg-warning text-warning-foreground",
   danger: "bg-danger text-danger-foreground",
+  neutral: "bg-muted text-muted-foreground",
 };
 
 export function StatusBadge({
+  tone,
+  label,
+  className,
+}: {
+  tone: StatusTone;
+  label: string;
+  className?: string;
+}) {
+  return <Badge className={cn(TONE_CLASSES[tone], className)}>{label}</Badge>;
+}
+
+/** The project-status spelling, so existing callers keep their one-argument shape. */
+export function ProjectStatusBadge({
   status,
   className,
 }: {
@@ -21,8 +35,10 @@ export function StatusBadge({
   className?: string;
 }) {
   return (
-    <Badge className={cn(TONE_CLASSES[statusTone(status)], className)}>
-      {statusLabel(status)}
-    </Badge>
+    <StatusBadge
+      tone={statusTone(status)}
+      label={statusLabel(status)}
+      className={className}
+    />
   );
 }

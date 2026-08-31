@@ -4,7 +4,7 @@ import { MessagesSquare } from "lucide-react";
 import Link from "next/link";
 
 import { NotFound } from "@/components/feedback/not-found";
-import { StatusBadge } from "@/components/feedback/status-badge";
+import { ProjectStatusBadge } from "@/components/feedback/status-badge";
 import { ProjectRowActions } from "@/components/projects/project-row-actions";
 import { ProjectStats } from "@/components/projects/project-stats";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -49,7 +49,7 @@ export function ProjectDetailScreen({ id }: { id: string }) {
         <div>
           <div className="flex items-center gap-3">
             <h1 className="text-3xl font-semibold tracking-tight">{project.name}</h1>
-            <StatusBadge status={project.status} />
+            <ProjectStatusBadge status={project.status} />
           </div>
           <p className="text-muted-foreground mt-1 font-mono text-base">
             {project.repoUrl} @{project.branch}

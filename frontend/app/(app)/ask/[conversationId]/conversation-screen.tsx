@@ -11,7 +11,7 @@ import { GroundingNotice } from "@/components/ask/grounding-notice";
 import { MessageList } from "@/components/ask/message-list";
 import { Sources } from "@/components/ask/sources";
 import { NotFound } from "@/components/feedback/not-found";
-import { StatusBadge } from "@/components/feedback/status-badge";
+import { ProjectStatusBadge } from "@/components/feedback/status-badge";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -108,7 +108,7 @@ export function ConversationScreen({ conversationId }: { conversationId: string 
               </Link>
               {/* Shown even when ready: it is the difference between a follow-up
                   that answers and one that returns PROJECT_NOT_READY. */}
-              <StatusBadge status={project.data.status} />
+              <ProjectStatusBadge status={project.data.status} />
             </>
           ) : project.isError ? (
             <span>That project is no longer available.</span>

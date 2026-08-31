@@ -1,4 +1,4 @@
-import type { ListParams } from "@/lib/api/types";
+import type { ListParams, QAListParams } from "@/lib/api/types";
 
 /**
  * Every API path in one module. A string literal at a call site is how the
@@ -29,6 +29,15 @@ export const endpoints = {
     detail: (id: string) => `/conversations/${id}`,
     messages: (id: string) => `/conversations/${id}/messages`,
   },
+  qaPairs: {
+    list: "/qa-pairs",
+    tags: "/qa-pairs/tags",
+    export: "/qa-pairs/export",
+    detail: (id: string) => `/qa-pairs/${id}`,
+    status: (id: string) => `/qa-pairs/${id}/status`,
+    rerun: (id: string) => `/qa-pairs/${id}/rerun`,
+    acceptRerun: (id: string) => `/qa-pairs/${id}/rerun/accept`,
+  },
 } as const;
 
 /**
@@ -51,6 +60,13 @@ export const SORT = {
     lastLoginAt: "last_login_at",
   },
   conversations: { title: "title", createdAt: "created_at", updatedAt: "updated_at" },
+  qaPairs: {
+    module: "module",
+    status: "status",
+    createdAt: "created_at",
+    updatedAt: "updated_at",
+    lastRunAt: "last_run_at",
+  },
 } as const;
 
 /** Serialise list params, dropping empties so the cache key stays stable. */
@@ -61,6 +77,24 @@ export function listQueryString(params: ListParams): string {
   if (params.search) search.set("search", params.search);
   if (params.sort) search.set("sort", params.sort);
   if (params.sortDirection) search.set("sortDirection", params.sortDirection);
+  const qs = search.toString();
+  return qs ? `?${qs}` : "";
+}
+
+/**
+ * `listQueryString` plus the six QA filters. A new function rather than widening
+ * `listQueryString` itself: three other screens call that one and none of them has
+ * these filters.
+ */
+export function qaListQueryString(params: QAListParams): string {
+  const base = listQueryString(params);
+  const search = new URLSearchParams(base.startsWith("?") ? base.slice(1) : base);
+  if (params.projectId) search.set("projectId", params.projectId);
+  if (params.module) search.set("module", params.module);
+  if (params.tag) search.set("tag", params.tag);
+  if (params.source) search.set("source", params.source);
+  if (params.status) search.set("status", params.status);
+  if (params.createdBy) search.set("createdBy", params.createdBy);
   const qs = search.toString();
   return qs ? `?${qs}` : "";
 }

@@ -1,4 +1,5 @@
 import {
+  ClipboardCheck,
   FolderGit2,
   LayoutDashboard,
   type LucideIcon,
@@ -27,14 +28,12 @@ interface NavUser {
 /**
  * The only place destinations are declared. The sidebar and the breadcrumbs both read
  * this, so they cannot drift. Never hardcode a nav label or href in a component.
- *
- * `/qa` is deliberately absent: `navigation.md` §6 lists it in the target route shape,
- * but it is M4 and a nav item pointing at a route that does not exist is broken UI.
  */
 export const navItems: NavItem[] = [
   { title: "Dashboard", href: "/", icon: LayoutDashboard },
   { title: "Projects", href: "/projects", icon: FolderGit2 },
   { title: "Ask", href: "/ask", icon: MessagesSquare },
+  { title: "QA List", href: "/qa", icon: ClipboardCheck },
   { title: "Settings", href: "/settings", icon: Settings, children: settingsNav },
 ];
 

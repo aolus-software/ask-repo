@@ -6,11 +6,12 @@ const admin = { isAdmin: true };
 const member = { isAdmin: false };
 
 describe("visibleNavTree", () => {
-  it("shows the four destinations that exist to an admin", () => {
+  it("shows the five destinations that exist to an admin", () => {
     expect(visibleNavTree(admin).map((i) => i.href)).toEqual([
       "/",
       "/projects",
       "/ask",
+      "/qa",
       "/settings",
     ]);
   });
@@ -20,6 +21,7 @@ describe("visibleNavTree", () => {
       "/",
       "/projects",
       "/ask",
+      "/qa",
     ]);
   });
 
@@ -33,8 +35,9 @@ describe("visibleNavTree", () => {
     expect(projects && "children" in projects).toBe(false);
   });
 
-  it("does not offer /qa — that route does not exist until M4", () => {
-    expect(visibleNavTree(admin).some((i) => i.href === "/qa")).toBe(false);
+  it("shows the QA List to a non-admin", () => {
+    const tree = visibleNavTree({ isAdmin: false });
+    expect(tree.map((item) => item.href)).toContain("/qa");
   });
 });
 
@@ -60,5 +63,10 @@ describe("resolveBreadcrumbs", () => {
 
   it("is empty on the dashboard", () => {
     expect(resolveBreadcrumbs("/", member)).toEqual([]);
+  });
+
+  it("builds breadcrumbs for a QA pair", () => {
+    const trail = resolveBreadcrumbs("/qa/abc-123", { isAdmin: false });
+    expect(trail[0]).toEqual({ href: "/qa", label: "QA List" });
   });
 });
