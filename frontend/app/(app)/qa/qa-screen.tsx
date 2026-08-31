@@ -27,6 +27,19 @@ const DEFAULTS = {
 };
 
 /**
+ * Mirrors the backend's `qa_export_max_rows` default (`backend/app/config.py`,
+ * `QA_EXPORT_MAX_ROWS` in `backend/.env.example`). Nothing on the wire exposes an
+ * operator override of that setting to the client, so this only matches the cap
+ * the server actually enforces on an unmodified instance — it disables the button
+ * on the same threshold `QAPairService.export` would refuse at by default, per
+ * design spec §6.2. An operator who raises `QA_EXPORT_MAX_ROWS` gets a button that
+ * disables too early rather than too late, which is the safe direction to drift:
+ * exceeding a cap this constant does not know about still fails safely server-side
+ * with `409 EXPORT_TOO_LARGE` rather than a corrupted download.
+ */
+const QA_EXPORT_MAX_ROWS = 5000;
+
+/**
  * URL state for the whole grid — search, page, and the six filters — behind one
  * `update(patch)`. Modelled on `hooks/use-list-params.ts`, widened for the extra
  * filters `QAFilters` needs: any change other than an explicit page resets to page 1,
@@ -91,6 +104,12 @@ export function QAScreen() {
       ),
   });
   const pairs = query.data?.items ?? [];
+  const totalCount = query.data?.totalCount ?? 0;
+  // The route builds the whole workbook in memory before refusing, so the button
+  // is disabled below what the server would 409 on rather than after the click
+  // (design spec §6.2) — narrowing the filters is the only recovery either way.
+  const overExportCap = totalCount > QA_EXPORT_MAX_ROWS;
+  const exportDisabled = query.isLoading || totalCount === 0 || overExportCap;
 
   // Same page of projects the filter bar's Select fetches — the query key matches, so
   // this shares that cache entry rather than issuing a second request.
@@ -122,6 +141,40 @@ export function QAScreen() {
       <PageHeader
         title="QA List"
         description="Answers the instance has published and verified. Anyone here can read or review one."
+        action={
+          <div className="flex items-center gap-3">
+            <span className="text-muted-foreground text-sm">
+              {totalCount} {totalCount === 1 ? "pair" : "pairs"}
+              {overExportCap
+                ? ` — narrow the filters to export (cap ${QA_EXPORT_MAX_ROWS})`
+                : ""}
+            </span>
+            {/* Same-origin, so the session cookies ride along and the browser
+                handles the download — no blob assembly, no object URLs (design
+                spec §6.4, §7.1). Rendered as a plain disabled Button rather than
+                a disabled anchor above the cap: an anchor's `disabled` attribute
+                has no browser meaning, so a click would still navigate to the
+                409 error page this button exists to keep the operator from
+                seeing. */}
+            {exportDisabled ? (
+              <Button variant="outline" disabled>
+                Export
+              </Button>
+            ) : (
+              <Button
+                variant="outline"
+                render={
+                  <a
+                    href={`/api/qa-pairs/export${qaListQueryString(params)}`}
+                    download
+                  />
+                }
+              >
+                Export
+              </Button>
+            )}
+          </div>
+        }
       />
 
       <ListToolbar
