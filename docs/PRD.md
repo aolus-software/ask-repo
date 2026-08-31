@@ -39,11 +39,12 @@ Four core features, sitting on top of an auth foundation:
 
 **Phase 1 (this document).** Flat access. Every authenticated user can see and query every project. No roles beyond a single `is_admin` flag. Destructive operations are limited to the project's creator or an admin.
 
-**Phase 2 (deferred, not specified here).** Three things, in no committed order:
+**Phase 2 (deferred, not specified here).** Four things, in no committed order:
 
 - **Per-project RBAC.** Users are assigned to projects and see only their own. Roles per project (viewer / editor / owner). Phase 1's `created_by` becomes the seed for the first membership row; the access resolver named in §2 becomes the enforcement point.
 - **Self-service password reset.** A user who forgot their password recovers it without an admin, replacing the out-of-band flow in §4.0. **This is the one phase-2 item that adds infrastructure**: a reset link has to reach the user, so it needs a mail provider — an SMTP host, a credential, a from-address, and deliverability from an instance that is deliberately not internet-facing (§5). Phase 1 has no mail provider anywhere in the stack, and that absence is currently load-bearing: it is why there is no email verification, no invitation flow, and no queue of outbound messages to operate. Whoever specifies this decides whether the cost is worth it against simply keeping admin-driven reset. A single-use, short-lived, hashed reset token stored like a refresh token is the shape to reach for; emailing a password is not.
 - **Audit trail.** An append-only record of who did what: logins and failed logins, account creation and deactivation, password changes and resets, project creation, re-index and deletion, and PAT changes. Phase 1 has attribution (`created_by`) but no history — a deleted project takes its `created_by` with it, so nothing anywhere records who deleted it, and §7's destructive-gating criteria are verifiable by test but not after the fact on a live instance. Two constraints follow from §9 and are not optional: the log records **that** an action happened and by whom, never the secret involved — no passwords, no tokens, no PATs, no clone URLs with credentials embedded — and it is append-only, so a user cannot erase their own entries. Whether it is a Postgres table or a structured log stream is open; a table is queryable from the admin UI, a stream is cheaper to retain.
+- **Multi-language.** Two halves, separable but usually wanted together. **The interface:** every string in the frontend comes from a catalogue rather than a literal, with a switcher and a stored preference — a column on the user row rather than a cookie, so the choice survives a new device. The token system in `docs/design.md` is unaffected (a colour has no language), but every screen is touched, and the form shells that route field errors (§5.1) must take their messages from the catalogue too or the interface ends up half-translated at exactly the moment a user is stuck. **The answers:** the assistant replies in the language the question was asked in, while the code, the identifiers, and the citations stay as they are in the repository — translating a symbol name would break the `[n]` citation contract against the file it points at. This half adds no infrastructure and one real risk. The index holds source code written in English, so a question embedded in another language lands in a different neighbourhood of the vector space than the code that answers it, and recall drops with **nothing reporting an error** — the same silent-quality failure the embedding-model guard in §4.2 exists to prevent. M3's classify node is the seam: it already rewrites every question into a standalone search query, so constraining that query to English keeps retrieval working while generation answers in the user's language. Two things whoever specifies this must decide: whether the fixed refusals in `app/rag/grounding.py` are translated (they are user-visible answers, not interface chrome, so they sit outside the frontend catalogue), and whether a non-English eval set from M5 is a precondition — without one, answer quality in a second language is unmeasured rather than good.
 
 ### Non-goals (v1)
 
@@ -51,6 +52,7 @@ Four core features, sitting on top of an auth foundation:
 - Public registration, social login. Self-service password reset — deferred to phase 2 (§2.1).
 - Per-project permissions and roles — deferred to phase 2.
 - An audit trail of who did what — deferred to phase 2 (§2.1). v1 has attribution, not history.
+- Multiple interface languages, and answers in a language other than English — deferred to phase 2 (§2.1). v1 ships one locale and answers in English.
 - Horizontal scaling, high availability, multi-region — a single VPS is the target.
 - CI/CD beyond a build-and-restart script.
 - UI polish.
@@ -481,7 +483,7 @@ Redis stays in the stack for login rate limiting only. It does not back the queu
 5. **M5 — Mock Data Generator:** generate synthetic Q&A + basic eval scoring.
 6. **M6 — Local vs hosted comparison:** benchmark qwen2.5-coder/qwen3 vs hosted model across nodes.
 
-**Phase 2 (after M6):** per-project RBAC — membership table, roles, and swapping the access resolver's body. Plus self-service password reset (which brings a mail provider into the stack for the first time) and an append-only audit trail. See §2.1 for what each covers and what it costs.
+**Phase 2 (after M6):** per-project RBAC — membership table, roles, and swapping the access resolver's body. Plus self-service password reset (which brings a mail provider into the stack for the first time), an append-only audit trail, and multi-language support — a translated interface and answers in the language the question was asked in, with the search query held to English so retrieval against English source code keeps working. See §2.1 for what each covers and what it costs.
 
 ---
 
