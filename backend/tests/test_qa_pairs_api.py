@@ -5,7 +5,7 @@ import uuid
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from tests.factories import create_project, create_qa_pair, create_user
+from tests.factories import create_qa_pair, create_user
 
 
 async def test_list_returns_a_page_in_camel_case(
@@ -89,9 +89,7 @@ async def test_a_non_owner_cannot_edit_or_delete(
     pair = await create_qa_pair(db_session, created_by=owner.id)
     await db_session.commit()
 
-    patched = await client_for_user_b.patch(
-        f"/qa-pairs/{pair.id}", json={"module": "hijacked"}
-    )
+    patched = await client_for_user_b.patch(f"/qa-pairs/{pair.id}", json={"module": "hijacked"})
     deleted = await client_for_user_b.delete(f"/qa-pairs/{pair.id}")
 
     assert patched.status_code == 403
@@ -112,9 +110,7 @@ async def test_a_non_owner_CAN_set_the_status(
     pair = await create_qa_pair(db_session, created_by=owner.id)
     await db_session.commit()
 
-    response = await client_for_user_b.put(
-        f"/qa-pairs/{pair.id}/status", json={"status": "fail"}
-    )
+    response = await client_for_user_b.put(f"/qa-pairs/{pair.id}/status", json={"status": "fail"})
 
     assert response.status_code == 200
     assert response.json()["status"] == "fail"

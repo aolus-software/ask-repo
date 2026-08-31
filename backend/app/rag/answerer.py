@@ -78,12 +78,14 @@ class Answerer:
         history: list[Turn],
         project_id: uuid.UUID,
         generation: int,
-        message_id: uuid.UUID,
+        message_id: uuid.UUID | None,
     ) -> AsyncGenerator[StreamEvent]:
         """Run the graph, forwarding its events and terminating exactly once.
 
         `message_id` is supplied by the caller rather than generated here so the
-        terminating event can name the row the caller is about to write.
+        terminating event can name the row the caller is about to write. It is
+        `None` on the re-run route, which writes a pending slot on a QA pair rather
+        than a message (spec §8.1).
         """
         if self.semaphore.locked():
             # Silence for the length of someone else's answer is indistinguishable
@@ -132,7 +134,7 @@ class Answerer:
 
             yield self._terminate(final, message_id=message_id)
 
-    def _terminate(self, final: TurnState, *, message_id: uuid.UUID) -> StreamEvent:
+    def _terminate(self, final: TurnState, *, message_id: uuid.UUID | None) -> StreamEvent:
         """Build the one event that ends this stream."""
         if final["failure"] is not None:
             message = (

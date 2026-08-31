@@ -144,7 +144,10 @@ class DoneEvent(StreamEvent):
     """The answer completed."""
 
     event_name: ClassVar[str] = "done"
-    message_id: uuid.UUID
+    # Nullable because the re-run route has no message row to name (spec §8.1).
+    # The conversation route still always sets it; a client on that path can rely
+    # on it in practice, just not in the type.
+    message_id: uuid.UUID | None
     model: str
     finish_reason: FinishReason
     cited_indexes: list[int]
@@ -169,7 +172,10 @@ class ErrorEvent(StreamEvent):
     """
 
     event_name: ClassVar[str] = "error"
-    message_id: uuid.UUID
+    # Nullable for the same reason as `DoneEvent` above, and it has to be both: a
+    # re-run that fails terminates through here, so leaving this one narrow would
+    # leave the failure path unable to terminate at all.
+    message_id: uuid.UUID | None
     code: ErrorCode
     message: str
     finish_reason: FinishReason

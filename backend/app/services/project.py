@@ -209,7 +209,6 @@ class ProjectService:
         if swept_pairs:
             logger.info("Soft-deleted %d QA pair(s) with project %s", swept_pairs, project.id)
 
-
         await self.session.commit()
 
     async def _enqueue(self, project_id: uuid.UUID) -> None:
