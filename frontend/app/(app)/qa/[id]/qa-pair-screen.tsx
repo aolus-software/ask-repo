@@ -1,7 +1,7 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Loader2, MoreHorizontal, Pencil, RotateCw, Trash2, X } from "lucide-react";
+import { Loader2, MoreHorizontal, Pencil, RotateCw, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
@@ -16,6 +16,7 @@ import { FormDialog } from "@/components/form/form-dialog";
 import { FormError } from "@/components/form/form-error";
 import { QAStatusControl } from "@/components/qa/qa-status-control";
 import { RerunPanel } from "@/components/qa/rerun-panel";
+import { TagsEditor } from "@/components/qa/tags-editor";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -39,68 +40,6 @@ import { canManageQAPair } from "@/lib/can";
 import { formatAbsolute, formatRelative } from "@/lib/dates";
 import { keys } from "@/lib/query/keys";
 import { qaStatusLabel, qaStatusTone } from "@/lib/status";
-
-/**
- * A tag chip editor: type, then Enter or comma to add; the badge's own button
- * removes one. No client-side count or length cap — `.claude/rules/forms.md` §4
- * limits client checks to required/shape, and the pair count and per-tag length
- * live in the backend (`MAX_TAGS`, `MAX_TAG_CHARS`) as the one place to keep them
- * honest. A 422 surfaces here through `fieldError`, same as every other field.
- */
-function TagsEditor({
-  tags,
-  onChange,
-  error,
-}: {
-  tags: string[];
-  onChange: (tags: string[]) => void;
-  error?: string;
-}) {
-  const [draft, setDraft] = useState("");
-
-  function commit() {
-    const value = draft.trim();
-    if (value && !tags.includes(value)) onChange([...tags, value]);
-    setDraft("");
-  }
-
-  return (
-    <Field>
-      <FieldLabel htmlFor="qa-edit-tags">Tags</FieldLabel>
-      {tags.length > 0 ? (
-        <div className="flex flex-wrap gap-1.5">
-          {tags.map((tag) => (
-            <Badge key={tag} variant="outline" className="gap-1">
-              {tag}
-              <button
-                type="button"
-                aria-label={`Remove tag ${tag}`}
-                onClick={() => onChange(tags.filter((existing) => existing !== tag))}
-              >
-                <X className="size-3" />
-              </button>
-            </Badge>
-          ))}
-        </div>
-      ) : null}
-      <Input
-        id="qa-edit-tags"
-        value={draft}
-        placeholder="Add a tag, then press Enter"
-        onChange={(event) => setDraft(event.target.value)}
-        onKeyDown={(event) => {
-          if (event.key === "Enter" || event.key === ",") {
-            event.preventDefault();
-            commit();
-          }
-        }}
-        onBlur={commit}
-        aria-invalid={Boolean(error)}
-      />
-      {error ? <FieldError>{error}</FieldError> : null}
-    </Field>
-  );
-}
 
 /**
  * Module, question and tags — never `answer`, which only ever comes from a model,
@@ -210,6 +149,7 @@ function EditQAPairDialog({
       </Field>
 
       <TagsEditor
+        id="qa-edit-tags"
         tags={values.tags}
         onChange={(tags) => setValues({ ...values, tags })}
         error={fieldError(mutation.error, "tags")}
