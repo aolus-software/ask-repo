@@ -1,9 +1,10 @@
 # RAG Rules
 
-Everything under `app/rag/`, plus `app/services/conversation.py` and
-`app/api/routes/conversations.py`. Read `router.md` and `response-api.md` alongside this —
-they own status codes and the wire contract; this file owns what is specific to retrieval,
-generation, and streaming.
+Everything under `app/rag/`, plus `app/services/conversation.py`,
+`app/api/routes/conversations.py`, and the re-run half of `app/services/qa_pair.py` and
+`app/api/routes/qa_pairs.py` — it streams through the same `Answerer`. Read `router.md` and
+`response-api.md` alongside this — they own status codes and the wire contract; this file owns
+what is specific to retrieval, generation, and streaming.
 
 Every invariant here is one lint cannot catch, and most of them fail **silently** when broken:
 no exception, no failing request, just worse answers that still look like answers. That is
@@ -221,3 +222,24 @@ graph. A node tested outside the runtime would be tested in a state it never run
 `Answerer._terminate` is the only place a `DoneEvent` or `ErrorEvent` is constructed.
 No node can emit one, which is what makes "exactly one terminator per stream"
 structural rather than a rule six nodes each have to remember.
+
+## The ordering contract holds on `POST /qa-pairs/{id}/rerun` too
+
+A re-run is a second caller of the same graph, not a second stream implementation.
+`citations` is emitted exactly once, before the first `token`, and exactly one
+terminator carries a `finishReason` — the same contract as `/conversations/{id}/messages`,
+because both routes are served by the same `Answerer`. The one wire difference is
+`messageId`: it is `null` on this route, since a re-run has no message row, and the
+terminator events' `messageId` field exists to be optional for exactly this case.
+
+The result the stream carries is never the pair's answer of record. It is written into
+the pending slot — `pending_answer`, `pending_citations`, `pending_model`,
+`pending_finish_reason`, `pending_run_at` — and stays there until
+`POST /qa-pairs/{id}/rerun/accept` promotes it. This is not a caching detail: a QA pair
+is published to every user on the instance, so its stored answer must come from a model
+through the server, never from a client request body. If the browser posted the streamed
+text back on Save, `POST /qa-pairs/{id}/rerun/accept` would be accepting assistant-authored
+content from whoever's tab happened to be open — the same hole `POST /qa-pairs` closes by
+taking a message id rather than answer text (`app/schemas/qa_pair.py`'s
+`QAPairCreateRequest`). The pending slot is what lets the client send only an instruction
+(`accept` or discard) and never content.

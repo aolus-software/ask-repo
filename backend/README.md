@@ -11,8 +11,12 @@ M1 is complete. The project routes and the entire ingestion pipeline are here �
 walk, chunk, embed, and write to Qdrant — along with the Kafka producer, the consumer
 that turns a queued message into an indexing run, the delayed-retry consumers, and
 `app/worker.py`: the separate process that runs all of them and sweeps up jobs the
-broker never received. `POST /projects` enqueues and a worker indexes. The Dev
-Knowledge / QA List / mock-data work starts at M2.
+broker never received. `POST /projects` enqueues and a worker indexes.
+
+M2 through M4 are shipped too: Dev Knowledge (streaming RAG Q&A over an indexed project),
+M3's LangGraph intent routing and corrective retrieval loop, and the QA List — see the
+`### Conversations` and `### QA List` route sections below. Only the Mock Data Generator
+(M5) and the local-vs-hosted comparison (M6) remain.
 
 ## Requirements
 

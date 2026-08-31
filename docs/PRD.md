@@ -329,15 +329,17 @@ publish a cut-off answer to the whole team.
 - As a dev, I can view all saved Q&A pairs, filtered by project or tag (e.g. "auth", "billing"), including ones my colleagues saved.
 - As a dev, I can see who saved a pair and when.
 - As a dev, I can re-run a saved question against the current index to see if the answer changed (useful after refactors).
-- As a dev, I can mark a Q&A pair as "verified correct" so it becomes a trusted reference / eval case for the team.
+- As a dev, I can mark a Q&A pair pass or fail against its expected result, so it becomes a trusted reference / eval case for the team.
 
 **Acceptance criteria**
 
 - Storage: a single Postgres `qa_pairs` table, scoped by `project_id`, readable by every user.
-- List view filterable by project, tag, `source`, `verified`, and `created_by`.
-- Any user may create and verify a pair. Editing or deleting a pair requires `created_by` or admin — same rule as projects, returning `403`.
+- List view filterable by project, tag, `source`, `status`, and `created_by`.
+- Any user may create a pair and set its status. Editing or deleting a pair requires `created_by` or admin — same rule as projects, returning `403`.
 - Re-run takes an existing question, re-queries Dev Knowledge, and shows old vs new answer side by side. The re-run does not overwrite the stored answer unless the user saves it.
 - Deleting a project soft-deletes its Q&A pairs.
+- A pair is created from a finished message id, never from answer text in the request body — the server copies `question`, `answer`, `citations`, `model`, and `project_id` out of the message row. A message whose `finish_reason` is anything but `stop` is refused with `409`, so a cut-off answer can never be published to the whole team.
+- The filtered list can be exported as a spreadsheet, for review outside the tool.
 
 **Schema (shared with §4.4)**
 
@@ -346,22 +348,30 @@ class QAPair(BaseModel):
     id: UUID
     project_id: UUID
     created_by: UUID                          # attribution; does not scope reads
+    module: str | None
     question: str
     answer: str | None                        # null until answered
-    reference_answer: str | None              # generated pairs only
+    reference_answer: str | None
     citations: list[Citation]                 # file path + chunk id + line range
     tags: list[str]
     source: Literal["manual", "generated"]
-    verified: bool = False
-    verified_by: UUID | None
+    status: Literal["unreviewed", "pass", "fail"]
+    reviewed_by: UUID | None
+    reviewed_at: datetime | None
     model: str | None                         # model that produced `answer`
     eval_score: float | None                  # generated + evaluated only
+    last_run_at: datetime | None
+    pending_answer: str | None                # a re-run's result, held server-side
+    pending_citations: list[Citation] | None
+    pending_model: str | None
+    pending_finish_reason: str | None
+    pending_run_at: datetime | None
     created_at: datetime
     updated_at: datetime
     deleted_at: datetime | None
 ```
 
-**Out of scope for v1:** exporting, collaborative editing of a single pair, versioned diffing UI.
+**Out of scope for v1:** collaborative editing of a single pair, versioned diffing UI.
 
 ---
 
@@ -378,8 +388,8 @@ class QAPair(BaseModel):
 **Acceptance criteria**
 
 - Generation uses an LLM prompted against actual code chunks to produce (question, reference answer, source file) triples — grounded generation, not hallucinated topics.
-- Output writes into the shared `qa_pairs` table (§4.3) with `source="generated"`, `verified=False`, and the caller as `created_by`.
-- Eval mode: for each generated pair, run it through Dev Knowledge, compare answer vs `reference_answer` (LLM-graded similarity is fine for v1), and store the result in `eval_score`.
+- Output writes into the shared `qa_pairs` table (§4.3) with `source="generated"`, `status="unreviewed"`, and the caller as `created_by`.
+- Eval mode: for each generated pair, run it through Dev Knowledge, compare answer vs `reference_answer` (LLM-graded similarity is fine for v1), and store the result in `eval_score` **alongside `status`** — the judge writes the same column a human does through `PUT /qa-pairs/{id}/status`, so the column means the same thing whether a person or a model filled it in.
 - Configurable count (10/25/50) and question-type mix.
 - Generation is the most expensive operation in the app; it runs as a background job with an instance-wide concurrency cap, not inline in the request.
 
@@ -479,7 +489,7 @@ Redis stays in the stack for login rate limiting only. It does not back the queu
 1. **M1 — Project ingestion:** `POST /projects` with repo link → clone + index, status tracking, manual re-index, URL validation, `created_by` gating. Moves ingestion out of the API process into a Kafka-driven worker (§5).
 2. **M2 — Dev Knowledge core (shipped):** RAG Q&A against a ready project (no graph yet), with private conversations, SSE streaming, history-aware query rewriting, and the grounding guardrails above.
 3. **M3 — LangGraph wrap (shipped):** turn the chain into a graph with intent routing (codebase question / conversational / out of scope) and a self-critique loop that **grades retrieval before generating** — when the excerpts do not answer the question, the grader supplies a better query and retrieval runs again. The critique deliberately sits before generation rather than after it: a critic that can reject a finished answer can only run on an answer that finished, which means either buffering the whole draft (reintroducing the silence §4.2 added streaming to remove) or visibly retracting a streamed one. See `docs/superpowers/specs/2026-08-30-m3-langgraph-design.md` §2.1.
-4. **M4 — QA List:** shared `qa_pairs` storage + save/view/filter/re-run.
+4. **M4 — QA List (shipped):** shared `qa_pairs` storage + save/view/filter/re-run, a pass/fail/unreviewed `status` verdict any user may set, and export of the filtered list to `.xlsx`.
 5. **M5 — Mock Data Generator:** generate synthetic Q&A + basic eval scoring.
 6. **M6 — Local vs hosted comparison:** benchmark qwen2.5-coder/qwen3 vs hosted model across nodes.
 
