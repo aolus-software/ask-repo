@@ -15,8 +15,8 @@ import uuid
 from datetime import datetime
 from enum import StrEnum
 
-from sqlalchemy import ARRAY, Float, ForeignKey, Index, String, Text
-from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy import DateTime, Float, ForeignKey, Index, String, Text
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 from sqlalchemy.dialects.postgresql import UUID as PgUUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -87,9 +87,7 @@ class QAPair(Base, TimestampMixin, SoftDeleteMixin):
     # cited subset: `docs/PRD.md:298-300` needs retrieval scoreable independently of
     # generation, which the discarded chunks are half of.
     citations: Mapped[list[dict[str, object]] | None] = mapped_column(JSONB, nullable=True)
-    tags: Mapped[list[str]] = mapped_column(
-        ARRAY(String), nullable=False, server_default="{}"
-    )
+    tags: Mapped[list[str]] = mapped_column(ARRAY(String), nullable=False, server_default="{}")
     # String rather than a native Postgres enum, matching `Message.role` and
     # `Project.status`: adding a value to a native enum needs a migration and a
     # table lock, and M5 is likely to want more states.
@@ -98,12 +96,12 @@ class QAPair(Base, TimestampMixin, SoftDeleteMixin):
     reviewed_by: Mapped[uuid.UUID | None] = mapped_column(
         PgUUID(as_uuid=True), ForeignKey("users.id"), nullable=True
     )
-    reviewed_at: Mapped[datetime | None] = mapped_column(nullable=True)
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     model: Mapped[str | None] = mapped_column(String(255), nullable=True)
     # M5 writes it. M4 only creates the column, so the eval milestone is a code
     # change rather than a migration against a table with rows in it.
     eval_score: Mapped[float | None] = mapped_column(Float, nullable=True)
-    last_run_at: Mapped[datetime | None] = mapped_column(nullable=True)
+    last_run_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     # --- The pending re-run slot (spec §2.5) ---
     #
@@ -113,9 +111,7 @@ class QAPair(Base, TimestampMixin, SoftDeleteMixin):
     # model through the server. `pending_finish_reason` is what `accept` refuses on,
     # so a truncated run can be read but never published.
     pending_answer: Mapped[str | None] = mapped_column(Text, nullable=True)
-    pending_citations: Mapped[list[dict[str, object]] | None] = mapped_column(
-        JSONB, nullable=True
-    )
+    pending_citations: Mapped[list[dict[str, object]] | None] = mapped_column(JSONB, nullable=True)
     pending_model: Mapped[str | None] = mapped_column(String(255), nullable=True)
     pending_finish_reason: Mapped[str | None] = mapped_column(String(32), nullable=True)
-    pending_run_at: Mapped[datetime | None] = mapped_column(nullable=True)
+    pending_run_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

@@ -9,14 +9,23 @@ from app.config import get_settings
 from app.core.errors import AppError, ErrorCode
 from app.core.middleware import AuthenticatedUser
 from app.models.conversation import FinishReason, Message, MessageRole
-from app.schemas.qa_pair import QAPairCreateRequest
+from app.models.qa_pair import QAStatus
+from app.schemas.qa_pair import (
+    QAPairCreateRequest,
+    QAPairStatusRequest,
+    QAPairUpdateRequest,
+)
 from app.services.qa_pair import QAPairService, normalise_tags
-from tests.factories import create_conversation, create_project, create_user
+from tests.factories import create_conversation, create_project, create_qa_pair, create_user
 
 
 def actor_for(user_id: uuid.UUID, *, is_admin: bool = False) -> AuthenticatedUser:
     return AuthenticatedUser(
-        id=user_id, email="a@example.com", is_admin=is_admin, must_change_password=False
+        id=user_id,
+        name="Test User",
+        email="a@example.com",
+        is_admin=is_admin,
+        must_change_password=False,
     )
 
 
@@ -28,9 +37,7 @@ async def seed_answered_turn(
 ) -> Message:
     """A question and its answer, in one conversation owned by `owner_id`."""
     project = await create_project(session, created_by=owner_id)
-    conversation = await create_conversation(
-        session, user_id=owner_id, project_id=project.id
-    )
+    conversation = await create_conversation(session, user_id=owner_id, project_id=project.id)
     session.add(
         Message(
             id=uuid.uuid4(),
@@ -39,7 +46,12 @@ async def seed_answered_turn(
             content="How does login work?",
         )
     )
-    await session.flush()
+    # Committed before the answer is added, not merely flushed. Postgres `now()` is
+    # transaction-start time, so two messages written in one transaction share a
+    # `created_at` — and the `uuid4` tiebreaker in `list_for_conversation` then
+    # sorts them at random, which makes "the question before this answer" a coin
+    # flip. `MessageRepository.recent_turns` documents the same trap.
+    await session.commit()
     answer = Message(
         id=uuid.uuid4(),
         conversation_id=conversation.id,
@@ -101,9 +113,7 @@ async def test_create_refuses_a_message_that_never_finished(
     service = QAPairService(db_session, get_settings())
 
     with pytest.raises(AppError) as caught:
-        await service.create(
-            QAPairCreateRequest(message_id=answer.id), actor=actor_for(user.id)
-        )
+        await service.create(QAPairCreateRequest(message_id=answer.id), actor=actor_for(user.id))
 
     assert caught.value.status_code == 409
     assert caught.value.code is ErrorCode.ANSWER_INCOMPLETE
@@ -132,19 +142,13 @@ async def test_create_from_an_unknown_message_is_404(db_session: AsyncSession) -
     service = QAPairService(db_session, get_settings())
 
     with pytest.raises(AppError) as caught:
-        await service.create(
-            QAPairCreateRequest(message_id=uuid.uuid4()), actor=actor_for(user.id)
-        )
+        await service.create(QAPairCreateRequest(message_id=uuid.uuid4()), actor=actor_for(user.id))
 
     assert caught.value.status_code == 404
 
 
 def test_normalise_tags_trims_lowercases_deduplicates_and_drops_empties() -> None:
     assert normalise_tags(["  Auth ", "auth", "", "Billing"]) == ["auth", "billing"]
-
-from app.schemas.qa_pair import QAPairStatusRequest, QAPairUpdateRequest
-from app.models.qa_pair import QAStatus
-from tests.factories import create_qa_pair
 
 
 async def test_update_is_gated_to_the_creator(db_session: AsyncSession) -> None:
@@ -183,9 +187,7 @@ async def test_an_admin_may_update_someone_elses_pair(db_session: AsyncSession) 
 async def test_update_leaves_omitted_fields_alone(db_session: AsyncSession) -> None:
     """A PATCH with one field must not blank the others."""
     owner = await create_user(db_session)
-    pair = await create_qa_pair(
-        db_session, created_by=owner.id, module="auth", tags=["auth"]
-    )
+    pair = await create_qa_pair(db_session, created_by=owner.id, module="auth", tags=["auth"])
     await db_session.commit()
     service = QAPairService(db_session, get_settings())
 

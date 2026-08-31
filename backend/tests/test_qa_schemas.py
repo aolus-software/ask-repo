@@ -1,7 +1,9 @@
 """The QA wire shapes: camelCase out, and the filters that must live on the model."""
 
 import uuid
+from datetime import UTC, datetime
 
+from app.models.qa_pair import QASource, QAStatus
 from app.schemas.qa_pair import QAPairCreateRequest, QAPairListQuery, QAPairResponse
 
 
@@ -33,16 +35,16 @@ def test_response_serialises_snake_case_attributes_as_camel_case() -> None:
         answer="a",
         reference_answer="a",
         tags=[],
-        source="manual",
-        status="unreviewed",
+        source=QASource.MANUAL,
+        status=QAStatus.UNREVIEWED,
         reviewed_by=None,
         reviewed_at=None,
         model=None,
         eval_score=None,
         last_run_at=None,
         has_pending_run=False,
-        created_at="2026-08-31T00:00:00Z",
-        updated_at="2026-08-31T00:00:00Z",
+        created_at=datetime(2026, 8, 31, tzinfo=UTC),
+        updated_at=datetime(2026, 8, 31, tzinfo=UTC),
     )
     dumped = response.model_dump(by_alias=True)
     assert "projectId" in dumped

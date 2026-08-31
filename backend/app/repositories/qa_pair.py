@@ -24,9 +24,7 @@ class QAPairRepository(BaseRepository[QAPair]):
 
     # Allowlisted, never interpolated: passing a query parameter into
     # getattr(Model, ...) unchecked exposes every column on the table.
-    SORTABLE_FIELDS = frozenset(
-        {"created_at", "updated_at", "last_run_at", "module", "status"}
-    )
+    SORTABLE_FIELDS = frozenset({"created_at", "updated_at", "last_run_at", "module", "status"})
 
     def _scoped(
         self,
@@ -62,9 +60,7 @@ class QAPairRepository(BaseRepository[QAPair]):
             statement = statement.where(QAPair.created_by == created_by)
         if search:
             term = f"%{search.strip()}%"
-            statement = statement.where(
-                QAPair.question.ilike(term) | QAPair.answer.ilike(term)
-            )
+            statement = statement.where(QAPair.question.ilike(term) | QAPair.answer.ilike(term))
         return statement
 
     async def list_page(
@@ -106,9 +102,7 @@ class QAPairRepository(BaseRepository[QAPair]):
             .offset((page - 1) * limit)
             .limit(limit)
         )
-        total = await self.session.execute(
-            select(func.count()).select_from(base.subquery())
-        )
+        total = await self.session.execute(select(func.count()).select_from(base.subquery()))
         return list(rows.scalars().all()), total.scalar_one()
 
     async def list_all(
@@ -147,9 +141,9 @@ class QAPairRepository(BaseRepository[QAPair]):
         )
         column = getattr(QAPair, sort)
         rows = await self.session.execute(
-            base.order_by(
-                column.desc() if descending else column.asc(), QAPair.id.asc()
-            ).limit(cap + 1)
+            base.order_by(column.desc() if descending else column.asc(), QAPair.id.asc()).limit(
+                cap + 1
+            )
         )
         return list(rows.scalars().all())
 
@@ -163,10 +157,19 @@ class QAPairRepository(BaseRepository[QAPair]):
         return result.scalar_one()
 
     async def distinct_tags(self, *, scope: ProjectScope) -> list[str]:
-        """Every tag in use across the caller's scope, sorted, for the filter."""
+        """Every tag in use across the caller's scope, sorted, for the filter.
+
+        Two nested subqueries rather than one. `unnest` is a set-returning function,
+        so it has to expand in the SELECT list of its own subquery before anything
+        can be DISTINCTed or ORDERed over the result — `column_valued` would put the
+        function in the FROM clause and leave the scoped subquery out of it, which
+        Postgres rejects with "missing FROM-clause entry".
+        """
         base = self._scoped(scope).subquery()
-        tag = func.unnest(base.c.tags).column_valued("tag")
-        result = await self.session.execute(select(tag).distinct().order_by(tag))
+        unnested = select(func.unnest(base.c.tags).label("tag")).subquery()
+        result = await self.session.execute(
+            select(unnested.c.tag).distinct().order_by(unnested.c.tag)
+        )
         return list(result.scalars().all())
 
     async def soft_delete_for_project(self, project_id: uuid.UUID) -> int:

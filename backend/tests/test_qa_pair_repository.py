@@ -4,9 +4,11 @@ import uuid
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.access import ProjectScope
 from app.models.qa_pair import QAPair, QASource, QAStatus
 from app.repositories.base import BaseRepository
-from tests.factories import create_project, create_user
+from app.repositories.qa_pair import QAPairRepository
+from tests.factories import create_project, create_qa_pair, create_user
 
 
 class _Repo(BaseRepository[QAPair]):
@@ -78,10 +80,6 @@ async def test_tags_round_trip_as_a_list(db_session: AsyncSession) -> None:
     await db_session.refresh(pair)
 
     assert pair.tags == ["auth", "billing"]
-
-from app.core.access import ProjectScope
-from app.repositories.qa_pair import QAPairRepository
-from tests.factories import create_qa_pair
 
 
 async def test_list_page_filters_by_tag_and_counts_unpaginated(
@@ -167,6 +165,7 @@ async def test_list_page_rejects_an_unlisted_sort_field(db_session: AsyncSession
     else:
         raise AssertionError("expected ValueError for an unlisted sort field")
 
+
 async def test_distinct_tags_are_sorted_and_deduplicated(db_session: AsyncSession) -> None:
     user = await create_user(db_session)
     project = await create_project(db_session, created_by=user.id)
@@ -197,4 +196,3 @@ async def test_soft_delete_for_project_sweeps_every_owner(db_session: AsyncSessi
         scope=ProjectScope.all(), page=1, limit=25, sort="created_at", descending=True
     )
     assert total == 0
-

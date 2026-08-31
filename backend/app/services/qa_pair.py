@@ -20,7 +20,6 @@ from app.core import access
 from app.core.errors import AppError, ErrorCode
 from app.core.middleware import AuthenticatedUser
 from app.models.conversation import FinishReason, Message, MessageRole
-from app.models.project import Project
 from app.models.qa_pair import QAPair, QASource, QAStatus
 from app.repositories.conversation import ConversationRepository, MessageRepository
 from app.repositories.project import ProjectRepository
@@ -86,7 +85,7 @@ class QAPairService:
             answer.conversation_id, access.resolve_conversation_owner(actor)
         )
         # `_require_publishable_message` already proved this, so it cannot be None.
-        assert conversation is not None  # noqa: S101 -- narrowing for the type checker
+        assert conversation is not None
 
         pair = QAPair(
             id=uuid.uuid4(),
@@ -109,9 +108,7 @@ class QAPairService:
         await self.session.commit()
         return self._detail(pair)
 
-    async def get(
-        self, pair_id: uuid.UUID, *, actor: AuthenticatedUser
-    ) -> QAPairDetailResponse:
+    async def get(self, pair_id: uuid.UUID, *, actor: AuthenticatedUser) -> QAPairDetailResponse:
         """One pair, if the caller may read its project."""
         return self._detail(await self._require_readable(pair_id, actor))
 
@@ -156,9 +153,7 @@ class QAPairService:
 
     # ---- guards -------------------------------------------------------------
 
-    async def _require_readable(
-        self, pair_id: uuid.UUID, actor: AuthenticatedUser
-    ) -> QAPair:
+    async def _require_readable(self, pair_id: uuid.UUID, actor: AuthenticatedUser) -> QAPair:
         """The pair, if its project is in the caller's scope. `404` otherwise."""
         pair = await self._pairs.get(pair_id)
         scope = access.resolve_project_scope(actor)
@@ -305,6 +300,13 @@ class QAPairService:
         if "tags" in changes and changes["tags"] is not None:
             pair.tags = normalise_tags(changes["tags"])
 
+        # `updated_at`'s `onupdate=func.now()` is a server-side expression: an ORM
+        # UPDATE does not fetch it back via RETURNING the way an INSERT does, so it
+        # is left expired on the Python object after commit. Setting it here avoids a
+        # lazy load that the projection below cannot perform outside an awaited
+        # context. Same reason as `UserService.update`.
+        pair.updated_at = datetime.now(UTC)
+
         await self.session.commit()
         return self._detail(pair)
 
@@ -325,6 +327,9 @@ class QAPairService:
         else:
             pair.reviewed_by = actor.id
             pair.reviewed_at = datetime.now(UTC)
+        # See `update` above: a server-side `onupdate` is left expired after an ORM
+        # UPDATE, and the projection cannot lazy-load it outside an awaited context.
+        pair.updated_at = datetime.now(UTC)
         await self.session.commit()
         return self._detail(pair)
 
@@ -336,4 +341,3 @@ class QAPairService:
         self._require_destructive_rights(pair, actor)
         await self._pairs.soft_delete(pair)
         await self.session.commit()
-

@@ -7,8 +7,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.security import hash_password
 from app.models.conversation import Conversation
 from app.models.project import Project, ProjectStatus
-from app.models.user import User
 from app.models.qa_pair import QAPair, QASource, QAStatus
+from app.models.user import User
 
 
 async def create_user(
@@ -71,6 +71,7 @@ async def create_conversation(
     await session.flush()
     return conversation
 
+
 async def create_qa_pair(
     session: AsyncSession,
     *,
@@ -104,4 +105,3 @@ async def create_qa_pair(
     session.add(pair)
     await session.flush()
     return pair
-
