@@ -79,6 +79,11 @@ A few properties are your responsibility, not the code's:
   dev configuration — the Kafka listener is `PLAINTEXT` and anyone who can reach it can
   publish ingestion jobs, which means making the instance clone an arbitrary URL, or read
   the job stream. Kafka must never be reachable beyond the internal network.
+- **The QA List's `.xlsx` export is a new egress path.** It contains code excerpts from
+  private repositories, and once a user downloads it, that spreadsheet is outside the
+  network boundary the instance otherwise relies on — this is not a new threat, since any
+  user could already read the same content through the UI, but it is a new place the content
+  can end up.
 - **An indexed repository can influence what the assistant says about it.** Repository
   content is fed to a language model when someone asks a question, so a file containing text
   shaped like an instruction — "ignore previous instructions", an imitation system prompt —

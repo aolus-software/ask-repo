@@ -12,7 +12,11 @@ export function MessageList({ messages }: { messages: MessageResponse[] }) {
           </div>
         ) : (
           <div key={message.id}>
-            <Answer content={message.content} />
+            <Answer
+              content={message.content}
+              messageId={message.id}
+              finishReason={message.finishReason}
+            />
             <Sources citations={message.citations ?? []} citedIndexes={[]} />
             {message.finishReason && message.finishReason !== "stop" ? (
               <p className="text-muted-foreground mt-2 text-xs">

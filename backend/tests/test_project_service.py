@@ -7,6 +7,7 @@ import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
+from app.core.access import ProjectScope
 from app.core.errors import AppError, ErrorCode
 from app.core.middleware import AuthenticatedUser
 from app.ingestion.chunker import Chunk
@@ -16,9 +17,10 @@ from app.models.project import ProjectStatus
 from app.queue.protocol import InMemoryIngestionQueue
 from app.repositories.conversation import ConversationRepository
 from app.repositories.project import ProjectRepository
+from app.repositories.qa_pair import QAPairRepository
 from app.schemas.project import ProjectCreateRequest
 from app.services.project import ProjectService
-from tests.factories import create_conversation, create_project, create_user
+from tests.factories import create_conversation, create_project, create_qa_pair, create_user
 
 
 def actor_for(user_id: uuid.UUID, *, is_admin: bool = False) -> AuthenticatedUser:
@@ -310,6 +312,33 @@ async def test_a_failed_vector_delete_rolls_the_conversation_sweep_back(
     assert caught.value.status_code == 503
     await db_session.rollback()
     assert await ConversationRepository(db_session).get_for_owner(conversation_id, owner_id)
+
+
+async def test_deleting_a_project_soft_deletes_its_qa_pairs(
+    db_session: AsyncSession, vector_store: InMemoryVectorStore
+) -> None:
+    """`docs/PRD.md:340`. Not scoped by creator — the project was shared, so its
+    pairs belong to several people and all of them go."""
+    owner = await create_user(db_session)
+    colleague = await create_user(db_session)
+    project = await create_project(db_session, created_by=owner.id)
+    await create_qa_pair(db_session, project_id=project.id, created_by=owner.id)
+    await create_qa_pair(db_session, project_id=project.id, created_by=colleague.id)
+    await db_session.commit()
+
+    service = ProjectService(
+        db_session,
+        get_settings(),
+        queue=InMemoryIngestionQueue(),
+        store_factory=lambda collection: vector_store,
+    )
+    await service.delete(project.id, actor=actor_for(owner.id))
+
+    repo = QAPairRepository(db_session)
+    _, total = await repo.list_page(
+        scope=ProjectScope.all(), page=1, limit=25, sort="created_at", descending=True
+    )
+    assert total == 0
 
 
 class _UnreachableStore(InMemoryVectorStore):

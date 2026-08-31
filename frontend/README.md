@@ -3,9 +3,10 @@
 Next.js UI for AskRepo — the codebase-aware assistant described in
 [`docs/PRD.md`](../docs/PRD.md).
 
-The M0–M2 screens are shipped: sign-in and the forced first-login password change, the
+The M0–M2 and M4 screens are shipped: sign-in and the forced first-login password change, the
 dashboard, projects (list, detail, create, re-index, delete), Dev Knowledge with streamed
-answers, and admin user management.
+answers, admin user management, and the QA List — the `/qa` grid and the `/qa/[id]` detail
+page, with a re-run panel and export.
 
 This layer is **not** a thin client. It acts as a backend-for-frontend: it holds the session in
 its own httpOnly cookies and calls the [backend](../backend/README.md) on the browser's behalf,
@@ -79,14 +80,14 @@ frontend/
 │   ├── layout.tsx         # fonts, theme, query provider, toaster
 │   ├── globals.css        # Tailwind entry + theme tokens (only file with raw hex)
 │   ├── (auth)/            # shell-less: /login, /change-password
-│   ├── (app)/             # the shell: dashboard, projects, ask, settings
+│   ├── (app)/             # the shell: dashboard, projects, ask, qa (/qa, /qa/[id]), settings
 │   └── api/
 │       ├── [...path]/     # the API forwarding route the browser talks to
 │       └── auth/          # login, refresh, logout — the only cookie writers
 ├── components/
 │   ├── ui/                # shadcn, CLI-managed
 │   ├── layout/ form/ feedback/
-│   └── projects/ ask/ users/
+│   └── projects/ ask/ qa/ users/
 ├── hooks/                 # one file per resource
 ├── lib/
 │   ├── api/               # types, endpoints, errors, both fetch clients

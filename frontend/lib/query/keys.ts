@@ -1,4 +1,4 @@
-import type { ListParams } from "@/lib/api/types";
+import type { ListParams, QAListParams } from "@/lib/api/types";
 
 /**
  * Every query key, in one module. Prefix invalidation after a mutation
@@ -23,5 +23,11 @@ export const keys = {
     all: ["users"] as const,
     list: (params: ListParams) => ["users", "list", params] as const,
     detail: (id: string) => ["users", "detail", id] as const,
+  },
+  qaPairs: {
+    all: ["qa-pairs"] as const,
+    list: (params: QAListParams) => ["qa-pairs", "list", params] as const,
+    detail: (id: string) => ["qa-pairs", "detail", id] as const,
+    tags: ["qa-pairs", "tags"] as const,
   },
 };

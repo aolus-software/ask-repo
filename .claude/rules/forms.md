@@ -30,7 +30,7 @@ Applied to the screens the PRD describes:
 | Confirm project delete | none | `ConfirmDialog` |
 | Confirm project reindex | none | `ConfirmDialog` |
 | Generate mock QA data (M5) | project, count, question-type mix | page — the type mix is a picker |
-| Edit QA pair (M4) | question, answer, tags, verified | page — tags are unbounded |
+| Edit QA pair (M4) | module, question, tags | dialog |
 
 ## 2. Both shells take the same props
 

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 
-import { StatusBadge } from "@/components/feedback/status-badge";
+import { ProjectStatusBadge } from "@/components/feedback/status-badge";
 import { TableSkeleton } from "@/components/feedback/table-skeleton";
 import {
   Table,
@@ -54,7 +54,7 @@ export function ProjectTable({
                 <span className="text-muted-foreground/70"> @{project.branch}</span>
               </TableCell>
               <TableCell>
-                <StatusBadge status={project.status} />
+                <ProjectStatusBadge status={project.status} />
               </TableCell>
               <TableCell className="text-muted-foreground text-sm">
                 {project.fileCount === null

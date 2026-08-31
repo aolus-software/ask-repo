@@ -11,8 +11,12 @@ M1 is complete. The project routes and the entire ingestion pipeline are here �
 walk, chunk, embed, and write to Qdrant — along with the Kafka producer, the consumer
 that turns a queued message into an indexing run, the delayed-retry consumers, and
 `app/worker.py`: the separate process that runs all of them and sweeps up jobs the
-broker never received. `POST /projects` enqueues and a worker indexes. The Dev
-Knowledge / QA List / mock-data work starts at M2.
+broker never received. `POST /projects` enqueues and a worker indexes.
+
+M2 through M4 are shipped too: Dev Knowledge (streaming RAG Q&A over an indexed project),
+M3's LangGraph intent routing and corrective retrieval loop, and the QA List — see the
+`### Conversations` and `### QA List` route sections below. Only the Mock Data Generator
+(M5) and the local-vs-hosted comparison (M6) remain.
 
 ## Requirements
 
@@ -165,6 +169,47 @@ be grounded.
 A `: keep-alive` comment goes out every 15 seconds during any gap, and the response sets
 `Cache-Control: no-cache` and `X-Accel-Buffering: no` so a proxy does not accumulate the
 stream and deliver it in one piece.
+
+### QA List
+
+The shared regression set. Access matches projects and inverts conversations: every
+authenticated user reads every pair, and `created_by` (or an admin) gates editing, deleting,
+and re-running. Setting `status` is the one write deliberately open to everyone — any user may
+mark a pair `pass` or `fail` (`docs/PRD.md:338`).
+
+| Method | Path | Auth | Description |
+| --- | --- | --- | --- |
+| `GET` | `/qa-pairs` | any user | List saved pairs, paginated; filters for project, module, tag, source, status, creator, and search |
+| `GET` | `/qa-pairs/tags` | any user | Distinct tags across the caller's scope, for the filter combobox |
+| `GET` | `/qa-pairs/export` | any user | The same filters as the list route, as a downloadable `.xlsx` |
+| `GET` | `/qa-pairs/{id}` | any user | One pair, with its citations and any pending re-run |
+| `POST` | `/qa-pairs` | any user | Publish a finished assistant answer from a conversation the caller owns |
+| `PATCH` | `/qa-pairs/{id}` | creator or admin | Edit module, question, expected result, or tags |
+| `PUT` | `/qa-pairs/{id}/status` | any user | Record pass / fail / unreviewed |
+| `POST` | `/qa-pairs/{id}/rerun` | creator or admin | Re-run the saved question; **streams the new answer** into a pending slot |
+| `POST` | `/qa-pairs/{id}/rerun/accept` | creator or admin | Save the pending re-run over the stored answer; resets `status` to unreviewed |
+| `DELETE` | `/qa-pairs/{id}/rerun` | creator or admin | Discard the pending re-run, leaving the stored answer untouched |
+| `DELETE` | `/qa-pairs/{id}` | creator or admin | Soft-delete a pair |
+
+`POST /qa-pairs` never takes answer text in the body — only a `messageId`. The server copies
+the question and answer out of the message rows itself, and refuses with `409
+ANSWER_INCOMPLETE` unless that message is a finished (`finishReason: "stop"`) assistant answer
+in a conversation the caller owns; a stranger's conversation is `404`, never `403`, because
+conversations are private.
+
+`POST /qa-pairs/{id}/rerun` follows the same pre-flight/stream split as
+`POST /conversations/{id}/messages`: everything that can return a status code other than `200`
+— ownership, project readiness, the embedding-model guard — runs before the stream starts, and
+the result lands in the pair's pending slot rather than overwriting the stored answer. A human
+then calls `rerun/accept` to publish it or `DELETE .../rerun` to throw it away; accepting always
+resets `status` to `unreviewed`; because a stale `pass` badge over a replaced answer is worse
+than no badge at all.
+
+`GET /qa-pairs/export` and `GET /qa-pairs/tags` are declared **before** `GET /qa-pairs/{id}` in
+the router: FastAPI matches path segments in declaration order, so a literal path declared
+after a parameterised one would be swallowed as a malformed id and 422 every request. The
+export is capped at `QA_EXPORT_MAX_ROWS` (default 5000) rows and returns `409
+EXPORT_TOO_LARGE` over that, since `openpyxl` builds the whole workbook in memory.
 
 ## Layout
 

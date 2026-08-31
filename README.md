@@ -11,7 +11,7 @@ network.
 Built as a learning project for RAG, LangChain/LangGraph, prompt engineering, and context
 management — against real repositories rather than tutorial data.
 
-> **Status: M0, M1, M2 and M3 shipped (backend).** Auth & accounts are implemented —
+> **Status: M0, M1, M2, M3 and M4 shipped.** Auth & accounts are implemented —
 > admin-provisioned users, login, forced first-login password change, and login rate
 > limiting — as are the project routes and the whole ingestion pipeline: clone, walk,
 > chunk, embed, Qdrant, driven by a Kafka job queue and a separate worker process.
@@ -23,9 +23,12 @@ management — against real repositories rather than tutorial data.
 > out of scope) before anything is retrieved, and on the codebase path a grader
 > checks the retrieved excerpts and re-searches with a better query when they fall
 > short — the loop grades retrieval, not the finished answer, so streaming stays
-> unaffected. **The M0–M2 frontend is shipped too**: sign in, change the forced initial password,
-> add and re-index projects, ask questions with the answer streaming in, and manage
-> accounts — all in a browser, with the session held in httpOnly cookies by Next rather
+> unaffected. M4 added the QA List: save a finished answer into a shared, browsable
+> regression set, filter and re-run it against the current index, mark it pass or
+> fail, and export the filtered list to a spreadsheet. **The M0–M2 and M4 frontend is
+> shipped too**: sign in, change the forced initial password, add and re-index
+> projects, ask questions with the answer streaming in, manage accounts, and work the
+> QA List — all in a browser, with the session held in httpOnly cookies by Next rather
 > than in the page. See [Roadmap](#roadmap) for what lands when, and
 > [`docs/PRD.md`](docs/PRD.md) for the full specification.
 
@@ -239,7 +242,8 @@ Milestones from [`docs/PRD.md`](docs/PRD.md) §6, built in order:
 - [x] **M2** — Dev Knowledge: streaming RAG Q&A against a ready project, private conversations
 - [x] **M0–M2 frontend** — auth screens, app shell, projects, streamed answers, admin user management
 - [x] **M3** — LangGraph: intent routing + a self-critique loop that grades retrieval before generating
-- [ ] **M4** — QA List: shared storage, save / view / filter / re-run
+- [x] **M4** — QA List: shared storage, save / view / filter / re-run, pass/fail status, export
+- [x] **M4 frontend** — the `/qa` grid, the `/qa/[id]` detail page, the re-run panel, save-from-Ask
 - [ ] **M5** — Mock Data Generator: synthetic Q&A + eval scoring
 - [ ] **M6** — Local vs hosted model comparison
 

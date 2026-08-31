@@ -55,12 +55,24 @@ async def test_an_admin_overrides_the_gate(
 def test_read_scoping_lives_in_exactly_one_function() -> None:
     """docs/PRD.md §7's phase-2 readiness criterion, 'confirmed by grep'.
 
-    Only two places may compare `created_by` to a caller: the access resolver, and
-    the service's destructive gate. Anything else is read scoping in the wrong
+    Only two things may compare `created_by` to a **caller**: the access resolver,
+    and a service's destructive gate. Anything else is read scoping in the wrong
     place, which is what phase 2 would have to hunt down.
+
+    `repositories/qa_pair.py` is the one entry that is not a caller comparison. It
+    matches `created_by` against a **query parameter** — `?createdBy=` — which
+    `docs/PRD.md` §4.3 specifies as a list filter alongside project, tag, source and
+    status. It runs after `resolve_project_scope` has already scoped the statement,
+    so it narrows within the scope rather than standing in for it. The regex cannot
+    tell the two apart; this docstring is where the difference is recorded.
     """
     app_root = pathlib.Path(__file__).resolve().parent.parent / "app"
-    allowed = {"core/access.py", "services/project.py"}
+    allowed = {
+        "core/access.py",
+        "services/project.py",  # destructive gate
+        "services/qa_pair.py",  # destructive gate
+        "repositories/qa_pair.py",  # `?createdBy=` list filter, applied inside the scope
+    }
     offenders: list[str] = []
 
     for path in sorted(app_root.rglob("*.py")):

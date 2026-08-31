@@ -36,7 +36,13 @@ export type ErrorCode =
   | "CONVERSATION_NOT_FOUND"
   | "PROJECT_NOT_READY"
   | "EMBEDDING_MODEL_CHANGED"
-  | "LLM_UNAVAILABLE";
+  | "LLM_UNAVAILABLE"
+  | "QA_PAIR_NOT_FOUND"
+  | "NOT_QA_PAIR_OWNER"
+  | "MESSAGE_NOT_FOUND"
+  | "ANSWER_INCOMPLETE"
+  | "NO_PENDING_RUN"
+  | "EXPORT_TOO_LARGE";
 
 /** The one error shape the whole API uses (`docs/PRD.md` §5.1). */
 export interface ErrorEnvelope {
@@ -159,7 +165,7 @@ export interface TokenEventPayload {
   text: string;
 }
 export interface DoneEventPayload {
-  messageId: string;
+  messageId: string | null;
   model: string;
   finishReason: FinishReason;
   citedIndexes: number[];
@@ -168,8 +174,54 @@ export interface DoneEventPayload {
   retrievalAttempts: number;
 }
 export interface ErrorEventPayload {
-  messageId: string;
+  messageId: string | null;
   code: ErrorCode;
   message: string;
   finishReason: FinishReason;
+}
+
+export type QAStatus = "unreviewed" | "pass" | "fail";
+export type QASource = "manual" | "generated";
+
+export interface PendingRunPayload {
+  answer: string;
+  citations: CitationPayload[] | null;
+  model: string | null;
+  finishReason: FinishReason;
+  runAt: string;
+}
+
+export interface QAPairResponse {
+  id: string;
+  projectId: string;
+  createdBy: string;
+  module: string | null;
+  question: string;
+  answer: string | null;
+  referenceAnswer: string | null;
+  tags: string[];
+  source: QASource;
+  status: QAStatus;
+  reviewedBy: string | null;
+  reviewedAt: string | null;
+  model: string | null;
+  evalScore: number | null;
+  lastRunAt: string | null;
+  hasPendingRun: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface QAPairDetailResponse extends QAPairResponse {
+  citations: CitationPayload[] | null;
+  pendingRun: PendingRunPayload | null;
+}
+
+export interface QAListParams extends ListParams {
+  projectId?: string;
+  module?: string;
+  tag?: string;
+  source?: QASource;
+  status?: QAStatus;
+  createdBy?: string;
 }

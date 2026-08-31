@@ -230,4 +230,37 @@ describe("the proxy", () => {
     expect(response.headers.get("cache-control")).toBe("no-cache");
     expect(response.headers.get("x-accel-buffering")).toBe("no");
   });
+
+  it("relays a binary body with its content-type and content-disposition intact", async () => {
+    // Regression guard, not a fix: the proxy already reads the request body with
+    // `arrayBuffer()` and passes `upstream.body` straight into `NextResponse`
+    // without decoding it, so this is expected to pass on the first run. A future
+    // change that JSON-parses the body would produce a corrupt file rather than an
+    // error, and the failure would surface as Excel refusing to open the export
+    // (design spec §6.4).
+    const bytes = new Uint8Array([0x50, 0x4b, 0x03, 0x04]); // a zip/xlsx magic number
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        async () =>
+          new Response(bytes, {
+            status: 200,
+            headers: {
+              "content-type":
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+              "content-disposition": 'attachment; filename="qa-pairs.xlsx"',
+            },
+          }),
+      ),
+    );
+
+    const response = await GET(
+      proxyRequest("/api/qa-pairs/export", "askrepo_access=jwt; askrepo_session=s%3D1"),
+      context(["qa-pairs", "export"]),
+    );
+
+    expect(response.headers.get("content-type")).toContain("spreadsheetml");
+    expect(response.headers.get("content-disposition")).toContain("qa-pairs.xlsx");
+    expect(new Uint8Array(await response.arrayBuffer())).toEqual(bytes);
+  });
 });

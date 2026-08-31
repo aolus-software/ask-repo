@@ -75,6 +75,17 @@ class ProjectRepository(BaseRepository[Project]):
         rows = await self.session.execute(statement)
         return rows.scalars().all(), total
 
+    async def by_ids(self, ids: set[uuid.UUID]) -> Sequence[Project]:
+        """Every live project among `ids`, in one query rather than N.
+
+        Used by the QA export to resolve `project_id` to a name — a 5,000-row
+        export otherwise costs 10,000 round trips if this were a loop.
+        """
+        if not ids:
+            return []
+        result = await self.session.execute(self.active_select().where(Project.id.in_(ids)))
+        return result.scalars().all()
+
     async def claim(
         self, *, project_id: uuid.UUID, job_id: uuid.UUID, worker_id: str, lease_seconds: int
     ) -> bool:

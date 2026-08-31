@@ -340,3 +340,49 @@ async def test_still_exactly_one_terminator_on_every_route() -> None:
 
         assert len(terminators) == 1
         assert events[-1] is terminators[0]
+
+
+async def _terminator_without_a_message(model: ScriptedChatModel) -> StreamEvent:
+    """Drain a turn that names no message row, and return how it ended.
+
+    Spelled out rather than routed through `collect`, because `message_id` is the
+    subject here and `collect` supplies one of its own.
+    """
+    events = [
+        event
+        async for event in build(model).answer(
+            question="how does it work",
+            history=[],
+            project_id=uuid.uuid4(),
+            generation=0,
+            message_id=None,
+        )
+    ]
+    return events[-1]
+
+
+async def test_a_run_with_no_message_terminates_with_a_null_message_id() -> None:
+    """A re-run writes a pending slot on a QA pair, not a message row (spec §8.1)."""
+    model = ScriptedChatModel(tokens=["a"], structured_results=_codebase_question_script())
+
+    terminator = await _terminator_without_a_message(model)
+
+    assert isinstance(terminator, DoneEvent)
+    assert terminator.message_id is None
+
+
+async def test_a_failing_run_with_no_message_also_terminates() -> None:
+    """The half that would otherwise be missed.
+
+    A re-run that fails ends through `ErrorEvent`, which carries the same field.
+    Widening only `DoneEvent` would leave the failure path unable to terminate at
+    all — the stream would raise inside the adapter instead of reporting.
+    """
+    model = ScriptedChatModel(
+        tokens=["a", "b", "c"], fail_after=2, structured_results=_codebase_question_script()
+    )
+
+    terminator = await _terminator_without_a_message(model)
+
+    assert isinstance(terminator, ErrorEvent)
+    assert terminator.message_id is None

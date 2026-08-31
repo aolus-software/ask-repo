@@ -274,6 +274,14 @@ below-floor neighbour in behind it.
 
 ---
 
+### QA List
+
+| Variable | Default | What it does |
+| --- | --- | --- |
+| `QA_EXPORT_MAX_ROWS` | `5000` | Rows the `.xlsx` export will build before refusing with `409 EXPORT_TOO_LARGE`. `openpyxl` builds the whole workbook in memory even in write-only mode, so this cap is the only thing bounding that allocation. Narrow the filters and try again rather than raising it casually. |
+
+---
+
 ## Values that fail silently
 
 Most misconfiguration is loud. These are the ones that would not be, which is why they carry

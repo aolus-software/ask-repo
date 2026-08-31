@@ -12,11 +12,12 @@ organization runs one instance on its own internal network.
 the security model. It outranks every other doc and outranks the code. When code and the PRD
 disagree, that is a contradiction to report — not a doc to quietly rewrite.
 
-**Status: M0, M1, M2, and M3 (backend) shipped.** The backend serves an index route, health
+**Status: M0, M1, M2, M3, and M4 (backend) shipped.** The backend serves an index route, health
 checks, the full auth/accounts surface (admin-provisioned users, login, forced first-login
-password change, session rotation, login rate limiting), the project CRUD routes, and the
-conversation routes that answer questions about an indexed project. **All four datastores are
-read** — Postgres, Redis, Qdrant, and Kafka.
+password change, session rotation, login rate limiting), the project CRUD routes, the
+conversation routes that answer questions about an indexed project, and the QA List routes that
+save, list, filter, re-run, and export a shared regression set of Q&A pairs. **All four
+datastores are read** — Postgres, Redis, Qdrant, and Kafka.
 
 M1 is complete end to end. `app/ingestion/` holds the cloner, walker, chunker, embedder adapter,
 Qdrant vector store, and `IngestionPipeline`; `app/queue/` holds the message format, topics, both
@@ -38,10 +39,18 @@ better search query when they fall short, bounded by `RAG_MAX_RETRIEVAL_ATTEMPTS
 grades retrieval, not the finished answer — see `docs/PRD.md` §5's Orchestration row and §6's
 M3 line for why.
 
-The M0–M2 frontend is shipped: auth screens, the app shell, projects, the streamed answer
-surface, and admin user management, with Next acting as a backend-for-frontend (see the
-Frontend section below). Later milestones are not built — do not assume a module exists
-because the PRD describes it; the PRD describes the destination.
+M4 is shipped too. `app/services/qa_pair.py` and `app/services/qa_export.py` hold the QA List's
+business rules and its `.xlsx` export; `app/api/routes/qa_pairs.py` puts them behind eleven
+routes. A pair is created from a finished message id, never from answer text in the request
+body, so `create` is the enforcement point for `docs/PRD.md` §4.2's `finish_reason` guard. A
+re-run streams over the same SSE contract as `POST /conversations/{id}/messages` but writes its
+result into a pending slot on the pair rather than letting the client post an answer back — see
+`.claude/rules/rag.md`.
+
+The M0–M2 and M4 frontend is shipped: auth screens, the app shell, projects, the streamed answer
+surface, admin user management, and the QA List (`/qa`, `/qa/[id]`), with Next acting as a
+backend-for-frontend (see the Frontend section below). Later milestones are not built — do not
+assume a module exists because the PRD describes it; the PRD describes the destination.
 
 ## Commands
 
@@ -287,7 +296,7 @@ Twelve rule files in `.claude/rules/`. Read the ones your change touches.
 | `router.md` | Any `APIRouter` — layout, dependencies, the CRUD shape, access scoping |
 | `persistence.md` | Any model, repository, migration, or session code |
 | `ingestion.md` | Anything under `app/ingestion/` or `app/queue/` — leases, pausing, error classes, collections |
-| `rag.md` | Anything under `app/rag/`, or the conversation service/routes — generation filters, grounding, the SSE contract, the shielded write |
+| `rag.md` | Anything under `app/rag/`, the conversation service/routes, or the QA List's re-run — generation filters, grounding, the SSE contract, the shielded write |
 | `design-system.md` | Any `.tsx` or `.css` — tokens, shadcn, dark mode, spacing |
 | `forms.md` | Any form — dialog vs page, validation ownership, field composition |
 | `navigation.md` | Sidebar, breadcrumbs, or adding a route |
@@ -310,8 +319,8 @@ enforced there — if you add a convention, wire it into the config in the same 
 ## Frontend
 
 App Router, React 19, Tailwind CSS 4 (CSS-first `@theme`, no `tailwind.config.js` for tokens).
-The M0–M2 screens are shipped: `/login`, `/change-password`, `/` (dashboard), `/projects`,
-`/projects/[id]`, `/ask`, `/ask/[conversationId]`, and `/settings/users`.
+The M0–M2 and M4 screens are shipped: `/login`, `/change-password`, `/` (dashboard), `/projects`,
+`/projects/[id]`, `/ask`, `/ask/[conversationId]`, `/settings/users`, `/qa`, and `/qa/[id]`.
 
 ### Next is a backend-for-frontend, not a thin client
 

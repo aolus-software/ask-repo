@@ -10,10 +10,13 @@ export function ListToolbar({
   initialSearch,
   placeholder,
   onSearchChange,
+  filters,
 }: {
   initialSearch: string;
   placeholder: string;
   onSearchChange: (value: string) => void;
+  /** Extra filter controls, dropped into the remaining grid cells. */
+  filters?: React.ReactNode;
 }) {
   const [value, setValue] = useState(initialSearch);
 
@@ -35,6 +38,7 @@ export function ListToolbar({
           onChange={(event) => setValue(event.target.value)}
         />
       </div>
+      {filters}
     </div>
   );
 }
