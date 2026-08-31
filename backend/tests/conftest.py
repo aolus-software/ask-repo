@@ -21,7 +21,7 @@ from httpx import ASGITransport, AsyncClient
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.config import get_settings
+from app.config import Settings, get_settings
 from app.core.security import create_access_token, hash_password
 from app.db.session import get_sessionmaker, reset_engine
 from app.ingestion.embedder import FakeEmbedder
@@ -29,6 +29,7 @@ from app.ingestion.vector_store import InMemoryVectorStore
 from app.models import Base, User
 from app.queue.protocol import InMemoryIngestionQueue
 from app.rag.answerer import Answerer
+from app.rag.graph.state import Classification, EvidenceVerdict
 from app.rag.retriever import CodeRetriever
 from tests.fakes import ScriptedChatModel
 
@@ -169,11 +170,19 @@ def chat_model() -> ScriptedChatModel:
 
     Its answer cites `[1]` and names only a retrieved path on purpose: an uncited or
     unrecognised-path answer would trip a grounding warning in every route test and
-    bury the real ones.
+    bury the real ones. `structured_results` scripts the graph's two utility calls --
+    classify, then grade -- so a route test exercises the real path without a
+    provider.
     """
     return ScriptedChatModel(
         tokens=["Validation lives in ", "[1]", " app/core/repo_url.py."],
         invoke_result="How is the repository URL validated?",
+        structured_results=[
+            Classification(
+                intent="codebase_question", search_query="How is the repository URL validated?"
+            ),
+            EvidenceVerdict(sufficient=True),
+        ],
     )
 
 
@@ -196,7 +205,7 @@ def _fake_answerer_factory(
             chat_model=chat_model,
             model_id="test-model",
             semaphore=asyncio.Semaphore(2),
-            timeout_seconds=30,
+            settings=Settings(),
         )
 
     return answerer_for

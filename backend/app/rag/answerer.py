@@ -1,12 +1,14 @@
-"""Sequencing one turn: rewrite, retrieve, generate.
+"""One turn's worth of work, expressed as a stream of events.
 
 Knows nothing about HTTP and nothing about the database. It receives a question, a
 history snapshot, and a retrieval handle, and yields events; everything that touches
 a session or a status code lives in the service and the route.
 
-That boundary is the point of the module. M3 replaces this file with a LangGraph
-state graph — if the sequencing lived in the route or the service, M3 would be a
-rewrite of the API layer instead of a rewrite of one file.
+Since M3 the sequencing is a LangGraph state graph (`app/rag/graph/`). This module is
+the adapter over it, and holds two things the graph deliberately does not: the
+concurrency permit, and the construction of the single terminator. Keeping the
+terminator here is what makes "exactly one per stream" structural -- no node can emit
+one, so no node can emit a second.
 """
 
 import asyncio
@@ -14,18 +16,19 @@ import logging
 import re
 import uuid
 from collections.abc import AsyncGenerator
+from typing import cast
 
 from langchain_core.language_models import BaseChatModel
-from langchain_core.messages import BaseMessage
 
+from app.config import Settings
 from app.core.errors import ErrorCode
 from app.models.conversation import FinishReason
-from app.rag.grounding import NO_CONTEXT_ANSWER, grounding_warnings
-from app.rag.prompts import ANSWER_PROMPT, REWRITE_PROMPT, Turn, format_spans, to_langchain_history
-from app.rag.retriever import RetrievedChunk, Retriever
+from app.rag.graph import build_answer_graph
+from app.rag.graph.state import Intent, TurnState
+from app.rag.grounding import NO_CONTEXT_ANSWER, WEAK_EVIDENCE, grounding_warnings
+from app.rag.prompts import Turn
+from app.rag.retriever import Retriever
 from app.schemas.conversation import (
-    CitationPayload,
-    CitationsEvent,
     DoneEvent,
     ErrorEvent,
     StatusEvent,
@@ -34,12 +37,6 @@ from app.schemas.conversation import (
 )
 
 logger = logging.getLogger(__name__)
-
-# The rewrite is one short call, not a full answer. Its own budget, well under the
-# whole-turn one, so a hung rewrite cannot consume the time the answer needs.
-REWRITE_TIMEOUT_SECONDS = 20.0
-# Past this the model has returned a preamble or an explanation, not a query.
-MAX_REWRITE_CHARS = 512
 
 _CITATION_PATTERN = re.compile(r"\[(\d+)\]")
 
@@ -55,31 +52,6 @@ def cited_indexes(text: str, *, count: int) -> list[int]:
     return sorted(index for index in found if 1 <= index <= count)
 
 
-def _text_of(message: BaseMessage) -> str:
-    """The plain text of a message, whichever content shape the provider used."""
-    content = message.content
-    if isinstance(content, str):
-        return content
-    return "".join(part for part in content if isinstance(part, str))
-
-
-def _to_citations(chunks: list[RetrievedChunk]) -> list[CitationPayload]:
-    """Number the spans as the prompt labels them: 1-based, best score first."""
-    return [
-        CitationPayload(
-            index=index,
-            file_path=chunk.file_path,
-            start_line=chunk.start_line,
-            end_line=chunk.end_line,
-            language=chunk.language,
-            symbol=chunk.symbol,
-            commit_sha=chunk.commit_sha,
-            score=chunk.score,
-        )
-        for index, chunk in enumerate(chunks, start=1)
-    ]
-
-
 class Answerer:
     """One turn's worth of work, expressed as a stream of events."""
 
@@ -90,13 +62,14 @@ class Answerer:
         chat_model: BaseChatModel,
         model_id: str,
         semaphore: asyncio.Semaphore,
-        timeout_seconds: float,
+        settings: Settings,
     ) -> None:
-        self.retriever = retriever
-        self.chat_model = chat_model
         self.model_id = model_id
         self.semaphore = semaphore
-        self.timeout_seconds = timeout_seconds
+        self.settings = settings
+        self.graph = build_answer_graph(
+            retriever=retriever, chat_model=chat_model, settings=settings
+        )
 
     async def answer(
         self,
@@ -107,11 +80,10 @@ class Answerer:
         generation: int,
         message_id: uuid.UUID,
     ) -> AsyncGenerator[StreamEvent]:
-        """Rewrite, retrieve, generate — emitting events throughout.
+        """Run the graph, forwarding its events and terminating exactly once.
 
         `message_id` is supplied by the caller rather than generated here so the
-        terminating event can name the row the caller is about to write. Deriving it
-        after the stream would mean `done` could not carry it.
+        terminating event can name the row the caller is about to write.
         """
         if self.semaphore.locked():
             # Silence for the length of someone else's answer is indistinguishable
@@ -119,115 +91,117 @@ class Answerer:
             yield StatusEvent(phase="queued")
 
         async with self.semaphore:
-            search_query = question
-            if history:
-                yield StatusEvent(phase="rewriting")
-                search_query = await self._rewrite(question, history)
+            state: TurnState = {
+                "question": question,
+                "history": history,
+                "project_id": project_id,
+                "generation": generation,
+                "intent": Intent.CODEBASE_QUESTION,
+                "search_query": question,
+                "spans": [],
+                "attempts": 0,
+                "gap": None,
+                "evidence_ok": False,
+                "answer": "",
+                "failure": None,
+            }
 
-            yield StatusEvent(phase="retrieving")
-            spans = await self.retriever.retrieve(
-                search_query, project_id=project_id, generation=generation
-            )
-            citations = _to_citations(spans)
-            yield CitationsEvent(citations=citations)
+            final: TurnState | None = None
+            async for mode, chunk in self.graph.astream(state, stream_mode=["custom", "values"]):
+                if mode == "custom":
+                    assert isinstance(chunk, StreamEvent)
+                    yield chunk
+                else:
+                    assert isinstance(chunk, dict)
+                    final = cast(TurnState, chunk)
 
-            if not spans:
-                # The guard the prompt cannot provide. With no evidence, asking the
-                # model to answer anyway leaves one instruction between the user and
-                # a fabrication — and spends a full generation producing it.
-                logger.info(
-                    "Nothing above the relevance floor for project %s; refusing to answer",
-                    project_id,
-                )
+            if final is None:  # pragma: no cover - the graph always yields a state
+                raise RuntimeError("the answer graph produced no final state")
+
+            if (
+                final["failure"] is None
+                and final["intent"] is Intent.CODEBASE_QUESTION
+                and not final["spans"]
+            ):
+                # The graph skips generation entirely on this route
+                # (`route_after_retrieval` in `app/rag/graph/build.py`) rather than
+                # spend a full generation on a fabrication with no evidence behind
+                # it. The fixed refusal is streamed here as ordinary tokens instead,
+                # so a client renders it exactly as it renders an answer.
                 yield TokenEvent(text=NO_CONTEXT_ANSWER)
-                yield DoneEvent(
-                    message_id=message_id,
-                    model=self.model_id,
-                    finish_reason=FinishReason.STOP,
-                    cited_indexes=[],
-                    grounding_warnings=grounding_warnings(answer="", spans=spans, cited_count=0),
-                )
-                return
 
-            yield StatusEvent(phase="generating")
-            messages = ANSWER_PROMPT.format_messages(
-                context=format_spans(spans),
-                history=to_langchain_history(history),
-                question=question,
+            yield self._terminate(final, message_id=message_id)
+
+    def _terminate(self, final: TurnState, *, message_id: uuid.UUID) -> StreamEvent:
+        """Build the one event that ends this stream."""
+        if final["failure"] is not None:
+            message = (
+                "The model did not finish in time. The partial answer was kept."
+                if final["failure"] is FinishReason.TIMEOUT
+                else "The model failed while answering. The partial answer was kept."
+            )
+            return ErrorEvent(
+                message_id=message_id,
+                code=ErrorCode.LLM_UNAVAILABLE,
+                message=message,
+                finish_reason=final["failure"],
             )
 
-            parts: list[str] = []
-            try:
-                async with asyncio.timeout(self.timeout_seconds):
-                    async for chunk in self.chat_model.astream(messages):
-                        text = _text_of(chunk)
-                        if text:
-                            parts.append(text)
-                            yield TokenEvent(text=text)
-            except TimeoutError:
-                logger.warning(
-                    "The model did not finish within %ss; ending the turn",
-                    self.timeout_seconds,
-                )
-                yield ErrorEvent(
-                    message_id=message_id,
-                    code=ErrorCode.LLM_UNAVAILABLE,
-                    message="The model did not finish in time. The partial answer was kept.",
-                    finish_reason=FinishReason.TIMEOUT,
-                )
-                return
-            except Exception:
-                logger.exception("The model failed partway through an answer")
-                yield ErrorEvent(
-                    message_id=message_id,
-                    code=ErrorCode.LLM_UNAVAILABLE,
-                    message="The model failed while answering. The partial answer was kept.",
-                    finish_reason=FinishReason.ERROR,
-                )
-                return
+        spans = final["spans"]
+        answer = final["answer"]
+        intent = final["intent"]
 
-            answer = "".join(parts)
-            cited = cited_indexes(answer, count=len(citations))
-            warnings = grounding_warnings(answer=answer, spans=spans, cited_count=len(cited))
-            if warnings:
-                logger.warning(
-                    "Answer for project %s carries grounding warnings: %s", project_id, warnings
-                )
-            yield DoneEvent(
+        if intent is Intent.CODEBASE_QUESTION and not spans:
+            # The guard the prompt cannot provide. With no evidence, asking the
+            # model to answer anyway leaves one instruction between the user and a
+            # fabrication -- and spends a full generation producing it.
+            logger.info(
+                "Nothing above the relevance floor for project %s; refusing to answer",
+                final["project_id"],
+            )
+            return DoneEvent(
                 message_id=message_id,
                 model=self.model_id,
                 finish_reason=FinishReason.STOP,
-                cited_indexes=cited,
-                grounding_warnings=warnings,
+                cited_indexes=[],
+                grounding_warnings=grounding_warnings(answer="", spans=[], cited_count=0),
+                intent=intent,
+                retrieval_attempts=final["attempts"],
             )
 
-    async def _rewrite(self, question: str, history: list[Turn]) -> str:
-        """Condense the conversation and the question into one standalone query.
-
-        Degrades rather than fails. On a raise, a timeout, empty output, or output
-        long enough to be a preamble, the raw question is used instead — trading a
-        worse answer for no answer is the wrong trade for an optimisation.
-
-        `CancelledError` is a `BaseException` and is deliberately not caught here: a
-        client that disconnected during the rewrite should stop the turn, not fall
-        back and carry on answering nobody.
-        """
-        try:
-            async with asyncio.timeout(REWRITE_TIMEOUT_SECONDS):
-                result = await self.chat_model.ainvoke(
-                    REWRITE_PROMPT.format_messages(
-                        history=to_langchain_history(history), question=question
-                    )
-                )
-            rewritten = _text_of(result).strip()
-        except Exception:
-            logger.warning("Query rewrite failed; retrieving on the raw question", exc_info=True)
-            return question
-
-        if not rewritten or len(rewritten) > MAX_REWRITE_CHARS:
+        cited = cited_indexes(answer, count=len(spans))
+        warnings = self._warnings_for(final, cited_count=len(cited))
+        if warnings:
             logger.warning(
-                "Query rewrite returned %d characters; retrieving on the raw question",
-                len(rewritten),
+                "Answer for project %s carries grounding warnings: %s",
+                final["project_id"],
+                warnings,
             )
-            return question
-        return rewritten
+        return DoneEvent(
+            message_id=message_id,
+            model=self.model_id,
+            finish_reason=FinishReason.STOP,
+            cited_indexes=cited,
+            grounding_warnings=warnings,
+            intent=intent,
+            retrieval_attempts=final["attempts"],
+        )
+
+    def _warnings_for(self, final: TurnState, *, cited_count: int) -> list[str]:
+        """Grounding warnings for whichever route this turn took.
+
+        The non-retrieval routes report nothing. `grounding_warnings()` returns
+        `[NO_CONTEXT]` for any empty span list, which was right when retrieval was
+        the only path -- but `conversational` and `out_of_scope` have empty spans
+        because they never searched, and reporting "nothing in the index matched
+        closely enough" would describe a search that did not happen.
+        """
+        if final["intent"] is not Intent.CODEBASE_QUESTION:
+            return []
+
+        warnings = grounding_warnings(
+            answer=final["answer"], spans=final["spans"], cited_count=cited_count
+        )
+        if not final["evidence_ok"] and final["spans"]:
+            warnings.append(WEAK_EVIDENCE)
+        return warnings

@@ -291,9 +291,7 @@ async def test_listing_filters_by_search_and_by_project(
     assert searched.json()["totalCount"] == 1
 
     scoped = await authed_client.get("/conversations", params={"projectId": str(project_b.id)})
-    assert [item["title"] for item in scoped.json()["items"]] == [
-        "How does the retry ladder work?"
-    ]
+    assert [item["title"] for item in scoped.json()["items"]] == ["How does the retry ladder work?"]
     assert scoped.json()["totalCount"] == 1
 
     together = await authed_client.get(
@@ -314,9 +312,9 @@ async def test_search_excludes_a_conversation_that_has_no_title_yet(
     await db_session.commit()
 
     assert (await authed_client.get("/conversations")).json()["totalCount"] == 1
-    assert (
-        await authed_client.get("/conversations", params={"search": "anything"})
-    ).json()["totalCount"] == 0
+    assert (await authed_client.get("/conversations", params={"search": "anything"})).json()[
+        "totalCount"
+    ] == 0
 
 
 async def test_search_does_not_leak_another_users_conversation(

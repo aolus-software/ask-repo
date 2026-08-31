@@ -24,7 +24,7 @@ dependencies = [
     "langchain-core>=0.3.0",
     "langchain-ollama>=0.2.0",
     "langchain-openai>=0.2.0",
-
+    "langgraph>=1.0",
 ]
 
 [tool.uv]
@@ -55,9 +55,13 @@ select = ["E", "F", "I", "UP", "B", "ANN", "T20", "LOG", "G", "RUF"]
 [tool.pytest.ini_options]
 markers = [
     "integration: needs a real Kafka broker and Qdrant; excluded from `make check`",
+    "model: needs a real chat model at CHAT_BASE_URL; excluded from `make check`",
 ]
-# Integration tests are opt-in: otherwise CI needs a broker in order to lint a docstring.
-addopts = "-m 'not integration'"
+# Both are opt-in: otherwise CI needs a broker in order to lint a docstring, and a
+# GPU in order to run a unit test. `model` is separate from `integration` because
+# the two need different things -- a broker and Qdrant versus a served LLM -- and a
+# machine commonly has one without the other.
+addopts = "-m 'not integration and not model'"
 testpaths = ["tests"]
 asyncio_mode = "auto"
 # Session scope: the engine fixture is session-scoped, and a function-scoped

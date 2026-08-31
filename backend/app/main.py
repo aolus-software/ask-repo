@@ -70,6 +70,20 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 def create_app() -> FastAPI:
     settings = get_settings()
 
+    # Uvicorn configures its own loggers and leaves the root logger at WARNING, so
+    # without this every `logger.info` in the API process is discarded -- including
+    # the routing and grading lines that are the *only* record of how a turn was
+    # answered, since the graph deliberately stores no trace
+    # (`docs/superpowers/specs/2026-08-30-m3-langgraph-design.md` §2.4). Matches
+    # `app/worker.py` and `app/cli.py`, which each do the same for their process.
+    #
+    # The level is set separately because `basicConfig` returns silently when the
+    # root logger already has a handler, which is the case whenever something
+    # configured logging before this ran -- it would leave the level untouched and
+    # the INFO records dropped exactly as before.
+    logging.basicConfig(level=logging.INFO)
+    logging.getLogger().setLevel(logging.INFO)
+
     app = FastAPI(
         title=settings.app_name,
         version=settings.app_version,

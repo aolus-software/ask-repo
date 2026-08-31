@@ -15,7 +15,8 @@ from aiokafka.errors import IllegalStateError
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import AIMessage, AIMessageChunk, BaseMessage
 from langchain_core.outputs import ChatGeneration, ChatGenerationChunk, ChatResult
-from pydantic import Field
+from langchain_core.runnables import Runnable, RunnableLambda
+from pydantic import BaseModel, Field, PrivateAttr
 
 from app.queue.topics import IngestionMessage
 
@@ -126,6 +127,40 @@ class ScriptedChatModel(BaseChatModel):
     invoke_result: str = ""
     fail_after: int | None = None
     stall_seconds: float = 0.0
+    # Handed out in order by `with_structured_output`. A turn makes at most two
+    # structured calls -- classify, then grade -- and they return different types, so
+    # a queue is the honest shape and a single value would hide an ordering bug.
+    structured_results: list[BaseModel] = Field(default_factory=list)
+
+    # Instance-level cursor into `structured_results`, consumed across every
+    # `with_structured_output` call on this instance -- not rebuilt per call, which
+    # would hand every caller the same first element, and not a class attribute,
+    # which would leak one instance's script into another's.
+    _structured_cursor: int = PrivateAttr(default=0)
+
+    # Every input handed to the runnable returned by `with_structured_output`, in
+    # call order. Lets a test prove what a node actually sent the model -- not just
+    # what the model handed back -- which matters for a prompt-injection regression
+    # guard. Instance-level for the same reason as the cursor above: a class
+    # attribute would leak one test's captured calls into another's model.
+    _captured_messages: list[object] = PrivateAttr(default_factory=list)
+
+    @property
+    def captured_messages(self) -> list[object]:
+        """Every input passed to `with_structured_output`'s runnable, in call order."""
+        return list(self._captured_messages)
+
+    # Every `messages` list handed to `_astream`, in call order. Kept separate from
+    # `_captured_messages` above rather than merged into one list: the two record
+    # different call kinds (structured-output calls vs. the streamed answer call),
+    # and merging them would make a reader's assertion depend on knowing which
+    # entries came from which method.
+    _captured_stream_messages: list[object] = PrivateAttr(default_factory=list)
+
+    @property
+    def captured_stream_messages(self) -> list[object]:
+        """Every `messages` list passed to `_astream`, in call order."""
+        return list(self._captured_stream_messages)
 
     @property
     def _llm_type(self) -> str:
@@ -138,6 +173,7 @@ class ScriptedChatModel(BaseChatModel):
         run_manager: object | None = None,
         **kwargs: object,
     ) -> AsyncIterator[ChatGenerationChunk]:
+        self._captured_stream_messages.append(messages)
         for index, token in enumerate(self.tokens):
             if self.fail_after is not None and index == self.fail_after:
                 raise RuntimeError("scripted model failure")
@@ -157,9 +193,36 @@ class ScriptedChatModel(BaseChatModel):
             generations=[ChatGeneration(message=AIMessage(content=self.invoke_result))]
         )
 
+    def with_structured_output(
+        self, schema: object, **kwargs: object
+    ) -> Runnable[object, BaseModel]:
+        """Serve the next scripted result instead of calling a real provider.
+
+        LangChain's default implementation binds a tool call and parses the model's
+        reply, which a scripted fake cannot satisfy. The cursor lives on the instance
+        so `classify` and `grade` -- two separate calls to this method on one model,
+        expecting two different types -- draw from the same queue in order, rather
+        than each getting a fresh copy of the whole list.
+        """
+
+        def _next(messages: object) -> BaseModel:
+            self._captured_messages.append(messages)
+            assert self._structured_cursor < len(self.structured_results), (
+                "the scripted model ran out of structured results"
+            )
+            result = self.structured_results[self._structured_cursor]
+            self._structured_cursor += 1
+            return result
+
+        return RunnableLambda(_next)
+
 
 class FailingChatModel(ScriptedChatModel):
-    """Raises on `ainvoke` — the query-rewrite failure path."""
+    """Raises on `ainvoke` and on any structured call — the degradation paths.
+
+    Both classify and grade must survive a model that raises, and each degrades to a
+    different safe default, so one fake covering both keeps them honest.
+    """
 
     def _generate(
         self,
@@ -168,4 +231,12 @@ class FailingChatModel(ScriptedChatModel):
         run_manager: object | None = None,
         **kwargs: object,
     ) -> ChatResult:
-        raise RuntimeError("scripted rewrite failure")
+        raise RuntimeError("scripted model failure")
+
+    def with_structured_output(
+        self, schema: object, **kwargs: object
+    ) -> Runnable[object, BaseModel]:
+        def _raise(_: object) -> BaseModel:
+            raise RuntimeError("scripted structured-output failure")
+
+        return RunnableLambda(_raise)

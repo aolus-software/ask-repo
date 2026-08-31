@@ -14,7 +14,7 @@ from typing import ClassVar, Literal
 from pydantic import Field
 
 from app.core.errors import ErrorCode
-from app.models.conversation import FinishReason, MessageRole
+from app.models.conversation import FinishReason, Intent, MessageRole
 from app.schemas.base import ApiModel
 from app.schemas.pagination import ListQuery
 
@@ -110,10 +110,15 @@ class StreamEvent(ApiModel):
 
 
 class StatusEvent(StreamEvent):
-    """Where the turn has got to. May be emitted any number of times, including none."""
+    """Where the turn has got to. May be emitted any number of times, including none.
+
+    `rewriting` retired with M3 task 13: the graph's `classify` node classifies and
+    rewrites in one call, so `classifying` covers what `rewriting` used to name, and
+    nothing emits the old value any more.
+    """
 
     event_name: ClassVar[str] = "status"
-    phase: Literal["queued", "rewriting", "retrieving", "generating"]
+    phase: Literal["queued", "classifying", "retrieving", "grading", "generating"]
 
 
 class CitationsEvent(StreamEvent):
@@ -147,6 +152,12 @@ class DoneEvent(StreamEvent):
     # `app/rag/grounding.py`. Empty is the normal case. Surfaced rather than
     # swallowed: a check whose result nothing can see is not a check.
     grounding_warnings: list[str] = Field(default_factory=list)
+    # The path this turn took. Unlike the grounding warnings above, none of this is
+    # recomputable from the stored message — a `Message` row records what was
+    # answered, not which route reached it — so a field nothing reports is a fact
+    # nothing can recover. Spec §2.4 chose reporting over a `trace` column.
+    intent: Intent
+    retrieval_attempts: int = 0
 
 
 class ErrorEvent(StreamEvent):

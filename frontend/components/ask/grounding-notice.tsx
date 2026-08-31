@@ -14,6 +14,8 @@ const MESSAGES: Record<string, string> = {
     "This answer does not cite any of the excerpts it was given. Treat it carefully.",
   unknown_paths:
     "This answer names files that were not among the excerpts retrieved. Those references may not exist.",
+  weak_evidence:
+    "The retrieved code may not fully cover this question. The answer names what it could not determine.",
 };
 
 export function GroundingNotice({ warnings }: { warnings: string[] }) {

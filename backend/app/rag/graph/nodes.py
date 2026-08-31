@@ -1,0 +1,330 @@
+"""The graph's nodes: every model call and every retrieval this turn makes.
+
+Each node is built by a factory taking its dependencies, so the graph wiring in
+`build.py` holds no business logic and a node can be constructed against a fake
+without touching a provider.
+
+Every node degrades rather than failing the turn. `app/rag/answerer.py` set that
+precedent for the query rewrite -- trading a worse answer for no answer is the wrong
+trade for an optimisation -- and the grader inherits it with an asymmetry that
+matters: a broken grader is treated as satisfied, because a helper that can block
+answers entirely is worse than the behaviour it was added to improve.
+"""
+
+import asyncio
+import logging
+from collections.abc import Awaitable, Callable
+
+from langchain_core.language_models import BaseChatModel
+from langchain_core.messages import BaseMessage
+from langgraph.config import get_stream_writer
+
+from app.models.conversation import FinishReason
+from app.rag.graph.state import Classification, EvidenceVerdict, Intent, TurnState
+from app.rag.grounding import OUT_OF_SCOPE_ANSWER
+from app.rag.prompts import (
+    ANSWER_PROMPT,
+    CLASSIFY_PROMPT,
+    GRADE_PROMPT,
+    HISTORY_ANSWER_PROMPT,
+    format_spans,
+    to_langchain_history,
+)
+from app.rag.retriever import RetrievedChunk, Retriever
+from app.schemas.conversation import (
+    CitationPayload,
+    CitationsEvent,
+    StatusEvent,
+    StreamEvent,
+    TokenEvent,
+)
+
+logger = logging.getLogger(__name__)
+
+# One short call, not a full answer. Its own budget, well under the whole-turn one,
+# so a hung helper cannot consume the time the answer needs.
+UTILITY_TIMEOUT_SECONDS = 20.0
+# Past this the model has returned a preamble or an explanation, not a query.
+MAX_QUERY_CHARS = 512
+
+Node = Callable[[TurnState], Awaitable[dict[str, object]]]
+
+
+def emit(event: StreamEvent) -> None:
+    """Write one event to the turn's stream.
+
+    The one place LangGraph's streaming API is named, so a later change of mechanism
+    touches this function rather than six nodes. It resolves the writer from the
+    runnable context and raises outside one -- see `run_node` in `tests/test_graph.py`
+    for how a node is exercised in a test.
+    """
+    get_stream_writer()(event)
+
+
+def build_classify(chat_model: BaseChatModel, *, enabled: bool) -> Node:
+    """Route the question and rewrite it for retrieval, in one structured call.
+
+    Fused because a model deciding "is this about the codebase?" has already done the
+    work of restating the question standalone; splitting them would buy a separable
+    node and cost a serialised round trip on every turn.
+    """
+
+    async def classify(state: TurnState) -> dict[str, object]:
+        question = state["question"]
+        fallback: dict[str, object] = {
+            "intent": Intent.CODEBASE_QUESTION,
+            "search_query": question,
+            "attempts": 0,
+        }
+        if not enabled:
+            return fallback
+
+        emit(StatusEvent(phase="classifying"))
+        try:
+            async with asyncio.timeout(UTILITY_TIMEOUT_SECONDS):
+                result = await chat_model.with_structured_output(Classification).ainvoke(
+                    CLASSIFY_PROMPT.format_messages(
+                        history=to_langchain_history(state["history"]), question=question
+                    )
+                )
+        except Exception:
+            logger.warning("Classification failed; retrieving on the raw question", exc_info=True)
+            return fallback
+
+        # `with_structured_output(..., include_raw=False)` composes the Pydantic
+        # parser into the chain, so a malformed response raises inside the awaited
+        # `ainvoke()` above -- inside the `try`. This call only narrows the type for
+        # the type checker; it is not a second failure surface, and must not be
+        # widened into one by broadening the `except` above.
+        classification = Classification.model_validate(result)
+        query = classification.search_query.strip()
+        if not query or len(query) > MAX_QUERY_CHARS:
+            logger.warning(
+                "Classification returned a %d-character query; retrieving on the raw "
+                "question instead of trusting the rest of the response",
+                len(query),
+            )
+            return fallback
+
+        intent = Intent(classification.intent)
+        logger.info("Routed the question as %s", intent.value)
+        return {"intent": intent, "search_query": query, "attempts": 0}
+
+    return classify
+
+
+def to_citations(chunks: list[RetrievedChunk]) -> list[CitationPayload]:
+    """Number the spans as the prompt labels them: 1-based, best score first."""
+    return [
+        CitationPayload(
+            index=index,
+            file_path=chunk.file_path,
+            start_line=chunk.start_line,
+            end_line=chunk.end_line,
+            language=chunk.language,
+            symbol=chunk.symbol,
+            commit_sha=chunk.commit_sha,
+            score=chunk.score,
+        )
+        for index, chunk in enumerate(chunks, start=1)
+    ]
+
+
+def build_retrieve(retriever: Retriever) -> Node:
+    """Find the spans this question should be answered from.
+
+    `citations` is emitted on the **first** attempt only. The contract says exactly
+    once (`.claude/rules/rag.md`), and a client renders its sources panel while the
+    answer types, so deferring it until the loop settles would hold the panel behind
+    up to two grader calls. The consequence is accepted: after a re-retrieval the
+    live panel shows the first attempt's spans while the answer comes from the
+    second. The stored message uses the final spans, so reloading the conversation
+    reconciles it.
+    """
+
+    async def retrieve(state: TurnState) -> dict[str, object]:
+        emit(StatusEvent(phase="retrieving"))
+        spans = await retriever.retrieve(
+            state["search_query"],
+            project_id=state["project_id"],
+            generation=state["generation"],
+        )
+        if state["attempts"] == 0:
+            emit(CitationsEvent(citations=to_citations(spans)))
+        return {"spans": spans, "attempts": state["attempts"] + 1}
+
+    return retrieve
+
+
+def build_grade(chat_model: BaseChatModel, *, enabled: bool) -> Node:
+    """Judge whether the retrieved excerpts can answer the question.
+
+    Biased toward `sufficient`, and its failure path says `sufficient` too. The
+    asymmetry is deliberate: a wrong "insufficient" spends another retrieval and can
+    only end at the weak-evidence path, while a wrong "sufficient" produces exactly
+    the behaviour this system had before the grader existed. A grader that can block
+    an answer is a regression, not a guardrail.
+    """
+
+    async def grade(state: TurnState) -> dict[str, object]:
+        if not enabled:
+            return {"evidence_ok": True}
+
+        emit(StatusEvent(phase="grading"))
+        try:
+            async with asyncio.timeout(UTILITY_TIMEOUT_SECONDS):
+                result = await chat_model.with_structured_output(EvidenceVerdict).ainvoke(
+                    GRADE_PROMPT.format_messages(
+                        context=format_spans(state["spans"]), question=state["question"]
+                    )
+                )
+        except Exception:
+            logger.warning(
+                "Evidence grading failed; answering on what was retrieved", exc_info=True
+            )
+            return {"evidence_ok": True}
+
+        # Same reasoning as `build_classify` above: the structured-output chain
+        # validates internally and raises inside the awaited call, so this is a type
+        # narrowing step, not a second failure surface.
+        verdict = EvidenceVerdict.model_validate(result)
+        if verdict.sufficient:
+            return {"evidence_ok": True}
+
+        # An empty `better_query` must not blank the search: the next attempt would
+        # embed an empty string and retrieve noise.
+        next_query = verdict.better_query.strip() or state["search_query"]
+        logger.info(
+            "Evidence graded insufficient after attempt %d (%s); re-searching",
+            state["attempts"],
+            verdict.gap or "no gap given",
+        )
+        return {
+            "evidence_ok": False,
+            "gap": verdict.gap or None,
+            "search_query": next_query,
+        }
+
+    return grade
+
+
+def text_of(message: BaseMessage) -> str:
+    """The plain text of a message, whichever content shape the provider used."""
+    content = message.content
+    if isinstance(content, str):
+        return content
+    return "".join(part for part in content if isinstance(part, str))
+
+
+def build_generate(chat_model: BaseChatModel, *, timeout_seconds: float) -> Node:
+    """Write the answer from the retrieved excerpts, streaming as it goes.
+
+    When the attempt budget ran out on weak evidence, the grader's stated gap is
+    passed into the prompt: an answer that names what it could not determine is
+    useful, one that hedges vaguely is not.
+
+    The tokens streamed so far are kept on every exit path, including a timeout or
+    a mid-stream model failure -- that is the partial-answer guarantee M2 built
+    `stream_turn`'s shielded termination write around, and it carries over
+    unchanged. `CancelledError` is a `BaseException` and is deliberately not caught
+    here: a disconnected client should stop the turn, not fall back to a partial
+    answer nobody will read.
+    """
+
+    async def generate(state: TurnState) -> dict[str, object]:
+        emit(StatusEvent(phase="generating"))
+        note = ""
+        if not state["evidence_ok"] and state["gap"]:
+            note = (
+                "The retrieved excerpts were judged incomplete for this question. "
+                f"What appears to be missing: {state['gap']}. Answer from what is "
+                "here, and state plainly what you could not determine from it."
+            )
+        messages = ANSWER_PROMPT.format_messages(
+            context=format_spans(state["spans"]),
+            history=to_langchain_history(state["history"]),
+            question=state["question"],
+            evidence_note=note,
+        )
+
+        parts: list[str] = []
+        try:
+            async with asyncio.timeout(timeout_seconds):
+                async for chunk in chat_model.astream(messages):
+                    text = text_of(chunk)
+                    if text:
+                        parts.append(text)
+                        emit(TokenEvent(text=text))
+        except TimeoutError:
+            logger.warning("The model did not finish within %ss; ending the turn", timeout_seconds)
+            return {"answer": "".join(parts), "failure": FinishReason.TIMEOUT}
+        except Exception:
+            logger.exception("The model failed partway through an answer")
+            return {"answer": "".join(parts), "failure": FinishReason.ERROR}
+
+        return {"answer": "".join(parts), "failure": None}
+
+    return generate
+
+
+def build_answer_from_history(chat_model: BaseChatModel, *, timeout_seconds: float) -> Node:
+    """Answer a message about the conversation rather than about the code.
+
+    No retrieval at all -- that is the saving this route exists for: a follow-up
+    like "thanks" or "say that again" is answered from the prior turns alone. The
+    empty `citations` event is not a formality: the ordering contract
+    (`.claude/rules/rag.md`) has no per-route exception, and a client must not need
+    to know which route it got in order to parse the stream.
+
+    Shares `build_generate`'s partial-answer guarantee: the tokens streamed so far
+    are kept on every exit path, including a timeout or a mid-stream model failure.
+    `CancelledError` is a `BaseException` and is deliberately not caught here, for
+    the same reason as in `build_generate` -- a disconnected client should stop the
+    turn, not fall back to a partial answer nobody will read.
+    """
+
+    async def answer_from_history(state: TurnState) -> dict[str, object]:
+        emit(CitationsEvent(citations=[]))
+        emit(StatusEvent(phase="generating"))
+        messages = HISTORY_ANSWER_PROMPT.format_messages(
+            history=to_langchain_history(state["history"]), question=state["question"]
+        )
+
+        parts: list[str] = []
+        try:
+            async with asyncio.timeout(timeout_seconds):
+                async for chunk in chat_model.astream(messages):
+                    text = text_of(chunk)
+                    if text:
+                        parts.append(text)
+                        emit(TokenEvent(text=text))
+        except TimeoutError:
+            logger.warning("The model did not finish within %ss; ending the turn", timeout_seconds)
+            return {"answer": "".join(parts), "failure": FinishReason.TIMEOUT}
+        except Exception:
+            logger.exception("The model failed partway through a conversational reply")
+            return {"answer": "".join(parts), "failure": FinishReason.ERROR}
+
+        return {"answer": "".join(parts), "failure": None}
+
+    return answer_from_history
+
+
+def build_refuse() -> Node:
+    """Decline a question that is not about this repository.
+
+    No model call, no retrieval, no dependency of any kind -- that is the saving
+    this route exists for, making an out-of-scope question the cheapest path in the
+    system: one classify call and nothing else. The fixed refusal is streamed as
+    ordinary tokens rather than a distinct event type, following the
+    `NO_CONTEXT_ANSWER` precedent: a client renders a refusal exactly as it renders
+    an answer, and the machine-readable distinction rides in the `done` event's
+    `intent`.
+    """
+
+    async def refuse(state: TurnState) -> dict[str, object]:
+        emit(CitationsEvent(citations=[]))
+        emit(TokenEvent(text=OUT_OF_SCOPE_ANSWER))
+        return {"answer": OUT_OF_SCOPE_ANSWER, "failure": None}
+
+    return refuse

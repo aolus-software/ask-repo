@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import type { DoneEventPayload, StatusEventPayload } from "@/lib/api/types";
 import { createSseDecoder, parseSseStream } from "@/lib/ask/sse";
 
 function streamOf(chunks: string[]): ReadableStream<Uint8Array> {
@@ -53,6 +54,32 @@ describe("createSseDecoder", () => {
       'event: status\ndata: {"phase":"retrieving"}\n\nevent: token\ndata: {"text":"x"}\n\n',
     );
     expect(events.map((e) => e.event)).toEqual(["status", "token"]);
+  });
+});
+
+describe("M3 stream fields", () => {
+  it("parses the classifying and grading phases", () => {
+    const decoder = createSseDecoder();
+    const events = decoder.push(
+      'event: status\ndata: {"phase":"classifying"}\n\nevent: status\ndata: {"phase":"grading"}\n\n',
+    );
+
+    // Typed as StatusEventPayload["phase"][], not string[]: this line only compiles
+    // once "classifying" and "grading" are members of the phase union in types.ts.
+    const expectedPhases: StatusEventPayload["phase"][] = ["classifying", "grading"];
+    const phases = events.map((e) => (e.data as StatusEventPayload).phase);
+    expect(phases).toEqual(expectedPhases);
+  });
+
+  it("carries the intent and attempt count on done", () => {
+    const decoder = createSseDecoder();
+    const events = decoder.push(
+      'event: done\ndata: {"messageId":"m","model":"x","finishReason":"stop","citedIndexes":[],"groundingWarnings":[],"intent":"conversational","retrievalAttempts":0}\n\n',
+    );
+
+    const payload = events[0]?.data as DoneEventPayload;
+    expect(payload.intent).toBe("conversational");
+    expect(payload.retrievalAttempts).toBe(0);
   });
 });
 

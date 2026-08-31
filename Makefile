@@ -179,6 +179,9 @@ test-watch: ## Re-run backend tests on change
 test-integration:  ## Run integration tests (needs `make infra`)
 	cd backend && uv run pytest -m integration -v
 
+test-model:  ## Run prompt tests against a real chat model (needs one served)
+	cd backend && uv run pytest -m model -v
+
 build: build-frontend ## Production build
 
 build-frontend: ## next build

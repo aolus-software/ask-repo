@@ -150,7 +150,7 @@ Five event types, all `camelCase` payloads:
 
 | Event | Payload | Notes |
 | --- | --- | --- |
-| `status` | `{phase}` | `queued` \| `rewriting` \| `retrieving` \| `generating`. May repeat |
+| `status` | `{phase}` | `queued` \| `classifying` \| `retrieving` \| `grading` \| `generating`. May repeat |
 | `citations` | `{citations: [...]}` | Exactly once, **before** the first `token` |
 | `token` | `{text}` | One fragment of the answer |
 | `done` | `{messageId, model, finishReason, citedIndexes, groundingWarnings}` | Terminator |
@@ -159,7 +159,8 @@ Five event types, all `camelCase` payloads:
 Exactly one terminator per stream, and both carry `finishReason`: `stop`, `error`, `timeout`,
 or `disconnected`. A disconnect emits nothing — nobody is listening — but the tokens that
 arrived are still persisted. `groundingWarnings` is empty for a normal answer and carries
-`no_context`, `uncited_answer`, or `unknown_paths` when the answer may not be grounded.
+`no_context`, `uncited_answer`, `unknown_paths`, or (M3) `weak_evidence` when the answer may not
+be grounded.
 
 A `: keep-alive` comment goes out every 15 seconds during any gap, and the response sets
 `Cache-Control: no-cache` and `X-Accel-Buffering: no` so a proxy does not accumulate the
@@ -213,9 +214,13 @@ backend/
 │   ├── rag/               # one answer, stage by stage
 │   │   ├── retriever.py  # embed query → filtered search → merge adjacent → typed spans
 │   │   ├── chat.py       # Ollama / OpenAI chat models behind build_chat_model
-│   │   ├── prompts.py    # the answer prompt, the rewrite prompt, span formatting
-│   │   ├── answerer.py   # rewrite → retrieve → generate, as a stream of events
-│   │   └── grounding.py  # the refusal, and the checks that make a bad answer visible
+│   │   ├── prompts.py    # the classify/rewrite prompt, the grade prompt, the answer prompt
+│   │   ├── answerer.py   # runs the graph, turns its stream writes into SSE events
+│   │   ├── grounding.py  # the refusal, and the checks that make a bad answer visible
+│   │   └── graph/        # the LangGraph state graph (M3)
+│   │       ├── state.py  # TurnState — the shared dict every node reads and writes
+│   │       ├── nodes.py  # classify → retrieve → grade/loop → generate, each with a fallback
+│   │       └── build.py  # wires the nodes into the compiled graph, incl. routing edges
 │   ├── worker.py          # the worker entrypoint: consumers + the reconcile sweep
 │   ├── models/            # SQLAlchemy models: User, RefreshToken, Project, Conversation, Message
 │   ├── repositories/      # the only layer that issues `select`
@@ -265,6 +270,11 @@ The four things worth knowing before you touch any of it:
   one. Worker replicas beyond the partition count sit idle.
 - **`RAG_MIN_SCORE` is the relevance floor below which no answer is generated at all** — the
   turn ends with a fixed refusal rather than a model call.
+- **`RAG_CLASSIFY_INTENT`, `RAG_GRADE_EVIDENCE` and `RAG_MAX_RETRIEVAL_ATTEMPTS` tune the graph
+  added in M3.** The first two default on and each short-circuits to its failure-path value when
+  off, so there is one code path rather than two; `RAG_MAX_RETRIEVAL_ATTEMPTS` (default `2`)
+  bounds how many times the grader may ask for a re-search before the answer is generated anyway
+  and flagged `weak_evidence`.
 
 ## Conventions
 

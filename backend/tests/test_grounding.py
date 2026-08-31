@@ -95,3 +95,20 @@ def test_a_url_does_not_mask_a_real_invention_beside_it() -> None:
     assert unknown_paths(
         "See https://example.com/docs and also app/services/billing.py.", spans
     ) == ["app/services/billing.py"]
+
+
+def test_weak_evidence_is_a_distinct_warning_from_no_context() -> None:
+    """They mean different things: `no_context` is "retrieval found nothing above the
+    floor", `weak_evidence` is "it found something and the grader judged it short"."""
+    from app.rag.grounding import NO_CONTEXT, WEAK_EVIDENCE
+
+    assert WEAK_EVIDENCE == "weak_evidence"
+    assert WEAK_EVIDENCE != NO_CONTEXT
+
+
+def test_the_out_of_scope_refusal_says_what_to_ask_instead() -> None:
+    """A refusal that does not redirect reads as a failure rather than a boundary."""
+    from app.rag.grounding import OUT_OF_SCOPE_ANSWER
+
+    assert OUT_OF_SCOPE_ANSWER.strip()
+    assert "project" in OUT_OF_SCOPE_ANSWER.lower()

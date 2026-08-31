@@ -48,6 +48,22 @@ class FinishReason(StrEnum):
     DISCONNECTED = "disconnected"
 
 
+class Intent(StrEnum):
+    """What kind of question a turn is, and therefore which path the answer
+    graph takes for it.
+
+    `StrEnum` so it serialises as its value in `DoneEvent`, matching
+    `FinishReason`. Defined here, alongside `FinishReason`, rather than in
+    `app.rag.graph.state` where the rest of the graph's data lives: this module
+    is already a dependency of the schema layer, and `Intent` needs to reach
+    `app/schemas/conversation.py` without making the schema layer depend on RAG.
+    """
+
+    CODEBASE_QUESTION = "codebase_question"
+    CONVERSATIONAL = "conversational"
+    OUT_OF_SCOPE = "out_of_scope"
+
+
 class Conversation(Base, TimestampMixin, SoftDeleteMixin):
     """One private thread of questions against one project."""
 

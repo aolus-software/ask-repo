@@ -22,8 +22,9 @@ import { takePendingQuestion } from "@/lib/ask/pending";
 
 const PHASE_LABELS: Record<string, string> = {
   queued: "Queued…",
-  rewriting: "Understanding the question…",
+  classifying: "Understanding the question…",
   retrieving: "Searching the codebase…",
+  grading: "Checking what it found…",
   generating: "Writing the answer…",
 };
 

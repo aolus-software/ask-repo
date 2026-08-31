@@ -69,6 +69,25 @@ of these safety properties are invisible to the obvious assertion — an evictio
 not cause a second index, because the database lease refuses the redelivery. See
 [`.claude/rules/ingestion.md`](.claude/rules/ingestion.md).
 
+### Prompt tests
+
+The `model` marker is the same idea for the answering side, and it is deselected by the same
+`addopts`. It needs a served chat model rather than a broker, which is why it is a separate
+marker — a machine commonly has one without the other. Tests with no model reachable skip
+rather than fail.
+
+```bash
+CHAT_MODEL=qwen2.5-coder:7b uv run pytest -m model
+```
+
+Read [`tests/test_rag_model_integration.py`](backend/tests/test_rag_model_integration.py)
+before editing any prompt in `app/rag/prompts.py`. The rest of the suite drives a scripted
+fake, so it proves the graph's wiring and nothing whatsoever about the prompts: a classifier
+that sends every out-of-scope question down the wrong branch passes all 563 unit tests,
+because none of them asks a model anything. Two such failures shipped in M3 and were caught
+by hand. The thresholds there are floors a regression would break through, not the scores
+observed — a probabilistic system cannot be asserted exactly, but it can be bounded.
+
 **Frontend**
 
 ```bash

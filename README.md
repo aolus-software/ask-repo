@@ -11,15 +11,19 @@ network.
 Built as a learning project for RAG, LangChain/LangGraph, prompt engineering, and context
 management — against real repositories rather than tutorial data.
 
-> **Status: M0, M1 and M2 shipped (backend).** Auth & accounts are implemented —
+> **Status: M0, M1, M2 and M3 shipped (backend).** Auth & accounts are implemented —
 > admin-provisioned users, login, forced first-login password change, and login rate
 > limiting — as are the project routes and the whole ingestion pipeline: clone, walk,
 > chunk, embed, Qdrant, driven by a Kafka job queue and a separate worker process.
 > `POST /projects` enqueues a repository and a worker indexes it in the background.
 > M2 added Dev Knowledge: ask a question about a ready project and the answer streams
 > back token by token over Server-Sent Events, cited to real files and line ranges,
-> with conversations private to whoever had them. There is no LangGraph yet — that is
-> M3. **The M0–M2 frontend is shipped too**: sign in, change the forced initial password,
+> with conversations private to whoever had them. M3 turned the answer path into a
+> LangGraph state graph: questions are routed (codebase question / conversational /
+> out of scope) before anything is retrieved, and on the codebase path a grader
+> checks the retrieved excerpts and re-searches with a better query when they fall
+> short — the loop grades retrieval, not the finished answer, so streaming stays
+> unaffected. **The M0–M2 frontend is shipped too**: sign in, change the forced initial password,
 > add and re-index projects, ask questions with the answer streaming in, and manage
 > accounts — all in a browser, with the session held in httpOnly cookies by Next rather
 > than in the page. See [Roadmap](#roadmap) for what lands when, and
@@ -234,7 +238,7 @@ Milestones from [`docs/PRD.md`](docs/PRD.md) §6, built in order:
 - [x] **M1** — Project ingestion: clone + index, status tracking, re-index, Kafka job queue
 - [x] **M2** — Dev Knowledge: streaming RAG Q&A against a ready project, private conversations
 - [x] **M0–M2 frontend** — auth screens, app shell, projects, streamed answers, admin user management
-- [ ] **M3** — LangGraph: intent routing + self-critique loop
+- [x] **M3** — LangGraph: intent routing + a self-critique loop that grades retrieval before generating
 - [ ] **M4** — QA List: shared storage, save / view / filter / re-run
 - [ ] **M5** — Mock Data Generator: synthetic Q&A + eval scoring
 - [ ] **M6** — Local vs hosted model comparison
