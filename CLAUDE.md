@@ -118,6 +118,11 @@ for both protocols, so route, service, consumer and retry tests all run with no 
 only suite needing a real one is `tests/test_ingestion_integration.py`, behind the `integration`
 marker.
 
+There is a second opt-in marker, `model`, for `tests/test_rag_model_integration.py`: it needs a
+served chat model rather than a broker, and it is what keeps the prompts honest. Everything else
+drives `ScriptedChatModel`, so no ordinary test can catch a prompt that routes or cites wrongly
+— run `uv run pytest -m model` after editing anything in `app/rag/prompts.py`.
+
 ### Configuration flows one way
 
 `app/config.py` defines `Settings` (pydantic-settings). Precedence is environment → `.env` →
