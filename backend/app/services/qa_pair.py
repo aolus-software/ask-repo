@@ -281,3 +281,59 @@ class QAPairService:
             or None,
             pending_run=pending,
         )
+
+    async def update(
+        self, pair_id: uuid.UUID, payload: QAPairUpdateRequest, *, actor: AuthenticatedUser
+    ) -> QAPairDetailResponse:
+        """Edit the fields a human owns.
+
+        `answer` is not among them. It only ever arrives from a model, through
+        `accept_rerun` — spec §2.5.
+        """
+        pair = await self._require_readable(pair_id, actor)
+        self._require_destructive_rights(pair, actor)
+
+        # `exclude_unset` so a PATCH naming one field does not blank the rest: an
+        # omitted key and an explicit null are different requests.
+        changes = payload.model_dump(exclude_unset=True)
+        if "module" in changes:
+            pair.module = changes["module"]
+        if "question" in changes and changes["question"] is not None:
+            pair.question = changes["question"]
+        if "reference_answer" in changes:
+            pair.reference_answer = changes["reference_answer"]
+        if "tags" in changes and changes["tags"] is not None:
+            pair.tags = normalise_tags(changes["tags"])
+
+        await self.session.commit()
+        return self._detail(pair)
+
+    async def set_status(
+        self, pair_id: uuid.UUID, payload: QAPairStatusRequest, *, actor: AuthenticatedUser
+    ) -> QAPairDetailResponse:
+        """Record the verdict. Open to every authenticated user.
+
+        Deliberately not gated on `created_by` — `docs/PRD.md:338` says any user may
+        verify a pair, and the point of a shared regression set is that a colleague
+        can mark a stale answer as failing without tracking down whoever saved it.
+        """
+        pair = await self._require_readable(pair_id, actor)
+        pair.status = payload.status.value
+        if payload.status is QAStatus.UNREVIEWED:
+            pair.reviewed_by = None
+            pair.reviewed_at = None
+        else:
+            pair.reviewed_by = actor.id
+            pair.reviewed_at = datetime.now(UTC)
+        await self.session.commit()
+        return self._detail(pair)
+
+    async def delete(self, pair_id: uuid.UUID, *, actor: AuthenticatedUser) -> None:
+        """Soft-delete a pair. No Qdrant work — its citations are copies and it
+        owns no vector points, so `docs/PRD.md` §5.1's hard-delete rule does not
+        apply here."""
+        pair = await self._require_readable(pair_id, actor)
+        self._require_destructive_rights(pair, actor)
+        await self._pairs.soft_delete(pair)
+        await self.session.commit()
+
