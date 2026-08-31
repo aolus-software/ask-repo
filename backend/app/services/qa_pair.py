@@ -7,24 +7,40 @@ available — the same split `ConversationService` makes and for the same reason
 to report a failure is an event.
 """
 
+import asyncio
 import builtins
 import logging
 import uuid
+from collections.abc import AsyncGenerator
+from contextlib import suppress
+from dataclasses import dataclass
 from datetime import UTC, datetime
 
 from fastapi import status
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import func, update
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.config import Settings
 from app.core import access
 from app.core.errors import AppError, ErrorCode
 from app.core.middleware import AuthenticatedUser
 from app.models.conversation import FinishReason, Message, MessageRole
+from app.models.project import Project, ProjectStatus
 from app.models.qa_pair import QAPair, QASource, QAStatus
+from app.rag.answerer import Answerer
 from app.repositories.conversation import ConversationRepository, MessageRepository
 from app.repositories.project import ProjectRepository
 from app.repositories.qa_pair import QAPairRepository
-from app.schemas.conversation import CitationPayload
+from app.schemas.conversation import (
+    KEEP_ALIVE,
+    CitationPayload,
+    CitationsEvent,
+    DoneEvent,
+    ErrorEvent,
+    StreamEvent,
+    TokenEvent,
+    encode_event,
+)
 from app.schemas.pagination import PaginatedResponse
 from app.schemas.qa_pair import (
     MAX_TAG_CHARS,
@@ -55,6 +71,22 @@ def normalise_tags(tags: list[str]) -> list[str]:
         if cleaned:
             seen.setdefault(cleaned, None)
     return list(seen)
+
+
+@dataclass(frozen=True, slots=True)
+class RerunContext:
+    """Everything the stream needs, flattened off the ORM.
+
+    Plain data on purpose: the stream runs on its own session, and ORM instances
+    bound to the request's session would be detached — or lazily reloaded — by the
+    time it uses them.
+    """
+
+    pair_id: uuid.UUID
+    project_id: uuid.UUID
+    generation: int
+    collection: str
+    question: str
 
 
 class QAPairService:
@@ -341,3 +373,191 @@ class QAPairService:
         self._require_destructive_rights(pair, actor)
         await self._pairs.soft_delete(pair)
         await self.session.commit()
+
+    async def prepare_rerun(self, pair_id: uuid.UUID, *, actor: AuthenticatedUser) -> RerunContext:
+        """Everything that can still set a status code, before any bytes are sent.
+
+        Once SSE headers are sent the status is fixed at `200`, so nothing here may
+        be deferred into the stream. The same split `ConversationService.prepare_turn`
+        makes, for the same reason.
+        """
+        pair = await self._require_readable(pair_id, actor)
+        self._require_destructive_rights(pair, actor)
+        project = await self._require_readable_project(pair.project_id, actor)
+        self._require_answerable(project)
+
+        return RerunContext(
+            pair_id=pair.id,
+            project_id=project.id,
+            generation=project.active_generation,
+            # Verbatim from the row, never recomputed from current settings: the
+            # width is probed at worker startup and is not available in this
+            # process, and a project indexed before a provider switch legitimately
+            # lives in a different collection from the one settings would name.
+            collection=project.embedding_collection or "",
+            question=pair.question,
+        )
+
+    async def _require_readable_project(
+        self, project_id: uuid.UUID, actor: AuthenticatedUser
+    ) -> Project:
+        """The project, if it is in the caller's scope."""
+        scope = access.resolve_project_scope(actor)
+        project = await self._projects.get(project_id)
+        if project is None or not (scope.unrestricted or project.id in scope.ids):
+            raise AppError(
+                status.HTTP_404_NOT_FOUND, ErrorCode.PROJECT_NOT_FOUND, "Project not found."
+            )
+        return project
+
+    def _require_answerable(self, project: Project) -> None:
+        """Refuse to answer from an index that is absent or built by another model.
+
+        The embedding check is the one that would otherwise fail silently — see
+        `.claude/rules/rag.md`. Mirrors `ConversationService._require_answerable`
+        deliberately rather than sharing it: the two are the same rule today, and a
+        premature helper would hide the day they stop being.
+        """
+        if project.status != ProjectStatus.READY.value or not project.embedding_collection:
+            raise AppError(
+                status.HTTP_409_CONFLICT,
+                ErrorCode.PROJECT_NOT_READY,
+                "This project is not indexed yet. Wait for indexing to finish.",
+            )
+        if project.embedding_model != self.settings.embedding_model:
+            raise AppError(
+                status.HTTP_409_CONFLICT,
+                ErrorCode.EMBEDDING_MODEL_CHANGED,
+                (
+                    f"This project was indexed with {project.embedding_model!r} but this "
+                    f"instance now embeds with {self.settings.embedding_model!r}. Reindex "
+                    "the project, or change the embedding model back."
+                ),
+            )
+
+
+KEEP_ALIVE_SECONDS = 15.0
+
+
+async def stream_rerun(
+    *,
+    context: RerunContext,
+    answerer: Answerer,
+    sessionmaker: async_sessionmaker[AsyncSession],
+    model_id: str,
+) -> AsyncGenerator[bytes]:
+    """Forward the answerer's events as SSE, and record the run exactly once.
+
+    Its own session, from the sessionmaker rather than from `Depends`: FastAPI
+    closes `yield` dependencies through the request's `AsyncExitStack`, and a
+    persistence guarantee should not rest on when that runs relative to a streaming
+    body — least of all on the cancellation path.
+
+    `history=[]` is correct rather than convenient: a saved question is standalone
+    by construction. The classify node still runs, so a saved question that now
+    routes out of scope reports that in `done` — the point of a re-run is that it
+    takes the same path the original answer took.
+    """
+    parts: list[str] = []
+    citations: list[CitationPayload] = []
+    # The default, not a fallback: reaching the end of this generator without a
+    # terminator means the client went away.
+    finish_reason = FinishReason.DISCONNECTED
+
+    events = answerer.answer(
+        question=context.question,
+        history=[],
+        project_id=context.project_id,
+        generation=context.generation,
+        message_id=None,
+    )
+    iterator = events.__aiter__()
+    pending: asyncio.Task[StreamEvent] | None = None
+    try:
+        while True:
+            pending = asyncio.ensure_future(anext(iterator))
+            # `asyncio.wait` rather than `wait_for`: `wait_for` cancels its task on
+            # timeout, throwing the pending event away instead of waiting longer.
+            while not (await asyncio.wait({pending}, timeout=KEEP_ALIVE_SECONDS))[0]:
+                yield KEEP_ALIVE
+            try:
+                event = pending.result()
+            except StopAsyncIteration:
+                break
+            pending = None
+
+            if isinstance(event, TokenEvent):
+                parts.append(event.text)
+            elif isinstance(event, CitationsEvent):
+                citations = event.citations
+            elif isinstance(event, DoneEvent | ErrorEvent):
+                finish_reason = event.finish_reason
+            yield encode_event(event)
+    finally:
+        # Shielded, because a disconnect arrives as CancelledError and every `await`
+        # in a cancelled task raises it again immediately — so an unshielded cleanup
+        # runs none of itself, losing the partial run and leaking the answerer's
+        # concurrency permit with it.
+        await asyncio.shield(
+            _store_pending_run(
+                events=events,
+                pending=pending,
+                context=context,
+                content="".join(parts),
+                citations=citations,
+                finish_reason=finish_reason,
+                sessionmaker=sessionmaker,
+                model_id=model_id,
+            )
+        )
+
+
+async def _store_pending_run(
+    *,
+    events: AsyncGenerator[StreamEvent],
+    pending: asyncio.Task[StreamEvent] | None,
+    context: RerunContext,
+    content: str,
+    citations: list[CitationPayload],
+    finish_reason: FinishReason,
+    sessionmaker: async_sessionmaker[AsyncSession],
+    model_id: str,
+) -> None:
+    """Close the answerer and write the pending slot.
+
+    Order matters. The in-flight `anext` is cancelled and awaited before `aclose`,
+    because closing a generator that is still running raises `RuntimeError` — and
+    that close is what releases the concurrency semaphore the answerer holds.
+
+    A partial run is stored, not discarded: `docs/PRD.md` §4.2's "a broken stream
+    keeps what arrived" applies here too, and `pending_finish_reason` is what stops
+    it ever being published (spec §2.5).
+    """
+    if pending is not None:
+        pending.cancel()
+        with suppress(asyncio.CancelledError, StopAsyncIteration):
+            await pending
+    with suppress(Exception):
+        await events.aclose()
+
+    async with sessionmaker() as session:
+        await session.execute(
+            update(QAPair)
+            .where(QAPair.id == context.pair_id)
+            .values(
+                pending_answer=content,
+                pending_citations=[citation.model_dump() for citation in citations] or None,
+                pending_model=model_id,
+                pending_finish_reason=finish_reason.value,
+                pending_run_at=func.now(),
+                updated_at=func.now(),
+            )
+        )
+        await session.commit()
+    if finish_reason is not FinishReason.STOP:
+        logger.warning(
+            "Re-run of QA pair %s ended as %s after %d characters",
+            context.pair_id,
+            finish_reason.value,
+            len(content),
+        )

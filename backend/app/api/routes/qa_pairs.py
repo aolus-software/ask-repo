@@ -9,9 +9,12 @@ import uuid
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query, Response, status
+from fastapi.responses import StreamingResponse
 
 from app.api.deps import CurrentUser, SessionDep
+from app.api.routes.conversations import SSE_HEADERS, AnswererFactory, get_answerer_factory
 from app.config import Settings, get_settings
+from app.db.session import get_sessionmaker
 from app.schemas.errors import ERROR_RESPONSES
 from app.schemas.pagination import PaginatedResponse
 from app.schemas.qa_pair import (
@@ -22,7 +25,7 @@ from app.schemas.qa_pair import (
     QAPairStatusRequest,
     QAPairUpdateRequest,
 )
-from app.services.qa_pair import QAPairService
+from app.services.qa_pair import QAPairService, stream_rerun
 
 router = APIRouter(prefix="/qa-pairs", tags=["QA List"])
 
@@ -35,6 +38,11 @@ def get_qa_pair_service(
 
 
 QAPairServiceDep = Annotated[QAPairService, Depends(get_qa_pair_service)]
+# Reused from the conversations router rather than rebuilt, which is what makes a
+# re-run take the SAME instance-wide answer semaphore as the Ask screen. A separate
+# factory here would give re-runs their own concurrency budget, and a burst of them
+# could then starve someone asking a live question.
+AnswererFactoryDep = Annotated[AnswererFactory, Depends(get_answerer_factory)]
 
 
 @router.get(
@@ -127,6 +135,42 @@ async def set_qa_pair_status(
 ) -> QAPairDetailResponse:
     """Record pass / fail / unreviewed. Open to every authenticated user."""
     return await service.set_status(pair_id, payload, actor=current_user)
+
+
+@router.post(
+    "/{pair_id}/rerun",
+    status_code=status.HTTP_200_OK,
+    summary="Re-run a saved question and stream the new answer",
+    # No `response_model`: the body is `text/event-stream`, whose payload models
+    # live in `app/schemas/conversation.py` and are checked by
+    # `tests/test_api_model.py` rather than by FastAPI.
+    response_class=StreamingResponse,
+    responses={code: ERROR_RESPONSES[code] for code in (401, 403, 404, 409)},
+)
+async def rerun_qa_pair(
+    pair_id: uuid.UUID,
+    current_user: CurrentUser,
+    service: QAPairServiceDep,
+    answerer_factory: AnswererFactoryDep,
+    settings: Annotated[Settings, Depends(get_settings)],
+) -> Response:
+    """Validate, then stream. The second route in the codebase that does two things.
+
+    Once the response body has started there is no status code left to set, so
+    every decision that needs one happens in `prepare_rerun` first. All of the
+    policy is still in the service — the route only chooses the transport.
+    """
+    context = await service.prepare_rerun(pair_id, actor=current_user)
+    return StreamingResponse(
+        stream_rerun(
+            context=context,
+            answerer=answerer_factory(context.collection),
+            sessionmaker=get_sessionmaker(),
+            model_id=settings.chat_model,
+        ),
+        media_type="text/event-stream",
+        headers=SSE_HEADERS,
+    )
 
 
 @router.delete(
