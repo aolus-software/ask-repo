@@ -1,6 +1,7 @@
 """Re-running a saved question: the pre-flight codes and the ordering contract."""
 
 import uuid
+from datetime import UTC, datetime
 
 from httpx import AsyncClient
 from sqlalchemy import select
@@ -8,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.ingestion.vector_store import InMemoryVectorStore
 from app.models.project import Project, ProjectStatus
-from app.models.qa_pair import QAPair
+from app.models.qa_pair import QAPair, QAStatus
 from tests.factories import create_project, create_qa_pair, create_user
 from tests.test_conversations_api import seed_ready_project, sse_events
 
@@ -136,3 +137,106 @@ async def test_rerun_of_an_unknown_pair_is_404(client_for_user_a: AsyncClient) -
     response = await client_for_user_a.post(f"/qa-pairs/{uuid.uuid4()}/rerun")
 
     assert response.status_code == 404
+
+
+async def stage_pending_run(
+    session: AsyncSession, pair_id: uuid.UUID, *, finish_reason: str = "stop"
+) -> None:
+    """Put a completed re-run in the slot without running the model."""
+    row = (await session.execute(select(QAPair).where(QAPair.id == pair_id))).scalar_one()
+    row.pending_answer = "A newer answer."
+    row.pending_citations = None
+    row.pending_model = "test-model"
+    row.pending_finish_reason = finish_reason
+    row.pending_run_at = datetime.now(UTC)
+    await session.commit()
+
+
+async def test_accept_promotes_the_run_and_resets_the_verdict(
+    client_for_user_a: AsyncClient, db_session: AsyncSession
+) -> None:
+    """A human verified *that text*. Replace the text and the verdict must go.
+
+    A stale green badge on a shared regression set is worse than no badge, because
+    it is trusted (spec §5.4).
+    """
+    owner_id = await caller_id(client_for_user_a)
+    project = await create_project(db_session, created_by=owner_id)
+    pair = await create_qa_pair(
+        db_session, project_id=project.id, created_by=owner_id, status=QAStatus.PASS
+    )
+    await db_session.commit()
+    await stage_pending_run(db_session, pair.id)
+
+    response = await client_for_user_a.post(f"/qa-pairs/{pair.id}/rerun/accept")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["answer"] == "A newer answer."
+    assert body["status"] == "unreviewed"
+    assert body["reviewedBy"] is None
+    assert body["reviewedAt"] is None
+    assert body["hasPendingRun"] is False
+    assert body["lastRunAt"] is not None
+
+
+async def test_accept_refuses_a_run_that_never_finished(
+    client_for_user_a: AsyncClient, db_session: AsyncSession
+) -> None:
+    """A partial run may be read. It may never be published to the team."""
+    owner_id = await caller_id(client_for_user_a)
+    project = await create_project(db_session, created_by=owner_id)
+    pair = await create_qa_pair(db_session, project_id=project.id, created_by=owner_id)
+    await db_session.commit()
+    await stage_pending_run(db_session, pair.id, finish_reason="disconnected")
+
+    response = await client_for_user_a.post(f"/qa-pairs/{pair.id}/rerun/accept")
+
+    assert response.status_code == 409
+    assert response.json()["detail"]["code"] == "ANSWER_INCOMPLETE"
+
+
+async def test_accept_with_an_empty_slot_is_409(
+    client_for_user_a: AsyncClient, db_session: AsyncSession
+) -> None:
+    owner_id = await caller_id(client_for_user_a)
+    project = await create_project(db_session, created_by=owner_id)
+    pair = await create_qa_pair(db_session, project_id=project.id, created_by=owner_id)
+    await db_session.commit()
+
+    response = await client_for_user_a.post(f"/qa-pairs/{pair.id}/rerun/accept")
+
+    assert response.status_code == 409
+    assert response.json()["detail"]["code"] == "NO_PENDING_RUN"
+
+
+async def test_discard_clears_the_slot_and_leaves_the_answer(
+    client_for_user_a: AsyncClient, db_session: AsyncSession
+) -> None:
+    owner_id = await caller_id(client_for_user_a)
+    project = await create_project(db_session, created_by=owner_id)
+    pair = await create_qa_pair(db_session, project_id=project.id, created_by=owner_id)
+    original = pair.answer
+    await db_session.commit()
+    await stage_pending_run(db_session, pair.id)
+
+    response = await client_for_user_a.delete(f"/qa-pairs/{pair.id}/rerun")
+
+    assert response.status_code == 204
+    detail = (await client_for_user_a.get(f"/qa-pairs/{pair.id}")).json()
+    assert detail["hasPendingRun"] is False
+    assert detail["answer"] == original
+
+
+async def test_a_non_owner_cannot_accept(
+    client_for_user_b: AsyncClient, db_session: AsyncSession
+) -> None:
+    owner = await create_user(db_session)
+    project = await create_project(db_session, created_by=owner.id)
+    pair = await create_qa_pair(db_session, project_id=project.id, created_by=owner.id)
+    await db_session.commit()
+    await stage_pending_run(db_session, pair.id)
+
+    response = await client_for_user_b.post(f"/qa-pairs/{pair.id}/rerun/accept")
+
+    assert response.status_code == 403

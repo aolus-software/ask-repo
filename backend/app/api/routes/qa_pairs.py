@@ -173,6 +173,34 @@ async def rerun_qa_pair(
     )
 
 
+@router.post(
+    "/{pair_id}/rerun/accept",
+    response_model=QAPairDetailResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Save a pending re-run over the stored answer",
+    responses={code: ERROR_RESPONSES[code] for code in (401, 403, 404, 409)},
+)
+async def accept_rerun(
+    pair_id: uuid.UUID, current_user: CurrentUser, service: QAPairServiceDep
+) -> QAPairDetailResponse:
+    """Promote the pending run. The status resets to unreviewed."""
+    return await service.accept_rerun(pair_id, actor=current_user)
+
+
+@router.delete(
+    "/{pair_id}/rerun",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Discard a pending re-run",
+    responses={code: ERROR_RESPONSES[code] for code in (401, 403, 404, 409)},
+)
+async def discard_rerun(
+    pair_id: uuid.UUID, current_user: CurrentUser, service: QAPairServiceDep
+) -> Response:
+    """Throw the pending run away, leaving the stored answer alone."""
+    await service.discard_rerun(pair_id, actor=current_user)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
 @router.delete(
     "/{pair_id}",
     status_code=status.HTTP_204_NO_CONTENT,

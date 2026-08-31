@@ -398,6 +398,70 @@ class QAPairService:
             question=pair.question,
         )
 
+    async def accept_rerun(
+        self, pair_id: uuid.UUID, *, actor: AuthenticatedUser
+    ) -> QAPairDetailResponse:
+        """Promote the pending run into the stored answer.
+
+        The verdict resets. A human who marked this pair `pass` vouched for *that
+        text*; if the text is replaced and the verdict survives, `status` stops
+        meaning "a person read this and it was right", which is the only thing it is
+        for (spec §5.4).
+        """
+        pair = await self._require_readable(pair_id, actor)
+        self._require_destructive_rights(pair, actor)
+
+        if pair.pending_run_at is None or pair.pending_answer is None:
+            raise AppError(
+                status.HTTP_409_CONFLICT,
+                ErrorCode.NO_PENDING_RUN,
+                "There is no re-run waiting on this pair.",
+            )
+        if pair.pending_finish_reason != FinishReason.STOP.value:
+            raise AppError(
+                status.HTTP_409_CONFLICT,
+                ErrorCode.ANSWER_INCOMPLETE,
+                "That re-run did not finish, so it cannot replace the stored answer.",
+            )
+
+        pair.answer = pair.pending_answer
+        pair.citations = pair.pending_citations
+        pair.model = pair.pending_model
+        pair.last_run_at = pair.pending_run_at
+        pair.status = QAStatus.UNREVIEWED.value
+        pair.reviewed_by = None
+        pair.reviewed_at = None
+        self._clear_pending(pair)
+        # See `update` above: a server-side `onupdate` is left expired after an ORM
+        # UPDATE, and the projection below cannot lazy-load it outside an awaited
+        # context.
+        pair.updated_at = datetime.now(UTC)
+
+        await self.session.commit()
+        return self._detail(pair)
+
+    async def discard_rerun(self, pair_id: uuid.UUID, *, actor: AuthenticatedUser) -> None:
+        """Throw the pending run away. The stored answer is untouched."""
+        pair = await self._require_readable(pair_id, actor)
+        self._require_destructive_rights(pair, actor)
+        if pair.pending_run_at is None:
+            raise AppError(
+                status.HTTP_409_CONFLICT,
+                ErrorCode.NO_PENDING_RUN,
+                "There is no re-run waiting on this pair.",
+            )
+        self._clear_pending(pair)
+        await self.session.commit()
+
+    @staticmethod
+    def _clear_pending(pair: QAPair) -> None:
+        """Empty all five slot columns together, so none is ever left behind."""
+        pair.pending_answer = None
+        pair.pending_citations = None
+        pair.pending_model = None
+        pair.pending_finish_reason = None
+        pair.pending_run_at = None
+
     async def _require_readable_project(
         self, project_id: uuid.UUID, actor: AuthenticatedUser
     ) -> Project:
