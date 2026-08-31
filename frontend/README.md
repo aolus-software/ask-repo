@@ -79,14 +79,14 @@ frontend/
 │   ├── layout.tsx         # fonts, theme, query provider, toaster
 │   ├── globals.css        # Tailwind entry + theme tokens (only file with raw hex)
 │   ├── (auth)/            # shell-less: /login, /change-password
-│   ├── (app)/             # the shell: dashboard, projects, ask, settings
+│   ├── (app)/             # the shell: dashboard, projects, ask, qa, settings
 │   └── api/
 │       ├── [...path]/     # the API forwarding route the browser talks to
 │       └── auth/          # login, refresh, logout — the only cookie writers
 ├── components/
 │   ├── ui/                # shadcn, CLI-managed
 │   ├── layout/ form/ feedback/
-│   └── projects/ ask/ users/
+│   └── projects/ ask/ qa/ users/
 ├── hooks/                 # one file per resource
 ├── lib/
 │   ├── api/               # types, endpoints, errors, both fetch clients
