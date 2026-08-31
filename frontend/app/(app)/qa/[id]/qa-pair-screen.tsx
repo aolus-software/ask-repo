@@ -1,7 +1,7 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Loader2, MoreHorizontal, Pencil, Trash2, X } from "lucide-react";
+import { Loader2, MoreHorizontal, Pencil, RotateCw, Trash2, X } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
@@ -15,6 +15,7 @@ import { ConfirmDialog } from "@/components/form/confirm-dialog";
 import { FormDialog } from "@/components/form/form-dialog";
 import { FormError } from "@/components/form/form-error";
 import { QAStatusControl } from "@/components/qa/qa-status-control";
+import { RerunPanel } from "@/components/qa/rerun-panel";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -338,11 +339,16 @@ function ResultCard({ pair }: { pair: QAPairDetailResponse }) {
 }
 
 /**
- * Edit and Delete, gated by `canManageQAPair` — the same ownership rule the backend
- * enforces on `PATCH`/`DELETE /qa-pairs/{id}`. Re-run lives here too once Task 15
- * lands; this task stops at Edit and Delete.
+ * Edit, Re-run and Delete, gated by `canManageQAPair` — the same ownership rule the
+ * backend enforces on `PATCH`/`POST .../rerun`/`DELETE /qa-pairs/{id}`.
  */
-function QAPairActionsMenu({ pair }: { pair: QAPairDetailResponse }) {
+function QAPairActionsMenu({
+  pair,
+  onRerun,
+}: {
+  pair: QAPairDetailResponse;
+  onRerun: () => void;
+}) {
   const router = useRouter();
   const queryClient = useQueryClient();
   const [editing, setEditing] = useState(false);
@@ -377,6 +383,10 @@ function QAPairActionsMenu({ pair }: { pair: QAPairDetailResponse }) {
             <Pencil className="size-4" />
             Edit
           </DropdownMenuItem>
+          <DropdownMenuItem onClick={onRerun}>
+            <RotateCw className="size-4" />
+            Re-run
+          </DropdownMenuItem>
           <DropdownMenuItem onClick={() => setConfirmingDelete(true)}>
             <Trash2 className="size-4" />
             Delete
@@ -402,6 +412,11 @@ function QAPairActionsMenu({ pair }: { pair: QAPairDetailResponse }) {
 
 export function QAPairScreen({ id }: { id: string }) {
   const user = useSession();
+  // Also true whenever the pair loads with a pending run already stored — that is
+  // the visible payoff of holding a re-run server-side (spec §2.5): it survives a
+  // reload, a closed laptop, or a different browser, so the panel renders without
+  // anyone having pressed the button in this session.
+  const [rerunTriggered, setRerunTriggered] = useState(false);
   const query = useQuery({
     queryKey: keys.qaPairs.detail(id),
     queryFn: () => apiFetch<QAPairDetailResponse>(endpoints.qaPairs.detail(id)),
@@ -434,6 +449,7 @@ export function QAPairScreen({ id }: { id: string }) {
   if (!pair) return <NotFound />;
 
   const canManage = canManageQAPair(user, pair);
+  const showRerunPanel = rerunTriggered || Boolean(pair.pendingRun);
 
   return (
     <div className="mx-auto w-full max-w-5xl space-y-6">
@@ -468,7 +484,9 @@ export function QAPairScreen({ id }: { id: string }) {
             </div>
           ) : null}
         </div>
-        {canManage ? <QAPairActionsMenu pair={pair} /> : null}
+        {canManage ? (
+          <QAPairActionsMenu pair={pair} onRerun={() => setRerunTriggered(true)} />
+        ) : null}
       </div>
 
       <Card>
@@ -482,8 +500,12 @@ export function QAPairScreen({ id }: { id: string }) {
 
       <div className="grid gap-6 md:grid-cols-2">
         <ExpectedResultCard pair={pair} canManage={canManage} />
-        <ResultCard pair={pair} />
+        {showRerunPanel ? null : <ResultCard pair={pair} />}
       </div>
+
+      {showRerunPanel ? (
+        <RerunPanel pair={pair} onClose={() => setRerunTriggered(false)} />
+      ) : null}
 
       <QAStatusControl
         pairId={pair.id}
