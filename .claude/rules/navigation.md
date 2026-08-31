@@ -89,7 +89,8 @@ The shape AskRepo is heading for:
 /ask                    Dev Knowledge — project picker + conversation
 /ask/[conversationId]   a conversation (private to the operator)
 /qa                     QA List (shared)
-/qa/[id]/edit           edit a QA pair
+/qa/[id]                a QA pair: expected result, result, status, review — edit and
+                        delete are a dropdown menu; edit opens a dialog, not a route
 /settings/users         admin only
 ```
 
