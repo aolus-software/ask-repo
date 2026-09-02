@@ -7,7 +7,6 @@ model and a hand-written migration can disagree — and the migration is what ru
 import subprocess
 from pathlib import Path
 
-import pytest
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -144,7 +143,6 @@ async def test_conversations_and_messages_exist_with_the_right_delete_semantics(
     assert ("messages", "citations") in found
 
 
-@pytest.mark.asyncio
 async def test_checklist_tables_exist_and_qa_pairs_does_not(db_session: AsyncSession) -> None:
     """The migration is the source of truth for the schema, not `create_all`."""
     result = await db_session.execute(
@@ -161,7 +159,6 @@ async def test_checklist_tables_exist_and_qa_pairs_does_not(db_session: AsyncSes
     assert "qa_pairs" not in tables
 
 
-@pytest.mark.asyncio
 async def test_checklist_indexes_exist(db_session: AsyncSession) -> None:
     """Each one serves a query named in spec 3.5; without them the grid scans."""
     result = await db_session.execute(
