@@ -110,6 +110,14 @@ async def test_status_counts_groups_by_module(db_session: AsyncSession) -> None:
     assert counts[module.id] == {"pass": 2, "blocked": 1}
 
 
+async def test_status_counts_returns_empty_without_querying(db_session: AsyncSession) -> None:
+    """The short-circuit matters because the module list calls this with whatever page it
+    has; an empty page must not become a query with an empty `IN ()`."""
+    repository = ChecklistItemRepository(db_session)
+
+    assert await repository.status_counts(module_ids=[]) == {}
+
+
 async def test_soft_delete_for_module_hides_the_items(db_session: AsyncSession) -> None:
     module = await create_checklist_module(db_session)
     await create_checklist_item(

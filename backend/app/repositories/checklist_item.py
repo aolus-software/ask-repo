@@ -158,7 +158,13 @@ class ChecklistItemRepository(BaseRepository[ChecklistItem]):
         return result.scalar_one_or_none()
 
     async def next_position(self, *, module_id: uuid.UUID, feature: str) -> int:
-        """Where the next item in this feature goes. Zero when the feature is new."""
+        """Where the next item in this feature goes. Zero when the feature is new.
+
+        Filters `deleted_at` explicitly rather than through `active_select()`: this is a
+        scalar aggregate, and `active_select()` returns a full-row `Select[tuple[ChecklistItem]]`
+        that cannot express `func.max(...)`. The filter is therefore remembered here rather
+        than structural, which is why it is called out.
+        """
         result = await self.session.execute(
             select(func.max(ChecklistItem.position)).where(
                 ChecklistItem.module_id == module_id,
@@ -176,6 +182,9 @@ class ChecklistItemRepository(BaseRepository[ChecklistItem]):
 
         One query rather than one per module: the module list renders these on every
         row, and an N+1 there is the difference between one round trip and twenty-five.
+
+        Filters `deleted_at` explicitly rather than through `active_select()`, for the same
+        reason `next_position` does: a grouped projection cannot come from a full-row select.
         """
         if not module_ids:
             return {}
