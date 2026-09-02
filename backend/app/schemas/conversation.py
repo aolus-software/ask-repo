@@ -3,8 +3,12 @@
 Both live here on purpose. The SSE payloads are as much a wire contract as any
 response model, but they never pass through FastAPI's `response_model`, so nothing
 in the framework enforces `ApiModel` on them. Putting them beside the ordinary
-schemas — and enumerating them in `SSE_EVENT_MODELS` — is what lets
-`tests/test_api_model.py` hold them to the same rule.
+schemas is what lets `tests/test_api_model.py` hold them to the same rule.
+
+`SSE_EVENT_MODELS`, the tuple that enumerates every event for that test, lives in
+`app.schemas` rather than here: `ChangeSetEvent` is a checklist type and
+`app.schemas.checklist` already imports `StreamEvent` and `CitationPayload` from this
+module, so enumerating the tuple in either module would close an import cycle.
 """
 
 import uuid
@@ -179,18 +183,6 @@ class ErrorEvent(StreamEvent):
     code: ErrorCode
     message: str
     finish_reason: FinishReason
-
-
-SSE_EVENT_MODELS: tuple[type[StreamEvent], ...] = (
-    StatusEvent,
-    CitationsEvent,
-    TokenEvent,
-    DoneEvent,
-    ErrorEvent,
-)
-"""Every event the stream can emit. `tests/test_api_model.py` walks this, which is
-the only thing holding these payloads to the camelCase rule — a new event added to
-the stream but not to this tuple ships unchecked."""
 
 
 def encode_event(event: StreamEvent) -> bytes:
