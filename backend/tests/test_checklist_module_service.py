@@ -18,6 +18,7 @@ from app.services.checklist_module import ChecklistModuleService
 from tests.factories import (
     create_checklist_change_set,
     create_checklist_item,
+    create_checklist_message,
     create_checklist_module,
     create_project,
     create_user,
@@ -120,6 +121,7 @@ async def test_deleting_a_module_cascades_to_items_change_sets_and_messages(
     """Spec 3.7. Nothing here reaches Qdrant: the checklist owns no vector points."""
     from app.repositories.checklist_change_set import ChecklistChangeSetRepository
     from app.repositories.checklist_item import ChecklistItemRepository
+    from app.repositories.checklist_message import ChecklistMessageRepository
 
     module = await create_checklist_module(db_session)
     await create_checklist_item(
@@ -129,6 +131,7 @@ async def test_deleting_a_module_cascades_to_items_change_sets_and_messages(
         created_by=module.created_by,
     )
     await create_checklist_change_set(db_session, module_id=module.id)
+    await create_checklist_message(db_session, module_id=module.id, created_by=module.created_by)
     service = ChecklistModuleService(db_session, Settings())
 
     await service.delete(
@@ -137,6 +140,7 @@ async def test_deleting_a_module_cascades_to_items_change_sets_and_messages(
 
     assert await ChecklistItemRepository(db_session).list_for_module(module.id) == []
     assert await ChecklistChangeSetRepository(db_session).pending_for_module(module.id) is None
+    assert await ChecklistMessageRepository(db_session).list_for_module(module.id, limit=50) == []
 
 
 async def test_create_refuses_a_project_that_is_not_ready(db_session: AsyncSession) -> None:
