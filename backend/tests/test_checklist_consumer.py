@@ -1,5 +1,6 @@
 """One generation message, end to end, with no broker."""
 
+import logging
 import uuid
 
 import pytest
@@ -7,7 +8,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.ingestion.errors import RetryableIngestionError, TerminalIngestionError
 from app.models.checklist import ChecklistModuleStatus
-from app.queue import checklist as checklist_module
 from app.queue.checklist import JobOutcome, handle_checklist_message
 from app.queue.protocol import InMemoryIngestionQueue
 from app.queue.topics import CHECKLIST_DLQ_TOPIC, CHECKLIST_TOPIC, ChecklistJobMessage
@@ -84,7 +84,11 @@ async def test_a_retryable_failure_goes_to_the_ladder_and_leaves_status_alone(
     db_session: AsyncSession,
 ) -> None:
     """The job is coming back, so a `failed` status would lie about it
-    (`.claude/rules/ingestion.md`)."""
+    (`.claude/rules/ingestion.md`). Asserting equality against `GENERATING`, not just
+    `!= FAILED`: the claim set `GENERATING`, and "left alone" means the retryable
+    failure rolled back without touching it -- a `!=` check would also pass if the
+    status were corrupted to anything else that isn't `FAILED`, including the factory
+    default `EMPTY`."""
     module = await create_checklist_module(db_session)
     queue = InMemoryIngestionQueue()
 
@@ -100,46 +104,45 @@ async def test_a_retryable_failure_goes_to_the_ladder_and_leaves_status_alone(
 
     assert queue.produced[0][0].startswith("askrepo.checklist.retry")
     await db_session.refresh(module)
-    assert module.status != ChecklistModuleStatus.FAILED.value
+    assert module.status == ChecklistModuleStatus.GENERATING.value
 
 
-async def test_a_terminal_failure_records_a_scrubbed_error(
-    db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+async def test_a_terminal_failure_records_only_the_exception_class(
+    db_session: AsyncSession, caplog: pytest.LogCaptureFixture
 ) -> None:
-    """A PAT can reach an exception message through the clone URL on the project row,
-    and `module.error` is read back by every authenticated user on this shared
-    instance -- so a `TerminalIngestionError`'s raw text must never reach it. This
-    layer holds no PAT and so cannot scrub a secret out of an arbitrary message; per
-    `.claude/rules/ingestion.md` it records the exception's class name instead, routed
-    through `scrub` for the shape (spec 4.7)."""
+    """`module.error` is read by every authenticated user via `ChecklistModuleResponse`,
+    so it must never carry an exception message: a `TerminalIngestionError` raised
+    downstream can quote a clone URL with a PAT in it.
+    `.claude/rules/ingestion.md` requires this layer to record the exception's CLASS NAME
+    and let the text go only to the log, because a consumer holds no PAT and so cannot
+    scrub one out of an arbitrary message.
+
+    Asserting equality, not `"ghp_secret" not in ...`: the substring check passes for any
+    string that happens to lack that literal, including one built from a different secret.
+    """
     module = await create_checklist_module(db_session)
     queue = InMemoryIngestionQueue()
-    seen: list[str] = []
-    real_scrub = checklist_module.scrub
+    secret_url = "https://x:ghp_secret@github.com/acme/repo.git"
 
-    def _spying_scrub(text: str, *secrets: str | None) -> str:
-        seen.append(text)
-        return real_scrub(text, *secrets)
+    with caplog.at_level(logging.WARNING):
+        await handle_checklist_message(
+            _message(module.id),
+            generator=_Generator(TerminalIngestionError(f"clone failed for {secret_url}")),
+            repository=ChecklistModuleRepository(db_session),
+            producer=queue,
+            worker_id="w1",
+            max_attempts=3,
+            session=db_session,
+        )
 
-    monkeypatch.setattr(checklist_module, "scrub", _spying_scrub)
-    error_text = "no indexed file matches 'https://x:ghp_secret@h/r'"
-
-    await handle_checklist_message(
-        _message(module.id),
-        generator=_Generator(TerminalIngestionError(error_text)),
-        repository=ChecklistModuleRepository(db_session),
-        producer=queue,
-        worker_id="w1",
-        max_attempts=3,
-        session=db_session,
-    )
-
-    assert seen, "the failure path must route its recorded text through scrub"
     await db_session.refresh(module)
     assert module.status == ChecklistModuleStatus.FAILED.value
-    assert module.error is not None
-    assert "ghp_secret" not in module.error
+    # Equality, so any leak of the message -- not just this one secret -- fails.
+    assert module.error == "generation failed: TerminalIngestionError."
     assert queue.produced[0][0] == CHECKLIST_DLQ_TOPIC
+    # The other half of the rule's trade: the full text still reaches an operator,
+    # just not the row every authenticated user can read.
+    assert secret_url in caplog.text
 
 
 async def test_a_failed_generation_leaves_existing_items_untouched(
