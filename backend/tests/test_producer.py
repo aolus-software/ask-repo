@@ -17,7 +17,7 @@ from fastapi import FastAPI
 from app.config import Settings, get_settings
 from app.main import lifespan
 from app.queue.producer import KafkaIngestionQueue, ensure_topics
-from app.queue.topics import ALL_TOPICS, DLQ_TOPIC, INGEST_TOPIC, IngestionMessage
+from app.queue.topics import ALL_TOPICS, CHECKLIST_TOPIC, DLQ_TOPIC, INGEST_TOPIC, IngestionMessage
 
 # Broker error codes, from the Kafka protocol. `create_topics` reports these in the
 # response body rather than raising, so the producer has to read them.
@@ -153,7 +153,9 @@ def _reset_stub_registries() -> None:
 async def test_enqueue_publishes_to_the_ingest_topic(monkeypatch: pytest.MonkeyPatch) -> None:
     stub = install_stub_producer(monkeypatch)
 
-    queue = KafkaIngestionQueue(bootstrap_servers="localhost:9092", topic=INGEST_TOPIC)
+    queue = KafkaIngestionQueue(
+        bootstrap_servers="localhost:9092", topic=INGEST_TOPIC, checklist_topic=CHECKLIST_TOPIC
+    )
     await queue.start()
     sent = message()
     await queue.enqueue(sent)
@@ -169,7 +171,9 @@ async def test_the_producer_is_idempotent(monkeypatch: pytest.MonkeyPatch) -> No
     """Without this a retried produce appends the message twice."""
     stub = install_stub_producer(monkeypatch)
 
-    await KafkaIngestionQueue(bootstrap_servers="localhost:9092", topic=INGEST_TOPIC).start()
+    await KafkaIngestionQueue(
+        bootstrap_servers="localhost:9092", topic=INGEST_TOPIC, checklist_topic=CHECKLIST_TOPIC
+    ).start()
 
     assert stub.kwargs["enable_idempotence"] is True
     assert stub.kwargs["acks"] == "all"
@@ -179,7 +183,9 @@ async def test_produce_to_targets_the_topic_it_is_given(monkeypatch: pytest.Monk
     """The retry and DLQ paths publish to a topic that is not the queue's own."""
     stub = install_stub_producer(monkeypatch)
 
-    queue = KafkaIngestionQueue(bootstrap_servers="localhost:9092", topic=INGEST_TOPIC)
+    queue = KafkaIngestionQueue(
+        bootstrap_servers="localhost:9092", topic=INGEST_TOPIC, checklist_topic=CHECKLIST_TOPIC
+    )
     await queue.start()
     await queue.produce_to(DLQ_TOPIC, message(attempt=3))
 
@@ -187,7 +193,9 @@ async def test_produce_to_targets_the_topic_it_is_given(monkeypatch: pytest.Monk
 
 
 async def test_enqueue_before_start_is_a_programming_error() -> None:
-    queue = KafkaIngestionQueue(bootstrap_servers="localhost:9092", topic=INGEST_TOPIC)
+    queue = KafkaIngestionQueue(
+        bootstrap_servers="localhost:9092", topic=INGEST_TOPIC, checklist_topic=CHECKLIST_TOPIC
+    )
     with pytest.raises(RuntimeError, match="not started"):
         await queue.enqueue(message())
 
@@ -198,7 +206,9 @@ async def test_enqueue_after_stop_is_a_programming_error(
     """Producing through a stopped queue must fail rather than silently drop a job."""
     stub = install_stub_producer(monkeypatch)
 
-    queue = KafkaIngestionQueue(bootstrap_servers="localhost:9092", topic=INGEST_TOPIC)
+    queue = KafkaIngestionQueue(
+        bootstrap_servers="localhost:9092", topic=INGEST_TOPIC, checklist_topic=CHECKLIST_TOPIC
+    )
     await queue.start()
     await queue.stop()
 
@@ -209,7 +219,9 @@ async def test_enqueue_after_stop_is_a_programming_error(
 
 async def test_stopping_a_queue_that_never_started_is_a_no_op() -> None:
     """The lifespan's `finally` runs even when start failed."""
-    await KafkaIngestionQueue(bootstrap_servers="localhost:9092", topic=INGEST_TOPIC).stop()
+    await KafkaIngestionQueue(
+        bootstrap_servers="localhost:9092", topic=INGEST_TOPIC, checklist_topic=CHECKLIST_TOPIC
+    ).stop()
 
 
 # --- topic creation ---------------------------------------------------------------

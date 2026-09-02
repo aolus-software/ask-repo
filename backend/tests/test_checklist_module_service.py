@@ -1,12 +1,20 @@
 """Module business rules: scoping, the destructive gate, and the generate pre-flight."""
 
+import uuid
+from datetime import UTC, datetime, timedelta
+
 import pytest
 from fastapi import status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import Settings
 from app.core.errors import AppError, ErrorCode
-from app.models.checklist import ChangeSetStatus, ChecklistModuleStatus
+from app.models.checklist import (
+    ChangeSetOrigin,
+    ChangeSetStatus,
+    ChecklistChangeSet,
+    ChecklistModuleStatus,
+)
 from app.models.project import ProjectStatus
 from app.queue.protocol import InMemoryIngestionQueue
 from app.schemas.checklist import (
@@ -158,6 +166,29 @@ async def test_create_refuses_a_project_that_is_not_ready(db_session: AsyncSessi
     assert caught.value.code is ErrorCode.PROJECT_NOT_READY
 
 
+async def test_create_normalises_the_path_and_starts_empty(db_session: AsyncSession) -> None:
+    """`create`'s success path: the module starts `empty` with no generation behind it,
+    and `source_path` is stored without leading or trailing slashes so it can be used as
+    a scroll prefix directly."""
+    project = await create_project(db_session)
+    project.embedding_collection = "c"
+    service = ChecklistModuleService(db_session, Settings())
+
+    created = await service.create(
+        ChecklistModuleCreateRequest(
+            project_id=project.id, name="  Authentication  ", source_path="/app/auth/"
+        ),
+        actor=authenticated(await create_user(db_session)),
+    )
+
+    assert created.status is ChecklistModuleStatus.EMPTY
+    assert created.source_path == "app/auth"
+    assert created.name == "Authentication"
+    assert created.item_count == 0
+    assert created.pending_change_set_id is None
+    assert created.stale is False
+
+
 async def test_generation_publishes_a_job_and_returns_generating(
     db_session: AsyncSession,
 ) -> None:
@@ -244,3 +275,69 @@ async def test_generation_does_not_apply_the_embedding_model_guard(
 
     assert result.status is ChecklistModuleStatus.GENERATING
     assert len(queue.messages) == 1
+
+
+async def test_change_sets_for_returns_newest_first(db_session: AsyncSession) -> None:
+    """The audit trail: newest first, so a reader sees the most recent proposal first.
+
+    `created_at` is set explicitly rather than left to the column default: Postgres
+    `now()` is transaction-scoped, so two rows inserted in this one transaction would
+    otherwise share an identical timestamp, and `list_for_module`'s `id` tiebreaker is
+    a random uuid4 that carries no ordering information -- see
+    `test_pending_for_module_ignores_resolved_sets` in
+    `tests/test_checklist_change_set_repository.py` for the same fix.
+    """
+    module = await create_checklist_module(db_session)
+    started = datetime.now(UTC)
+    older = ChecklistChangeSet(
+        id=uuid.uuid4(),
+        module_id=module.id,
+        origin=ChangeSetOrigin.GENERATION.value,
+        summary="older",
+        operations=[],
+        status=ChangeSetStatus.APPLIED.value,
+        created_by=module.created_by,
+        created_at=started,
+    )
+    newer = ChecklistChangeSet(
+        id=uuid.uuid4(),
+        module_id=module.id,
+        origin=ChangeSetOrigin.GENERATION.value,
+        summary="newer",
+        operations=[],
+        status=ChangeSetStatus.APPLIED.value,
+        created_by=module.created_by,
+        created_at=started + timedelta(seconds=1),
+    )
+    db_session.add_all([older, newer])
+    await db_session.commit()
+    service = ChecklistModuleService(db_session, Settings())
+
+    change_sets = await service.change_sets_for(
+        module.id, actor=authenticated(await create_user(db_session))
+    )
+
+    assert [row.id for row in change_sets] == [newer.id, older.id]
+
+
+async def test_messages_are_readable_by_any_authenticated_user(
+    db_session: AsyncSession,
+) -> None:
+    """The chat is shared, inverting the privacy rule that governs conversations,
+    because it is the justification record for a document everyone can see (spec 2.4).
+    A user who did not create the module -- not its creator, not an admin -- can still
+    read its messages."""
+    module = await create_checklist_module(db_session)
+    await create_checklist_message(
+        db_session,
+        module_id=module.id,
+        created_by=module.created_by,
+        content="Why does this test expect 401?",
+    )
+    stranger = await create_user(db_session)
+    service = ChecklistModuleService(db_session, Settings())
+
+    messages = await service.messages(module.id, actor=authenticated(stranger))
+
+    assert len(messages) == 1
+    assert messages[0].content == "Why does this test expect 401?"

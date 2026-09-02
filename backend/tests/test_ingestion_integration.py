@@ -40,7 +40,7 @@ from app.ingestion.vector_store import InMemoryVectorStore, QdrantVectorStore
 from app.models.project import ProjectStatus
 from app.queue.consumer import IngestionConsumer
 from app.queue.producer import KafkaIngestionQueue, ensure_topics
-from app.queue.topics import INGEST_TOPIC, IngestionMessage
+from app.queue.topics import CHECKLIST_TOPIC, INGEST_TOPIC, IngestionMessage
 from app.repositories.project import ProjectRepository
 from tests.factories import create_project
 
@@ -93,7 +93,9 @@ async def producer() -> AsyncIterator[KafkaIngestionQueue]:
         partitions=settings.kafka_ingest_partitions,
     )
     queue = KafkaIngestionQueue(
-        bootstrap_servers=settings.kafka_bootstrap_servers, topic=INGEST_TOPIC
+        bootstrap_servers=settings.kafka_bootstrap_servers,
+        topic=INGEST_TOPIC,
+        checklist_topic=CHECKLIST_TOPIC,
     )
     await queue.start()
     yield queue

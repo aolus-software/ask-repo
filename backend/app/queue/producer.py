@@ -8,7 +8,6 @@ from aiokafka.errors import TopicAlreadyExistsError, for_code
 
 from app.queue.topics import (
     ALL_TOPICS,
-    CHECKLIST_TOPIC,
     INGEST_TOPIC,
     ChecklistJobMessage,
     IngestionMessage,
@@ -30,7 +29,7 @@ class KafkaIngestionQueue:
         *,
         bootstrap_servers: str,
         topic: str = INGEST_TOPIC,
-        checklist_topic: str = CHECKLIST_TOPIC,
+        checklist_topic: str,
     ) -> None:
         self.topic = topic
         self.checklist_topic = checklist_topic
