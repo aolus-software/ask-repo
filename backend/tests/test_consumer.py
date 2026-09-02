@@ -118,6 +118,7 @@ async def test_a_retryable_failure_goes_to_the_one_minute_topic(db_session: Asyn
 
     assert outcome is JobOutcome.RETRY_SCHEDULED
     topic, routed = producer.produced[0]
+    assert isinstance(routed, IngestionMessage)  # this producer only ever carries these
     assert topic == RETRY_TOPICS[0][0]
     assert routed.attempt == 1
     assert routed.not_before_ms > 0
@@ -182,6 +183,7 @@ async def test_a_retry_can_actually_be_claimed(db_session: AsyncSession) -> None
     await db_session.commit()
 
     _, forwarded = producer.produced[0]
+    assert isinstance(forwarded, IngestionMessage)  # this producer only ever carries these
     pipeline = StubPipeline()
     second = await handle(db_session, forwarded, pipeline=pipeline, producer=producer)
 

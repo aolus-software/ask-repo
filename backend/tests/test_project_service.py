@@ -14,6 +14,7 @@ from app.ingestion.errors import RetryableIngestionError
 from app.ingestion.vector_store import InMemoryVectorStore, VectorStore, VectorStoreFactory
 from app.models.project import ProjectStatus
 from app.queue.protocol import InMemoryIngestionQueue
+from app.queue.topics import IngestionMessage
 from app.repositories.conversation import ConversationRepository
 from app.repositories.project import ProjectRepository
 from app.schemas.project import ProjectCreateRequest
@@ -61,7 +62,9 @@ async def test_create_enqueues_exactly_one_job(db_session: AsyncSession) -> None
 
     assert response.status == ProjectStatus.PENDING
     assert len(queue.messages) == 1
-    assert queue.messages[0].project_id == response.id
+    sent = queue.messages[0]
+    assert isinstance(sent, IngestionMessage)  # this queue only ever carries these
+    assert sent.project_id == response.id
 
 
 async def test_create_rejects_a_url_that_fails_validation(db_session: AsyncSession) -> None:

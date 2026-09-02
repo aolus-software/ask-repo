@@ -12,17 +12,21 @@ from datetime import UTC, datetime, timedelta
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.project import ProjectStatus
-from app.queue.topics import INGEST_TOPIC, IngestionMessage
+from app.queue.topics import INGEST_TOPIC, IngestionMessage, JobMessage
 from app.repositories.project import LEASE_SECONDS, ProjectRepository
 from app.worker import RECONCILE_INTERVAL_SECONDS, reconcile_once
 from tests.factories import create_project
 
 
 class RecordingProducer:
+    """A `TopicProducer` double. Reconcile only ever forwards `IngestionMessage`,
+    so `.sent` stays narrow even though `produce_to` accepts any `JobMessage`."""
+
     def __init__(self) -> None:
         self.sent: list[tuple[str, IngestionMessage]] = []
 
-    async def produce_to(self, topic: str, message: IngestionMessage) -> None:
+    async def produce_to(self, topic: str, message: JobMessage) -> None:
+        assert isinstance(message, IngestionMessage)  # reconcile only forwards these
         self.sent.append((topic, message))
 
 

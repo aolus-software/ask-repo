@@ -21,7 +21,7 @@ from app.queue import retry as retry_module
 from app.queue.consumer import _RepauseOnRebalance
 from app.queue.protocol import InMemoryIngestionQueue, TopicProducer
 from app.queue.retry import RetryConsumer, seconds_until_due
-from app.queue.topics import INGEST_TOPIC, RETRY_TOPICS, IngestionMessage
+from app.queue.topics import INGEST_TOPIC, RETRY_TOPICS, IngestionMessage, JobMessage
 from tests.fakes import FakeConsumer, record_for
 
 RETRY_TOPIC = RETRY_TOPICS[0][0]
@@ -59,7 +59,7 @@ class Clock:
 class ExplodingProducer:
     """A `TopicProducer` whose broker is down."""
 
-    async def produce_to(self, topic: str, message: IngestionMessage) -> None:
+    async def produce_to(self, topic: str, message: JobMessage) -> None:
         raise RuntimeError("broker unreachable")
 
 
