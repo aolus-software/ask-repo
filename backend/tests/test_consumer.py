@@ -21,7 +21,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.ingestion.errors import RetryableIngestionError, TerminalIngestionError
 from app.models.project import ProjectStatus
 from app.queue import consumer as consumer_module
-from app.queue.consumer import IngestionConsumer, JobOutcome, Pipeline, handle_message
+from app.queue.consumer import (
+    IngestionConsumer,
+    JobOutcome,
+    PausingConsumer,
+    Pipeline,
+    handle_message,
+)
 from app.queue.protocol import InMemoryIngestionQueue
 from app.queue.topics import DLQ_TOPIC, INGEST_TOPIC, RETRY_TOPICS, IngestionMessage
 from app.repositories.project import ProjectRepository
@@ -418,3 +424,46 @@ async def test_one_failing_record_does_not_end_the_polling_loop(
     # Absorbed, and the offset stayed put so the record is redelivered — safe, because
     # `claim` is the deduplication boundary, not the offset.
     assert consumer.committed == []
+
+
+async def test_pausing_consumer_keeps_polling_for_the_length_of_a_job() -> None:
+    """The property the whole pattern exists for, asserted against the base class so
+    the checklist consumer inherits it rather than reimplementing it.
+
+    aiokafka measures liveness as fetcher idle time: go longer than
+    `max.poll.interval.ms` without calling `getmany` and the client leaves the group on
+    its own (`.claude/rules/ingestion.md`)."""
+    started = asyncio.Event()
+    release = asyncio.Event()
+    partition = TopicPartition("t", 0)
+
+    class _SlowConsumer(PausingConsumer[str]):
+        topic = "t"
+        group_id = "g"
+
+        def _decode(self, raw: bytes) -> str:
+            return raw.decode()
+
+        async def _ensure_topics(self) -> None:
+            return None
+
+        async def _run_job(self, message: str) -> object:
+            started.set()
+            await release.wait()
+            return None
+
+    fake = FakeConsumer({partition}, records={partition: [SimpleNamespace(value=b"job", offset=0)]})
+    subject = _SlowConsumer()
+    task = asyncio.create_task(subject._process(fake, partition, fake.first_record()))
+
+    await started.wait()
+    await asyncio.sleep(0)
+    assert fake.paused == {partition}
+    polls_during_job = fake.poll_count
+    await asyncio.sleep(0.05)
+    assert fake.poll_count > polls_during_job
+
+    release.set()
+    await task
+    assert fake.committed == [{partition: 1}]
+    assert fake.paused == set()

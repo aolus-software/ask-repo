@@ -138,7 +138,13 @@ async def main() -> None:
         asyncio.create_task(reconcile_loop(producer=producer, topic=settings.kafka_ingest_topic)),
         *[
             asyncio.create_task(
-                RetryConsumer(settings=settings, producer=producer, topic=topic).run()
+                RetryConsumer(
+                    settings=settings,
+                    producer=producer,
+                    topic=topic,
+                    decode=IngestionMessage.from_bytes,
+                    destination_topic=settings.kafka_ingest_topic,
+                ).run()
             )
             for topic, _ in RETRY_TOPICS
         ],

@@ -69,6 +69,8 @@ def build(producer: TopicProducer | None = None, *, topic: str = RETRY_TOPIC) ->
         settings=get_settings(),
         producer=producer if producer is not None else InMemoryIngestionQueue(),
         topic=topic,
+        decode=IngestionMessage.from_bytes,
+        destination_topic=get_settings().kafka_ingest_topic,
     )
 
 

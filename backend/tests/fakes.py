@@ -35,6 +35,7 @@ class FakeConsumer:
         assigned: set[TopicPartition],
         *,
         on_poll: Callable[[], Awaitable[None]] | None = None,
+        records: dict[TopicPartition, list[object]] | None = None,
     ) -> None:
         self._assigned = set(assigned)
         self._paused: set[TopicPartition] = set()
@@ -45,9 +46,36 @@ class FakeConsumer:
         # Lets a test act in the middle of a hold — a rebalance, say — at the one
         # moment a real broker could interrupt: while the loop is parked in a poll.
         self._on_poll = on_poll
+        # Canned records a test can hand straight to `_process`, bypassing `getmany`
+        # entirely — `getmany` below always returns nothing once everything is
+        # paused, which is the real pause contract this fake exists to encode.
+        self.records: dict[TopicPartition, list[object]] = dict(records) if records else {}
 
     def subscribe(self, *, topics: list[str], listener: ConsumerRebalanceListener) -> None:
         self.listener = listener
+
+    @property
+    def paused(self) -> set[TopicPartition]:
+        """Every partition currently paused — lets a test assert pause/resume symmetry."""
+        return set(self._paused)
+
+    @property
+    def poll_count(self) -> int:
+        """Alias for `keep_alive_polls`, read by a test that does not care which
+        loop (ingestion or retry) drove the polling."""
+        return self.keep_alive_polls
+
+    def first_record(self) -> object:
+        """The first canned record given to the constructor.
+
+        A convenience for a test that drives `_process` directly rather than
+        through `run`'s polling loop — `getmany` never hands these back, since it
+        always returns nothing once everything assigned is paused.
+        """
+        for records in self.records.values():
+            if records:
+                return records[0]
+        raise AssertionError("FakeConsumer was constructed with no records")
 
     def assignment(self) -> set[TopicPartition]:
         return set(self._assigned)
