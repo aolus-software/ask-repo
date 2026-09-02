@@ -37,7 +37,12 @@ class ChecklistChangeSetRepository(BaseRepository[ChecklistChangeSet]):
         return result.scalar_one_or_none()
 
     async def pending_module_ids(self, module_ids: list[uuid.UUID]) -> dict[uuid.UUID, uuid.UUID]:
-        """Module id to pending change-set id, for the modules that have one."""
+        """Module id to pending change-set id, for the modules that have one.
+
+        Filters `deleted_at` explicitly rather than through `active_select()`, for the same
+        reason `ChecklistItemRepository.status_counts` does: a two-column projection cannot
+        come from a full-row select.
+        """
         if not module_ids:
             return {}
         result = await self.session.execute(

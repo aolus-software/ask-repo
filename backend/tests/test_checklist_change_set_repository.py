@@ -5,7 +5,12 @@ from datetime import UTC, datetime, timedelta
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.checklist import ChangeSetStatus, ChecklistMessage
+from app.models.checklist import (
+    ChangeSetOrigin,
+    ChangeSetStatus,
+    ChecklistChangeSet,
+    ChecklistMessage,
+)
 from app.models.conversation import MessageRole
 from app.repositories.checklist_change_set import ChecklistChangeSetRepository
 from app.repositories.checklist_message import ChecklistMessageRepository
@@ -18,14 +23,40 @@ from tests.factories import (
 
 async def test_pending_for_module_ignores_resolved_sets(db_session: AsyncSession) -> None:
     """At most one pending set per module is the invariant the generate route
-    enforces with `409 CHANGE_SET_PENDING`; a resolved one must not block it."""
+    enforces with `409 CHANGE_SET_PENDING`; a resolved one must not block it.
+
+    `created_at` is set explicitly, with the APPLIED row deterministically newer than
+    the PENDING one, rather than going through `create_checklist_change_set` (which does
+    not take a timestamp): Postgres `now()` is transaction-scoped, so two rows inserted in
+    this one transaction would otherwise share an identical `created_at`, and
+    `order_by(created_at.desc()).limit(1)` has no id tiebreaker -- a tie would make which
+    row comes back unspecified, and the guard would only catch a dropped status filter by
+    luck rather than deterministically.
+    """
     module = await create_checklist_module(db_session)
-    await create_checklist_change_set(
-        db_session, module_id=module.id, status=ChangeSetStatus.APPLIED
+    started = datetime.now(UTC)
+    applied = ChecklistChangeSet(
+        id=uuid.uuid4(),
+        module_id=module.id,
+        origin=ChangeSetOrigin.GENERATION.value,
+        summary="1 added",
+        operations=[],
+        status=ChangeSetStatus.APPLIED.value,
+        created_by=module.created_by,
+        created_at=started + timedelta(seconds=1),
     )
-    pending = await create_checklist_change_set(
-        db_session, module_id=module.id, status=ChangeSetStatus.PENDING
+    pending = ChecklistChangeSet(
+        id=uuid.uuid4(),
+        module_id=module.id,
+        origin=ChangeSetOrigin.GENERATION.value,
+        summary="1 added",
+        operations=[],
+        status=ChangeSetStatus.PENDING.value,
+        created_by=module.created_by,
+        created_at=started,
     )
+    db_session.add_all([applied, pending])
+    await db_session.commit()
     repository = ChecklistChangeSetRepository(db_session)
 
     found = await repository.pending_for_module(module.id)
@@ -37,11 +68,18 @@ async def test_pending_for_module_ignores_resolved_sets(db_session: AsyncSession
 async def test_pending_module_ids_maps_only_modules_with_one(
     db_session: AsyncSession,
 ) -> None:
-    """The module list shows a Review-changes badge per row without an N+1."""
+    """The module list shows a Review-changes badge per row without an N+1.
+
+    `without` holds a RESOLVED change set rather than none: a module with no rows at
+    all cannot tell a working status filter from a missing one.
+    """
     with_pending = await create_checklist_module(db_session)
     without = await create_checklist_module(db_session)
     change_set = await create_checklist_change_set(
         db_session, module_id=with_pending.id, status=ChangeSetStatus.PENDING
+    )
+    await create_checklist_change_set(
+        db_session, module_id=without.id, status=ChangeSetStatus.APPLIED
     )
     repository = ChecklistChangeSetRepository(db_session)
 
