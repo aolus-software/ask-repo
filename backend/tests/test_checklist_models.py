@@ -5,11 +5,13 @@ import uuid
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.base import SoftDeleteMixin
 from app.models.checklist import (
     ChangeSetOrigin,
     ChangeSetStatus,
     ChecklistItemSource,
     ChecklistItemStatus,
+    ChecklistMessage,
     ChecklistModuleStatus,
 )
 from tests.factories import (
@@ -75,9 +77,6 @@ async def test_change_set_stores_operations_as_json(db_session: AsyncSession) ->
 async def test_message_is_soft_deletable(db_session: AsyncSession) -> None:
     """Unlike `messages`. Spec 3.4: a shared, auditable record does not get that
     exception, because it is not deleted wholesale with a private parent."""
-    from app.models.checklist import ChecklistMessage
-    from app.models.base import SoftDeleteMixin
-
     assert issubclass(ChecklistMessage, SoftDeleteMixin)
     user = await create_user(db_session)
     assert user.id is not None
