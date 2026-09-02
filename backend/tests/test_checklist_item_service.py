@@ -182,3 +182,115 @@ async def test_export_applies_the_same_filters_and_ignores_pagination(
 
     sheet = load_workbook(BytesIO(content)).worksheets[0]
     assert sheet.max_row == 3  # header plus the two PASS rows, `limit` ignored
+
+
+async def test_update_changes_the_definition_and_leaves_the_result_alone(
+    db_session: AsyncSession,
+) -> None:
+    """The gated write's success path.
+
+    Asserts the four definition fields change AND that `current_result`/`status`
+    survive untouched -- the whole reason `ChecklistItemUpdateRequest` carries no
+    field for them is that editing an expectation must never quietly discard a
+    tester's recorded observation.
+    """
+    creator = await create_user(db_session)
+    module = await create_checklist_module(db_session, created_by=creator.id)
+    item = await create_checklist_item(
+        db_session,
+        module_id=module.id,
+        project_id=module.project_id,
+        created_by=creator.id,
+    )
+    service = ChecklistItemService(db_session, Settings())
+    # A genuine recorded observation, not the factory's default -- via `set_result`,
+    # the only path that actually writes these columns.
+    await service.set_result(
+        item.id,
+        ChecklistItemResultRequest(current_result="Returned 500", status=ChecklistItemStatus.FAIL),
+        actor=authenticated(creator),
+    )
+
+    updated = await service.update(
+        item.id,
+        ChecklistItemUpdateRequest(
+            feature="Signup",
+            test_name="Rejects a duplicate email",
+            expected_result="409 EMAIL_ALREADY_EXISTS",
+            notes="Edge case",
+        ),
+        actor=authenticated(creator),
+    )
+
+    assert updated.feature == "Signup"
+    assert updated.test_name == "Rejects a duplicate email"
+    assert updated.expected_result == "409 EMAIL_ALREADY_EXISTS"
+    assert updated.notes == "Edge case"
+    # The observation survives an edit to what was expected.
+    assert updated.current_result == "Returned 500"
+    assert updated.status is ChecklistItemStatus.FAIL
+
+
+async def test_list_is_scoped_and_filters_within_the_scope(
+    db_session: AsyncSession,
+) -> None:
+    """`list` returns items from modules the caller did not create -- phase 1 shares
+    everything -- and its `module_id` filter narrows within that scope rather than
+    replacing it."""
+    creator = await create_user(db_session)
+    module = await create_checklist_module(db_session, created_by=creator.id)
+    item_in_module = await create_checklist_item(
+        db_session,
+        module_id=module.id,
+        project_id=module.project_id,
+        created_by=creator.id,
+        feature="Login",
+    )
+    other_module = await create_checklist_module(db_session, created_by=creator.id)
+    item_in_other_module = await create_checklist_item(
+        db_session,
+        module_id=other_module.id,
+        project_id=other_module.project_id,
+        created_by=creator.id,
+        feature="Signup",
+    )
+    caller = await create_user(db_session)
+    service = ChecklistItemService(db_session, Settings())
+
+    unfiltered = await service.list(ChecklistItemListQuery(), actor=authenticated(caller))
+    unfiltered_ids = {row.id for row in unfiltered.items}
+    assert item_in_module.id in unfiltered_ids
+    assert item_in_other_module.id in unfiltered_ids
+
+    filtered = await service.list(
+        ChecklistItemListQuery(module_id=module.id), actor=authenticated(caller)
+    )
+    filtered_ids = {row.id for row in filtered.items}
+    assert filtered_ids == {item_in_module.id}
+
+
+async def test_delete_is_gated_and_hides_the_item(db_session: AsyncSession) -> None:
+    """Soft delete: a stranger gets 403 (existence is not a secret), the creator
+    succeeds, and the item stops appearing in `list` afterwards."""
+    creator = await create_user(db_session)
+    module = await create_checklist_module(db_session, created_by=creator.id)
+    item = await create_checklist_item(
+        db_session,
+        module_id=module.id,
+        project_id=module.project_id,
+        created_by=creator.id,
+    )
+    stranger = await create_user(db_session)
+    service = ChecklistItemService(db_session, Settings())
+
+    with pytest.raises(AppError) as caught:
+        await service.delete(item.id, actor=authenticated(stranger))
+    assert caught.value.status_code == status.HTTP_403_FORBIDDEN
+    assert caught.value.code is ErrorCode.NOT_CHECKLIST_OWNER
+
+    await service.delete(item.id, actor=authenticated(creator))
+
+    remaining = await service.list(
+        ChecklistItemListQuery(module_id=module.id), actor=authenticated(creator)
+    )
+    assert item.id not in {row.id for row in remaining.items}
