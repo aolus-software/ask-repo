@@ -7,7 +7,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.security import hash_password
 from app.models.conversation import Conversation
 from app.models.project import Project, ProjectStatus
-from app.models.qa_pair import QAPair, QASource, QAStatus
 from app.models.user import User
 
 
@@ -74,38 +73,3 @@ async def create_conversation(
     session.add(conversation)
     await session.flush()
     return conversation
-
-
-async def create_qa_pair(
-    session: AsyncSession,
-    *,
-    project_id: uuid.UUID | None = None,
-    created_by: uuid.UUID | None = None,
-    question: str = "How does login work?",
-    answer: str | None = "It hashes the password with bcrypt.",
-    reference_answer: str | None = None,
-    module: str | None = None,
-    tags: list[str] | None = None,
-    status: QAStatus = QAStatus.UNREVIEWED,
-    source: QASource = QASource.MANUAL,
-) -> QAPair:
-    """A saved pair. `reference_answer` defaults to `answer`, as a real save does."""
-    if created_by is None:
-        created_by = (await create_user(session)).id
-    if project_id is None:
-        project_id = (await create_project(session, created_by=created_by)).id
-    pair = QAPair(
-        id=uuid.uuid4(),
-        project_id=project_id,
-        created_by=created_by,
-        module=module,
-        question=question,
-        answer=answer,
-        reference_answer=answer if reference_answer is None else reference_answer,
-        tags=tags or [],
-        source=source.value,
-        status=status.value,
-    )
-    session.add(pair)
-    await session.flush()
-    return pair

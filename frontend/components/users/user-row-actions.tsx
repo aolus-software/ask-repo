@@ -60,7 +60,7 @@ export function UserRowActions({ user }: { user: UserResponse }) {
         open={deactivating}
         onOpenChange={setDeactivating}
         title={`Deactivate ${user.name}?`}
-        description="Their sessions end immediately. Projects and QA pairs they created stay."
+        description="Their sessions end immediately. Projects they created stay."
         confirmLabel="Deactivate"
         isPending={deactivate.isPending}
         // 409 LAST_ADMIN names no field, so it renders as this dialog's banner.
