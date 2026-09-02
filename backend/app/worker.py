@@ -14,17 +14,27 @@ import uuid
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.checklist.generator import ChecklistGenerator
 from app.config import get_settings
 from app.db.session import get_sessionmaker
 from app.ingestion.chunker import LanguageAwareChunker
 from app.ingestion.embedder import build_embedder, probe_dimensions
 from app.ingestion.pipeline import IngestionPipeline
-from app.ingestion.vector_store import QdrantVectorStore, collection_name
+from app.ingestion.vector_store import QdrantVectorStore, build_store_factory, collection_name
+from app.queue.checklist import ChecklistConsumer
 from app.queue.consumer import IngestionConsumer
 from app.queue.producer import KafkaIngestionQueue, ensure_topics
 from app.queue.protocol import TopicProducer
 from app.queue.retry import RetryConsumer
-from app.queue.topics import RETRY_TOPICS, IngestionMessage
+from app.queue.topics import (
+    ALL_CHECKLIST_TOPICS,
+    CHECKLIST_RETRY_TOPICS,
+    RETRY_TOPICS,
+    ChecklistJobMessage,
+    IngestionMessage,
+)
+from app.rag.chat import build_chat_model
+from app.repositories.checklist_module import ChecklistModuleRepository
 from app.repositories.project import ProjectRepository
 from app.repositories.refresh_token import RefreshTokenRepository
 
@@ -62,8 +72,36 @@ async def reconcile_once(
     return len(stranded)
 
 
-async def reconcile_loop(*, producer: TopicProducer, topic: str) -> None:
-    """The 60-second tick: recover lost jobs and prune dead refresh tokens.
+async def reconcile_modules_once(
+    *, repository: ChecklistModuleRepository, producer: TopicProducer, topic: str
+) -> int:
+    """Re-enqueue every generation that was lost. Returns how many.
+
+    Covers the same two gaps as `reconcile_once` does for projects: the route committed
+    the row but the produce failed, and a worker died holding a lease. Safe to run on
+    every worker concurrently -- the claim deduplicates.
+    """
+    stranded = await repository.find_stranded(generating_older_than_seconds=STRANDED_AFTER_SECONDS)
+    for module in stranded:
+        logger.info("re-enqueueing stranded checklist module %s", module.id)
+        await producer.produce_to(
+            topic,
+            ChecklistJobMessage(
+                module_id=module.id,
+                # A fresh job id: reusing the old one could match `last_job_id` and
+                # the claim would refuse the replacement message.
+                job_id=uuid.uuid4(),
+                attempt=0,
+                not_before_ms=0,
+                original_topic=topic,
+            ),
+        )
+    return len(stranded)
+
+
+async def reconcile_loop(*, producer: TopicProducer, topic: str, checklist_topic: str) -> None:
+    """The 60-second tick: recover lost jobs of both kinds and prune dead refresh
+    tokens.
 
     `docs/PRD.md` §5.1 schedules the `refresh_tokens` cleanup for "M1, with the job
     scheduler". This loop is that scheduler.
@@ -75,6 +113,11 @@ async def reconcile_loop(*, producer: TopicProducer, topic: str) -> None:
             async with sessionmaker() as session:
                 await reconcile_once(
                     repository=ProjectRepository(session), producer=producer, topic=topic
+                )
+                await reconcile_modules_once(
+                    repository=ChecklistModuleRepository(session),
+                    producer=producer,
+                    topic=checklist_topic,
                 )
                 pruned = await RefreshTokenRepository(session).delete_expired_and_revoked()
                 await session.commit()
@@ -93,6 +136,11 @@ async def main() -> None:
     await ensure_topics(
         bootstrap_servers=settings.kafka_bootstrap_servers,
         partitions=settings.kafka_ingest_partitions,
+    )
+    await ensure_topics(
+        bootstrap_servers=settings.kafka_bootstrap_servers,
+        partitions=settings.kafka_checklist_partitions,
+        topics=ALL_CHECKLIST_TOPICS,
     )
 
     producer = KafkaIngestionQueue(
@@ -133,9 +181,36 @@ async def main() -> None:
         worker_id=worker_id,
     )
 
+    # The worker answers with a chat model now, not only an embedder: generation maps
+    # and reduces through one. Constructed here rather than per job -- building it
+    # opens no connection, and one per message would rebuild a client per generation.
+    chat_model = build_chat_model(settings)
+    store_factory = build_store_factory(settings)
+
+    def build_generator(session: AsyncSession) -> ChecklistGenerator:
+        """A generator bound to one job's session."""
+        return ChecklistGenerator(
+            session, settings, store_factory=store_factory, chat_model=chat_model
+        )
+
+    checklist_consumer = ChecklistConsumer(
+        settings=settings,
+        sessionmaker=get_sessionmaker(),
+        producer=producer,
+        build_generator=build_generator,
+        worker_id=worker_id,
+    )
+
     tasks = [
         asyncio.create_task(consumer.run()),
-        asyncio.create_task(reconcile_loop(producer=producer, topic=settings.kafka_ingest_topic)),
+        asyncio.create_task(checklist_consumer.run()),
+        asyncio.create_task(
+            reconcile_loop(
+                producer=producer,
+                topic=settings.kafka_ingest_topic,
+                checklist_topic=settings.kafka_checklist_topic,
+            )
+        ),
         *[
             asyncio.create_task(
                 RetryConsumer(
@@ -147,6 +222,18 @@ async def main() -> None:
                 ).run()
             )
             for topic, _ in RETRY_TOPICS
+        ],
+        *[
+            asyncio.create_task(
+                RetryConsumer(
+                    settings=settings,
+                    producer=producer,
+                    topic=topic,
+                    decode=ChecklistJobMessage.from_bytes,
+                    destination_topic=settings.kafka_checklist_topic,
+                ).run()
+            )
+            for topic, _ in CHECKLIST_RETRY_TOPICS
         ],
     ]
 

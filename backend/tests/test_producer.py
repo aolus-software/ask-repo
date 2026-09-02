@@ -350,7 +350,9 @@ async def test_the_lifespan_owns_the_producer_outside_the_test_environment(
 
     ensured: list[tuple[str, int]] = []
 
-    async def record_ensure_topics(*, bootstrap_servers: str, partitions: int) -> None:
+    async def record_ensure_topics(
+        *, bootstrap_servers: str, partitions: int, topics: tuple[str, ...] = ()
+    ) -> None:
         ensured.append((bootstrap_servers, partitions))
 
     monkeypatch.setattr("app.main.ensure_topics", record_ensure_topics)
@@ -365,7 +367,8 @@ async def test_the_lifespan_owns_the_producer_outside_the_test_environment(
         assert queue.bootstrap_servers == "broker:9092"
         assert queue.topic == INGEST_TOPIC
 
-    assert ensured == [("broker:9092", 2)]
+    # The ingest call, then the checklist family (spec 4.1 / `app/queue/checklist.py`).
+    assert ensured == [("broker:9092", 2), ("broker:9092", settings.kafka_checklist_partitions)]
     assert StubQueue.instances[0].stopped is True
 
 
@@ -376,7 +379,9 @@ async def test_the_lifespan_stops_the_producer_when_the_app_raises(
     settings = Settings(app_env="development")
     monkeypatch.setattr("app.main.get_settings", lambda: settings)
 
-    async def noop(*, bootstrap_servers: str, partitions: int) -> None:
+    async def noop(
+        *, bootstrap_servers: str, partitions: int, topics: tuple[str, ...] = ()
+    ) -> None:
         return None
 
     monkeypatch.setattr("app.main.ensure_topics", noop)

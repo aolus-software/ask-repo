@@ -11,11 +11,20 @@ from datetime import UTC, datetime, timedelta
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.checklist import ChecklistModuleStatus
 from app.models.project import ProjectStatus
-from app.queue.topics import INGEST_TOPIC, IngestionMessage, JobMessage
+from app.queue.protocol import InMemoryIngestionQueue
+from app.queue.topics import (
+    CHECKLIST_TOPIC,
+    INGEST_TOPIC,
+    ChecklistJobMessage,
+    IngestionMessage,
+    JobMessage,
+)
+from app.repositories.checklist_module import ChecklistModuleRepository
 from app.repositories.project import LEASE_SECONDS, ProjectRepository
-from app.worker import RECONCILE_INTERVAL_SECONDS, reconcile_once
-from tests.factories import create_project
+from app.worker import RECONCILE_INTERVAL_SECONDS, reconcile_modules_once, reconcile_once
+from tests.factories import create_checklist_module, create_project
 
 
 class RecordingProducer:
@@ -192,3 +201,31 @@ def test_the_sweep_runs_often_enough_to_meet_the_recovery_promise() -> None:
     minutes. The lease is 300s and the sweep is what notices it lapsed, so a tick
     slower than the lease would blow that budget."""
     assert RECONCILE_INTERVAL_SECONDS <= LEASE_SECONDS
+
+
+async def test_reconcile_re_enqueues_a_module_whose_worker_died(
+    db_session: AsyncSession,
+) -> None:
+    """The reconcile sweep recovers generations the same way it recovers indexes:
+    the lease expired, so the module is stranded in `generating` with nobody on it
+    (spec 4.5)."""
+    module = await create_checklist_module(db_session, status=ChecklistModuleStatus.GENERATING)
+    module.lease_expires_at = datetime.now(UTC) - timedelta(seconds=1)
+    module.updated_at = datetime.now(UTC) - timedelta(seconds=600)
+    await db_session.flush()
+    queue = InMemoryIngestionQueue()
+
+    count = await reconcile_modules_once(
+        repository=ChecklistModuleRepository(db_session),
+        producer=queue,
+        topic=CHECKLIST_TOPIC,
+    )
+
+    assert count == 1
+    topic, message = queue.produced[0]
+    assert topic == CHECKLIST_TOPIC
+    assert isinstance(message, ChecklistJobMessage)
+    assert message.module_id == module.id
+    # A fresh job id: reusing the old one could match `last_job_id` and the claim
+    # would refuse the replacement message.
+    assert message.job_id != module.last_job_id

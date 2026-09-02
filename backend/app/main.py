@@ -14,6 +14,7 @@ from app.core.errors import register_exception_handlers
 from app.core.middleware import AuthContextMiddleware
 from app.ingestion.embedder import build_embedder
 from app.queue.producer import KafkaIngestionQueue, ensure_topics
+from app.queue.topics import ALL_CHECKLIST_TOPICS
 from app.rag.chat import build_chat_model
 
 logger = logging.getLogger(__name__)
@@ -55,6 +56,14 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     await ensure_topics(
         bootstrap_servers=settings.kafka_bootstrap_servers,
         partitions=settings.kafka_ingest_partitions,
+    )
+    # Broker auto-creation is off, and POST /checklist-modules/{id}/generate publishes
+    # from this process -- an unensured topic would make every generate request fail
+    # at produce time.
+    await ensure_topics(
+        bootstrap_servers=settings.kafka_bootstrap_servers,
+        partitions=settings.kafka_checklist_partitions,
+        topics=ALL_CHECKLIST_TOPICS,
     )
     queue = KafkaIngestionQueue(
         bootstrap_servers=settings.kafka_bootstrap_servers, topic=settings.kafka_ingest_topic
