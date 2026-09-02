@@ -52,6 +52,35 @@ def _chunk(path: str, index: int, start: int, end: int) -> Chunk:
     )
 
 
+async def _seed(
+    store: InMemoryVectorStore,
+    *,
+    project_id: uuid.UUID,
+    generation: int,
+    file_path: str,
+    chunk_index: int = 0,
+    text: str = "def login(): ...",
+) -> None:
+    """One chunk in the store, through the real upsert path."""
+    await store.upsert(
+        project_id=project_id,
+        generation=generation,
+        chunks=[
+            Chunk(
+                file_path=file_path,
+                start_line=1,
+                end_line=2,
+                language="python",
+                symbol=None,
+                chunk_index=chunk_index,
+                text=text,
+            )
+        ],
+        vectors=[[0.1, 0.2, 0.3]],
+        commit_sha="abc123",
+    )
+
+
 def test_collection_name_encodes_provider_model_and_dimensions() -> None:
     """A collection's vector size is fixed at creation, so switching provider must
     target a different collection rather than corrupt the existing one."""
@@ -402,16 +431,17 @@ async def test_a_width_mismatch_on_an_existing_collection_is_terminal() -> None:
     assert "1536" in str(raised.value)
 
 
-async def test_a_matching_width_is_accepted_and_indexes_both_filtered_fields() -> None:
-    """The width check must not reject the normal case, and both fields that get
-    filtered need an index -- `generation` is filtered by the swap's delete."""
+async def test_a_matching_width_is_accepted_and_indexes_every_filtered_field() -> None:
+    """The width check must not reject the normal case, and every field that gets
+    filtered needs an index -- `generation` is filtered by the swap's delete, and
+    `file_path` by M4's module scroll."""
     store = store_with_existing_width(768, asking_for=768)
 
     await store.ensure_collection()
 
     client = store._client
     assert isinstance(client, WidthReportingClient)
-    assert client.created_indexes == ["project_id", "generation"]
+    assert client.created_indexes == ["project_id", "generation", "file_path"]
 
 
 async def test_search_filters_by_project_and_generation() -> None:
@@ -469,3 +499,69 @@ async def test_search_returns_the_closest_first_and_honours_the_limit() -> None:
     assert len(hits) == 1
     assert hits[0].payload["file_path"] == "near.py"
     assert hits[0].score > 0.9
+
+
+async def test_scroll_filters_by_project_generation_and_prefix() -> None:
+    """Enumeration, not search. Both the project and the generation filter are
+    mandatory for the reason `.claude/rules/rag.md` gives for retrieval: a reindex
+    means both generations are in the collection by design, and an unfiltered read
+    mixes them (spec 4.2)."""
+    store = InMemoryVectorStore(dimensions=3)
+    project = uuid.uuid4()
+    other = uuid.uuid4()
+    await _seed(store, project_id=project, generation=1, file_path="app/auth/login.py")
+    await _seed(store, project_id=project, generation=1, file_path="app/billing/plan.py")
+    await _seed(store, project_id=project, generation=2, file_path="app/auth/login.py")
+    await _seed(store, project_id=other, generation=1, file_path="app/auth/login.py")
+
+    pages = [
+        page
+        async for page in store.scroll(
+            project_id=project, generation=1, path_prefix="app/auth", page_size=10
+        )
+    ]
+
+    payloads = [payload for page in pages for payload in page]
+    assert [payload["file_path"] for payload in payloads] == ["app/auth/login.py"]
+
+
+async def test_scroll_pages_and_does_not_lose_a_chunk() -> None:
+    """A dropped page is a hole in a file, and spec 4.3 reports holes rather than
+    silently stitching around them -- so paging has to be exhaustive."""
+    store = InMemoryVectorStore(dimensions=3)
+    project = uuid.uuid4()
+    for index in range(5):
+        await _seed(
+            store,
+            project_id=project,
+            generation=1,
+            file_path="app/auth/login.py",
+            chunk_index=index,
+        )
+
+    pages = [
+        page
+        async for page in store.scroll(
+            project_id=project, generation=1, path_prefix="app/auth", page_size=2
+        )
+    ]
+
+    assert [len(page) for page in pages] == [2, 2, 1]
+    indexes = sorted(payload["chunk_index"] for page in pages for payload in page)
+    assert indexes == [0, 1, 2, 3, 4]
+
+
+async def test_scroll_over_an_empty_prefix_yields_nothing() -> None:
+    """`409 MODULE_PATH_NOT_INDEXED` is decided from this being empty (spec 4.1)."""
+    store = InMemoryVectorStore(dimensions=3)
+    project = uuid.uuid4()
+    await _seed(store, project_id=project, generation=1, file_path="app/auth/login.py")
+
+    pages = [
+        page
+        async for page in store.scroll(
+            project_id=project, generation=1, path_prefix="frontend", page_size=10
+        )
+    ]
+
+    assert pages == []

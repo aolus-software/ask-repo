@@ -27,7 +27,7 @@ Four things here are load-bearing and easy to get wrong:
 import math
 import re
 import uuid
-from collections.abc import Callable
+from collections.abc import AsyncIterator, Callable
 from dataclasses import dataclass
 from typing import Any, Protocol
 
@@ -155,6 +155,27 @@ class VectorStore(Protocol):
         """The `limit` closest chunks in one project's active generation."""
         ...
 
+    def scroll(
+        self,
+        *,
+        project_id: uuid.UUID,
+        generation: int,
+        path_prefix: str,
+        page_size: int,
+    ) -> AsyncIterator[list[dict[str, Any]]]:
+        """Every chunk under `path_prefix`, paged, with no query vector.
+
+        The enumeration counterpart to `search`. `CodeRetriever` returns the top-k
+        chunks most similar to a query, which is the right tool for "where is X
+        handled" and the wrong one for "list every feature in this module" -- top-k
+        has no notion of *all of them* and cannot report what it left out (spec 2.2).
+
+        Declared as a plain method returning an `AsyncIterator` rather than as an
+        `async def`, because an async generator's declared return type is the iterator
+        itself; an implementation is free to be either.
+        """
+        ...
+
     async def upsert(
         self,
         *,
@@ -197,7 +218,8 @@ class QdrantVectorStore:
 
         The payload indexes are not optional: filtering without one degrades to a scan
         as the collection grows. `project_id` is filtered by every M2 query and by both
-        deletes; `generation` is filtered by the swap's delete.
+        deletes; `generation` is filtered by the swap's delete; `file_path` is filtered
+        by M4's module scroll.
 
         An existing collection is verified rather than trusted. The name encodes the
         width, so the two normally agree — but a provider that re-tags a model id with
@@ -224,15 +246,18 @@ class QdrantVectorStore:
                         size=dimensions, distance=models.Distance.COSINE
                     ),
                 )
-            for field in ("project_id", "generation"):
+            # Every filter this collection serves has an index. Without one the filter
+            # degrades to a scan as the collection grows: `project_id` and `generation`
+            # are filtered by every M2 query and by both deletes, and `file_path` by
+            # M4's module scroll (spec 4.2).
+            schemas: dict[str, models.PayloadSchemaType] = {
+                "project_id": models.PayloadSchemaType.KEYWORD,
+                "generation": models.PayloadSchemaType.INTEGER,
+                "file_path": models.PayloadSchemaType.TEXT,
+            }
+            for field, schema in schemas.items():
                 await self._client.create_payload_index(
-                    collection_name=self.collection,
-                    field_name=field,
-                    field_schema=(
-                        models.PayloadSchemaType.KEYWORD
-                        if field == "project_id"
-                        else models.PayloadSchemaType.INTEGER
-                    ),
+                    collection_name=self.collection, field_name=field, field_schema=schema
                 )
         except IngestionError:
             raise
@@ -277,6 +302,65 @@ class QdrantVectorStore:
             SearchHit(payload=dict(point.payload or {}), score=point.score)
             for point in response.points
         ]
+
+    async def scroll(
+        self,
+        *,
+        project_id: uuid.UUID,
+        generation: int,
+        path_prefix: str,
+        page_size: int,
+    ) -> AsyncIterator[list[dict[str, Any]]]:
+        """Page through every chunk under `path_prefix` in one generation.
+
+        `with_vectors=False`: the generator reads text, and shipping a 768-float vector
+        per chunk over a whole module is bandwidth spent on nothing.
+
+        The prefix filter needs the `file_path` payload index `ensure_collection`
+        creates. Without it this degrades to a scan of the whole collection, which is
+        the same failure the `project_id` and `generation` indexes exist to prevent.
+        """
+        offset: Any = None
+        while True:
+            try:
+                points, offset = await self._client.scroll(
+                    collection_name=self.collection,
+                    scroll_filter=models.Filter(
+                        must=[
+                            models.FieldCondition(
+                                key="project_id", match=models.MatchValue(value=str(project_id))
+                            ),
+                            models.FieldCondition(
+                                key="generation", match=models.MatchValue(value=generation)
+                            ),
+                            models.FieldCondition(
+                                key="file_path", match=models.MatchText(text=path_prefix)
+                            ),
+                        ]
+                    ),
+                    limit=page_size,
+                    offset=offset,
+                    with_payload=True,
+                    with_vectors=False,
+                )
+            except Exception as error:
+                raise _as_ingestion_error(error, "Qdrant scroll failed") from error
+
+            if not points:
+                return
+            # `MatchText` is a substring match, so `app/auth` would also return
+            # `vendor/app/authz.py`. Narrowed to a real prefix here rather than
+            # dropping the server-side condition: the condition is what keeps the
+            # index in play, and this is a cheap exact check over one page.
+            page = [
+                dict(point.payload or {})
+                for point in points
+                if str((point.payload or {}).get("file_path", "")).startswith(path_prefix)
+            ]
+            if page:
+                yield page
+            if offset is None:
+                return
 
     async def _verify_width(self, dimensions: int) -> None:
         """Refuse to write into a collection created at a different vector width.
@@ -401,6 +485,34 @@ class InMemoryVectorStore:
         ]
         scored.sort(key=lambda hit: hit.score, reverse=True)
         return scored[:limit]
+
+    async def scroll(
+        self,
+        *,
+        project_id: uuid.UUID,
+        generation: int,
+        path_prefix: str,
+        page_size: int,
+    ) -> AsyncIterator[list[dict[str, Any]]]:
+        """Same filters as the real store, paged the same way.
+
+        Sorted by `(file_path, chunk_index)` so a test's page boundaries are stable.
+        Qdrant's own scroll order is by point id and is not sorted this way -- the
+        generator re-groups and re-sorts regardless (spec 4.3), so nothing depends on
+        the order matching.
+        """
+        matches = sorted(
+            (
+                dict(point["payload"])
+                for point in self.points
+                if point["payload"]["project_id"] == str(project_id)
+                and point["payload"]["generation"] == generation
+                and str(point["payload"]["file_path"]).startswith(path_prefix)
+            ),
+            key=lambda payload: (payload["file_path"], payload["chunk_index"]),
+        )
+        for start in range(0, len(matches), page_size):
+            yield matches[start : start + page_size]
 
     async def upsert(
         self,
