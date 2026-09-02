@@ -348,10 +348,13 @@ class QdrantVectorStore:
 
             if not points:
                 return
-            # `MatchText` is a substring match, so `app/auth` would also return
-            # `vendor/app/authz.py`. Narrowed to a real prefix here rather than
-            # dropping the server-side condition: the condition is what keeps the
-            # index in play, and this is a cheap exact check over one page.
+            # `MatchText` is a full-text match over word tokens, not a prefix
+            # match: `app/auth` tokenizes to {app, auth} and matches any path
+            # containing both as whole words -- `vendor/app/auth/nested.py` does,
+            # and is not in this module. (`vendor/app/authz.py` does NOT: the
+            # tokenizer does not split `authz` into `auth`.) Narrowed to a real
+            # prefix here rather than dropping the server-side condition, which is
+            # what keeps the payload index in play.
             page = [
                 dict(point.payload or {})
                 for point in points
