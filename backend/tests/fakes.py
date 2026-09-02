@@ -245,6 +245,46 @@ class ScriptedChatModel(BaseChatModel):
         return RunnableLambda(_next)
 
 
+class StructuredScriptedChatModel:
+    """A chat model whose `with_structured_output(schema)` returns scripted objects.
+
+    Keyed by schema class rather than by call order, because generation makes one call
+    per file plus one reduce and the file order is not something a test should have to
+    predict. `prompts_for` records what each schema was asked, which is how a test
+    asserts that the existing items reached the reduce prompt.
+    """
+
+    def __init__(self, scripts: dict[type, list[object]]) -> None:
+        self._scripts = {schema: list(values) for schema, values in scripts.items()}
+        self._prompts: dict[type, list[list[BaseMessage]]] = {}
+
+    def with_structured_output(self, schema: type) -> "_BoundStructured":
+        return _BoundStructured(self, schema)
+
+    def prompts_for(self, schema: type) -> list[list[BaseMessage]]:
+        """Every prompt this schema was invoked with, in call order."""
+        return self._prompts.get(schema, [])
+
+    def _next(self, schema: type, messages: list[BaseMessage]) -> object:
+        self._prompts.setdefault(schema, []).append(messages)
+        script = self._scripts.get(schema) or []
+        if not script:
+            raise AssertionError(f"no scripted response left for {schema.__name__}")
+        # The last entry repeats, so a map step over N files needs one script entry.
+        return script.pop(0) if len(script) > 1 else script[0]
+
+
+class _BoundStructured:
+    """What `with_structured_output` returns: something with `ainvoke`."""
+
+    def __init__(self, parent: StructuredScriptedChatModel, schema: type) -> None:
+        self._parent = parent
+        self._schema = schema
+
+    async def ainvoke(self, messages: list[BaseMessage]) -> object:
+        return self._parent._next(self._schema, messages)
+
+
 class FailingChatModel(ScriptedChatModel):
     """Raises on `ainvoke` and on any structured call — the degradation paths.
 
