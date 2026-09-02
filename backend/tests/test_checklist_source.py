@@ -64,6 +64,32 @@ def test_trim_overlap_leaves_unrelated_chunks_alone() -> None:
     assert trim_overlap("alpha", "beta", chunk_overlap=64) == "beta"
 
 
+def test_a_chunk_wholly_repeated_from_its_predecessor_is_trimmed_away() -> None:
+    """An accepted consequence of the bound, pinned so it stays deliberate.
+
+    The search ceiling is the chunk's own length, so a chunk identical to its
+    predecessor's tail trims to nothing. That is the right call -- such a chunk is far
+    more likely to be an overlap artefact than real content -- but it is content
+    disappearing with no error, so it is recorded here rather than left to be
+    rediscovered.
+    """
+    assert trim_overlap("AAAA", "AAAA", chunk_overlap=1000) == ""
+
+
+def test_a_coincidentally_repeated_line_is_trimmed_like_a_seam() -> None:
+    """The known false positive, recorded rather than left as folklore.
+
+    A line repeated at the join -- a closing brace, a bare `return None` -- is
+    indistinguishable from a real seam by suffix matching alone. Trimming it is the
+    accepted cost of removing real seams; the `chunk_overlap` ceiling is what keeps the
+    damage to at most one overlap's worth of text.
+    """
+    previous = "def a():\n    return None\n"
+    current = "    return None\ndef b():\n    pass\n"
+
+    assert trim_overlap(previous, current, chunk_overlap=150) == "def b():\n    pass\n"
+
+
 def test_a_missing_chunk_is_reported_not_stitched() -> None:
     """A file with a hole in it, where nothing says so, is the failure mode spec 4.6
     is about. The summary names which files were partial."""
@@ -83,10 +109,16 @@ def test_a_missing_chunk_is_reported_not_stitched() -> None:
 
 
 def test_line_range_spans_the_whole_file() -> None:
+    """min/max across every chunk, not first-chunk-start and last-chunk-end.
+
+    The chunk indexes here run opposite to the line numbers on purpose: a rebuild that
+    took `chunks[0].start_line` and `chunks[-1].end_line` after the index sort would
+    return (18, 20) and pass on monotonic data. Only min/max returns (1, 40).
+    """
     source = rebuild_files(
         [
-            _payload(file_path="a.py", chunk_index=0, text="A0", start_line=1, end_line=20),
-            _payload(file_path="a.py", chunk_index=1, text="A1", start_line=18, end_line=40),
+            _payload(file_path="a.py", chunk_index=0, text="A0", start_line=18, end_line=40),
+            _payload(file_path="a.py", chunk_index=1, text="A1", start_line=1, end_line=20),
         ],
         chunk_overlap=0,
     )
