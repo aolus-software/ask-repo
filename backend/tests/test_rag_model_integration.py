@@ -26,10 +26,17 @@ import re
 import httpx
 import pytest
 
+from app.checklist.model_output import ProposedChangeSet
 from app.config import Settings
 from app.rag.chat import build_chat_model
 from app.rag.graph.state import Classification
-from app.rag.prompts import ANSWER_PROMPT, CLASSIFY_PROMPT, format_spans
+from app.rag.prompts import (
+    ANSWER_PROMPT,
+    CLASSIFY_PROMPT,
+    ExistingItem,
+    build_reduce_prompt,
+    format_spans,
+)
 from app.rag.retriever import RetrievedChunk
 
 pytestmark = pytest.mark.model
@@ -187,3 +194,53 @@ async def test_the_answer_carries_citation_labels(settings: Settings) -> None:
         cited += bool(labels)
 
     assert cited >= 4, f"only {cited}/{len(ANSWERABLE)} answers carried a citation label"
+
+
+async def test_reduce_never_fills_in_a_current_result(settings: Settings) -> None:
+    """The one property no scripted test can check: a real model, asked for a test
+    plan, must not write what actually happens (spec 2.3)."""
+    model = build_chat_model(settings).with_structured_output(ProposedChangeSet)
+    result = await model.ainvoke(
+        build_reduce_prompt(
+            module_name="Authentication",
+            observations=[
+                ("app/auth/login.py", "raises 401 when bcrypt.checkpw fails", 30, 44),
+                ("app/auth/login.py", "returns an access token on success", 45, 52),
+            ],
+            existing=[],
+        )
+    )
+    assert isinstance(result, ProposedChangeSet)
+    assert result.operations
+    for operation in result.operations:
+        assert operation.op == "add"
+        assert operation.expected_result
+        # No field exists for an observation, and none may be smuggled into another.
+        assert "current result" not in operation.expected_result.lower()
+
+
+async def test_reduce_proposes_an_update_rather_than_a_duplicate_add(settings: Settings) -> None:
+    """Regeneration is a diff. A model handed an existing item whose expectation is
+    now wrong must name its id, not add a second row beside it (spec 2.1)."""
+    model = build_chat_model(settings).with_structured_output(ProposedChangeSet)
+    existing = [
+        ExistingItem(
+            id="11111111-1111-1111-1111-111111111111",
+            feature="Login",
+            test_name="Rejects a wrong password",
+            expected_result="Returns 400",
+        )
+    ]
+    result = await model.ainvoke(
+        build_reduce_prompt(
+            module_name="Authentication",
+            observations=[
+                ("app/auth/login.py", "raises 401 INVALID_CREDENTIALS on a wrong password", 30, 44)
+            ],
+            existing=existing,
+        )
+    )
+    assert isinstance(result, ProposedChangeSet)
+    updates = [operation for operation in result.operations if operation.op == "update"]
+    assert updates
+    assert updates[0].item_id == "11111111-1111-1111-1111-111111111111"
