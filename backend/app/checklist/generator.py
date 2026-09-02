@@ -54,6 +54,12 @@ class ChecklistGenerator:
         store_factory: VectorStoreFactory,
         chat_model: BaseChatModel,
     ) -> None:
+        """Bind this run to `session`.
+
+        `_renew` deliberately does not use `session` -- it opens its own short-lived
+        session per tick, because an `AsyncSession` is not safe for concurrent use and
+        the heartbeat runs while the rest of this class is still using this one.
+        """
         self.session = session
         self.settings = settings
         self.store_factory = store_factory
@@ -104,7 +110,7 @@ class ChecklistGenerator:
             )
             operations = self._to_operations(proposal, source=source)
         finally:
-            renewal.cancel()
+            await self._stop_renewal(renewal, module_id=module_id)
 
         summary = self._summarise(proposal, source=source)
         change_set = ChecklistChangeSet(
@@ -160,6 +166,23 @@ class ChecklistGenerator:
             if not held:
                 logger.warning("lost the lease on checklist module %s mid-run", module_id)
                 return
+
+    async def _stop_renewal(self, renewal: asyncio.Task[None], *, module_id: uuid.UUID) -> None:
+        """Cancel the heartbeat and collect it, so nothing fails silently.
+
+        Matches `IngestionPipeline._stop`: a bare `.cancel()` with no `await` leaves
+        any non-`CancelledError` failure -- including one from the heartbeat's own
+        `get_sessionmaker()` teardown -- unretrieved, and it surfaces later as an
+        unrelated "Task exception was never retrieved" warning instead of here, where
+        it is at least attributable to this module's run.
+        """
+        renewal.cancel()
+        try:
+            await renewal
+        except asyncio.CancelledError:
+            pass
+        except Exception:
+            logger.warning("lease renewal for checklist module %s failed", module_id, exc_info=True)
 
     async def _read_source(
         self,
@@ -222,8 +245,21 @@ class ChecklistGenerator:
             async with semaphore:
                 return await self._observe(file)
 
-        observed = await asyncio.gather(*(observe(file) for file in source.files))
-        observations = [entry for group in observed for entry in group]
+        # A `TaskGroup` rather than `asyncio.gather`: gather with the default
+        # `return_exceptions=False` propagates the first failure but leaves its
+        # siblings running -- still holding semaphore permits and still calling the
+        # model -- after `run` has already unwound into the consumer's failure path.
+        # A TaskGroup cancels them.
+        try:
+            async with asyncio.TaskGroup() as group:
+                tasks = [group.create_task(observe(file)) for file in source.files]
+        except* Exception as failures:
+            # Re-raise the first cause unwrapped: `_read_source` and the consumer
+            # classify on `TerminalIngestionError`/`RetryableIngestionError`, and an
+            # `ExceptionGroup` matches neither -- it would fall through to the
+            # unclassified path and dead-letter with a misleading reason.
+            raise failures.exceptions[0] from None
+        observations = [entry for task in tasks for entry in task.result()]
 
         model = self.chat_model.with_structured_output(ProposedChangeSet)
         result = await model.ainvoke(

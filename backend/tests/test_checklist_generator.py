@@ -7,6 +7,7 @@ from typing import cast
 
 import pytest
 from langchain_core.language_models import BaseChatModel
+from langchain_core.messages import BaseMessage
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -25,6 +26,7 @@ from app.ingestion.errors import TerminalIngestionError
 from app.ingestion.vector_store import InMemoryVectorStore
 from app.models.checklist import ChangeSetOrigin, ChangeSetStatus, ChecklistModuleStatus
 from app.repositories.checklist_change_set import ChecklistChangeSetRepository
+from app.repositories.checklist_item import ChecklistItemRepository
 from app.repositories.checklist_module import ChecklistModuleRepository
 from tests.factories import create_checklist_item, create_checklist_module, create_project
 from tests.fakes import StructuredScriptedChatModel
@@ -48,6 +50,31 @@ async def _index(store: InMemoryVectorStore, *, project_id: uuid.UUID, path: str
         vectors=[[0.1] * 8],
         commit_sha="abc123",
     )
+
+
+class _RaisingChatModel:
+    """`with_structured_output(FileObservations).ainvoke(...)` always raises.
+
+    Exercises the map step's failure path directly: a real served model never raises
+    a domain `IngestionError`, but a Qdrant hiccup surfacing through `_observe` would,
+    and that is exactly the kind of failure `asyncio.TaskGroup` must not smuggle
+    through an `ExceptionGroup`.
+    """
+
+    def with_structured_output(self, schema: type) -> "_RaisingBound":
+        return _RaisingBound(schema)
+
+
+class _RaisingBound:
+    """What `_RaisingChatModel.with_structured_output` returns."""
+
+    def __init__(self, schema: type) -> None:
+        self._schema = schema
+
+    async def ainvoke(self, messages: list[object]) -> object:
+        if self._schema is FileObservations:
+            raise TerminalIngestionError("the map step failed")
+        raise AssertionError("the reduce step should never be reached")
 
 
 async def test_generation_writes_a_pending_change_set_and_no_items(
@@ -114,6 +141,9 @@ async def test_generation_writes_a_pending_change_set_and_no_items(
     assert change_set.operations[0]["op"] == "add"
     # Spec 2.3: the generator never writes an observation.
     assert "currentResult" not in change_set.operations[0]
+    # Spec 2.1: nothing generated enters the checklist unreviewed -- the change set
+    # is the only thing generation writes.
+    assert await ChecklistItemRepository(db_session).list_for_module(module.id) == []
 
 
 async def test_operations_carry_a_citation_resolved_from_the_index(
@@ -379,3 +409,125 @@ async def test_lease_renewal_uses_its_own_session(
         # bug either never reaches this line (the task dies on its first tick) or
         # leaves the lease at its original claim-time expiry.
         assert refreshed.lease_expires_at > claimed_until
+
+
+class _OrphanDetectingChatModel:
+    """Distinguishes files by the path embedded in `build_map_prompt`'s content.
+
+    One file fails immediately; the other sleeps and records whether it finished
+    normally -- proving it kept running orphaned after its sibling's failure had
+    already propagated -- or was cancelled -- proving `_propose` cancelled it. This is
+    the actual property Finding 2 is about: whether the surviving map tasks are still
+    running, spending semaphore permits and model calls, after `run` has unwound.
+    """
+
+    def __init__(self, *, slow_path: str, outcomes: list[str]) -> None:
+        self._slow_path = slow_path
+        self._outcomes = outcomes
+
+    def with_structured_output(self, schema: type) -> "_OrphanDetectingBound":
+        return _OrphanDetectingBound(schema, slow_path=self._slow_path, outcomes=self._outcomes)
+
+
+class _OrphanDetectingBound:
+    """What `_OrphanDetectingChatModel.with_structured_output` returns."""
+
+    def __init__(self, schema: type, *, slow_path: str, outcomes: list[str]) -> None:
+        self._schema = schema
+        self._slow_path = slow_path
+        self._outcomes = outcomes
+
+    async def ainvoke(self, messages: list[BaseMessage]) -> object:
+        if self._schema is not FileObservations:
+            raise AssertionError("the reduce step should never be reached")
+        content = str(messages[-1].content)
+        if self._slow_path not in content:
+            raise TerminalIngestionError("the fast file fails immediately")
+        try:
+            await asyncio.sleep(0.2)
+        except asyncio.CancelledError:
+            self._outcomes.append("cancelled")
+            raise
+        self._outcomes.append("completed")
+        return FileObservations(behaviours=[])
+
+
+async def test_a_terminal_failure_from_one_file_is_not_wrapped_in_an_exception_group(
+    db_session: AsyncSession,
+) -> None:
+    """A `TerminalIngestionError` from one map task must reach `run` as itself.
+
+    `asyncio.TaskGroup` wraps every failure in an `ExceptionGroup`. Neither
+    `_read_source` nor the consumer's failure routing classifies on that --
+    an unclassified exception falls through to the unclassified path and
+    dead-letters with a misleading reason (`.claude/rules/ingestion.md`), so
+    `_propose` must unwrap it back to the original `TerminalIngestionError`.
+    """
+    project = await create_project(db_session)
+    project.active_generation = 1
+    project.embedding_collection = "in-memory"
+    module = await create_checklist_module(
+        db_session, project_id=project.id, source_path="app/auth"
+    )
+    store = InMemoryVectorStore(dimensions=8)
+    await _index(store, project_id=project.id, path="app/auth/login.py")
+    await _index(store, project_id=project.id, path="app/auth/logout.py")
+
+    generator = ChecklistGenerator(
+        db_session,
+        Settings(),
+        store_factory=lambda _: store,
+        chat_model=cast(BaseChatModel, _RaisingChatModel()),
+    )
+    job_id = uuid.uuid4()
+    await ChecklistModuleRepository(db_session).claim(
+        module_id=module.id, job_id=job_id, worker_id="w1", lease_seconds=300
+    )
+
+    with pytest.raises(TerminalIngestionError):
+        await generator.run(module_id=module.id, job_id=job_id, worker_id="w1")
+
+
+async def test_a_sibling_map_task_is_cancelled_on_failure(db_session: AsyncSession) -> None:
+    """The other in-flight `_observe` calls must not keep running after one fails.
+
+    `asyncio.gather`'s default `return_exceptions=False` propagates the first failure
+    but leaves sibling tasks running -- still holding semaphore permits and still
+    calling the model -- after `run` has already unwound into the consumer's failure
+    path (Finding 2). This is the actual discriminator: the ExceptionGroup-unwrapping
+    test above passes against plain `asyncio.gather` too, because `gather` never
+    raises an `ExceptionGroup` in the first place -- it only guards the unwrap logic
+    inside the `TaskGroup` implementation, not the orphaned-task behaviour Finding 2
+    is about.
+    """
+    project = await create_project(db_session)
+    project.active_generation = 1
+    project.embedding_collection = "in-memory"
+    module = await create_checklist_module(
+        db_session, project_id=project.id, source_path="app/auth"
+    )
+    store = InMemoryVectorStore(dimensions=8)
+    await _index(store, project_id=project.id, path="app/auth/fast.py")
+    await _index(store, project_id=project.id, path="app/auth/slow.py")
+
+    outcomes: list[str] = []
+    generator = ChecklistGenerator(
+        db_session,
+        Settings(),
+        store_factory=lambda _: store,
+        chat_model=cast(
+            BaseChatModel,
+            _OrphanDetectingChatModel(slow_path="app/auth/slow.py", outcomes=outcomes),
+        ),
+    )
+    job_id = uuid.uuid4()
+    await ChecklistModuleRepository(db_session).claim(
+        module_id=module.id, job_id=job_id, worker_id="w1", lease_seconds=300
+    )
+
+    with pytest.raises(TerminalIngestionError):
+        await generator.run(module_id=module.id, job_id=job_id, worker_id="w1")
+
+    # Give an orphaned sibling task time to finish its sleep, if one is still running.
+    await asyncio.sleep(0.3)
+    assert outcomes == ["cancelled"]
