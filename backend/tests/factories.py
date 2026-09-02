@@ -129,12 +129,22 @@ async def create_checklist_item(
     source: ChecklistItemSource = ChecklistItemSource.GENERATED,
     position: int = 0,
 ) -> ChecklistItem:
-    """One test case. `project_id` defaults to the module's, as a real insert does."""
+    """One test case. `project_id` and `created_by` default to the module's, as a real
+    insert does -- `ChecklistItem.project_id` is denormalised off the module at insert
+    and never updated, because a module cannot move between projects."""
+    module: ChecklistModule
     if module_id is None:
         module = await create_checklist_module(session, created_by=created_by)
-        module_id, project_id, created_by = module.id, module.project_id, module.created_by
-    if project_id is None or created_by is None:
-        raise ValueError("pass project_id and created_by when passing module_id")
+    else:
+        fetched = await session.get(ChecklistModule, module_id)
+        if fetched is None:
+            raise ValueError(f"no checklist module {module_id}")
+        module = fetched
+    module_id = module.id
+    if project_id is None:
+        project_id = module.project_id
+    if created_by is None:
+        created_by = module.created_by
     item = ChecklistItem(
         id=uuid.uuid4(),
         module_id=module_id,

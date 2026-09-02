@@ -39,7 +39,7 @@ async def test_item_denormalises_project_and_defaults_to_untested(
 ) -> None:
     project = await create_project(db_session)
     module = await create_checklist_module(db_session, project_id=project.id)
-    item = await create_checklist_item(db_session, module_id=module.id, project_id=project.id)
+    item = await create_checklist_item(db_session, module_id=module.id)
 
     assert item.project_id == project.id
     assert item.status == ChecklistItemStatus.UNTESTED.value
