@@ -1,12 +1,16 @@
 """Generation end to end, with no Qdrant, no broker, and no served model."""
 
+import asyncio
 import uuid
+from contextlib import suppress
 from typing import cast
 
 import pytest
 from langchain_core.language_models import BaseChatModel
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.checklist import generator as generator_module
 from app.checklist.generator import ChecklistGenerator
 from app.checklist.model_output import (
     FileObservations,
@@ -15,6 +19,7 @@ from app.checklist.model_output import (
     ProposedOperation,
 )
 from app.config import Settings
+from app.db.session import get_sessionmaker
 from app.ingestion.chunker import Chunk
 from app.ingestion.errors import TerminalIngestionError
 from app.ingestion.vector_store import InMemoryVectorStore
@@ -316,3 +321,61 @@ async def test_a_lost_lease_leaves_the_module_alone(db_session: AsyncSession) ->
     assert module.lease_owner == "w2"
     assert module.status == ChecklistModuleStatus.GENERATING.value
     assert await ChecklistChangeSetRepository(db_session).pending_for_module(module.id) is None
+
+
+async def test_lease_renewal_uses_its_own_session(
+    db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`_renew` must not share the generation's session.
+
+    An `AsyncSession` is not safe for concurrent use, and the renewal heartbeat runs
+    while `run` is scrolling and calling the model on the same session. Mirrors
+    `test_pipeline.py::test_the_lease_heartbeat_runs_on_a_session_of_its_own`: holding
+    `db_session` busy with a real query for the whole window in which the heartbeat
+    ticks is exactly the interleaving an `AsyncSession` cannot survive. A `_renew` that
+    shares `self.session` either raises inside its own task -- dying unnoticed and
+    renewing nothing -- or corrupts the busy query, so this asserts a renewal was
+    actually observed *during* that busy window, not merely that one eventually
+    landed. A version of this test that only checks `lease_expires_at is not None`
+    after the fact passes just as readily against the shared-session bug (the initial
+    claim already set that column), which is why the assertion below compares against
+    the pre-renewal baseline instead.
+    """
+    monkeypatch.setattr(generator_module, "LEASE_RENEWAL_SECONDS", 0.01)
+    project = await create_project(db_session)
+    module = await create_checklist_module(db_session, project_id=project.id)
+    job_id = uuid.uuid4()
+    await ChecklistModuleRepository(db_session).claim(
+        module_id=module.id, job_id=job_id, worker_id="w1", lease_seconds=300
+    )
+    await db_session.commit()
+    await db_session.refresh(module)
+    claimed_until = module.lease_expires_at
+    assert claimed_until is not None
+
+    generator = ChecklistGenerator(
+        db_session,
+        Settings(),
+        store_factory=lambda _: InMemoryVectorStore(dimensions=8),
+        chat_model=cast(BaseChatModel, StructuredScriptedChatModel({})),
+    )
+    renewal = asyncio.create_task(generator._renew(module_id=module.id, worker_id="w1"))
+    try:
+        # Hold `db_session` busy with a real query across several renewal ticks --
+        # the same interleaving `IngestionPipeline`'s sibling test uses to force the
+        # concurrent-use hazard rather than merely hoping timing exposes it.
+        for _ in range(5):
+            await db_session.execute(text("SELECT pg_sleep(0.02)"))
+    finally:
+        renewal.cancel()
+        with suppress(asyncio.CancelledError):
+            await renewal
+
+    async with get_sessionmaker()() as verify:
+        refreshed = await ChecklistModuleRepository(verify).get(module.id)
+        assert refreshed is not None
+        assert refreshed.lease_expires_at is not None
+        # A renewal actually landed while `db_session` was busy: the shared-session
+        # bug either never reaches this line (the task dies on its first tick) or
+        # leaves the lease at its original claim-time expiry.
+        assert refreshed.lease_expires_at > claimed_until

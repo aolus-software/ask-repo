@@ -17,6 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.checklist.model_output import FileObservations, ProposedChangeSet, ProposedOperation
 from app.checklist.source import ModuleFile, ModuleSource, rebuild_files
 from app.config import Settings
+from app.db.session import get_sessionmaker
 from app.ingestion.errors import RetryableIngestionError, TerminalIngestionError
 from app.ingestion.vector_store import VectorStoreFactory
 from app.models.checklist import (
@@ -140,18 +141,25 @@ class ChecklistGenerator:
     async def _renew(self, *, module_id: uuid.UUID, worker_id: str) -> None:
         """Hold the lease for the length of the run.
 
-        A generation over a large module runs for minutes, and the lease is five. This
-        is what makes the two numbers compatible -- the same arrangement
-        `IngestionPipeline` uses.
+        A generation over a large module runs for minutes and the lease is five, so
+        this is what makes the two numbers compatible -- the same arrangement
+        `IngestionPipeline._renew_lease` uses.
+
+        Each tick uses its own short-lived session, never the one the generation is
+        running on: an `AsyncSession` is not safe for concurrent use, and two
+        coroutines interleaving on one connection fail with an `InterfaceError` or,
+        worse, a mis-scoped transaction.
         """
         while True:
             await asyncio.sleep(LEASE_RENEWAL_SECONDS)
-            if not await self.modules.renew_lease(
-                module_id=module_id, worker_id=worker_id, lease_seconds=LEASE_SECONDS
-            ):
+            async with get_sessionmaker()() as session:
+                held = await ChecklistModuleRepository(session).renew_lease(
+                    module_id=module_id, worker_id=worker_id, lease_seconds=LEASE_SECONDS
+                )
+                await session.commit()
+            if not held:
                 logger.warning("lost the lease on checklist module %s mid-run", module_id)
                 return
-            await self.session.commit()
 
     async def _read_source(
         self,
