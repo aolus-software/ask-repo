@@ -6,7 +6,14 @@ from aiokafka import AIOKafkaProducer
 from aiokafka.admin import AIOKafkaAdminClient, NewTopic
 from aiokafka.errors import TopicAlreadyExistsError, for_code
 
-from app.queue.topics import ALL_TOPICS, INGEST_TOPIC, IngestionMessage, JobMessage
+from app.queue.topics import (
+    ALL_TOPICS,
+    CHECKLIST_TOPIC,
+    INGEST_TOPIC,
+    ChecklistJobMessage,
+    IngestionMessage,
+    JobMessage,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -18,8 +25,15 @@ _TOPIC_ALREADY_EXISTS = TopicAlreadyExistsError.errno
 class KafkaIngestionQueue:
     """The real queue. Started and stopped by the application lifespan."""
 
-    def __init__(self, *, bootstrap_servers: str, topic: str = INGEST_TOPIC) -> None:
+    def __init__(
+        self,
+        *,
+        bootstrap_servers: str,
+        topic: str = INGEST_TOPIC,
+        checklist_topic: str = CHECKLIST_TOPIC,
+    ) -> None:
         self.topic = topic
+        self.checklist_topic = checklist_topic
         self._bootstrap_servers = bootstrap_servers
         self._producer: AIOKafkaProducer | None = None
 
@@ -43,6 +57,10 @@ class KafkaIngestionQueue:
     async def enqueue(self, message: IngestionMessage) -> None:
         """Publish a job to the main ingest topic."""
         await self.produce_to(self.topic, message)
+
+    async def enqueue_checklist(self, message: ChecklistJobMessage) -> None:
+        """Publish a generation job to the checklist topic."""
+        await self.produce_to(self.checklist_topic, message)
 
     async def produce_to(self, topic: str, message: JobMessage) -> None:
         """Publish to a specific topic — used by the retry and DLQ paths."""

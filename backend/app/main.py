@@ -66,7 +66,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         topics=ALL_CHECKLIST_TOPICS,
     )
     queue = KafkaIngestionQueue(
-        bootstrap_servers=settings.kafka_bootstrap_servers, topic=settings.kafka_ingest_topic
+        bootstrap_servers=settings.kafka_bootstrap_servers,
+        topic=settings.kafka_ingest_topic,
+        checklist_topic=settings.kafka_checklist_topic,
     )
     await queue.start()
     app.state.ingestion_queue = queue

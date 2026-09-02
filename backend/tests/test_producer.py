@@ -83,9 +83,10 @@ class StubQueue:
 
     instances: ClassVar[list["StubQueue"]] = []
 
-    def __init__(self, *, bootstrap_servers: str, topic: str) -> None:
+    def __init__(self, *, bootstrap_servers: str, topic: str, checklist_topic: str) -> None:
         self.bootstrap_servers = bootstrap_servers
         self.topic = topic
+        self.checklist_topic = checklist_topic
         self.started = False
         self.stopped = False
         StubQueue.instances.append(self)

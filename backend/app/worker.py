@@ -144,7 +144,9 @@ async def main() -> None:
     )
 
     producer = KafkaIngestionQueue(
-        bootstrap_servers=settings.kafka_bootstrap_servers, topic=settings.kafka_ingest_topic
+        bootstrap_servers=settings.kafka_bootstrap_servers,
+        topic=settings.kafka_ingest_topic,
+        checklist_topic=settings.kafka_checklist_topic,
     )
     await producer.start()
 

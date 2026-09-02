@@ -251,3 +251,19 @@ class ProjectRepository(BaseRepository[Project]):
         )
         rows = await self.session.execute(statement)
         return rows.scalars().all()
+
+    async def active_generations(self, project_ids: Sequence[uuid.UUID]) -> dict[uuid.UUID, int]:
+        """Each project's `active_generation`, in one query.
+
+        Read by the checklist module list to answer "is this checklist stale?" for a
+        whole page. One statement rather than one per row: the alternative is an N+1
+        on the busiest screen in the feature.
+        """
+        if not project_ids:
+            return {}
+        result = await self.session.execute(
+            select(Project.id, Project.active_generation).where(
+                Project.id.in_(project_ids), Project.deleted_at.is_(None)
+            )
+        )
+        return {project_id: generation for project_id, generation in result.all()}

@@ -17,7 +17,13 @@ there would be read by a consumer that cannot parse it.
 
 from typing import Protocol
 
-from app.queue.topics import INGEST_TOPIC, IngestionMessage, JobMessage
+from app.queue.topics import (
+    CHECKLIST_TOPIC,
+    INGEST_TOPIC,
+    ChecklistJobMessage,
+    IngestionMessage,
+    JobMessage,
+)
 
 
 class IngestionQueue(Protocol):
@@ -41,6 +47,19 @@ class TopicProducer(Protocol):
         ...
 
 
+class ChecklistQueue(Protocol):
+    """Somewhere to put a generation job so a worker picks it up.
+
+    A second protocol rather than a second method on `IngestionQueue`, because the two
+    have different destinations and a caller should not be able to reach the wrong one:
+    a checklist job on the ingest topic is read by a consumer that cannot parse it.
+    """
+
+    async def enqueue_checklist(self, message: ChecklistJobMessage) -> None:
+        """Publish a generation job. Raises on failure."""
+        ...
+
+
 class InMemoryIngestionQueue:
     """Test double. Records what it was handed and never fails.
 
@@ -55,6 +74,10 @@ class InMemoryIngestionQueue:
     async def enqueue(self, message: IngestionMessage) -> None:
         """Record the job, on the main ingest topic."""
         await self.produce_to(INGEST_TOPIC, message)
+
+    async def enqueue_checklist(self, message: ChecklistJobMessage) -> None:
+        """Record the job, on the checklist generate topic."""
+        await self.produce_to(CHECKLIST_TOPIC, message)
 
     async def produce_to(self, topic: str, message: JobMessage) -> None:
         """Record the job and the topic it was routed to."""
