@@ -22,6 +22,10 @@ from app.ingestion.vector_store import VectorStoreFactory
 from app.models.project import Project, ProjectStatus
 from app.queue.protocol import IngestionQueue
 from app.queue.topics import INGEST_TOPIC, IngestionMessage
+from app.repositories.checklist_change_set import ChecklistChangeSetRepository
+from app.repositories.checklist_item import ChecklistItemRepository
+from app.repositories.checklist_message import ChecklistMessageRepository
+from app.repositories.checklist_module import ChecklistModuleRepository
 from app.repositories.conversation import ConversationRepository
 from app.repositories.project import ProjectRepository
 from app.schemas.pagination import ListQuery, PaginatedResponse
@@ -54,6 +58,10 @@ class ProjectService:
         self.store_factory = store_factory
         self._repository = ProjectRepository(session)
         self._conversations = ConversationRepository(session)
+        self._checklist_modules = ChecklistModuleRepository(session)
+        self._checklist_items = ChecklistItemRepository(session)
+        self._checklist_change_sets = ChecklistChangeSetRepository(session)
+        self._checklist_messages = ChecklistMessageRepository(session)
 
     async def create(
         self, payload: ProjectCreateRequest, *, actor: AuthenticatedUser
@@ -173,6 +181,17 @@ class ProjectService:
         swept = await self._conversations.soft_delete_for_project(project.id)
         if swept:
             logger.info("Soft-deleted %d conversation(s) with project %s", swept, project.id)
+
+        # Spec 3.7: the whole checklist goes with the project it describes. Four
+        # independent bulk UPDATEs in one transaction -- the order reads as the
+        # containment does rather than because anything depends on it. Nothing here
+        # reaches Qdrant: the checklist owns no vector points, it reads the project's.
+        await self._checklist_items.soft_delete_for_project(project.id)
+        await self._checklist_change_sets.soft_delete_for_project(project.id)
+        await self._checklist_messages.soft_delete_for_project(project.id)
+        modules = await self._checklist_modules.soft_delete_for_project(project.id)
+        if modules:
+            logger.info("Soft-deleted %d checklist module(s) with project %s", modules, project.id)
 
         if project.embedding_collection:
             store = self.store_factory(project.embedding_collection)

@@ -7,6 +7,7 @@ import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
+from app.core.access import ProjectScope
 from app.core.errors import AppError, ErrorCode
 from app.core.middleware import AuthenticatedUser
 from app.ingestion.chunker import Chunk
@@ -15,11 +16,23 @@ from app.ingestion.vector_store import InMemoryVectorStore, VectorStore, VectorS
 from app.models.project import ProjectStatus
 from app.queue.protocol import InMemoryIngestionQueue
 from app.queue.topics import IngestionMessage
+from app.repositories.checklist_change_set import ChecklistChangeSetRepository
+from app.repositories.checklist_item import ChecklistItemRepository
+from app.repositories.checklist_message import ChecklistMessageRepository
+from app.repositories.checklist_module import ChecklistModuleRepository
 from app.repositories.conversation import ConversationRepository
 from app.repositories.project import ProjectRepository
 from app.schemas.project import ProjectCreateRequest
 from app.services.project import ProjectService
-from tests.factories import create_conversation, create_project, create_user
+from tests.factories import (
+    create_checklist_change_set,
+    create_checklist_item,
+    create_checklist_message,
+    create_checklist_module,
+    create_conversation,
+    create_project,
+    create_user,
+)
 
 
 def actor_for(user_id: uuid.UUID, *, is_admin: bool = False) -> AuthenticatedUser:
@@ -320,3 +333,34 @@ class _UnreachableStore(InMemoryVectorStore):
 
     async def delete_project(self, project_id: uuid.UUID) -> None:
         raise RetryableIngestionError("qdrant is unreachable")
+
+
+async def test_deleting_a_project_cascades_to_the_whole_checklist(
+    db_session: AsyncSession,
+) -> None:
+    """Spec 3.7: modules, items, change sets, and messages all go.
+
+    Nothing here reaches Qdrant -- the checklist owns no vector points, and the
+    project's own delete path already hard-deletes the ones it does own.
+    """
+    project = await create_project(db_session)
+    module = await create_checklist_module(db_session, project_id=project.id)
+    await create_checklist_item(db_session, module_id=module.id)
+    await create_checklist_change_set(db_session, module_id=module.id)
+    await create_checklist_message(db_session, module_id=module.id, created_by=module.created_by)
+    admin = await create_user(db_session, is_admin=True)
+    await db_session.commit()
+
+    await service_for(db_session, InMemoryIngestionQueue()).delete(
+        project.id, actor=actor_for(admin.id, is_admin=True)
+    )
+
+    assert (
+        await ChecklistModuleRepository(db_session).get_in_scope(
+            module.id, scope=ProjectScope.all()
+        )
+        is None
+    )
+    assert await ChecklistItemRepository(db_session).list_for_module(module.id) == []
+    assert await ChecklistChangeSetRepository(db_session).pending_for_module(module.id) is None
+    assert await ChecklistMessageRepository(db_session).list_for_module(module.id, limit=10) == []
