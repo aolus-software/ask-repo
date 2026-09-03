@@ -338,27 +338,29 @@ class ChecklistModuleService:
     async def _summaries(
         self, rows: builtins.list[ChecklistModule]
     ) -> builtins.list[ChecklistModuleResponse]:
-        """Modules plus their counts, staleness, and pending badge, in three queries.
+        """Modules plus their counts, staleness, project name and pending badge.
 
-        Three regardless of how many rows: the counts, the pending ids, and the
-        projects' active generations are each resolved in one statement. An N+1 here is
-        the difference between one round trip and twenty-five on the list screen.
+        Three queries regardless of how many rows: the counts, the pending ids, and the
+        projects' names and active generations are each resolved in one statement. An
+        N+1 here is the difference between one round trip and twenty-five on the list
+        screen.
         """
         if not rows:
             return []
         module_ids = [row.id for row in rows]
         counts = await self.items.status_counts(module_ids=module_ids)
         pending = await self.change_sets.pending_module_ids(module_ids)
-        generations = await self.projects.active_generations([row.project_id for row in rows])
+        projects = await self.projects.names_and_generations([row.project_id for row in rows])
 
         summaries: builtins.list[ChecklistModuleResponse] = []
         for row in rows:
             by_status = counts.get(row.id, {})
-            active = generations.get(row.project_id)
+            project = projects.get(row.project_id)
             summaries.append(
                 ChecklistModuleResponse(
                     id=row.id,
                     project_id=row.project_id,
+                    project_name=project.name if project else "",
                     created_by=row.created_by,
                     name=row.name,
                     source_path=row.source_path,
@@ -373,8 +375,8 @@ class ChecklistModuleService:
                     untested_count=by_status.get(ChecklistItemStatus.UNTESTED.value, 0),
                     stale=(
                         row.indexed_generation is not None
-                        and active is not None
-                        and row.indexed_generation < active
+                        and project is not None
+                        and row.indexed_generation < project.active_generation
                     ),
                     pending_change_set_id=pending.get(row.id),
                     created_at=row.created_at,

@@ -194,6 +194,8 @@ export type ChangeSetStatus = "pending" | "applied" | "discarded";
 export interface ChecklistModuleResponse {
   id: string;
   projectId: string;
+  /** Denormalised by the server so a page of rows needs no second request. */
+  projectName: string;
   createdBy: string;
   name: string;
   sourcePath: string;

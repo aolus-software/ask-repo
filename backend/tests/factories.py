@@ -49,6 +49,7 @@ async def create_project(
     created_by: uuid.UUID | None = None,
     status: ProjectStatus = ProjectStatus.READY,
     repo_url: str = "https://github.com/acme/repo.git",
+    name: str = "repo",
 ) -> Project:
     """A project owned by `created_by`, or by a freshly created user."""
     if created_by is None:
@@ -56,7 +57,7 @@ async def create_project(
     project = Project(
         id=uuid.uuid4(),
         created_by=created_by,
-        name="repo",
+        name=name,
         repo_url=repo_url,
         branch="main",
         status=status.value,

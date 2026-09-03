@@ -32,6 +32,7 @@ export function ModuleTable({
         <TableHeader>
           <TableRow>
             <TableHead>Module</TableHead>
+            <TableHead>Project</TableHead>
             <TableHead>Status</TableHead>
             <TableHead>Tests</TableHead>
             <TableHead>Pass</TableHead>
@@ -44,7 +45,7 @@ export function ModuleTable({
         </TableHeader>
         <TableBody>
           {isLoading ? (
-            <TableSkeleton columns={9} />
+            <TableSkeleton columns={10} />
           ) : (
             modules.map((module) => (
               <TableRow key={module.id}>
@@ -55,6 +56,14 @@ export function ModuleTable({
                   <div className="text-muted-foreground text-sm">
                     {module.sourcePath}
                   </div>
+                </TableCell>
+                <TableCell className="text-muted-foreground text-sm">
+                  <Link
+                    href={`/projects/${module.projectId}`}
+                    className="hover:text-primary"
+                  >
+                    {module.projectName}
+                  </Link>
                 </TableCell>
                 <TableCell>
                   <div className="flex flex-col gap-2">

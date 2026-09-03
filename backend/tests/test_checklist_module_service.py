@@ -341,3 +341,21 @@ async def test_messages_are_readable_by_any_authenticated_user(
 
     assert len(messages) == 1
     assert messages[0].content == "Why does this test expect 401?"
+
+
+async def test_summaries_carry_the_project_name(db_session: AsyncSession) -> None:
+    """The list renders the project a module belongs to, so the row carries its name.
+
+    An id alone would make the screen resolve twenty-five names client-side, which is
+    the N+1 `_summaries` exists to avoid moved into the browser.
+    """
+    project = await create_project(db_session, name="checkout-service")
+    module = await create_checklist_module(db_session, project_id=project.id)
+    service = ChecklistModuleService(db_session, Settings())
+    actor = authenticated(await create_user(db_session))
+
+    page = await service.list(ChecklistModuleListQuery(), actor=actor)
+    detail = await service.get(module.id, actor=actor)
+
+    assert page.items[0].project_name == "checkout-service"
+    assert detail.project_name == "checkout-service"

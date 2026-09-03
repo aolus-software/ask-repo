@@ -71,6 +71,9 @@ class ChecklistModuleResponse(ApiModel):
 
     id: uuid.UUID
     project_id: uuid.UUID
+    # Denormalised onto the row so the list can render the project column without
+    # the browser resolving twenty-five ids against `/projects`.
+    project_name: str
     created_by: uuid.UUID
     name: str
     source_path: str

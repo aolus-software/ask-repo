@@ -8,7 +8,7 @@ one skipped poll rather than two workers indexing the same repository.
 import uuid
 from collections.abc import Sequence
 from datetime import UTC, datetime, timedelta
-from typing import Any, cast
+from typing import Any, NamedTuple, cast
 
 from sqlalchemy import case, func, or_, select, update
 from sqlalchemy.engine import CursorResult
@@ -22,6 +22,13 @@ from app.repositories.base import BaseRepository
 # — spec §4.2 makes five minutes safe only because renewal runs every sixty seconds.
 LEASE_SECONDS = 300
 LEASE_RENEWAL_SECONDS = 60
+
+
+class ProjectSummary(NamedTuple):
+    """The columns a checklist row needs from the project it belongs to."""
+
+    name: str
+    active_generation: int
 
 
 class ProjectRepository(BaseRepository[Project]):
@@ -252,18 +259,24 @@ class ProjectRepository(BaseRepository[Project]):
         rows = await self.session.execute(statement)
         return rows.scalars().all()
 
-    async def active_generations(self, project_ids: Sequence[uuid.UUID]) -> dict[uuid.UUID, int]:
-        """Each project's `active_generation`, in one query.
+    async def names_and_generations(
+        self, project_ids: Sequence[uuid.UUID]
+    ) -> dict[uuid.UUID, ProjectSummary]:
+        """Each project's name and `active_generation`, in one query.
 
-        Read by the checklist module list to answer "is this checklist stale?" for a
-        whole page. One statement rather than one per row: the alternative is an N+1
-        on the busiest screen in the feature.
+        Read by the checklist module list, which needs both for every row: the name to
+        render the project column, the generation to answer "is this checklist stale?".
+        One statement rather than one per row, and one rather than two -- the
+        alternative is an N+1 on the busiest screen in the feature.
         """
         if not project_ids:
             return {}
         result = await self.session.execute(
-            select(Project.id, Project.active_generation).where(
+            select(Project.id, Project.name, Project.active_generation).where(
                 Project.id.in_(project_ids), Project.deleted_at.is_(None)
             )
         )
-        return {project_id: generation for project_id, generation in result.all()}
+        return {
+            project_id: ProjectSummary(name=name, active_generation=generation)
+            for project_id, name, generation in result.all()
+        }
