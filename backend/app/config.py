@@ -153,6 +153,7 @@ class Settings(BaseSettings):
     # there is one code path rather than two.
     rag_grade_evidence: bool = True
     rag_classify_intent: bool = True
+    rag_propose_changes: bool = True
 
     # Rows above which the export refuses rather than building a workbook in
     # memory. `openpyxl` allocates the whole book even in write-only mode, so this

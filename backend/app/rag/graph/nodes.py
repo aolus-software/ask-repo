@@ -13,12 +13,15 @@ answers entirely is worse than the behaviour it was added to improve.
 
 import asyncio
 import logging
+import uuid
 from collections.abc import Awaitable, Callable
 
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import BaseMessage
 from langgraph.config import get_stream_writer
+from pydantic import ValidationError
 
+from app.checklist.model_output import ProposedChangeSet
 from app.models.conversation import FinishReason
 from app.rag.graph.state import Classification, EvidenceVerdict, Intent, TurnState
 from app.rag.grounding import OUT_OF_SCOPE_ANSWER
@@ -27,10 +30,12 @@ from app.rag.prompts import (
     CLASSIFY_PROMPT,
     GRADE_PROMPT,
     HISTORY_ANSWER_PROMPT,
+    build_propose_prompt,
     format_spans,
     to_langchain_history,
 )
 from app.rag.retriever import RetrievedChunk, Retriever
+from app.schemas.checklist import ChangeOperationPayload, ChangeSetEvent
 from app.schemas.conversation import (
     CitationPayload,
     CitationsEvent,
@@ -328,3 +333,98 @@ def build_refuse() -> Node:
         return {"answer": OUT_OF_SCOPE_ANSWER, "failure": None}
 
     return refuse
+
+
+def build_propose_changes(chat_model: BaseChatModel, *, enabled: bool) -> Node:
+    """Decide whether this exchange changes the module's checklist.
+
+    Runs last, after the answer is complete, and emits at most one `ChangeSetEvent`.
+    It never emits a terminator: `Answerer._terminate` is the only place a `DoneEvent`
+    or `ErrorEvent` is constructed, which is what makes "exactly one terminator per
+    stream" structural rather than a rule six nodes have to remember.
+
+    Falls back to proposing nothing rather than failing the turn. A helper node may
+    never be the reason a question goes unanswered -- a proposer that dies costs the
+    user a proposal, and a proposer that can fail the turn costs them the answer.
+
+    `CancelledError` is a `BaseException` and is deliberately not caught: a client
+    that disconnected mid-proposal should stop the turn, not fall back and carry on
+    proposing to nobody.
+    """
+
+    async def propose_changes(state: TurnState) -> dict[str, object]:
+        change_set_id = state["change_set_id"]
+        if not enabled or change_set_id is None or not state["answer"].strip():
+            return {"operations": [], "change_summary": ""}
+
+        try:
+            model = chat_model.with_structured_output(ProposedChangeSet)
+            result = await model.ainvoke(
+                build_propose_prompt(
+                    module_name=state["module_name"],
+                    answer=state["answer"],
+                    existing=state["existing_items"],
+                )
+            )
+        except Exception as e:
+            if isinstance(e, asyncio.CancelledError):
+                raise
+            logger.exception("proposing checklist changes failed; proposing nothing")
+            return {"operations": [], "change_summary": ""}
+
+        if not isinstance(result, ProposedChangeSet) or not result.operations:
+            return {"operations": [], "change_summary": ""}
+
+        # Build operation dicts, validating each one individually so one bad operation
+        # does not drop the whole set. Operations with invalid payloads are dropped.
+        operations: list[dict[str, object]] = []
+        for operation in result.operations:
+            operation_dict: dict[str, object] = {
+                "op": operation.op,
+                "id": str(uuid.uuid4()),
+                "itemId": operation.item_id or None,
+                "feature": operation.feature or None,
+                "testName": operation.test_name or None,
+                "expectedResult": operation.expected_result or None,
+                "changes": operation.changes or None,
+                "citations": [citation.model_dump() for citation in to_citations(state["spans"])]
+                or None,
+                "rationale": operation.rationale or "No rationale given.",
+            }
+            try:
+                # Validate this operation's payload. If it fails, drop it and log.
+                ChangeOperationPayload.model_validate(operation_dict)
+                operations.append(operation_dict)
+            except ValidationError as e:
+                logger.warning(
+                    "Dropping proposed operation with invalid payload: %s", e, exc_info=False
+                )
+
+        # If no operations survived validation, return the empty shape.
+        if not operations:
+            return {"operations": [], "change_summary": ""}
+
+        summary = result.summary or f"{len(operations)} proposed change(s)"
+
+        # Emit the event with only the valid operations. This call cannot raise because
+        # operations are already validated above.
+        try:
+            validated_ops = [
+                ChangeOperationPayload.model_validate(operation) for operation in operations
+            ]
+            emit(
+                ChangeSetEvent(
+                    change_set_id=change_set_id,
+                    summary=summary,
+                    operations=validated_ops,
+                )
+            )
+        except Exception as e:
+            if isinstance(e, asyncio.CancelledError):
+                raise
+            logger.exception("Failed to emit ChangeSetEvent; proposing nothing")
+            return {"operations": [], "change_summary": ""}
+
+        return {"operations": operations, "change_summary": summary}
+
+    return propose_changes

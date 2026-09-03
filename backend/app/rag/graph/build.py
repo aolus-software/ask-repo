@@ -16,6 +16,7 @@ from app.rag.graph.nodes import (
     build_classify,
     build_generate,
     build_grade,
+    build_propose_changes,
     build_refuse,
     build_retrieve,
 )
@@ -61,9 +62,18 @@ def route_after_grading(state: TurnState, max_attempts: int) -> str:
 
 
 def build_answer_graph(
-    *, retriever: Retriever, chat_model: BaseChatModel, settings: Settings
+    *,
+    retriever: Retriever,
+    chat_model: BaseChatModel,
+    settings: Settings,
+    propose: bool = False,
 ) -> CompiledStateGraph[TurnState, None, TurnState, TurnState]:
-    """The compiled answer graph for one instance's configuration."""
+    """The compiled answer graph for one instance's configuration.
+
+    `propose` adds a trailing node that proposes checklist operations. One graph shape
+    with an optional tail rather than two graphs, because a second graph would need a
+    second adapter -- and the adapter is where the single terminator is built.
+    """
     max_attempts = settings.rag_max_retrieval_attempts
 
     # Each node is wrapped in `RunnableLambda`: a bare async callable structurally
@@ -113,8 +123,23 @@ def build_answer_graph(
         lambda state: route_after_grading(state, max_attempts),
         {"retrieve": "retrieve", "generate": "generate"},
     )
-    graph.add_edge("generate", END)
-    graph.add_edge("answer_from_history", END)
     graph.add_edge("refuse", END)
+    if propose:
+        graph.add_node(
+            "propose_changes",
+            RunnableLambda(build_propose_changes(chat_model, enabled=settings.rag_propose_changes)),
+        )
+        # Both answering routes feed the proposer. A refinement instruction may
+        # classify either way -- "add a test for an empty password" is a codebase
+        # question, "make the third one clearer" is conversational -- and wiring only
+        # `generate` would silently drop every proposal on the second kind.
+        #
+        # `refuse` does not: an out-of-scope turn produced no answer to propose from.
+        graph.add_edge("generate", "propose_changes")
+        graph.add_edge("answer_from_history", "propose_changes")
+        graph.add_edge("propose_changes", END)
+    else:
+        graph.add_edge("generate", END)
+        graph.add_edge("answer_from_history", END)
 
     return graph.compile()

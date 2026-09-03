@@ -3,6 +3,7 @@
 import asyncio
 import uuid
 
+import pytest
 from langchain_core.language_models import BaseChatModel
 from pydantic import BaseModel
 
@@ -48,6 +49,7 @@ def build(
     *,
     concurrency: int = 2,
     settings: Settings | None = None,
+    propose: bool = False,
 ) -> Answerer:
     """An answerer over fakes. Explicit parameters rather than `**kwargs`, so a
     misspelled option is a type error here instead of a silently ignored default."""
@@ -57,6 +59,7 @@ def build(
         model_id="test-model",
         semaphore=asyncio.Semaphore(concurrency),
         settings=settings if settings is not None else Settings(),
+        propose=propose,
     )
 
 
@@ -386,3 +389,75 @@ async def test_a_failing_run_with_no_message_also_terminates() -> None:
 
     assert isinstance(terminator, ErrorEvent)
     assert terminator.message_id is None
+
+
+@pytest.mark.asyncio
+async def test_a_proposing_answerer_emits_citations_then_tokens_then_change_set_then_done() -> None:
+    """The ordering contract, unchanged, with one event inserted. A client must not
+    need to know which route it got in order to parse the stream."""
+    from app.checklist.model_output import ProposedChangeSet, ProposedOperation
+    from app.rag.graph.state import Classification, EvidenceVerdict
+
+    model = ScriptedChatModel(
+        tokens=["a", "b"],
+        structured_results=[
+            Classification(intent="codebase_question", search_query="q"),
+            EvidenceVerdict(sufficient=True),
+            ProposedChangeSet(
+                summary="1 test",
+                operations=[
+                    ProposedOperation(
+                        op="add",
+                        feature="Login",
+                        test_name="Empty password",
+                        expected_result="422",
+                        rationale="Validation.",
+                    )
+                ],
+            ),
+        ],
+    )
+    answerer = build(model, propose=True)
+    change_set_id = uuid.uuid4()
+    message_id = uuid.uuid4()
+    events = [
+        event
+        async for event in answerer.answer(
+            question="Add a test for an empty password.",
+            history=[],
+            project_id=uuid.uuid4(),
+            generation=1,
+            message_id=message_id,
+            existing_items=[],
+            change_set_id=change_set_id,
+            module_name="Authentication",
+        )
+    ]
+
+    names = [type(event).__name__ for event in events]
+    assert names.count("CitationsEvent") == 1
+    assert names.index("CitationsEvent") < names.index("TokenEvent")
+    assert names.count("ChangeSetEvent") == 1
+    assert names.index("ChangeSetEvent") > max(
+        index for index, name in enumerate(names) if name == "TokenEvent"
+    )
+    # Exactly one terminator, and it is last.
+    assert names[-1] in {"DoneEvent", "ErrorEvent"}
+    assert names.count("DoneEvent") + names.count("ErrorEvent") == 1
+
+
+@pytest.mark.asyncio
+async def test_a_non_proposing_answerer_emits_no_change_set() -> None:
+    model = ScriptedChatModel(tokens=["x"], structured_results=_codebase_question_script())
+    answerer = build(model, propose=False)
+    events = [
+        event
+        async for event in answerer.answer(
+            question="How does login work?",
+            history=[],
+            project_id=uuid.uuid4(),
+            generation=1,
+            message_id=uuid.uuid4(),
+        )
+    ]
+    assert not any(type(event).__name__ == "ChangeSetEvent" for event in events)
