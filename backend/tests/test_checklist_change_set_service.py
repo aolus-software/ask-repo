@@ -263,3 +263,95 @@ async def test_applying_moves_the_module_to_ready(db_session: AsyncSession) -> N
 
     await db_session.refresh(module)
     assert module.status == ChecklistModuleStatus.READY.value
+
+
+async def test_update_rejects_forbidden_fields_in_the_allowlist(
+    db_session: AsyncSession,
+) -> None:
+    """The update allowlist (`UPDATABLE_FIELDS`) gates which fields a model-authored
+    `changes` payload may write. `status`, `currentResult`, and `createdBy` must not be
+    writable from a proposal, or a model could overwrite a tester's recorded observation
+    and attribution."""
+    module = await create_checklist_module(db_session)
+    item = await create_checklist_item(
+        db_session,
+        module_id=module.id,
+        project_id=module.project_id,
+        created_by=module.created_by,
+        current_result="Observed 400",
+        status=ChecklistItemStatus.FAIL,
+    )
+    operation_id = uuid.uuid4()
+    change_set = await create_checklist_change_set(
+        db_session,
+        module_id=module.id,
+        operations=[
+            {
+                "op": "update",
+                "id": str(operation_id),
+                "itemId": str(item.id),
+                "changes": {
+                    "expectedResult": "401 INVALID_CREDENTIALS",
+                    "status": "pass",
+                    "currentResult": "Malicious override",
+                    "createdBy": str(uuid.uuid4()),
+                },
+                "rationale": "Attempt to write forbidden fields.",
+            }
+        ],
+    )
+    service = ChecklistChangeSetService(db_session, Settings())
+
+    result = await service.apply(
+        change_set.id, ChangeSetApplyRequest(), actor=authenticated(await create_user(db_session))
+    )
+
+    updated = result.items[0]
+    assert updated.expected_result == "401 INVALID_CREDENTIALS"
+    assert updated.current_result == "Observed 400"
+    assert updated.status is ChecklistItemStatus.FAIL
+
+
+async def test_an_operation_on_an_item_from_another_module_is_skipped(
+    db_session: AsyncSession,
+) -> None:
+    """The vanished-item guard checks both that the item exists and that it belongs
+    to the target module. An item from a different module is silently skipped, not
+    applied to the wrong module and not failed (spec 3.3)."""
+    item_module = await create_checklist_module(db_session)
+    target_module = await create_checklist_module(db_session)
+    cross_module_operation = uuid.uuid4()
+    good_operation = uuid.uuid4()
+
+    item = await create_checklist_item(
+        db_session,
+        module_id=item_module.id,
+        project_id=item_module.project_id,
+        created_by=item_module.created_by,
+    )
+
+    change_set = await create_checklist_change_set(
+        db_session,
+        module_id=target_module.id,
+        operations=[
+            {
+                "op": "update",
+                "id": str(cross_module_operation),
+                "itemId": str(item.id),
+                "changes": {"feature": "Mutated feature"},
+                "rationale": "Item belongs to different module.",
+            },
+            _add(good_operation),
+        ],
+    )
+    service = ChecklistChangeSetService(db_session, Settings())
+
+    result = await service.apply(
+        change_set.id, ChangeSetApplyRequest(), actor=authenticated(await create_user(db_session))
+    )
+
+    assert result.skipped_operation_ids == [cross_module_operation]
+    assert len(result.items) == 1
+    assert result.change_set.status is ChangeSetStatus.APPLIED
+    await db_session.refresh(item)
+    assert item.feature != "Mutated feature"
