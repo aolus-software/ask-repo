@@ -7,6 +7,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Plus } from "lucide-react";
 
 import { CreateModuleDialog } from "@/components/checklist/create-module-dialog";
+import { ModuleFilters } from "@/components/checklist/module-filters";
 import { ModuleTable } from "@/components/checklist/module-table";
 import { EmptyState } from "@/components/feedback/empty-state";
 import { ListToolbar } from "@/components/layout/list-toolbar";
@@ -59,6 +60,18 @@ export function ChecklistScreen() {
     [searchParams, router, pathname],
   );
 
+  const handleProjectChange = useCallback(
+    (projectId: string | undefined) => {
+      const next = new URLSearchParams(searchParams.toString());
+      if (projectId) next.set("projectId", projectId);
+      else next.delete("projectId");
+      next.delete("page");
+      const qs = next.toString();
+      router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+    },
+    [searchParams, router, pathname],
+  );
+
   const handlePageChange = useCallback(
     (page: number) => {
       const next = new URLSearchParams(searchParams.toString());
@@ -87,6 +100,12 @@ export function ChecklistScreen() {
         initialSearch={searchParams.get("search") ?? ""}
         placeholder="Search modules and paths"
         onSearchChange={handleSearch}
+        filters={
+          <ModuleFilters
+            projectId={params.projectId}
+            onProjectChange={handleProjectChange}
+          />
+        }
       />
 
       <Card className="p-0">
