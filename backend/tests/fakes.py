@@ -7,7 +7,8 @@ is a second thing to get wrong, and a divergence between them would be invisible
 """
 
 import asyncio
-from collections.abc import AsyncIterator, Awaitable, Callable
+import uuid
+from collections.abc import AsyncGenerator, AsyncIterator, Awaitable, Callable
 from types import SimpleNamespace
 
 from aiokafka import ConsumerRebalanceListener, TopicPartition
@@ -18,7 +19,11 @@ from langchain_core.outputs import ChatGeneration, ChatGenerationChunk, ChatResu
 from langchain_core.runnables import Runnable, RunnableLambda
 from pydantic import BaseModel, Field, PrivateAttr
 
+from app.models.conversation import FinishReason, Intent
 from app.queue.topics import IngestionMessage
+from app.rag.prompts import ExistingItem, Turn
+from app.schemas.checklist import ChangeSetEvent
+from app.schemas.conversation import CitationsEvent, DoneEvent, StreamEvent, TokenEvent
 
 
 class FakeConsumer:
@@ -308,3 +313,76 @@ class FailingChatModel(ScriptedChatModel):
             raise RuntimeError("scripted structured-output failure")
 
         return RunnableLambda(_raise)
+
+
+class FakeAnswerer:
+    """A scripted stand-in for `app.rag.answerer.Answerer`, for the checklist stream.
+
+    `closed` records whether the last generator this produced ran its `finally` to
+    completion -- which is what `stream_checklist_turn`'s shielded finaliser must
+    still trigger even on a disconnect, because closing the answerer is what
+    releases its concurrency permit (`.claude/rules/rag.md`).
+    """
+
+    def __init__(self, events: list[StreamEvent], *, hang: bool = False) -> None:
+        self._events = events
+        self._hang = hang
+        self.closed = False
+
+    @classmethod
+    def proposing(cls, *, change_set_id: uuid.UUID, message_id: uuid.UUID) -> "FakeAnswerer":
+        """Cites, answers, proposes one change, and terminates with `stop`."""
+        return cls(
+            events=[
+                CitationsEvent(citations=[]),
+                TokenEvent(text="Sure, "),
+                TokenEvent(text="I've added it."),
+                ChangeSetEvent(
+                    change_set_id=change_set_id,
+                    summary="1 proposed change",
+                    operations=[],
+                ),
+                DoneEvent(
+                    message_id=message_id,
+                    model="test-model",
+                    finish_reason=FinishReason.STOP,
+                    cited_indexes=[],
+                    grounding_warnings=[],
+                    intent=Intent.CODEBASE_QUESTION,
+                    retrieval_attempts=1,
+                ),
+            ]
+        )
+
+    @classmethod
+    def hanging_after_one_token(cls) -> "FakeAnswerer":
+        """Yields one token, then hangs -- a stand-in for a client disconnect
+        arriving mid-generation, before any terminator is produced."""
+        return cls(events=[TokenEvent(text="partial")], hang=True)
+
+    async def answer(
+        self,
+        *,
+        question: str,
+        history: list[Turn],
+        project_id: uuid.UUID,
+        generation: int,
+        message_id: uuid.UUID | None,
+        existing_items: list[ExistingItem] | None = None,
+        change_set_id: uuid.UUID | None = None,
+        module_name: str = "",
+    ) -> AsyncGenerator[StreamEvent]:
+        """Yield the scripted events, then hang forever if `hang` was requested.
+
+        The `finally` is what makes `aclose()` observable: a real disconnect cancels
+        the in-flight `anext` and then closes this generator, which throws
+        `GeneratorExit` in wherever it is suspended and runs this block on the way
+        out -- exactly the path `_finalise_checklist_turn` depends on.
+        """
+        try:
+            for event in self._events:
+                yield event
+            if self._hang:
+                await asyncio.Event().wait()
+        finally:
+            self.closed = True

@@ -187,6 +187,18 @@ class ChecklistModuleRepository(BaseRepository[ChecklistModule]):
         )
         return cast(CursorResult[Any], result).rowcount == 1
 
+    async def mark_in_review(self, module_id: uuid.UUID) -> None:
+        """Move a module to `review` because a proposal is now pending.
+
+        A bulk UPDATE from the stream's own session, so `updated_at` is set explicitly
+        (`.claude/rules/persistence.md`).
+        """
+        await self.session.execute(
+            update(ChecklistModule)
+            .where(ChecklistModule.id == module_id, ChecklistModule.deleted_at.is_(None))
+            .values(status=ChecklistModuleStatus.REVIEW.value, updated_at=func.now())
+        )
+
     async def find_stranded(
         self, *, generating_older_than_seconds: int
     ) -> Sequence[ChecklistModule]:

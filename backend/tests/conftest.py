@@ -19,7 +19,7 @@ import redis.asyncio as aioredis
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy import text
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.config import Settings, get_settings
 from app.core.security import create_access_token, hash_password
@@ -124,6 +124,13 @@ async def db_session() -> AsyncIterator[AsyncSession]:
     """A session for tests that talk to repositories directly."""
     async with get_sessionmaker()() as session:
         yield session
+
+
+@pytest.fixture
+def sessionmaker() -> async_sessionmaker[AsyncSession]:
+    """The real sessionmaker, for a stream under test to open its own session from --
+    exactly as `stream_turn`/`stream_checklist_turn` do outside a request."""
+    return get_sessionmaker()
 
 
 @pytest.fixture
