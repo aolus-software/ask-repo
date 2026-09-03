@@ -850,29 +850,27 @@ async def test_propose_node_emits_a_change_set_event() -> None:
     from app.checklist.model_output import ProposedChangeSet, ProposedOperation
     from app.rag.graph.nodes import build_propose_changes
     from app.schemas.checklist import ChangeSetEvent
-    from tests.fakes import StructuredScriptedChatModel
+    from tests.fakes import ScriptedChatModel
 
     change_set_id = uuid.uuid4()
-    chat = StructuredScriptedChatModel(
-        {
-            ProposedChangeSet: [
-                ProposedChangeSet(
-                    summary="1 added",
-                    operations=[
-                        ProposedOperation(
-                            op="add",
-                            feature="Login",
-                            test_name="Rejects an empty password",
-                            expected_result="422 VALIDATION_ERROR",
-                            rationale="The schema has min_length=1.",
-                        )
-                    ],
-                )
-            ]
-        }
+    chat = ScriptedChatModel(
+        structured_results=[
+            ProposedChangeSet(
+                summary="1 added",
+                operations=[
+                    ProposedOperation(
+                        op="add",
+                        feature="Login",
+                        test_name="Rejects an empty password",
+                        expected_result="422 VALIDATION_ERROR",
+                        rationale="The schema has min_length=1.",
+                    )
+                ],
+            )
+        ]
     )
     events, state = await run_node(
-        build_propose_changes(chat, enabled=True),  # type: ignore[arg-type]
+        build_propose_changes(chat, enabled=True),
         base_state(answer="You should also test an empty password.", change_set_id=change_set_id),
     )
 
@@ -889,13 +887,11 @@ async def test_propose_node_emits_nothing_when_the_model_proposes_nothing() -> N
     from app.checklist.model_output import ProposedChangeSet
     from app.rag.graph.nodes import build_propose_changes
     from app.schemas.checklist import ChangeSetEvent
-    from tests.fakes import StructuredScriptedChatModel
+    from tests.fakes import ScriptedChatModel
 
-    chat = StructuredScriptedChatModel(
-        {ProposedChangeSet: [ProposedChangeSet(summary="", operations=[])]}
-    )
+    chat = ScriptedChatModel(structured_results=[ProposedChangeSet(summary="", operations=[])])
     events, state = await run_node(
-        build_propose_changes(chat, enabled=True),  # type: ignore[arg-type]
+        build_propose_changes(chat, enabled=True),
         base_state(answer="Because the route is gone."),
     )
 
@@ -918,7 +914,7 @@ async def test_propose_node_falls_back_rather_than_failing_the_turn() -> None:
             raise RuntimeError("model down")
 
     events, state = await run_node(
-        build_propose_changes(_Exploding(), enabled=True),  # type: ignore[arg-type]
+        build_propose_changes(_Exploding(), enabled=True),  # type: ignore[arg-type]  # duck-typed stand-in raises from ainvoke, not a BaseChatModel
         base_state(answer="An answer."),
     )
 
@@ -942,7 +938,10 @@ async def test_propose_node_does_not_swallow_a_disconnect() -> None:
     # When the model raises CancelledError, the node should propagate it, not catch it
     # and return an empty proposal. We verify this by checking that calling the node
     # directly (not through run_node) raises the exception.
-    node = build_propose_changes(_Cancelling(), enabled=True)  # type: ignore[arg-type]
+    # This test calls the node directly rather than through run_node because LangGraph
+    # wraps a node-raised CancelledError as NodeCancelledError (an Exception subclass),
+    # which would make the pytest.raises(asyncio.CancelledError) assertion fail.
+    node = build_propose_changes(_Cancelling(), enabled=True)  # type: ignore[arg-type]  # duck-typed stand-in raises from ainvoke, not a BaseChatModel
     with pytest.raises(asyncio.CancelledError):
         await node(base_state(answer="a", change_set_id=uuid.uuid4()))
 
@@ -997,37 +996,35 @@ async def test_propose_node_drops_invalid_operations_one_at_a_time() -> None:
     from app.checklist.model_output import ProposedChangeSet, ProposedOperation
     from app.rag.graph.nodes import build_propose_changes
     from app.schemas.checklist import ChangeSetEvent
-    from tests.fakes import StructuredScriptedChatModel
+    from tests.fakes import ScriptedChatModel
 
     change_set_id = uuid.uuid4()
-    chat = StructuredScriptedChatModel(
-        {
-            ProposedChangeSet: [
-                ProposedChangeSet(
-                    summary="2 changes",
-                    operations=[
-                        ProposedOperation(
-                            op="update",
-                            item_id="not-a-uuid",  # This one will not validate
-                            feature="Login",
-                            test_name="Invalid update",
-                            expected_result="Should be dropped",
-                            rationale="item_id is not a UUID.",
-                        ),
-                        ProposedOperation(
-                            op="add",
-                            feature="Auth",
-                            test_name="Valid operation",
-                            expected_result="Should survive",
-                            rationale="This one is good.",
-                        ),
-                    ],
-                )
-            ]
-        }
+    chat = ScriptedChatModel(
+        structured_results=[
+            ProposedChangeSet(
+                summary="2 changes",
+                operations=[
+                    ProposedOperation(
+                        op="update",
+                        item_id="not-a-uuid",  # This one will not validate
+                        feature="Login",
+                        test_name="Invalid update",
+                        expected_result="Should be dropped",
+                        rationale="item_id is not a UUID.",
+                    ),
+                    ProposedOperation(
+                        op="add",
+                        feature="Auth",
+                        test_name="Valid operation",
+                        expected_result="Should survive",
+                        rationale="This one is good.",
+                    ),
+                ],
+            )
+        ]
     )
     events, state = await run_node(
-        build_propose_changes(chat, enabled=True),  # type: ignore[arg-type]
+        build_propose_changes(chat, enabled=True),
         base_state(answer="Here are updates.", change_set_id=change_set_id),
     )
 

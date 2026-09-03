@@ -366,9 +366,7 @@ def build_propose_changes(chat_model: BaseChatModel, *, enabled: bool) -> Node:
                     existing=state["existing_items"],
                 )
             )
-        except Exception as e:
-            if isinstance(e, asyncio.CancelledError):
-                raise
+        except Exception:
             logger.exception("proposing checklist changes failed; proposing nothing")
             return {"operations": [], "change_summary": ""}
 
@@ -378,6 +376,7 @@ def build_propose_changes(chat_model: BaseChatModel, *, enabled: bool) -> Node:
         # Build operation dicts, validating each one individually so one bad operation
         # does not drop the whole set. Operations with invalid payloads are dropped.
         operations: list[dict[str, object]] = []
+        validated_ops: list[ChangeOperationPayload] = []
         for operation in result.operations:
             operation_dict: dict[str, object] = {
                 "op": operation.op,
@@ -393,8 +392,9 @@ def build_propose_changes(chat_model: BaseChatModel, *, enabled: bool) -> Node:
             }
             try:
                 # Validate this operation's payload. If it fails, drop it and log.
-                ChangeOperationPayload.model_validate(operation_dict)
+                validated_payload = ChangeOperationPayload.model_validate(operation_dict)
                 operations.append(operation_dict)
+                validated_ops.append(validated_payload)
             except ValidationError as e:
                 logger.warning(
                     "Dropping proposed operation with invalid payload: %s", e, exc_info=False
@@ -406,12 +406,8 @@ def build_propose_changes(chat_model: BaseChatModel, *, enabled: bool) -> Node:
 
         summary = result.summary or f"{len(operations)} proposed change(s)"
 
-        # Emit the event with only the valid operations. This call cannot raise because
-        # operations are already validated above.
+        # Emit the event with the validated operations.
         try:
-            validated_ops = [
-                ChangeOperationPayload.model_validate(operation) for operation in operations
-            ]
             emit(
                 ChangeSetEvent(
                     change_set_id=change_set_id,
@@ -419,9 +415,7 @@ def build_propose_changes(chat_model: BaseChatModel, *, enabled: bool) -> Node:
                     operations=validated_ops,
                 )
             )
-        except Exception as e:
-            if isinstance(e, asyncio.CancelledError):
-                raise
+        except Exception:
             logger.exception("Failed to emit ChangeSetEvent; proposing nothing")
             return {"operations": [], "change_summary": ""}
 
