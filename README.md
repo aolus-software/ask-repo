@@ -23,12 +23,13 @@ management — against real repositories rather than tutorial data.
 > out of scope) before anything is retrieved, and on the codebase path a grader
 > checks the retrieved excerpts and re-searches with a better query when they fall
 > short — the loop grades retrieval, not the finished answer, so streaming stays
-> unaffected. M4 added the QA List: save a finished answer into a shared, browsable
-> regression set, filter and re-run it against the current index, mark it pass or
-> fail, and export the filtered list to a spreadsheet. **The M0–M2 and M4 frontend is
+> unaffected. M4 added the QA Checklist: a user names a module, AskRepo generates
+> test cases with expected results grounded in the code, nothing enters the checklist
+> unreviewed, a shared conversation proposes further changes, and testers record
+> pass/fail/blocked results — all exported to `.xlsx`. **The M0–M2 and M4 frontend is
 > shipped too**: sign in, change the forced initial password, add and re-index
 > projects, ask questions with the answer streaming in, manage accounts, and work the
-> QA List — all in a browser, with the session held in httpOnly cookies by Next rather
+> checklist — all in a browser, with the session held in httpOnly cookies by Next rather
 > than in the page. See [Roadmap](#roadmap) for what lands when, and
 > [`docs/PRD.md`](docs/PRD.md) for the full specification.
 
@@ -39,7 +40,7 @@ management — against real repositories rather than tutorial data.
 | **0** | Auth & Accounts | Admin-provisioned email/password accounts, JWT access + revocable refresh tokens |
 | **1** | Project ingestion | Submit a repo URL; AskRepo clones, indexes, and tracks it. Projects are shared instance-wide |
 | **2** | Dev Knowledge | Ask questions against an indexed project; answers cite real file paths and functions. Conversations stay private to each user |
-| **3** | QA List | Shared, browsable Q&A pairs — the team's knowledge base and regression set |
+| **3** | QA Checklist | Generate test cases for a code module, review and refine them via chat, record pass/fail/blocked results, and export as a spreadsheet |
 | **4** | Mock Data Generator | Auto-generate synthetic Q&A pairs from code, plus a lightweight eval score |
 
 ## Stack
@@ -242,8 +243,8 @@ Milestones from [`docs/PRD.md`](docs/PRD.md) §6, built in order:
 - [x] **M2** — Dev Knowledge: streaming RAG Q&A against a ready project, private conversations
 - [x] **M0–M2 frontend** — auth screens, app shell, projects, streamed answers, admin user management
 - [x] **M3** — LangGraph: intent routing + a self-critique loop that grades retrieval before generating
-- [x] **M4** — QA List: shared storage, save / view / filter / re-run, pass/fail status, export
-- [x] **M4 frontend** — the `/qa` grid, the `/qa/[id]` detail page, the re-run panel, save-from-Ask
+- [x] **M4** — QA Checklist: generate test cases from code, shared chat for refinement, apply/discard proposals, result recording, export
+- [x] **M4 frontend** — the `/checklist` module list, the `/checklist/[moduleId]` grid with chat and review panel
 - [ ] **M5** — Mock Data Generator: synthetic Q&A + eval scoring
 - [ ] **M6** — Local vs hosted model comparison
 

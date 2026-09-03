@@ -88,9 +88,8 @@ The shape AskRepo is heading for:
 /projects/[id]          detail: status, stats, reindex, delete
 /ask                    Dev Knowledge — project picker + conversation
 /ask/[conversationId]   a conversation (private to the operator)
-/qa                     QA List (shared)
-/qa/[id]                a QA pair: expected result, result, status, review — edit and
-                        delete are a dropdown menu; edit opens a dialog, not a route
+/checklist              QA Checklist modules (shared)
+/checklist/[moduleId]   the checklist grid, chat and review panel
 /settings/users         admin only
 ```
 
@@ -104,7 +103,7 @@ Notes that bite:
 
 ## 7. Conversations are private; projects are not
 
-`/projects` and `/qa` show everything on the instance — that is intended (`docs/PRD.md` §4.1).
+`/projects` and `/checklist` show everything on the instance — that is intended (`docs/PRD.md` §4.1).
 `/ask/[conversationId]` shows only the operator's own, and a foreign id answers `404`, not `403`
 (`response-api.md`). The nav must not imply otherwise: there is no "all conversations"
 destination, and the conversation list in the sidebar or picker is always the caller's own.

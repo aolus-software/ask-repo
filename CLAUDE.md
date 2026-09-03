@@ -15,9 +15,11 @@ disagree, that is a contradiction to report — not a doc to quietly rewrite.
 **Status: M0, M1, M2, M3, and M4 (backend) shipped.** The backend serves an index route, health
 checks, the full auth/accounts surface (admin-provisioned users, login, forced first-login
 password change, session rotation, login rate limiting), the project CRUD routes, the
-conversation routes that answer questions about an indexed project, and the QA List routes that
-save, list, filter, re-run, and export a shared regression set of Q&A pairs. **All four
-datastores are read** — Postgres, Redis, Qdrant, and Kafka.
+conversation routes that answer questions about an indexed project, and the seventeen QA
+Checklist routes that name modules over a repository, generate reviewed test plans for them,
+refine them by chat, record results, and export the grid to `.xlsx`. **All four
+datastores are read** — Postgres, Redis, Qdrant, and Kafka. The worker reads a chat model as
+well as an embedder: checklist generation runs a model in that process, ingestion does not.
 
 M1 is complete end to end. `app/ingestion/` holds the cloner, walker, chunker, embedder adapter,
 Qdrant vector store, and `IngestionPipeline`; `app/queue/` holds the message format, topics, both
@@ -39,17 +41,23 @@ better search query when they fall short, bounded by `RAG_MAX_RETRIEVAL_ATTEMPTS
 grades retrieval, not the finished answer — see `docs/PRD.md` §5's Orchestration row and §6's
 M3 line for why.
 
-M4 is shipped too. `app/services/qa_pair.py` and `app/services/qa_export.py` hold the QA List's
-business rules and its `.xlsx` export; `app/api/routes/qa_pairs.py` puts them behind eleven
-routes. A pair is created from a finished message id, never from answer text in the request
-body, so `create` is the enforcement point for `docs/PRD.md` §4.2's `finish_reason` guard. A
-re-run streams over the same SSE contract as `POST /conversations/{id}/messages` but writes its
-result into a pending slot on the pair rather than letting the client post an answer back — see
-`.claude/rules/rag.md`.
+M4 is shipped too, and it replaced the QA List that shipped at this milestone earlier —
+`docs/superpowers/specs/2026-09-01-m4-qa-checklist-design.md` §0 records why. `app/checklist/`
+holds the generator, the model's output contracts, and the file rebuild; `app/queue/checklist.py`
+holds the job handler the worker runs; `app/services/checklist_module.py`,
+`checklist_item.py`, `checklist_change_set.py` and `checklist_export.py` hold the business rules;
+and `checklist_modules.py`, `checklist_items.py` and `checklist_change_sets.py` put them behind
+seventeen routes.
+
+Two facts about it outrank the rest. **The generator scrolls the index; it does not search it**
+— top-k retrieval cannot report what it left out, and a test plan that silently omits a file is
+worse than one that says which files it covered. And **nothing writes `checklist_items` except
+the apply path**: generation and the refinement chat both write a *pending change set*, and
+`POST /checklist-change-sets/{id}/apply` is the only code that turns a proposal into a row.
 
 The M0–M2 and M4 frontend is shipped: auth screens, the app shell, projects, the streamed answer
-surface, admin user management, and the QA List (`/qa`, `/qa/[id]`), with Next acting as a
-backend-for-frontend (see the Frontend section below). Later milestones are not built — do not
+surface, admin user management, and the QA Checklist (`/checklist`, `/checklist/[moduleId]`),
+with Next acting as a backend-for-frontend (see the Frontend section below). Later milestones are not built — do not
 assume a module exists because the PRD describes it; the PRD describes the destination.
 
 ## Commands
@@ -237,6 +245,24 @@ A model change therefore lands in a different collection instead of silently mix
 vectors. Each project records the collection it wrote to, which is how `DELETE /projects/{id}`
 knows where its points live. Never hardcode a collection name.
 
+### The checklist is a diff, not a list
+
+A generated checklist never lands as rows. Both producers — the background generator and the
+refinement chat — write a **pending change set**: a JSON list of `add` / `update` / `remove`
+operations, each with the rationale that argued for it. A human ticks the ones they accept and
+`POST /checklist-change-sets/{id}/apply` writes exactly those. Discarding writes nothing at all.
+
+Two consequences that are not visible from any single file. **A regeneration cannot destroy a
+recorded result**: it proposes operations against the rows that exist, and a `pass` a tester
+recorded last week survives unless somebody ticks a `remove` and applies it. And **`status` and
+`current_result` are outside what an operation may write** — the apply path runs an explicit
+column allowlist rather than `setattr`, because `changes` originates in a model's output and an
+unchecked key would let it claim an observation nobody made.
+
+One pending change set per module, deliberately: concurrent refinement is out of scope for v1,
+and the UI disables Generate and the composer while one is waiting rather than letting the
+second request fail with a `409` after the user typed a paragraph.
+
 ### Reindex is a generation swap
 
 A reindex does not empty the project's points and refill them — that would take a `ready` project
@@ -296,7 +322,7 @@ Twelve rule files in `.claude/rules/`. Read the ones your change touches.
 | `router.md` | Any `APIRouter` — layout, dependencies, the CRUD shape, access scoping |
 | `persistence.md` | Any model, repository, migration, or session code |
 | `ingestion.md` | Anything under `app/ingestion/` or `app/queue/` — leases, pausing, error classes, collections |
-| `rag.md` | Anything under `app/rag/`, the conversation service/routes, or the QA List's re-run — generation filters, grounding, the SSE contract, the shielded write |
+| `rag.md` | Anything under `app/rag/`, the conversation service/routes, or the checklist's refinement chat — generation filters, grounding, the SSE contract, the shielded write |
 | `design-system.md` | Any `.tsx` or `.css` — tokens, shadcn, dark mode, spacing |
 | `forms.md` | Any form — dialog vs page, validation ownership, field composition |
 | `navigation.md` | Sidebar, breadcrumbs, or adding a route |
@@ -320,7 +346,8 @@ enforced there — if you add a convention, wire it into the config in the same 
 
 App Router, React 19, Tailwind CSS 4 (CSS-first `@theme`, no `tailwind.config.js` for tokens).
 The M0–M2 and M4 screens are shipped: `/login`, `/change-password`, `/` (dashboard), `/projects`,
-`/projects/[id]`, `/ask`, `/ask/[conversationId]`, `/settings/users`, `/qa`, and `/qa/[id]`.
+`/projects/[id]`, `/ask`, `/ask/[conversationId]`, `/settings/users`, `/checklist`, and
+`/checklist/[moduleId]`.
 
 ### Next is a backend-for-frontend, not a thin client
 

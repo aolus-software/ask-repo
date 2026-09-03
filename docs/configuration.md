@@ -261,6 +261,7 @@ already running Postgres, Qdrant, Redis and Kafka.
 | `RAG_MAX_RETRIEVAL_ATTEMPTS` | `2` | How many times retrieval may run for one question — the first attempt plus any the evidence grader asks for. Raise it if answers often miss code you know is indexed; each extra attempt costs one model call before the answer starts. Must be at least 1. |
 | `RAG_GRADE_EVIDENCE` | `true` | Whether a model call judges the retrieved excerpts before answering, and re-searches on a better query when they fall short. Turning it off removes one model call per question and makes the answer path identical to M2's. |
 | `RAG_CLASSIFY_INTENT` | `true` | Whether a model call routes the question — code question, conversational follow-up, or out of scope — before retrieving. Turning it off sends every question down the retrieval path, including "thanks". |
+| `RAG_PROPOSE_CHANGES` | `true` | Whether the QA Checklist's refinement chat runs the extra model call that turns a reply into a proposed change set. Turning it off leaves the chat answering questions about the checklist and proposing nothing — the Ask screen is unaffected either way, because its call site cannot reach this node. |
 
 `RAG_MIN_SCORE` is the setting most worth tuning. Below the floor the embedder is saying
 "unrelated", and answering from unrelated code is how a fluent, confident, entirely wrong
@@ -274,11 +275,20 @@ below-floor neighbour in behind it.
 
 ---
 
-### QA List
+### QA Checklist
+
+`QA_EXPORT_MAX_ROWS` was renamed to `CHECKLIST_EXPORT_MAX_ROWS` when the QA List was replaced
+(`docs/PRD.md` §4.3). The old name is not read as a fallback: an instance still setting it will
+run on the default and the export cap will silently be whatever the default is, so rename it in
+your `.env` rather than assuming it carried over.
 
 | Variable | Default | What it does |
 | --- | --- | --- |
-| `QA_EXPORT_MAX_ROWS` | `5000` | Rows the `.xlsx` export will build before refusing with `409 EXPORT_TOO_LARGE`. `openpyxl` builds the whole workbook in memory even in write-only mode, so this cap is the only thing bounding that allocation. Narrow the filters and try again rather than raising it casually. |
+| `CHECKLIST_EXPORT_MAX_ROWS` | `5000` | Rows the `.xlsx` export will build before refusing with `409 EXPORT_TOO_LARGE`. `openpyxl` builds the whole workbook in memory even in write-only mode, so this cap is the only thing bounding that allocation. Narrow the filters and try again rather than raising it casually. |
+| `KAFKA_CHECKLIST_TOPIC` | `askrepo.checklist.generate` | The topic checklist generation jobs are published to. Its own topic, not the ingest one, and that is the point: a generation retrying for eleven minutes must not sit in the queue a project reindex is waiting in. Its retry rungs are derived from this name, so renaming it strands anything already queued under the old one. |
+| `KAFKA_CHECKLIST_PARTITIONS` | `1` | Partitions on that topic, which is the ceiling on how many generations run at once — one consumer may own a partition, so `1` means one generation at a time across the instance. Raise it only alongside worker replicas; more partitions than workers buys nothing. Lowering it later is not possible without deleting the topic. |
+| `CHECKLIST_MAP_CONCURRENCY` | `4` | How many files the generator observes concurrently in its map step. Each is one model call, so this multiplies load on a server that may already serialise inference: too high and every generation gets slower rather than the batch finishing sooner. Too low and a large module takes minutes longer than it needs to. |
+| `CHECKLIST_SCROLL_PAGE_SIZE` | `256` | Points fetched per Qdrant scroll page while enumerating a module's files. It bounds memory per page, not the total: the generator reads every matching chunk regardless, so this trades round trips against the size of one response. |
 
 ---
 

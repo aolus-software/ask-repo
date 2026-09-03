@@ -1,6 +1,7 @@
 # M4 — QA Checklist: Design
 
-**Status:** approved, not implemented.
+**Status:** implemented, 2026-09-03.
+**Implemented by:** `docs/superpowers/plans/2026-09-02-m4-qa-checklist.md`.
 **Supersedes:** `docs/superpowers/specs/2026-08-31-m4-qa-list-design.md`.
 **Requires PRD changes:** §4.3 rewritten, §4.4 storage clause amended, §6's M4 line, §7's
 success criteria. Those land in the same change as the code
