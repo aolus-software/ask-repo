@@ -391,22 +391,17 @@ def build_propose_changes(chat_model: BaseChatModel, *, enabled: bool) -> Node:
                 "rationale": operation.rationale or "No rationale given.",
             }
             try:
-                # Validate this operation's payload. If it fails, drop it and log.
                 validated_payload = ChangeOperationPayload.model_validate(operation_dict)
                 operations.append(operation_dict)
                 validated_ops.append(validated_payload)
             except ValidationError as e:
-                logger.warning(
-                    "Dropping proposed operation with invalid payload: %s", e, exc_info=False
-                )
+                logger.warning("Dropping proposed operation with invalid payload: %s", e)
 
-        # If no operations survived validation, return the empty shape.
         if not operations:
             return {"operations": [], "change_summary": ""}
 
         summary = result.summary or f"{len(operations)} proposed change(s)"
 
-        # Emit the event with the validated operations.
         try:
             emit(
                 ChangeSetEvent(
