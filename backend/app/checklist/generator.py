@@ -14,7 +14,8 @@ from datetime import UTC, datetime
 from langchain_core.language_models import BaseChatModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.checklist.model_output import FileObservations, ProposedChangeSet, ProposedOperation
+from app.checklist.model_output import FileObservations, ProposedChangeSet
+from app.checklist.operations import stored_operation
 from app.checklist.source import ModuleFile, ModuleSource, rebuild_files
 from app.config import Settings
 from app.db.session import get_sessionmaker
@@ -288,7 +289,7 @@ class ChecklistGenerator:
             file.path: (file.start_line, file.end_line, file.language) for file in source.files
         }
         operations: list[dict[str, object]] = []
-        for index, operation in enumerate(proposal.operations):
+        for operation in proposal.operations:
             citations: list[dict[str, object]] = [
                 {
                     "index": position + 1,
@@ -305,31 +306,10 @@ class ChecklistGenerator:
                     [path for path in operation.citation_paths if path in ranges]
                 )
             ]
-            operations.append(self._operation_json(operation, index=index, citations=citations))
+            stored = stored_operation(operation, citations=citations)
+            if stored is not None:
+                operations.append(stored)
         return operations
-
-    @staticmethod
-    def _operation_json(
-        operation: ProposedOperation, *, index: int, citations: list[dict[str, object]]
-    ) -> dict[str, object]:
-        """One operation, keyed camelCase because it is read back as a wire payload.
-
-        Stored in the shape `ChangeOperationPayload` parses, so the apply path and the
-        diff UI read one thing rather than translating between two.
-        """
-        return {
-            "op": operation.op,
-            # Minted here, not by the model: each operation needs its own id so apply
-            # can be selective, and an id the model chose could collide or repeat.
-            "id": str(uuid.uuid4()),
-            "itemId": operation.item_id or None,
-            "feature": operation.feature or None,
-            "testName": operation.test_name or None,
-            "expectedResult": operation.expected_result or None,
-            "changes": operation.changes or None,
-            "citations": citations or None,
-            "rationale": operation.rationale or "No rationale given.",
-        }
 
     @staticmethod
     def _summarise(proposal: ProposedChangeSet, *, source: ModuleSource) -> str:

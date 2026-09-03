@@ -13,15 +13,14 @@ answers entirely is worse than the behaviour it was added to improve.
 
 import asyncio
 import logging
-import uuid
 from collections.abc import Awaitable, Callable
 
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import BaseMessage
 from langgraph.config import get_stream_writer
-from pydantic import ValidationError
 
 from app.checklist.model_output import ProposedChangeSet
+from app.checklist.operations import stored_operation
 from app.models.conversation import FinishReason
 from app.rag.graph.state import Classification, EvidenceVerdict, Intent, TurnState
 from app.rag.grounding import OUT_OF_SCOPE_ANSWER
@@ -373,29 +372,14 @@ def build_propose_changes(chat_model: BaseChatModel, *, enabled: bool) -> Node:
         if not isinstance(result, ProposedChangeSet) or not result.operations:
             return {"operations": [], "change_summary": ""}
 
-        # Build operation dicts, validating each one individually so one bad operation
-        # does not drop the whole set. Operations with invalid payloads are dropped.
-        operations: list[dict[str, object]] = []
-        validated_ops: list[ChangeOperationPayload] = []
-        for operation in result.operations:
-            operation_dict: dict[str, object] = {
-                "op": operation.op,
-                "id": str(uuid.uuid4()),
-                "itemId": operation.item_id or None,
-                "feature": operation.feature or None,
-                "testName": operation.test_name or None,
-                "expectedResult": operation.expected_result or None,
-                "changes": operation.changes or None,
-                "citations": [citation.model_dump() for citation in to_citations(state["spans"])]
-                or None,
-                "rationale": operation.rationale or "No rationale given.",
-            }
-            try:
-                validated_payload = ChangeOperationPayload.model_validate(operation_dict)
-                operations.append(operation_dict)
-                validated_ops.append(validated_payload)
-            except ValidationError as e:
-                logger.warning("Dropping proposed operation with invalid payload: %s", e)
+        # Citations are the same for every operation this call proposes: the turn had
+        # one retrieval, not one per operation.
+        citations = [citation.model_dump() for citation in to_citations(state["spans"])]
+        operations = [
+            stored
+            for operation in result.operations
+            if (stored := stored_operation(operation, citations=citations)) is not None
+        ]
 
         if not operations:
             return {"operations": [], "change_summary": ""}
@@ -407,7 +391,10 @@ def build_propose_changes(chat_model: BaseChatModel, *, enabled: bool) -> Node:
                 ChangeSetEvent(
                     change_set_id=change_set_id,
                     summary=summary,
-                    operations=validated_ops,
+                    # Already guaranteed to validate -- `stored_operation` only
+                    # returns dicts that do -- so this is re-parsing what was proven
+                    # correct, not a second place that decision could diverge.
+                    operations=[ChangeOperationPayload.model_validate(op) for op in operations],
                 )
             )
         except Exception:
