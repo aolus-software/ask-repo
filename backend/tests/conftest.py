@@ -230,6 +230,10 @@ def app_with_queue(
     The name is understated for historical reasons: it replaced only the broker when
     M1 shipped it.
     """
+    from app.api.routes.checklist_modules import (
+        get_checklist_queue,
+        get_proposing_answerer_factory,
+    )
     from app.api.routes.conversations import get_answerer_factory
     from app.api.routes.projects import get_ingestion_queue, get_store_factory
     from app.main import create_app
@@ -243,6 +247,12 @@ def app_with_queue(
     # override, deleting an indexed project opens a real Qdrant connection and fails
     # with 503 against a collection the fake never created.
     application.dependency_overrides[get_store_factory] = lambda: lambda collection: vector_store
+    # The checklist routes have their own queue and answerer dependencies, so
+    # overriding the conversation ones does not cover them.
+    application.dependency_overrides[get_checklist_queue] = lambda: ingestion_queue
+    application.dependency_overrides[get_proposing_answerer_factory] = lambda: (
+        _fake_answerer_factory(vector_store, chat_model)
+    )
     return application
 
 

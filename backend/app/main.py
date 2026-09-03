@@ -8,7 +8,17 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.routes import auth, conversations, health, index, projects, users
+from app.api.routes import (
+    auth,
+    checklist_change_sets,
+    checklist_items,
+    checklist_modules,
+    conversations,
+    health,
+    index,
+    projects,
+    users,
+)
 from app.config import get_settings
 from app.core.errors import register_exception_handlers
 from app.core.middleware import AuthContextMiddleware
@@ -125,6 +135,9 @@ def create_app() -> FastAPI:
     app.include_router(users.router)
     app.include_router(projects.router)
     app.include_router(conversations.router)
+    app.include_router(checklist_modules.router)
+    app.include_router(checklist_items.router)
+    app.include_router(checklist_change_sets.router)
 
     return app
 
