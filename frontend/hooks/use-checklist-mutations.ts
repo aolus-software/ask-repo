@@ -50,6 +50,23 @@ export function useDeleteChecklistModule(id: string) {
   });
 }
 
+/**
+ * Generate for a module whose id is only known at call time.
+ *
+ * `useGenerateChecklistModule` binds its id when the hook runs, which a caller acting
+ * on a just-created module cannot do -- the id arrives in the create response.
+ */
+export function useGenerateChecklistModuleById() {
+  const invalidate = useChecklistModuleInvalidation();
+  return useMutation({
+    mutationFn: (moduleId: string) =>
+      apiFetch<ChecklistModuleResponse>(endpoints.checklistModules.generate(moduleId), {
+        method: "POST",
+      }),
+    onSuccess: invalidate,
+  });
+}
+
 export function useGenerateChecklistModule(id: string) {
   const invalidate = useChecklistModuleInvalidation();
   return useMutation({

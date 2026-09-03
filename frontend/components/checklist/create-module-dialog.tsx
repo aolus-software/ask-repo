@@ -14,7 +14,10 @@ import {
 } from "@/components/ui/combobox";
 import { Field, FieldDescription, FieldError, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { useCreateChecklistModule } from "@/hooks/use-checklist-mutations";
+import {
+  useCreateChecklistModule,
+  useGenerateChecklistModuleById,
+} from "@/hooks/use-checklist-mutations";
 import { useProjects } from "@/hooks/use-projects";
 import { fieldError } from "@/lib/api/errors";
 import { SORT } from "@/lib/api/endpoints";
@@ -31,6 +34,7 @@ export function CreateModuleDialog({
 }) {
   const [values, setValues] = useState(EMPTY);
   const mutation = useCreateChecklistModule();
+  const generate = useGenerateChecklistModuleById();
 
   const query = useProjects({
     limit: 100,
@@ -61,10 +65,19 @@ export function CreateModuleDialog({
         sourcePath: values.sourcePath.trim(),
       },
       {
-        onSuccess: () => {
-          toast.success("Module created");
+        // Generation is fired here rather than folded into the create request: the
+        // module exists either way, and chaining them would report a generation
+        // failure as a failed create, inviting a retry that makes a second module.
+        onSuccess: (module) => {
+          toast.success("Module created. Generating its checklist\u2026");
           setValues(EMPTY);
           onOpenChange(false);
+          generate.mutate(module.id, {
+            onError: () =>
+              toast.error(
+                "Module created, but generation did not start. Use Generate on the module.",
+              ),
+          });
         },
       },
     );
