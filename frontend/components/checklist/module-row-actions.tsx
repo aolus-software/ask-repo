@@ -1,11 +1,6 @@
 "use client";
 
-import {
-  Edit2,
-  MoreHorizontal,
-  Play,
-  Trash2,
-} from "lucide-react";
+import { Edit2, MoreHorizontal, Play, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 
@@ -21,11 +16,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Field, FieldDescription, FieldError, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import {
   useDeleteChecklistModule,
   useGenerateChecklistModule,
@@ -36,11 +27,7 @@ import { fieldError } from "@/lib/api/errors";
 import type { ChecklistModuleResponse } from "@/lib/api/types";
 import { canManageProject } from "@/lib/can";
 
-export function ModuleRowActions({
-  module,
-}: {
-  module: ChecklistModuleResponse;
-}) {
+export function ModuleRowActions({ module }: { module: ChecklistModuleResponse }) {
   const user = useSession();
   const [editingName, setEditingName] = useState(module.name);
   const [editingPath, setEditingPath] = useState(module.sourcePath);

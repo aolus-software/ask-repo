@@ -255,7 +255,10 @@ describe("the proxy", () => {
     );
 
     const response = await GET(
-      proxyRequest("/api/checklist-items/export", "askrepo_access=jwt; askrepo_session=s%3D1"),
+      proxyRequest(
+        "/api/checklist-items/export",
+        "askrepo_access=jwt; askrepo_session=s%3D1",
+      ),
       context(["checklist-items", "export"]),
     );
 

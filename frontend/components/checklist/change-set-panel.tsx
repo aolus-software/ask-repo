@@ -60,7 +60,10 @@ function targetItem(
   return items.find((item) => item.id === operation.itemId);
 }
 
-function isOrphaned(operation: ChangeOperation, items: ChecklistItemResponse[]): boolean {
+function isOrphaned(
+  operation: ChangeOperation,
+  items: ChecklistItemResponse[],
+): boolean {
   if (operation.op === "add") return false;
   return targetItem(operation, items) === undefined;
 }
@@ -84,14 +87,16 @@ function OperationRow({
         className="mt-1"
         aria-label="Include this change"
       />
-      <div className={orphaned ? "flex-1 text-muted-foreground" : "flex-1"}>{children}</div>
+      <div className={orphaned ? "text-muted-foreground flex-1" : "flex-1"}>
+        {children}
+      </div>
     </div>
   );
 }
 
 function Rationale({ rationale }: { rationale: string }) {
   return (
-    <p className="text-sm text-muted-foreground">
+    <p className="text-muted-foreground text-sm">
       {rationale.trim() ? rationale : "No rationale given."}
     </p>
   );
@@ -119,16 +124,21 @@ export function ChangeSetPanel({
 
   function invalidate() {
     queryClient.invalidateQueries({ queryKey: keys.checklistModules.detail(moduleId) });
-    queryClient.invalidateQueries({ queryKey: keys.checklistChangeSets.forModule(moduleId) });
+    queryClient.invalidateQueries({
+      queryKey: keys.checklistChangeSets.forModule(moduleId),
+    });
     queryClient.invalidateQueries({ queryKey: keys.checklistItems.all });
   }
 
   const applyMutation = useMutation({
     mutationFn: (body: { operationIds?: string[] }) =>
-      apiFetch<ChangeSetApplyResponse>(endpoints.checklistChangeSets.apply(changeSet.id), {
-        method: "POST",
-        body: JSON.stringify(body),
-      }),
+      apiFetch<ChangeSetApplyResponse>(
+        endpoints.checklistChangeSets.apply(changeSet.id),
+        {
+          method: "POST",
+          body: JSON.stringify(body),
+        },
+      ),
     onSuccess: (data) => {
       invalidate();
       if (data.skippedOperationIds.length > 0) {
@@ -141,9 +151,12 @@ export function ChangeSetPanel({
 
   const discardMutation = useMutation({
     mutationFn: () =>
-      apiFetch<ChecklistChangeSetResponse>(endpoints.checklistChangeSets.discard(changeSet.id), {
-        method: "POST",
-      }),
+      apiFetch<ChecklistChangeSetResponse>(
+        endpoints.checklistChangeSets.discard(changeSet.id),
+        {
+          method: "POST",
+        },
+      ),
     onSuccess: () => {
       invalidate();
       toast.success("Proposals discarded");
@@ -179,7 +192,7 @@ export function ChangeSetPanel({
       <CardHeader>
         <CardTitle>Proposed changes</CardTitle>
         <CardDescription>{changeSet.summary}</CardDescription>
-        <p className="text-sm text-muted-foreground">
+        <p className="text-muted-foreground text-sm">
           {counts.added} added, {counts.updated} changed, {counts.removed} removed
         </p>
       </CardHeader>
@@ -187,15 +200,15 @@ export function ChangeSetPanel({
         {skippedCount !== null ? (
           <Alert>
             <AlertDescription>
-              {skippedCount} proposed change{skippedCount === 1 ? "" : "s"} were skipped because
-              the test case they referred to no longer exists.
+              {skippedCount} proposed change{skippedCount === 1 ? "" : "s"} were skipped
+              because the test case they referred to no longer exists.
             </AlertDescription>
           </Alert>
         ) : null}
 
         {added.length > 0 ? (
           <div>
-            <h3 className="text-sm font-medium text-primary">Added</h3>
+            <h3 className="text-primary text-sm font-medium">Added</h3>
             <Separator className="mt-2" />
             <div className="divide-y">
               {added.map((operation) => (
@@ -206,7 +219,7 @@ export function ChangeSetPanel({
                   orphaned={false}
                 >
                   <p className="font-medium">{operation.testName}</p>
-                  <p className="text-sm text-muted-foreground">{operation.feature}</p>
+                  <p className="text-muted-foreground text-sm">{operation.feature}</p>
                   {operation.expectedResult ? (
                     <p className="mt-1 text-sm">{operation.expectedResult}</p>
                   ) : null}
@@ -221,7 +234,7 @@ export function ChangeSetPanel({
 
         {updated.length > 0 ? (
           <div>
-            <h3 className="text-sm font-medium text-muted-foreground">Changed</h3>
+            <h3 className="text-muted-foreground text-sm font-medium">Changed</h3>
             <Separator className="mt-2" />
             <div className="divide-y">
               {updated.map((operation) => {
@@ -242,14 +255,18 @@ export function ChangeSetPanel({
                       <>
                         <p className="font-medium">{item.testName}</p>
                         <div className="mt-1 space-y-1">
-                          {Object.entries(operation.changes ?? {}).map(([field, next]) => (
-                            <p key={field} className="text-sm">
-                              <span className="text-muted-foreground">{fieldLabel(field)}: </span>
-                              {oldFieldValue(item, field)}
-                              <span className="text-muted-foreground"> → </span>
-                              {next}
-                            </p>
-                          ))}
+                          {Object.entries(operation.changes ?? {}).map(
+                            ([field, next]) => (
+                              <p key={field} className="text-sm">
+                                <span className="text-muted-foreground">
+                                  {fieldLabel(field)}:{" "}
+                                </span>
+                                {oldFieldValue(item, field)}
+                                <span className="text-muted-foreground"> → </span>
+                                {next}
+                              </p>
+                            ),
+                          )}
                         </div>
                       </>
                     )}
@@ -265,7 +282,7 @@ export function ChangeSetPanel({
 
         {removed.length > 0 ? (
           <div>
-            <h3 className="text-sm font-medium text-destructive">Removed</h3>
+            <h3 className="text-destructive text-sm font-medium">Removed</h3>
             <Separator className="mt-2" />
             <div className="divide-y">
               {removed.map((operation) => {
@@ -285,7 +302,7 @@ export function ChangeSetPanel({
                     ) : (
                       <>
                         <p className="font-medium">{item.testName}</p>
-                        <p className="text-sm text-muted-foreground">{item.feature}</p>
+                        <p className="text-muted-foreground text-sm">{item.feature}</p>
                       </>
                     )}
                     <div className="mt-2">

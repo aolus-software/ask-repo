@@ -2,8 +2,8 @@
 
 import Link from "next/link";
 
+import { ChecklistModuleStatusBadge } from "@/components/checklist/module-status-badge";
 import { StalenessBadge } from "@/components/checklist/staleness-badge";
-import { StatusBadge } from "@/components/feedback/status-badge";
 import { TableSkeleton } from "@/components/feedback/table-skeleton";
 import {
   Table,
@@ -13,31 +13,10 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { ModuleRowActions } from "@/components/checklist/module-row-actions";
-import type { ChecklistModuleResponse, ChecklistModuleStatus } from "@/lib/api/types";
+import type { ChecklistModuleResponse } from "@/lib/api/types";
 import { formatRelative } from "@/lib/dates";
-import type { StatusTone } from "@/lib/status";
-
-const STATUS_MAPPING: Record<ChecklistModuleStatus, string> = {
-  empty: "Empty",
-  generating: "Generating",
-  review: "Review",
-  ready: "Ready",
-  failed: "Failed",
-};
-
-const STATUS_TONE_MAPPING: Record<ChecklistModuleStatus, StatusTone> = {
-  empty: "neutral",
-  generating: "warning",
-  review: "warning",
-  ready: "success",
-  failed: "danger",
-};
 
 /** Column order is fixed by `docs/design.md`: identity, status, timestamps, actions. */
 export function ModuleTable({
@@ -70,10 +49,7 @@ export function ModuleTable({
             modules.map((module) => (
               <TableRow key={module.id}>
                 <TableCell className="font-medium">
-                  <Link
-                    href={`/checklist/${module.id}`}
-                    className="hover:text-primary"
-                  >
+                  <Link href={`/checklist/${module.id}`} className="hover:text-primary">
                     {module.name}
                   </Link>
                   <div className="text-muted-foreground text-sm">
@@ -82,12 +58,9 @@ export function ModuleTable({
                 </TableCell>
                 <TableCell>
                   <div className="flex flex-col gap-2">
-                    <StatusBadge
-                      tone={STATUS_TONE_MAPPING[module.status]}
-                      label={STATUS_MAPPING[module.status] || module.status}
-                    />
+                    <ChecklistModuleStatusBadge status={module.status} />
                     {module.pendingChangeSetId ? (
-                      <div className="text-xs text-primary">Review changes</div>
+                      <div className="text-primary text-xs">Review changes</div>
                     ) : null}
                   </div>
                 </TableCell>
@@ -97,7 +70,7 @@ export function ModuleTable({
                   {module.status === "failed" && module.error ? (
                     <Tooltip>
                       <TooltipTrigger>
-                        <div className="text-destructive truncate cursor-help">
+                        <div className="text-destructive cursor-help truncate">
                           {module.failCount}
                         </div>
                       </TooltipTrigger>
@@ -108,9 +81,7 @@ export function ModuleTable({
                   )}
                 </TableCell>
                 <TableCell className="text-sm">{module.blockedCount}</TableCell>
-                <TableCell className="text-sm">
-                  {module.untestedCount}
-                </TableCell>
+                <TableCell className="text-sm">{module.untestedCount}</TableCell>
                 <TableCell className="text-muted-foreground text-sm">
                   {module.lastGeneratedAt ? (
                     <>

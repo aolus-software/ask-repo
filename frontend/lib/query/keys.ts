@@ -30,12 +30,14 @@ export const keys = {
   },
   checklistModules: {
     all: ["checklist-modules"] as const,
-    list: (params: ChecklistModuleListParams) => ["checklist-modules", "list", params] as const,
+    list: (params: ChecklistModuleListParams) =>
+      ["checklist-modules", "list", params] as const,
     detail: (id: string) => ["checklist-modules", "detail", id] as const,
   },
   checklistItems: {
     all: ["checklist-items"] as const,
-    list: (params: ChecklistItemListParams) => ["checklist-items", "list", params] as const,
+    list: (params: ChecklistItemListParams) =>
+      ["checklist-items", "list", params] as const,
   },
   checklistChangeSets: {
     all: ["checklist-change-sets"] as const,

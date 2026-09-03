@@ -3,7 +3,11 @@ import { describe, expect, it } from "vitest";
 import { groupByFeature, summariseOperations } from "@/lib/checklist/operations";
 import type { ChangeOperation, ChecklistItemResponse } from "@/lib/api/types";
 
-function item(feature: string, testName: string, position: number): ChecklistItemResponse {
+function item(
+  feature: string,
+  testName: string,
+  position: number,
+): ChecklistItemResponse {
   return {
     id: `${feature}-${position}`,
     moduleId: "m",
@@ -51,6 +55,10 @@ describe("summariseOperations", () => {
       { op: "remove", id: "4", itemId: "j", rationale: "r" },
     ];
 
-    expect(summariseOperations(operations)).toEqual({ added: 2, updated: 1, removed: 1 });
+    expect(summariseOperations(operations)).toEqual({
+      added: 2,
+      updated: 1,
+      removed: 1,
+    });
   });
 });

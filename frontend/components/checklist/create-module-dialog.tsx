@@ -38,9 +38,7 @@ export function CreateModuleDialog({
     sortDirection: "desc",
   });
 
-  const readyProjects = (query.data?.items ?? []).filter(
-    (p) => p.status === "ready"
-  );
+  const readyProjects = (query.data?.items ?? []).filter((p) => p.status === "ready");
   const selectedProject = readyProjects.find((p) => p.id === values.projectId) ?? null;
 
   function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
@@ -68,7 +66,7 @@ export function CreateModuleDialog({
           setValues(EMPTY);
           onOpenChange(false);
         },
-      }
+      },
     );
   }
 
@@ -114,8 +112,8 @@ export function CreateModuleDialog({
           </ComboboxContent>
         </Combobox>
         <FieldDescription>
-          A module can only be created against an indexed project. Offering others produces
-          a 409 the user cannot act on.
+          A module can only be created against an indexed project. Offering others
+          produces a 409 the user cannot act on.
         </FieldDescription>
         {fieldError(mutation.error, "projectId") ? (
           <FieldError>{fieldError(mutation.error, "projectId")}</FieldError>
@@ -147,9 +145,7 @@ export function CreateModuleDialog({
           className="font-mono"
           placeholder="backend/app/auth"
           value={values.sourcePath}
-          onChange={(event) =>
-            setValues({ ...values, sourcePath: event.target.value })
-          }
+          onChange={(event) => setValues({ ...values, sourcePath: event.target.value })}
           aria-invalid={Boolean(fieldError(mutation.error, "sourcePath"))}
         />
         <FieldDescription>

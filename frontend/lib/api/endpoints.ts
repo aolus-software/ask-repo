@@ -102,7 +102,9 @@ export function listQueryString(params: ListParams): string {
 }
 
 /** `listQueryString` plus the two module filters. */
-export function checklistModuleListQueryString(params: ChecklistModuleListParams): string {
+export function checklistModuleListQueryString(
+  params: ChecklistModuleListParams,
+): string {
   const search = new URLSearchParams(listQueryString(params).replace(/^\?/, ""));
   if (params.projectId) search.set("projectId", params.projectId);
   if (params.status) search.set("status", params.status);

@@ -48,7 +48,10 @@ export function ItemFilters({
           placeholder="Filter by feature"
           value={currentFilters.feature ?? ""}
           onChange={(event) =>
-            onFiltersChange({ ...currentFilters, feature: event.target.value || undefined })
+            onFiltersChange({
+              ...currentFilters,
+              feature: event.target.value || undefined,
+            })
           }
           aria-label="Filter by feature"
         />

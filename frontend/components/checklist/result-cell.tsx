@@ -46,7 +46,10 @@ export function ResultCell({
   isSaving = false,
 }: {
   item: ChecklistItemResponse;
-  onSave: (input: { currentResult: string | null; status: ChecklistItemStatus }) => void;
+  onSave: (input: {
+    currentResult: string | null;
+    status: ChecklistItemStatus;
+  }) => void;
   canEditDefinition: boolean;
   isSaving?: boolean;
 }) {
@@ -55,7 +58,8 @@ export function ResultCell({
   const [currentResult, setCurrentResult] = useState(item.currentResult ?? "");
   const [status, setStatus] = useState<ChecklistItemStatus>(item.status);
 
-  const isDirty = currentResult !== (item.currentResult ?? "") || status !== item.status;
+  const isDirty =
+    currentResult !== (item.currentResult ?? "") || status !== item.status;
 
   return (
     <div className="flex min-w-64 flex-col gap-3">
@@ -72,7 +76,10 @@ export function ResultCell({
 
       <Field>
         <FieldLabel htmlFor={`status-${item.id}`}>Status</FieldLabel>
-        <Select value={status} onValueChange={(value) => setStatus(value as ChecklistItemStatus)}>
+        <Select
+          value={status}
+          onValueChange={(value) => setStatus(value as ChecklistItemStatus)}
+        >
           <SelectTrigger id={`status-${item.id}`}>
             <SelectValue />
           </SelectTrigger>

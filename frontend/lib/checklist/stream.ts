@@ -45,7 +45,9 @@ export async function consumeChecklistStream(
   for await (const event of parseSseStream(response.body)) {
     switch (event.event) {
       case "citations":
-        handlers.onCitations((event.data as { citations: CitationPayload[] }).citations);
+        handlers.onCitations(
+          (event.data as { citations: CitationPayload[] }).citations,
+        );
         break;
       case "token": {
         const { text } = event.data as { text: string };

@@ -65,7 +65,9 @@ export function ItemGrid({
 }) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draft, setDraft] = useState<Draft | null>(null);
-  const [pendingDelete, setPendingDelete] = useState<ChecklistItemResponse | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<ChecklistItemResponse | null>(
+    null,
+  );
 
   const saveResult = useSaveChecklistItemResult(moduleId);
   const updateDetail = useUpdateChecklistItemDetail(moduleId);
@@ -129,7 +131,8 @@ export function ItemGrid({
                 <TableCell colSpan={COLUMN_COUNT} className="text-sm font-semibold">
                   {group.feature}
                   <span className="text-muted-foreground ml-2 font-normal">
-                    {group.items.length} test {group.items.length === 1 ? "case" : "cases"}
+                    {group.items.length} test{" "}
+                    {group.items.length === 1 ? "case" : "cases"}
                   </span>
                 </TableCell>
               </TableRow>,
@@ -150,7 +153,10 @@ export function ItemGrid({
                         <div className="flex flex-col gap-1 text-sm">
                           <span>{item.testName}</span>
                           {item.source === "manual" ? (
-                            <Badge variant="outline" className="w-fit text-xs font-normal">
+                            <Badge
+                              variant="outline"
+                              className="w-fit text-xs font-normal"
+                            >
                               Hand-written
                             </Badge>
                           ) : null}
@@ -178,7 +184,8 @@ export function ItemGrid({
                         item={item}
                         canEditDefinition={canEdit(item)}
                         isSaving={
-                          saveResult.isPending && saveResult.variables?.itemId === item.id
+                          saveResult.isPending &&
+                          saveResult.variables?.itemId === item.id
                         }
                         onSave={(input) =>
                           saveResult.mutate(
@@ -235,7 +242,11 @@ export function ItemGrid({
                         </div>
                       ) : canEdit(item) ? (
                         <div className="flex justify-end gap-1">
-                          <Button size="sm" variant="ghost" onClick={() => startEditing(item)}>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => startEditing(item)}
+                          >
                             Edit
                           </Button>
                           <Button

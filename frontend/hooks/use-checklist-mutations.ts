@@ -73,13 +73,17 @@ export function useSaveChecklistItemResult(moduleId: string) {
     }) =>
       apiFetch<ChecklistItemResponse>(endpoints.checklistItems.result(input.itemId), {
         method: "PUT",
-        body: JSON.stringify({ currentResult: input.currentResult, status: input.status }),
+        body: JSON.stringify({
+          currentResult: input.currentResult,
+          status: input.status,
+        }),
       }),
     // Optimistic on purpose, and only here: a tester works down twenty rows in one
     // sitting, and a round trip before each row settles makes the grid feel broken.
     onMutate: async (input) => {
       await queryClient.cancelQueries({ queryKey: detailKey });
-      const previous = queryClient.getQueryData<ChecklistModuleDetailResponse>(detailKey);
+      const previous =
+        queryClient.getQueryData<ChecklistModuleDetailResponse>(detailKey);
       if (previous) {
         queryClient.setQueryData<ChecklistModuleDetailResponse>(detailKey, {
           ...previous,
@@ -120,7 +124,9 @@ export function useUpdateChecklistItemDetail(moduleId: string) {
       });
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: keys.checklistModules.detail(moduleId) });
+      queryClient.invalidateQueries({
+        queryKey: keys.checklistModules.detail(moduleId),
+      });
       queryClient.invalidateQueries({ queryKey: keys.checklistItems.all });
     },
   });
@@ -132,7 +138,9 @@ export function useDeleteChecklistItem(moduleId: string) {
     mutationFn: (itemId: string) =>
       apiFetch<void>(endpoints.checklistItems.detail(itemId), { method: "DELETE" }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: keys.checklistModules.detail(moduleId) });
+      queryClient.invalidateQueries({
+        queryKey: keys.checklistModules.detail(moduleId),
+      });
       queryClient.invalidateQueries({ queryKey: keys.checklistItems.all });
     },
   });

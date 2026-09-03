@@ -184,7 +184,8 @@ export interface ErrorEventPayload {
   finishReason: FinishReason;
 }
 
-export type ChecklistModuleStatus = "empty" | "generating" | "review" | "ready" | "failed";
+export type ChecklistModuleStatus =
+  "empty" | "generating" | "review" | "ready" | "failed";
 export type ChecklistItemStatus = "untested" | "pass" | "fail" | "blocked";
 export type ChecklistItemSource = "generated" | "manual";
 export type ChangeSetOrigin = "generation" | "chat";

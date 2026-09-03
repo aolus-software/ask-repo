@@ -41,7 +41,7 @@ export function ChecklistScreen() {
     queryKey: keys.checklistModules.list(params),
     queryFn: () =>
       apiFetch<PaginatedResponse<ChecklistModuleResponse>>(
-        `${endpoints.checklistModules.list}${checklistModuleListQueryString(params)}`
+        `${endpoints.checklistModules.list}${checklistModuleListQueryString(params)}`,
       ),
   });
 
@@ -56,7 +56,7 @@ export function ChecklistScreen() {
       const qs = next.toString();
       router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
     },
-    [searchParams, router, pathname]
+    [searchParams, router, pathname],
   );
 
   const handlePageChange = useCallback(
@@ -67,7 +67,7 @@ export function ChecklistScreen() {
       const qs = next.toString();
       router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
     },
-    [searchParams, router, pathname]
+    [searchParams, router, pathname],
   );
 
   return (
