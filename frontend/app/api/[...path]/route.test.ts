@@ -248,19 +248,19 @@ describe("the proxy", () => {
             headers: {
               "content-type":
                 "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-              "content-disposition": 'attachment; filename="qa-pairs.xlsx"',
+              "content-disposition": 'attachment; filename="qa-checklist.xlsx"',
             },
           }),
       ),
     );
 
     const response = await GET(
-      proxyRequest("/api/qa-pairs/export", "askrepo_access=jwt; askrepo_session=s%3D1"),
-      context(["qa-pairs", "export"]),
+      proxyRequest("/api/checklist-items/export", "askrepo_access=jwt; askrepo_session=s%3D1"),
+      context(["checklist-items", "export"]),
     );
 
     expect(response.headers.get("content-type")).toContain("spreadsheetml");
-    expect(response.headers.get("content-disposition")).toContain("qa-pairs.xlsx");
+    expect(response.headers.get("content-disposition")).toContain("qa-checklist.xlsx");
     expect(new Uint8Array(await response.arrayBuffer())).toEqual(bytes);
   });
 });

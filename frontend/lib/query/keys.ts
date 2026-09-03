@@ -1,4 +1,8 @@
-import type { ListParams, QAListParams } from "@/lib/api/types";
+import type {
+  ChecklistItemListParams,
+  ChecklistModuleListParams,
+  ListParams,
+} from "@/lib/api/types";
 
 /**
  * Every query key, in one module. Prefix invalidation after a mutation
@@ -24,10 +28,20 @@ export const keys = {
     list: (params: ListParams) => ["users", "list", params] as const,
     detail: (id: string) => ["users", "detail", id] as const,
   },
-  qaPairs: {
-    all: ["qa-pairs"] as const,
-    list: (params: QAListParams) => ["qa-pairs", "list", params] as const,
-    detail: (id: string) => ["qa-pairs", "detail", id] as const,
-    tags: ["qa-pairs", "tags"] as const,
+  checklistModules: {
+    all: ["checklist-modules"] as const,
+    list: (params: ChecklistModuleListParams) => ["checklist-modules", "list", params] as const,
+    detail: (id: string) => ["checklist-modules", "detail", id] as const,
+  },
+  checklistItems: {
+    all: ["checklist-items"] as const,
+    list: (params: ChecklistItemListParams) => ["checklist-items", "list", params] as const,
+  },
+  checklistChangeSets: {
+    all: ["checklist-change-sets"] as const,
+    forModule: (moduleId: string) => ["checklist-change-sets", moduleId] as const,
+  },
+  checklistMessages: {
+    forModule: (moduleId: string) => ["checklist-messages", moduleId] as const,
   },
 };

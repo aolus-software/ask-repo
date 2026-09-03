@@ -1,4 +1,8 @@
-import type { ListParams, QAListParams } from "@/lib/api/types";
+import type {
+  ChecklistItemListParams,
+  ChecklistModuleListParams,
+  ListParams,
+} from "@/lib/api/types";
 
 /**
  * Every API path in one module. A string literal at a call site is how the
@@ -29,14 +33,22 @@ export const endpoints = {
     detail: (id: string) => `/conversations/${id}`,
     messages: (id: string) => `/conversations/${id}/messages`,
   },
-  qaPairs: {
-    list: "/qa-pairs",
-    tags: "/qa-pairs/tags",
-    export: "/qa-pairs/export",
-    detail: (id: string) => `/qa-pairs/${id}`,
-    status: (id: string) => `/qa-pairs/${id}/status`,
-    rerun: (id: string) => `/qa-pairs/${id}/rerun`,
-    acceptRerun: (id: string) => `/qa-pairs/${id}/rerun/accept`,
+  checklistModules: {
+    list: "/checklist-modules",
+    detail: (id: string) => `/checklist-modules/${id}`,
+    generate: (id: string) => `/checklist-modules/${id}/generate`,
+    changeSets: (id: string) => `/checklist-modules/${id}/change-sets`,
+    messages: (id: string) => `/checklist-modules/${id}/messages`,
+  },
+  checklistItems: {
+    list: "/checklist-items",
+    export: "/checklist-items/export",
+    detail: (id: string) => `/checklist-items/${id}`,
+    result: (id: string) => `/checklist-items/${id}/result`,
+  },
+  checklistChangeSets: {
+    apply: (id: string) => `/checklist-change-sets/${id}/apply`,
+    discard: (id: string) => `/checklist-change-sets/${id}/discard`,
   },
 } as const;
 
@@ -60,12 +72,20 @@ export const SORT = {
     lastLoginAt: "last_login_at",
   },
   conversations: { title: "title", createdAt: "created_at", updatedAt: "updated_at" },
-  qaPairs: {
-    module: "module",
+  checklistModules: {
+    name: "name",
     status: "status",
     createdAt: "created_at",
     updatedAt: "updated_at",
-    lastRunAt: "last_run_at",
+    lastGeneratedAt: "last_generated_at",
+  },
+  checklistItems: {
+    feature: "feature",
+    testName: "test_name",
+    status: "status",
+    position: "position",
+    createdAt: "created_at",
+    updatedAt: "updated_at",
   },
 } as const;
 
@@ -81,20 +101,23 @@ export function listQueryString(params: ListParams): string {
   return qs ? `?${qs}` : "";
 }
 
-/**
- * `listQueryString` plus the six QA filters. A new function rather than widening
- * `listQueryString` itself: three other screens call that one and none of them has
- * these filters.
- */
-export function qaListQueryString(params: QAListParams): string {
-  const base = listQueryString(params);
-  const search = new URLSearchParams(base.startsWith("?") ? base.slice(1) : base);
+/** `listQueryString` plus the two module filters. */
+export function checklistModuleListQueryString(params: ChecklistModuleListParams): string {
+  const search = new URLSearchParams(listQueryString(params).replace(/^\?/, ""));
   if (params.projectId) search.set("projectId", params.projectId);
-  if (params.module) search.set("module", params.module);
-  if (params.tag) search.set("tag", params.tag);
-  if (params.source) search.set("source", params.source);
   if (params.status) search.set("status", params.status);
-  if (params.createdBy) search.set("createdBy", params.createdBy);
+  const qs = search.toString();
+  return qs ? `?${qs}` : "";
+}
+
+/** `listQueryString` plus the five grid filters. */
+export function checklistItemListQueryString(params: ChecklistItemListParams): string {
+  const search = new URLSearchParams(listQueryString(params).replace(/^\?/, ""));
+  if (params.projectId) search.set("projectId", params.projectId);
+  if (params.moduleId) search.set("moduleId", params.moduleId);
+  if (params.feature) search.set("feature", params.feature);
+  if (params.status) search.set("status", params.status);
+  if (params.source) search.set("source", params.source);
   const qs = search.toString();
   return qs ? `?${qs}` : "";
 }

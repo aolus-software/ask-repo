@@ -33,7 +33,7 @@ export const navItems: NavItem[] = [
   { title: "Dashboard", href: "/", icon: LayoutDashboard },
   { title: "Projects", href: "/projects", icon: FolderGit2 },
   { title: "Ask", href: "/ask", icon: MessagesSquare },
-  { title: "QA List", href: "/qa", icon: ClipboardCheck },
+  { title: "Checklist", href: "/checklist", icon: ClipboardCheck },
   { title: "Settings", href: "/settings", icon: Settings, children: settingsNav },
 ];
 

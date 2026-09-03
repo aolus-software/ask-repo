@@ -37,12 +37,16 @@ export type ErrorCode =
   | "PROJECT_NOT_READY"
   | "EMBEDDING_MODEL_CHANGED"
   | "LLM_UNAVAILABLE"
-  | "QA_PAIR_NOT_FOUND"
-  | "NOT_QA_PAIR_OWNER"
   | "MESSAGE_NOT_FOUND"
-  | "ANSWER_INCOMPLETE"
-  | "NO_PENDING_RUN"
-  | "EXPORT_TOO_LARGE";
+  | "EXPORT_TOO_LARGE"
+  | "CHECKLIST_MODULE_NOT_FOUND"
+  | "CHECKLIST_ITEM_NOT_FOUND"
+  | "NOT_CHECKLIST_OWNER"
+  | "CHANGE_SET_NOT_FOUND"
+  | "CHANGE_SET_PENDING"
+  | "CHANGE_SET_ALREADY_RESOLVED"
+  | "GENERATION_IN_PROGRESS"
+  | "MODULE_PATH_NOT_INDEXED";
 
 /** The one error shape the whole API uses (`docs/PRD.md` §5.1). */
 export interface ErrorEnvelope {
@@ -180,48 +184,124 @@ export interface ErrorEventPayload {
   finishReason: FinishReason;
 }
 
-export type QAStatus = "unreviewed" | "pass" | "fail";
-export type QASource = "manual" | "generated";
+export type ChecklistModuleStatus = "empty" | "generating" | "review" | "ready" | "failed";
+export type ChecklistItemStatus = "untested" | "pass" | "fail" | "blocked";
+export type ChecklistItemSource = "generated" | "manual";
+export type ChangeSetOrigin = "generation" | "chat";
+export type ChangeSetStatus = "pending" | "applied" | "discarded";
 
-export interface PendingRunPayload {
-  answer: string;
-  citations: CitationPayload[] | null;
-  model: string | null;
-  finishReason: FinishReason;
-  runAt: string;
-}
-
-export interface QAPairResponse {
+export interface ChecklistModuleResponse {
   id: string;
   projectId: string;
   createdBy: string;
-  module: string | null;
-  question: string;
-  answer: string | null;
-  referenceAnswer: string | null;
-  tags: string[];
-  source: QASource;
-  status: QAStatus;
-  reviewedBy: string | null;
-  reviewedAt: string | null;
-  model: string | null;
-  evalScore: number | null;
-  lastRunAt: string | null;
-  hasPendingRun: boolean;
+  name: string;
+  sourcePath: string;
+  status: ChecklistModuleStatus;
+  error: string | null;
+  indexedGeneration: number | null;
+  lastGeneratedAt: string | null;
+  itemCount: number;
+  passCount: number;
+  failCount: number;
+  blockedCount: number;
+  untestedCount: number;
+  /** The project was reindexed after this checklist was built. A prompt, not a block. */
+  stale: boolean;
+  pendingChangeSetId: string | null;
   createdAt: string;
   updatedAt: string;
 }
 
-export interface QAPairDetailResponse extends QAPairResponse {
+export interface ChecklistItemResponse {
+  id: string;
+  moduleId: string;
+  projectId: string;
+  feature: string;
+  testName: string;
+  expectedResult: string;
+  /** A human's observation. AskRepo never writes it. */
+  currentResult: string | null;
+  status: ChecklistItemStatus;
+  notes: string | null;
   citations: CitationPayload[] | null;
-  pendingRun: PendingRunPayload | null;
+  source: ChecklistItemSource;
+  position: number;
+  createdBy: string;
+  reviewedBy: string | null;
+  reviewedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
 }
 
-export interface QAListParams extends ListParams {
+export interface ChecklistModuleDetailResponse extends ChecklistModuleResponse {
+  items: ChecklistItemResponse[];
+}
+
+/**
+ * One proposed operation. Three shapes in one object, discriminated by `op`: `itemId`
+ * is present on `update` and `remove`, the content fields on `add`.
+ */
+export interface ChangeOperation {
+  op: "add" | "update" | "remove";
+  id: string;
+  rationale: string;
+  itemId?: string | null;
+  feature?: string | null;
+  testName?: string | null;
+  expectedResult?: string | null;
+  citations?: CitationPayload[] | null;
+  changes?: Record<string, string> | null;
+}
+
+export interface ChecklistChangeSetResponse {
+  id: string;
+  moduleId: string;
+  origin: ChangeSetOrigin;
+  messageId: string | null;
+  summary: string;
+  operations: ChangeOperation[];
+  status: ChangeSetStatus;
+  resolvedBy: string | null;
+  resolvedAt: string | null;
+  createdBy: string;
+  createdAt: string;
+}
+
+export interface ChangeSetApplyResponse {
+  changeSet: ChecklistChangeSetResponse;
+  items: ChecklistItemResponse[];
+  /** Their target item was deleted between proposal and apply; skipped, not failed. */
+  skippedOperationIds: string[];
+}
+
+export interface ChecklistMessageResponse {
+  id: string;
+  moduleId: string;
+  role: MessageRole;
+  content: string;
+  citations: CitationPayload[] | null;
+  model: string | null;
+  finishReason: FinishReason | null;
+  createdBy: string;
+  createdAt: string;
+}
+
+/** The one event M4 adds to the stream. At most once, after the last token. */
+export interface ChangeSetEventPayload {
+  changeSetId: string;
+  summary: string;
+  operations: ChangeOperation[];
+}
+
+export interface ChecklistModuleListParams extends ListParams {
   projectId?: string;
-  module?: string;
-  tag?: string;
-  source?: QASource;
-  status?: QAStatus;
-  createdBy?: string;
+  status?: ChecklistModuleStatus;
+}
+
+export interface ChecklistItemListParams extends ListParams {
+  projectId?: string;
+  moduleId?: string;
+  feature?: string;
+  status?: ChecklistItemStatus;
+  source?: ChecklistItemSource;
 }
