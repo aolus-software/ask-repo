@@ -1,6 +1,10 @@
-# AskRepo
+<p align="center">
+  <img src="assets/logo.png" alt="AskRepo" width="120" height="120" />
+</p>
 
-Ask questions about a codebase and get grounded, cited answers.
+<h1 align="center">AskRepo</h1>
+
+<p align="center">Ask questions about a codebase and get grounded, cited answers.</p>
 
 AskRepo clones a repository, indexes it into a vector store, and answers natural-language
 questions about it — citing the actual files and functions the answer came from. It is
@@ -65,6 +69,7 @@ ask-repo/
 │   ├── deployment.md     Running it for a team
 │   ├── configuration.md  Every setting, what it does, what to change for production
 │   └── design.md       Design tokens, layout geometry, component inventory
+├── assets/             Brand source files — logo.png and the favicon set
 ├── .claude/            Rules, commands and skills for AI agents
 └── Makefile            Task runner — `make help`
 ```
