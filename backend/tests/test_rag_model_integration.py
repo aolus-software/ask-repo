@@ -248,19 +248,27 @@ async def test_reduce_proposes_an_update_rather_than_a_duplicate_add(settings: S
     assert updates[0].item_id == "11111111-1111-1111-1111-111111111111"
 
 
-async def test_reduce_proposes_negative_cases_not_only_happy_paths(
+async def test_reduce_proposes_both_kinds_not_only_one(
     settings: Settings,
 ) -> None:
-    """The property the `kind` field exists to make measurable.
+    """The property the `kind` field exists to make measurable, in both directions.
 
-    A generator left to itself proposes happy paths: they are what the code most
-    obviously does. Given observations that name a refusal and a success, the plan
-    must cover both -- a checklist of only positives says nothing about what happens
-    when the feature is misused, which is where defects live.
+    Given observations that name refusals and a success, the plan must cover both --
+    a checklist of only positives says nothing about what happens when the feature is
+    misused, and a checklist of only negatives never establishes that the feature
+    works at all. Both halves have now been the missing one:
+
+    - Negatives went missing when `kind` was optional in the schema and the model
+      omitted it, and again when the prompt described it away from the other
+      per-test fields.
+    - Positives went missing when the prompt's refusal rule matched "validates" and
+      "requires" -- the verbs the map step is itself told to use -- and closed with
+      "if it is not a success path, it is negative". Every observation about a module
+      built out of validation matched, and a real generation came back with no
+      positive rows at all.
 
     Only a real model can check this. `ScriptedChatModel` returns whatever the test
-    scripted, so the entire unit suite passes against a prompt that never asks for a
-    negative case at all.
+    scripted, so the entire unit suite passes against a prompt that asks for neither.
     """
     model = build_chat_model(settings).with_structured_output(ProposedChangeSet)
     result = await model.ainvoke(
@@ -271,6 +279,12 @@ async def test_reduce_proposes_negative_cases_not_only_happy_paths(
                 ("app/auth/login.py", "raises 401 INVALID_CREDENTIALS on a wrong password", 30, 44),
                 ("app/auth/login.py", "raises 422 when the email field is missing", 20, 29),
                 ("app/auth/login.py", "raises 429 after five attempts in a minute", 53, 61),
+                # The observation that broke this. Phrased with the verb the map step
+                # is instructed to use, it matched the old refusal rule outright --
+                # even though a validation rule is the precondition of a success path
+                # and owes the plan a passing case as well as a failing one.
+                ("app/auth/login.py", "validates the email field is a valid address", 12, 19),
+                ("app/auth/login.py", "requires the account to be active", 62, 70),
             ],
             existing=[],
         )
@@ -284,12 +298,14 @@ async def test_reduce_proposes_negative_cases_not_only_happy_paths(
         assert operation.test_name.strip(), f"unnamed test: {operation!r}"
         assert operation.expected_result.strip(), f"no expectation: {operation!r}"
     kinds = [_narrow_kind(operation.kind) for operation in result.operations]
-    # Only the negative is asserted. It is the property the field exists for and the
-    # one that regressed twice while this was being written: first when `kind` was
-    # optional in the schema and the model omitted it, then when the prompt described
-    # it away from the other per-test fields. That a happy path is also proposed is
-    # not worth pinning -- the model sometimes returns only the refusals for these
-    # observations, and a flaky assertion on the easy half would cost the hard one.
+    # Both halves are asserted, and the raw strings are reported on failure: a kind
+    # that arrived as "positive, not an error case" and narrowed to negative is a
+    # different bug from one the model genuinely labelled negative, and the narrowed
+    # enum alone cannot tell them apart.
+    raw = [operation.kind for operation in result.operations]
     assert ChecklistItemKind.NEGATIVE in kinds, (
-        f"no negative test proposed for three refusal observations; kinds were {kinds}"
+        f"no negative test proposed for four refusal observations; raw kinds were {raw}"
+    )
+    assert ChecklistItemKind.POSITIVE in kinds, (
+        f"no positive test proposed for a success and two validations; raw kinds were {raw}"
     )

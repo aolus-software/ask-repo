@@ -169,6 +169,18 @@ def test_a_hallucinated_item_id_still_drops_an_update_or_remove(
         ("happy path", "positive"),
         ("", "positive"),
         ("nonsense", "positive"),
+        # A label followed by its own justification. The model was asked for one word
+        # and answers with a word plus the reason, and the reason for a POSITIVE case
+        # is naturally phrased in terms of what it is not -- "valid, not an error",
+        # "no invalid input". Matching any negative word anywhere in the string read
+        # every one of these as negative, which is how a generated checklist came back
+        # with no positive rows at all.
+        ("positive: valid credentials, not an error case", "positive"),
+        ("positive (no invalid input)", "positive"),
+        ("positive -- rejects nothing, valid input only", "positive"),
+        # The same shape the other way round: the label still wins.
+        ("negative -- not a happy path", "negative"),
+        ("negative: invalid password", "negative"),
     ],
 )
 def test_kind_is_narrowed_and_never_drops_the_operation(raw: str, expected: str) -> None:
@@ -180,6 +192,12 @@ def test_kind_is_narrowed_and_never_drops_the_operation(raw: str, expected: str)
     `item_id` taught. Positive specifically: a mislabelled happy path is cosmetic,
     while a mislabelled failure case inflates the negative coverage the field exists
     to measure.
+
+    **The first word that names a kind decides it**, rather than any negative word
+    anywhere winning. A model handed a one-word field writes the word and then
+    explains itself, and a positive case explains itself by naming what it is not --
+    so "any negative word anywhere" resolved the explanation instead of the label and
+    inflated exactly the count this field exists to measure.
     """
     operation = ProposedOperation(
         op="add", kind=raw, feature="Login", test_name="t", expected_result="e", rationale="r"

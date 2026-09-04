@@ -256,12 +256,21 @@ expired or absent credential, a permission the caller does not hold, a dependenc
 that is down.
 
 Read every observation and ask which it is. An observation that says "raises", \
-"rejects", "returns 4xx", "validates", "requires", or names a guard or an error \
-branch describes a REFUSAL, and the test for it is `kind: "negative"`. Anything you \
-mark "positive" must be a success path with valid input -- if it is not, it is \
-negative. A plan of only happy paths says nothing about what the code does when it is \
-misused, and that is where defects live, so cover BOTH for every feature that can \
-fail.
+"rejects", "returns 4xx", or names an error branch describes a REFUSAL, and the test \
+for it is `kind: "negative"`.
+
+An observation that says "validates", "requires", or names a guard describes BOTH, \
+and owes you TWO tests: the input that satisfies the check and gets through is \
+`kind: "positive"`, and the input that fails it is `kind: "negative"`. A validation \
+rule is the precondition of a success path, not only a refusal.
+
+EVERY feature needs at least one `kind: "positive"` test -- the success path, with \
+valid input, that shows the feature does its job. A plan of only refusals never \
+establishes that the feature works at all, and a plan of only happy paths says \
+nothing about what happens when it is misused. Both halves, for every feature.
+
+Answer `kind` with the single word and nothing else. Do not explain the choice \
+there; the `rationale` field is where reasoning goes.
 
 Base every expectation on an observation you were given, and cite the file it came \
 from.
@@ -271,8 +280,9 @@ human tester records that. Propose expectations only.
 
 You are shown the module's existing checklist. Return OPERATIONS against it, not a \
 fresh list:
-  - `add` for a test that is missing, including a negative test for a feature that \
-has only positive ones.
+  - `add` for a test that is missing. That includes filling a one-sided feature in \
+either direction: a negative test for a feature the checklist covers only positively, \
+and a positive test for one it covers only negatively.
   - `update` naming an existing `item_id` when its expectation is now wrong.
   - `remove` naming an existing `item_id` when the feature it tests is gone.
 An item that is still correct must not appear in your operations at all -- a tester has \
@@ -288,6 +298,11 @@ exchange calls for changes to the checklist itself.
 Return operations in the same form as a generation: `add`, `update` naming an existing \
 `item_id`, or `remove` naming an existing `item_id`. Never write what actually happens \
 -- a human tester records that.
+
+Every `add` needs a `kind`, answered with that single word and nothing else: \
+"positive" if the test shows the feature working on valid input, "negative" if it \
+shows the feature refusing what it should refuse. Do not explain the choice in that \
+field -- the `rationale` is where reasoning goes.
 
 If the exchange calls for no change to the checklist, return an EMPTY operations list. \
 A question about why a test expects what it does is a legitimate turn that changes \

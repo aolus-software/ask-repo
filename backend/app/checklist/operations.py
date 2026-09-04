@@ -31,19 +31,34 @@ logger = logging.getLogger(__name__)
 # lesson `item_id` taught: a field the model fills in freely must never be able to
 # delete a test case it also proposed.
 _NEGATIVE_WORDS = frozenset({"negative", "negatif", "failure", "error", "edge", "invalid", "sad"})
+# Recognised so that a label can win over the words that follow it. Without a
+# positive vocabulary there is nothing for "positive" to match, so the scan below has
+# no label to stop on and the explanation decides the kind.
+_POSITIVE_WORDS = frozenset({"positive", "positif", "happy", "success", "valid", "nominal"})
 
 
 def _narrow_kind(raw: str) -> ChecklistItemKind:
-    """The model's `kind` as the enum, defaulting to positive.
+    """The model's `kind` as the enum: the first word that names one wins.
 
     Defaulting to *positive* specifically: a mislabelled happy path is a cosmetic
     error, while a mislabelled failure case inflates the negative coverage the field
     exists to measure.
+
+    Reading the **first** recognised word rather than searching for any negative one
+    is what keeps that default honest. Asked for a single word, a model writes the
+    word and then justifies it -- and a positive case is justified by naming what it
+    is not: "positive: valid credentials, not an error case", "positive (no invalid
+    input)". Scanning for any negative word anywhere resolved the justification
+    instead of the label, so those came back `negative`, and a module whose
+    observations are mostly validation came back with no positive rows at all.
     """
     # Word-wise and punctuation-blind: models answer "edge case", "edge-case",
     # "negative test", "error path" as readily as the bare word.
-    if set(re.split(r"[^a-z]+", raw.lower())) & _NEGATIVE_WORDS:
-        return ChecklistItemKind.NEGATIVE
+    for word in re.split(r"[^a-z]+", raw.lower()):
+        if word in _NEGATIVE_WORDS:
+            return ChecklistItemKind.NEGATIVE
+        if word in _POSITIVE_WORDS:
+            return ChecklistItemKind.POSITIVE
     return ChecklistItemKind.POSITIVE
 
 
