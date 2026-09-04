@@ -6,7 +6,13 @@ from aiokafka import AIOKafkaProducer
 from aiokafka.admin import AIOKafkaAdminClient, NewTopic
 from aiokafka.errors import TopicAlreadyExistsError, for_code
 
-from app.queue.topics import ALL_TOPICS, INGEST_TOPIC, IngestionMessage
+from app.queue.topics import (
+    ALL_TOPICS,
+    INGEST_TOPIC,
+    ChecklistJobMessage,
+    IngestionMessage,
+    JobMessage,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -18,8 +24,15 @@ _TOPIC_ALREADY_EXISTS = TopicAlreadyExistsError.errno
 class KafkaIngestionQueue:
     """The real queue. Started and stopped by the application lifespan."""
 
-    def __init__(self, *, bootstrap_servers: str, topic: str = INGEST_TOPIC) -> None:
+    def __init__(
+        self,
+        *,
+        bootstrap_servers: str,
+        topic: str = INGEST_TOPIC,
+        checklist_topic: str,
+    ) -> None:
         self.topic = topic
+        self.checklist_topic = checklist_topic
         self._bootstrap_servers = bootstrap_servers
         self._producer: AIOKafkaProducer | None = None
 
@@ -44,15 +57,25 @@ class KafkaIngestionQueue:
         """Publish a job to the main ingest topic."""
         await self.produce_to(self.topic, message)
 
-    async def produce_to(self, topic: str, message: IngestionMessage) -> None:
+    async def enqueue_checklist(self, message: ChecklistJobMessage) -> None:
+        """Publish a generation job to the checklist topic."""
+        await self.produce_to(self.checklist_topic, message)
+
+    async def produce_to(self, topic: str, message: JobMessage) -> None:
         """Publish to a specific topic — used by the retry and DLQ paths."""
         if self._producer is None:
             raise RuntimeError("KafkaIngestionQueue is not started")
         await self._producer.send_and_wait(topic, value=message.to_bytes(), key=message.key())
 
 
-async def ensure_topics(*, bootstrap_servers: str, partitions: int) -> None:
-    """Create every topic the system uses, idempotently.
+async def ensure_topics(
+    *, bootstrap_servers: str, partitions: int, topics: tuple[str, ...] = ALL_TOPICS
+) -> None:
+    """Create the topics if they are absent. Idempotent, so both processes may call it.
+
+    `topics` is a parameter rather than a constant because M4 adds a second family
+    (`ALL_CHECKLIST_TOPICS`) with its own partition count -- generation's instance-wide
+    cap is one partition, ingestion's is two.
 
     Explicit rather than relying on broker auto-creation: auto-created topics get
     one partition, which would silently halve the ingestion concurrency cap that
@@ -65,14 +88,14 @@ async def ensure_topics(*, bootstrap_servers: str, partitions: int) -> None:
     admin = AIOKafkaAdminClient(bootstrap_servers=bootstrap_servers)
     await admin.start()
     try:
-        topics = [
+        new_topics = [
             # Replication factor 1: a single-broker cluster cannot do better, and
             # the source of truth for a project's state is Postgres regardless.
             NewTopic(name=name, num_partitions=partitions, replication_factor=1)
-            for name in ALL_TOPICS
+            for name in topics
         ]
         try:
-            response = await admin.create_topics(topics)
+            response = await admin.create_topics(new_topics)
         except TopicAlreadyExistsError:
             # aiokafka 0.14 reports this in the response instead (see below), but
             # older and newer clients have raised it, and it is the normal path on

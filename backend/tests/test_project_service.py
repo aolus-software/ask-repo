@@ -15,12 +15,24 @@ from app.ingestion.errors import RetryableIngestionError
 from app.ingestion.vector_store import InMemoryVectorStore, VectorStore, VectorStoreFactory
 from app.models.project import ProjectStatus
 from app.queue.protocol import InMemoryIngestionQueue
+from app.queue.topics import IngestionMessage
+from app.repositories.checklist_change_set import ChecklistChangeSetRepository
+from app.repositories.checklist_item import ChecklistItemRepository
+from app.repositories.checklist_message import ChecklistMessageRepository
+from app.repositories.checklist_module import ChecklistModuleRepository
 from app.repositories.conversation import ConversationRepository
 from app.repositories.project import ProjectRepository
-from app.repositories.qa_pair import QAPairRepository
 from app.schemas.project import ProjectCreateRequest
 from app.services.project import ProjectService
-from tests.factories import create_conversation, create_project, create_qa_pair, create_user
+from tests.factories import (
+    create_checklist_change_set,
+    create_checklist_item,
+    create_checklist_message,
+    create_checklist_module,
+    create_conversation,
+    create_project,
+    create_user,
+)
 
 
 def actor_for(user_id: uuid.UUID, *, is_admin: bool = False) -> AuthenticatedUser:
@@ -63,7 +75,9 @@ async def test_create_enqueues_exactly_one_job(db_session: AsyncSession) -> None
 
     assert response.status == ProjectStatus.PENDING
     assert len(queue.messages) == 1
-    assert queue.messages[0].project_id == response.id
+    sent = queue.messages[0]
+    assert isinstance(sent, IngestionMessage)  # this queue only ever carries these
+    assert sent.project_id == response.id
 
 
 async def test_create_rejects_a_url_that_fails_validation(db_session: AsyncSession) -> None:
@@ -314,35 +328,39 @@ async def test_a_failed_vector_delete_rolls_the_conversation_sweep_back(
     assert await ConversationRepository(db_session).get_for_owner(conversation_id, owner_id)
 
 
-async def test_deleting_a_project_soft_deletes_its_qa_pairs(
-    db_session: AsyncSession, vector_store: InMemoryVectorStore
-) -> None:
-    """`docs/PRD.md:340`. Not scoped by creator — the project was shared, so its
-    pairs belong to several people and all of them go."""
-    owner = await create_user(db_session)
-    colleague = await create_user(db_session)
-    project = await create_project(db_session, created_by=owner.id)
-    await create_qa_pair(db_session, project_id=project.id, created_by=owner.id)
-    await create_qa_pair(db_session, project_id=project.id, created_by=colleague.id)
-    await db_session.commit()
-
-    service = ProjectService(
-        db_session,
-        get_settings(),
-        queue=InMemoryIngestionQueue(),
-        store_factory=lambda collection: vector_store,
-    )
-    await service.delete(project.id, actor=actor_for(owner.id))
-
-    repo = QAPairRepository(db_session)
-    _, total = await repo.list_page(
-        scope=ProjectScope.all(), page=1, limit=25, sort="created_at", descending=True
-    )
-    assert total == 0
-
-
 class _UnreachableStore(InMemoryVectorStore):
     """A vector store that is down."""
 
     async def delete_project(self, project_id: uuid.UUID) -> None:
         raise RetryableIngestionError("qdrant is unreachable")
+
+
+async def test_deleting_a_project_cascades_to_the_whole_checklist(
+    db_session: AsyncSession,
+) -> None:
+    """Spec 3.7: modules, items, change sets, and messages all go.
+
+    Nothing here reaches Qdrant -- the checklist owns no vector points, and the
+    project's own delete path already hard-deletes the ones it does own.
+    """
+    project = await create_project(db_session)
+    module = await create_checklist_module(db_session, project_id=project.id)
+    await create_checklist_item(db_session, module_id=module.id)
+    await create_checklist_change_set(db_session, module_id=module.id)
+    await create_checklist_message(db_session, module_id=module.id, created_by=module.created_by)
+    admin = await create_user(db_session, is_admin=True)
+    await db_session.commit()
+
+    await service_for(db_session, InMemoryIngestionQueue()).delete(
+        project.id, actor=actor_for(admin.id, is_admin=True)
+    )
+
+    assert (
+        await ChecklistModuleRepository(db_session).get_in_scope(
+            module.id, scope=ProjectScope.all()
+        )
+        is None
+    )
+    assert await ChecklistItemRepository(db_session).list_for_module(module.id) == []
+    assert await ChecklistChangeSetRepository(db_session).pending_for_module(module.id) is None
+    assert await ChecklistMessageRepository(db_session).list_for_module(module.id, limit=10) == []

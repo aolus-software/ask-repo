@@ -22,7 +22,10 @@ app/api/routes/
 ├── auth.py         # POST /auth/login, /auth/refresh, …
 ├── users.py        # admin user provisioning
 ├── projects.py     # project ingestion + lifecycle
-└── qa_pairs.py     # shared QA List
+├── conversations.py # /conversations CRUD + the SSE answer endpoint
+├── checklist_modules.py # /checklist-modules CRUD + generate + chat
+├── checklist_items.py   # /checklist-items CRUD + export
+└── checklist_change_sets.py # apply + discard change sets
 ```
 
 Each module defines exactly one `router` and is mounted in `app/main.py`. A module with two
@@ -37,7 +40,7 @@ router = APIRouter(prefix="/projects", tags=["Projects"])
 - **`prefix`** is the flat, kebab-case plural resource name. No role prefix — access control
   lives in dependencies, never in the URL. `/projects`, not `/admin/projects`.
 - **`tags`** is the entity name in Title Case, matching the resource: `Projects`,
-  `QA Pairs`, `Users`, `Auth`. One tag per router. Do not invent per-route tags.
+  `Checklist Modules`, `Users`, `Auth`. One tag per router. Do not invent per-route tags.
 - Register the router in `app/main.py` in the order routes should appear in `/docs`.
 
 ## Every route has a summary

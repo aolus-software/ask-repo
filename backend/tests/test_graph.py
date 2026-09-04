@@ -1,7 +1,10 @@
 """The graph: routing, the corrective retrieval loop, and the streaming contract."""
 
+import asyncio
+import uuid
 from typing import cast
 
+import pytest
 from langchain_core.language_models import BaseChatModel
 from langchain_core.runnables import RunnableLambda
 from langgraph.graph import END, START, StateGraph
@@ -202,6 +205,11 @@ def base_state(**overrides: object) -> TurnState:
         "evidence_ok": False,
         "answer": "",
         "failure": None,
+        "module_name": "",
+        "existing_items": [],
+        "change_set_id": None,
+        "operations": [],
+        "change_summary": "",
     }
     state.update(overrides)  # type: ignore[typeddict-item]  # test helper takes arbitrary overrides
     return state
@@ -623,7 +631,11 @@ async def test_the_refusal_makes_no_model_call_at_all() -> None:
 
 
 def graph_for(
-    chat_model: BaseChatModel, retriever: Retriever | None = None, *, max_attempts: int = 2
+    chat_model: BaseChatModel,
+    retriever: Retriever | None = None,
+    *,
+    max_attempts: int = 2,
+    propose: bool = False,
 ) -> CompiledStateGraph[TurnState, None, TurnState, TurnState]:
     """A compiled graph over fakes, with settings overridden per test."""
     from app.config import Settings
@@ -634,6 +646,7 @@ def graph_for(
         retriever=retriever if retriever is not None else RecordingRetriever(),
         chat_model=chat_model,
         settings=Settings(rag_max_retrieval_attempts=max_attempts),
+        propose=propose,
     )
 
 
@@ -826,3 +839,202 @@ async def test_an_out_of_scope_question_makes_exactly_one_model_call() -> None:
 
     assert retriever.queries == []
     assert final["answer"] == OUT_OF_SCOPE_ANSWER
+
+
+@pytest.mark.asyncio
+async def test_propose_node_emits_a_change_set_event() -> None:
+    """At most once, after the last token. Not a terminator -- the terminator is built
+    only by the adapter (`.claude/rules/rag.md`)."""
+    import uuid
+
+    from app.checklist.model_output import ProposedChangeSet, ProposedOperation
+    from app.rag.graph.nodes import build_propose_changes
+    from app.schemas.checklist import ChangeSetEvent
+    from tests.fakes import ScriptedChatModel
+
+    change_set_id = uuid.uuid4()
+    chat = ScriptedChatModel(
+        structured_results=[
+            ProposedChangeSet(
+                summary="1 added",
+                operations=[
+                    ProposedOperation(
+                        kind="positive",
+                        op="add",
+                        feature="Login",
+                        test_name="Rejects an empty password",
+                        expected_result="422 VALIDATION_ERROR",
+                        rationale="The schema has min_length=1.",
+                    )
+                ],
+            )
+        ]
+    )
+    events, state = await run_node(
+        build_propose_changes(chat, enabled=True),
+        base_state(answer="You should also test an empty password.", change_set_id=change_set_id),
+    )
+
+    emitted = [event for event in events if isinstance(event, ChangeSetEvent)]
+    assert len(emitted) == 1
+    assert emitted[0].change_set_id == change_set_id
+    assert emitted[0].operations[0].test_name == "Rejects an empty password"
+    assert state["operations"][0]["op"] == "add"
+
+
+@pytest.mark.asyncio
+async def test_propose_node_emits_nothing_when_the_model_proposes_nothing() -> None:
+    """'Why does this test expect 410?' is a legitimate turn that changes nothing."""
+    from app.checklist.model_output import ProposedChangeSet
+    from app.rag.graph.nodes import build_propose_changes
+    from app.schemas.checklist import ChangeSetEvent
+    from tests.fakes import ScriptedChatModel
+
+    chat = ScriptedChatModel(structured_results=[ProposedChangeSet(summary="", operations=[])])
+    events, state = await run_node(
+        build_propose_changes(chat, enabled=True),
+        base_state(answer="Because the route is gone."),
+    )
+
+    assert [event for event in events if isinstance(event, ChangeSetEvent)] == []
+    assert state["operations"] == []
+
+
+@pytest.mark.asyncio
+async def test_propose_node_falls_back_rather_than_failing_the_turn() -> None:
+    """A helper node may never be the reason a question goes unanswered
+    (`.claude/rules/rag.md`). A proposer that dies costs the proposal, not the answer."""
+    from app.rag.graph.nodes import build_propose_changes
+    from app.schemas.checklist import ChangeSetEvent
+
+    class _Exploding:
+        def with_structured_output(self, schema: type) -> "_Exploding":
+            return self
+
+        async def ainvoke(self, messages: object) -> object:
+            raise RuntimeError("model down")
+
+    events, state = await run_node(
+        build_propose_changes(_Exploding(), enabled=True),  # type: ignore[arg-type]  # duck-typed stand-in raises from ainvoke, not a BaseChatModel
+        base_state(answer="An answer."),
+    )
+
+    assert state["operations"] == []
+    assert [event for event in events if isinstance(event, ChangeSetEvent)] == []
+
+
+@pytest.mark.asyncio
+async def test_propose_node_does_not_swallow_a_disconnect() -> None:
+    """`CancelledError` is a `BaseException` and is deliberately not caught: a client
+    that went away should stop the turn, not fall back and carry on."""
+    from app.rag.graph.nodes import build_propose_changes
+
+    class _Cancelling:
+        def with_structured_output(self, schema: type) -> "_Cancelling":
+            return self
+
+        async def ainvoke(self, messages: object) -> object:
+            raise asyncio.CancelledError()
+
+    # When the model raises CancelledError, the node should propagate it, not catch it
+    # and return an empty proposal. We verify this by checking that calling the node
+    # directly (not through run_node) raises the exception.
+    # This test calls the node directly rather than through run_node because LangGraph
+    # wraps a node-raised CancelledError as NodeCancelledError (an Exception subclass),
+    # which would make the pytest.raises(asyncio.CancelledError) assertion fail.
+    node = build_propose_changes(_Cancelling(), enabled=True)  # type: ignore[arg-type]  # duck-typed stand-in raises from ainvoke, not a BaseChatModel
+    with pytest.raises(asyncio.CancelledError):
+        await node(base_state(answer="a", change_set_id=uuid.uuid4()))
+
+
+@pytest.mark.asyncio
+async def test_the_proposing_graph_runs_propose_after_generate_and_after_history() -> None:
+    """A refinement instruction may classify either way -- 'add a test for an empty
+    password' is a codebase question, 'make the third one clearer' is conversational --
+    so both answering routes feed the proposer. `refuse` does not: an out-of-scope
+    turn produced no answer to propose from."""
+    from tests.fakes import ScriptedChatModel
+    from tests.test_answerer import RecordingRetriever
+
+    model = ScriptedChatModel(
+        tokens=["x"],
+        structured_results=[
+            Classification(intent="codebase_question", search_query="q"),
+            EvidenceVerdict(sufficient=True),
+        ],
+    )
+    graph = graph_for(model, RecordingRetriever(), propose=True)
+    nodes = set(graph.get_graph().nodes)
+    assert "propose_changes" in nodes
+    edges = {(edge.source, edge.target) for edge in graph.get_graph().edges}
+    assert ("generate", "propose_changes") in edges
+    assert ("answer_from_history", "propose_changes") in edges
+    assert ("refuse", "propose_changes") not in edges
+
+
+def test_the_default_graph_has_no_proposer() -> None:
+    """The Ask screen must not grow a checklist proposal."""
+    from tests.fakes import ScriptedChatModel
+    from tests.test_answerer import RecordingRetriever
+
+    model = ScriptedChatModel(
+        tokens=["x"],
+        structured_results=[
+            Classification(intent="codebase_question", search_query="q"),
+            EvidenceVerdict(sufficient=True),
+        ],
+    )
+    graph = graph_for(model, RecordingRetriever())
+    assert "propose_changes" not in set(graph.get_graph().nodes)
+
+
+@pytest.mark.asyncio
+async def test_propose_node_drops_invalid_operations_one_at_a_time() -> None:
+    """When a proposed operation's payload will not validate, drop it and log it --
+    an operation with a non-UUID item_id costs that operation only, not the whole set."""
+    import uuid
+
+    from app.checklist.model_output import ProposedChangeSet, ProposedOperation
+    from app.rag.graph.nodes import build_propose_changes
+    from app.schemas.checklist import ChangeSetEvent
+    from tests.fakes import ScriptedChatModel
+
+    change_set_id = uuid.uuid4()
+    chat = ScriptedChatModel(
+        structured_results=[
+            ProposedChangeSet(
+                summary="2 changes",
+                operations=[
+                    ProposedOperation(
+                        kind="positive",
+                        op="update",
+                        item_id="not-a-uuid",  # This one will not validate
+                        feature="Login",
+                        test_name="Invalid update",
+                        expected_result="Should be dropped",
+                        rationale="item_id is not a UUID.",
+                    ),
+                    ProposedOperation(
+                        kind="positive",
+                        op="add",
+                        feature="Auth",
+                        test_name="Valid operation",
+                        expected_result="Should survive",
+                        rationale="This one is good.",
+                    ),
+                ],
+            )
+        ]
+    )
+    events, state = await run_node(
+        build_propose_changes(chat, enabled=True),
+        base_state(answer="Here are updates.", change_set_id=change_set_id),
+    )
+
+    emitted = [event for event in events if isinstance(event, ChangeSetEvent)]
+    assert len(emitted) == 1
+    # Only the valid operation survives
+    assert len(emitted[0].operations) == 1
+    assert emitted[0].operations[0].test_name == "Valid operation"
+    assert len(state["operations"]) == 1
+    assert state["operations"][0]["testName"] == "Valid operation"

@@ -160,3 +160,21 @@ def test_the_graph_nodes_are_on_by_default() -> None:
     assert settings.rag_max_retrieval_attempts == 2
     assert settings.rag_grade_evidence is True
     assert settings.rag_classify_intent is True
+
+
+def test_checklist_bounds_reject_zero() -> None:
+    """A control set to zero is not a control: a zero map concurrency never runs a
+    file, and a zero scroll page never reads a chunk. Fail at startup instead."""
+    for field in (
+        "checklist_map_concurrency",
+        "checklist_scroll_page_size",
+        "kafka_checklist_partitions",
+    ):
+        with pytest.raises(ValidationError):
+            Settings(**{field: 0})  # type: ignore[arg-type]  # test builder
+
+
+def test_checklist_generation_defaults_to_one_partition() -> None:
+    """The instance-wide generation cap is the topology, not a setting one can raise
+    by accident -- the same move `kafka_ingest_partitions` makes for ingestion."""
+    assert Settings().kafka_checklist_partitions == 1

@@ -11,7 +11,7 @@ describe("visibleNavTree", () => {
       "/",
       "/projects",
       "/ask",
-      "/qa",
+      "/checklist",
       "/settings",
     ]);
   });
@@ -21,7 +21,7 @@ describe("visibleNavTree", () => {
       "/",
       "/projects",
       "/ask",
-      "/qa",
+      "/checklist",
     ]);
   });
 
@@ -35,9 +35,12 @@ describe("visibleNavTree", () => {
     expect(projects && "children" in projects).toBe(false);
   });
 
-  it("shows the QA List to a non-admin", () => {
+  it("points at the checklist rather than the retired QA List", () => {
     const tree = visibleNavTree({ isAdmin: false });
-    expect(tree.map((item) => item.href)).toContain("/qa");
+    const hrefs = tree.map((item) => item.href);
+
+    expect(hrefs).toContain("/checklist");
+    expect(hrefs).not.toContain("/qa");
   });
 });
 
@@ -65,8 +68,10 @@ describe("resolveBreadcrumbs", () => {
     expect(resolveBreadcrumbs("/", member)).toEqual([]);
   });
 
-  it("builds breadcrumbs for a QA pair", () => {
-    const trail = resolveBreadcrumbs("/qa/abc-123", { isAdmin: false });
-    expect(trail[0]).toEqual({ href: "/qa", label: "QA List" });
+  it("resolves a breadcrumb trail into a module", () => {
+    expect(resolveBreadcrumbs("/checklist/abc-123", { isAdmin: false })).toEqual([
+      { href: "/checklist", label: "Checklist" },
+      { href: "/checklist/abc-123", label: "abc-123" },
+    ]);
   });
 });

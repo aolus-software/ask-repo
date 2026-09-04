@@ -20,7 +20,7 @@ Four core features, sitting on top of an auth foundation:
 0. **Auth & Accounts** — admin-provisioned email/password accounts, login, and account lifecycle. Not a feature users came for, but it establishes who is making each request.
 1. **Project (repo-link ingestion)** — create a project from a repo URL; app clones + indexes it, tracks status and re-index.
 2. **Dev Knowledge** — ask questions about a codebase, get grounded answers, scoped to a project.
-3. **QA List** — a saved, browsable list of question/answer pairs generated from or about the codebase.
+3. **QA Checklist** — a reviewed, generated manual test plan for a module of the indexed application, with human-recorded results.
 4. **QA Mock Data Generator** — auto-generate synthetic Q&A pairs from a codebase for testing/evaluating the retrieval and answer quality.
 
 ---
@@ -39,12 +39,50 @@ Four core features, sitting on top of an auth foundation:
 
 **Phase 1 (this document).** Flat access. Every authenticated user can see and query every project. No roles beyond a single `is_admin` flag. Destructive operations are limited to the project's creator or an admin.
 
-**Phase 2 (deferred, not specified here).** Four things, in no committed order:
+**Phase 2 (deferred, not specified here).** Six things, in no committed order:
 
 - **Per-project RBAC.** Users are assigned to projects and see only their own. Roles per project (viewer / editor / owner). Phase 1's `created_by` becomes the seed for the first membership row; the access resolver named in §2 becomes the enforcement point.
-- **Self-service password reset.** A user who forgot their password recovers it without an admin, replacing the out-of-band flow in §4.0. **This is the one phase-2 item that adds infrastructure**: a reset link has to reach the user, so it needs a mail provider — an SMTP host, a credential, a from-address, and deliverability from an instance that is deliberately not internet-facing (§5). Phase 1 has no mail provider anywhere in the stack, and that absence is currently load-bearing: it is why there is no email verification, no invitation flow, and no queue of outbound messages to operate. Whoever specifies this decides whether the cost is worth it against simply keeping admin-driven reset. A single-use, short-lived, hashed reset token stored like a refresh token is the shape to reach for; emailing a password is not.
+- **Self-service password reset.** A user who forgot their password recovers it without an admin, replacing the out-of-band flow in §4.0. **This is one of the two phase-2 items that add infrastructure**, and both add the same one: a reset link has to reach the user, so it needs a mail provider — an SMTP host, a credential, a from-address, and deliverability from an instance that is deliberately not internet-facing (§5). Phase 1 has no mail provider anywhere in the stack, and that absence is currently load-bearing: it is why there is no email verification, no invitation flow, and no queue of outbound messages to operate. Whoever specifies this decides whether the cost is worth it against simply keeping admin-driven reset. A single-use, short-lived, hashed reset token stored like a refresh token is the shape to reach for; emailing a password is not. **Specify it together with notifications below** — they share the provider, the outbound queue, and the deliverability problem, and paying that cost once for two features is a materially different trade from paying it for either alone.
+- **Notifications — in-app and email.** Every long-running operation in this document is currently silent. §4.1's ingestion is fire-and-forget, M4's generation runs in a worker, and the only way to learn that either finished is to reload the screen showing its status column. That is tolerable for the person who pressed the button and useless for everyone else — the wrong way round for a checklist that §4.3 publishes to the whole instance, where the reviewer who needs to act is routinely not the person who started the generation. The events worth raising are the ones a human is blocked on: a project reached `ready` or `failed` (and the same for a re-index), a checklist generation finished and **a change set is pending review**, a change set someone else applied or discarded, and M5's eval run completing.
+
+  **One record, two transports.** A notification is a row; email is a delivery attempt against that row, never a parallel feature. Built separately they diverge immediately — an email with no in-app trace, or a read state that does not survive being emailed. Read state is per user, so the storage is a row per `(user, event)` rather than per event, and a fan-out writes N rows for N recipients. That is affordable precisely because §2 targets one organization on one box; it would not be at a different scale.
+
+  **Choosing recipients is an access question, and it must not become a second access resolver.** Phase 1 shares every project (§4.1), so "notify everyone who could read this" means telling the whole instance about every index — noise that trains people to ignore the feature, which costs the notifications that mattered. `created_by` is the natural recipient for an operation someone started, and using it that way is a **third** use of a column §7 otherwise restricts to attribution and destructive gating: it still must not scope reads. When per-project RBAC lands, "who is interested in this project" becomes membership, and it must resolve through the same single function the access resolver becomes. Two places deciding who may see a project is exactly what §2's phase-2 readiness goal exists to prevent, and here the failure is not an empty list — it is a notification naming a repository to someone who was never given it.
+
+  **Email is the first path *out* of the network, and that is the real cost.** §5 puts the instance behind a VPN with no public exposure, and §9's whole posture is that inputs are untrusted while nothing leaves. A mail host breaks that assumption: repository names, module names, file paths and generated expectations are held internally *because* the instance is internal. So an email carries the event type and a link and nothing else — never an answer, an excerpt, an expected result, a checklist row, or anything derived from clone output. §9's scrubbing obligation extends to this path rather than being re-argued on it, and the same reasoning rules out putting the content in a subject line.
+
+  **Delivery is at-least-once, and a duplicate email costs more than a duplicate job.** §5's queue redelivers by design, and the mitigation is the one ingestion already demonstrates: a unique constraint on `(event_id, user_id)` in Postgres is the deduplication boundary — not the offset, not the partition key. A refused insert costs nothing; a second email about a review that was already done costs the feature's credibility. And a send that fails must never roll back what it describes: the index succeeded whether or not the mail went out, so the row is written first, the send retries against it, and a permanently failed send is visible to an operator without touching the job's status.
+
+  In-app delivery starts as a **polled unread count, not a socket.** The SSE machinery in §4.2 is built for the lifetime of one answer; a per-user notification stream is a different connection lifecycle with different failure modes, and polling an integer is honest at this scale. Whoever specifies this decides per-user preferences (which events, email on or off, immediate or digested) and whether an admin creating an account sends an invitation by mail — that last one is the only notification that is really an auth flow, since it would replace §4.0's out-of-band password handoff.
+- **A per-user answer persona.** An optional instruction a user sets once — how much explanation they want, what they can be assumed to know already, how terse to be — applied to the answers Dev Knowledge gives *them*. The want is real: the same question from someone new to a repository and from the person who wrote it deserves different answers, and today the only lever is rephrasing the question every time.
+
+  **The safe half is the shape of the answer; free-form instruction is where every risk below lives.** Verbosity, assumed expertise and depth expressed as structured preferences get most of the value and raise none of the following. Free text raises all of it, so it is a second decision argued separately rather than the obvious generalisation of the first.
+
+  **A persona must not simply be concatenated into the system prompt, and that is the whole design.** §4.2's guardrails rest on a property `.claude/rules/rag.md` states outright: the model's instructions come from the system message and nowhere else, which is exactly why retrieved code is fenced as data rather than trusted. A persona pasted into that same message *becomes* one of those instructions — and the dangerous ones are not exotic. "Answer confidently", "skip the citations", "give me your best guess" each cancels, on its own, a guardrail that exists because a fluent fabrication about a codebase is the failure this product is most exposed to. So the persona occupies a bounded slot that the non-negotiable rules are stated *after*, and `app/rag/grounding.py`'s checks remain the backstop: they are computed from the finished answer, so `uncited_answer` still fires on a persona that talked the model out of citing, whatever it said.
+
+  **It applies to private answers only, and never to anything shared.** Conversations are per user (§4.2), so a persona shaping them changes only what its owner reads. The QA Checklist is the opposite case: §4.3 publishes it to the whole instance, and both the generator and the refinement chat write a document other people are relied on to test against. A persona reaching either would make a shared artifact's content depend on who happened to press the button — two reviewers seeing different proposals for the same module, and a tester reading an expected result shaped by a colleague's stylistic preference. **Generation and the checklist chat take no persona.** That is a property of the feature, not a gap in it.
+
+  **Bounded length, for a reason that is not politeness.** The persona rides in the prompt on every turn, so it competes with the excerpts for the context window. An unbounded one crowds out retrieved code and answer quality drops with **nothing reporting an error** — the same silent-degradation class as §4.2's embedding-model guard. A server-enforced character cap is the cheap answer.
+
+  Storage is a nullable column on the user row rather than a table, for the reason §4.3 keeps `feature` a string: a persona has no attributes beyond its text. Two things whoever specifies this decides. Whether an admin may set an **instance-wide** default — "assume our deployment conventions" is a legitimate organizational want and a different feature from a personal preference, with different review implications. And what it does to M5: an eval score is comparable only against a fixed prompt, so the harness runs with personas off, or its numbers stop meaning anything across users.
 - **Audit trail.** An append-only record of who did what: logins and failed logins, account creation and deactivation, password changes and resets, project creation, re-index and deletion, and PAT changes. Phase 1 has attribution (`created_by`) but no history — a deleted project takes its `created_by` with it, so nothing anywhere records who deleted it, and §7's destructive-gating criteria are verifiable by test but not after the fact on a live instance. Two constraints follow from §9 and are not optional: the log records **that** an action happened and by whom, never the secret involved — no passwords, no tokens, no PATs, no clone URLs with credentials embedded — and it is append-only, so a user cannot erase their own entries. Whether it is a Postgres table or a structured log stream is open; a table is queryable from the admin UI, a stream is cheaper to retain.
 - **Multi-language.** Two halves, separable but usually wanted together. **The interface:** every string in the frontend comes from a catalogue rather than a literal, with a switcher and a stored preference — a column on the user row rather than a cookie, so the choice survives a new device. The token system in `docs/design.md` is unaffected (a colour has no language), but every screen is touched, and the form shells that route field errors (§5.1) must take their messages from the catalogue too or the interface ends up half-translated at exactly the moment a user is stuck. **The answers:** the assistant replies in the language the question was asked in, while the code, the identifiers, and the citations stay as they are in the repository — translating a symbol name would break the `[n]` citation contract against the file it points at. This half adds no infrastructure and one real risk. The index holds source code written in English, so a question embedded in another language lands in a different neighbourhood of the vector space than the code that answers it, and recall drops with **nothing reporting an error** — the same silent-quality failure the embedding-model guard in §4.2 exists to prevent. M3's classify node is the seam: it already rewrites every question into a standalone search query, so constraining that query to English keeps retrieval working while generation answers in the user's language. Two things whoever specifies this must decide: whether the fixed refusals in `app/rag/grounding.py` are translated (they are user-visible answers, not interface chrome, so they sit outside the frontend catalogue), and whether a non-English eval set from M5 is a precondition — without one, answer quality in a second language is unmeasured rather than good.
+
+**Phase 3 (deferred, and dependent on phase 2 rather than parallel to it).** A graph database — **Neo4j Community Edition** — as a second retrieval surface beside the vector index: a *code knowledge graph*. That makes five stateful services, four of which are databases: Postgres, Redis, Qdrant and Neo4j, plus Kafka as the broker. **Kafka stays** — §5's job-queue decision is settled and nothing here reopens it.
+
+**What it buys is a class of question the current design cannot answer, and this document already names it.** §4.4's question-type list includes *"what would break if I changed Y"*, and §4.2's retrieval structurally cannot answer that. Vector search returns the k chunks most *similar* to a question; "what calls this, and what calls those" is **reachability**, not similarity, and no amount of top-k tuning computes a transitive closure. The same gap is visible in two other places already written down. M4's generator scrolls every chunk under a path precisely because top-k "cannot report what it left out" (§4.3) — with a graph, "every route under this path and every guard it passes through" is one query rather than a map-reduce over every file, which is exactly where that milestone's twenty-minute cost lives. And §4.2's citations are file-and-line; a graph adds a *structural* citation — the call path itself — which is a different and independently checkable kind of evidence.
+
+**Shape.** Nodes for files, modules and symbols; edges for `DEFINES`, `IMPORTS`, `CALLS`, `INHERITS_FROM`, `REFERENCES`. It is a **derived** store like Qdrant: rebuildable from a clone, never the source of truth, holding no user data. That is what keeps the blast radius of getting it wrong at "answers get worse" rather than "data is lost".
+
+**The cost that decides whether this is worth doing: a graph needs a parser, and the chunker is not one.** M1's chunker is text plus line ranges, which is everything a vector index needs and nothing an edge needs. `CALLS` and `IMPORTS` require language-aware parsing — tree-sitter, or a language server per language — and that cost does not amortise: it is paid again for each language, and a half-parsed language yields a graph that is confidently wrong rather than empty, which is worse than absent. This is why code-graph tooling generally supports three languages well and twenty badly. Whoever specifies this picks the supported languages deliberately and **states which are unsupported**, the way §4.3 states its coverage bound instead of implying completeness.
+
+**A fifth stateful service, on the box that already chose bcrypt over argon2id to save memory.** §5 made that trade because Postgres, Qdrant, Redis and possibly Ollama share one VPS, and §9 lists resource exhaustion as a live concern rather than a hypothetical. Neo4j adds a JVM heap and a page cache to that same box. Community Edition in particular: one database per instance, no clustering, and **backups that are not online** — `neo4j-admin dump` expects the database stopped, which would make it the first datastore in this stack whose backup is not a hot operation, against a §9 requirement that backups be restorable. Its GPL v3 licence also differs from Postgres', Redis' and Qdrant's; running it as a separate service alongside an application is the ordinary case, but an organization that redistributes AskRepo should confirm that itself rather than take this document's word for it.
+
+**Two existing invariants extend to it, and neither is optional.** A reindex is a generation swap (§4.1), so the graph must be versioned the same way and switched together with the vectors — otherwise an answer cites a call path from one commit and excerpts from another, two derived stores disagreeing about what the code *is*, with nothing reporting an error. And soft delete still does not reach a derived store: Postgres rows soft-delete while the matching Qdrant points hard-delete in the same operation, so deleting a project must drop its subgraph in that same operation too. The general rule this makes explicit — worth stating once here rather than rediscovering per store — is that **Postgres soft-deletes and every derived store hard-deletes alongside it.**
+
+**Read scoping does not get a second implementation.** A Cypher query filtering on its own `project_id` property is the same defect as a route filtering projects on its own (§7): the graph is queried for the project ids the access resolver returned, never for ids it decided itself. This is the concrete reason phase 3 depends on phase 2 instead of running beside it — introducing a second query language before there is one enforcement point means RBAC then has two places to change rather than one, which is the outcome §2's phase-2 readiness goal exists to prevent.
+
+**And the honest reason it is on this list at all.** §1 names learning as this project's primary goal, and §5 records that Kafka is in the stack for that reason, with the technical argument against it preserved rather than hidden. A graph database is the same kind of choice. The difference is that the technical case here is real and stated above — but "we wanted to build GraphRAG on a workload that warrants it" is a sufficient reason in this project, and recording that is better than manufacturing a requirement to justify it.
 
 ### Non-goals (v1)
 
@@ -53,6 +91,9 @@ Four core features, sitting on top of an auth foundation:
 - Per-project permissions and roles — deferred to phase 2.
 - An audit trail of who did what — deferred to phase 2 (§2.1). v1 has attribution, not history.
 - Multiple interface languages, and answers in a language other than English — deferred to phase 2 (§2.1). v1 ships one locale and answers in English.
+- Notifications of any kind — in-app or email — deferred to phase 2 (§2.1). v1 reports the outcome of a background job on the screen that shows its status, and a user learns it finished by looking.
+- Per-user answer personas or custom prompts — deferred to phase 2 (§2.1). Every user gets the same prompt, which is also what makes M5's eval numbers comparable between them.
+- A graph database and structural code queries — deferred to phase 3 (§2.1). v1 retrieves by vector similarity only, so "what calls this" is answered as well as similarity can answer it and no better.
 - Horizontal scaling, high availability, multi-region — a single VPS is the target.
 - CI/CD beyond a build-and-restart script.
 - UI polish.
@@ -112,7 +153,7 @@ The field is `password_hash`, not `password`. The plaintext exists only in the r
 
 - `POST /users` (**admin only**) accepts `{name, email, password, isAdmin?}`, creates the account
   with `must_change_password=True`. `GET /users` and `GET /users/{id}` are readable by **any
-  authenticated user** — from M1 every project and QA pair carries `created_by`, and turning an id
+  authenticated user** — from M1 every project, and from M4 every checklist module and item, carries `created_by`, and turning an id
   into a name should not require an admin token. `PATCH /users/{id}` (**admin only**) updates
   name/admin flag; `DELETE /users/{id}` (**admin only**) soft-deletes and revokes that user's
   refresh tokens.
@@ -249,6 +290,14 @@ class Project(BaseModel):
 
 **Why the last seven columns exist.** The queue delivers at least once, so two workers can be handed the same job; `lease_owner` / `lease_expires_at` / `last_job_id` are what make one of them stand down, and they live in Postgres rather than in the broker because the database is the only thing both workers already agree on. `active_generation` and `embedding_collection` exist because a reindex must not take the project offline — see the next point. `embedding_model` records what the stored vectors actually are, so a model change is detectable rather than silently mixing incompatible vectors in one collection.
 
+**Planned, not yet built — the project detail page and the dashboard grow with each milestone.** Both currently show only what M1 produces: status, file and chunk counts, the indexed commit, the embedding model. As later milestones land, each one has a per-project story worth surfacing there — M4's checklist modules and their pass/fail/blocked/untested totals, M5's evaluation results, and whatever M6 adds — so that a project's page answers "what do we know about this repository, and how well is it tested?" rather than only "is it indexed?". The dashboard aggregates the same figures across projects. This is deliberately additive: no milestone's screens are blocked on it, and each one contributes its own tile when it ships rather than the page being designed up front for data that does not exist yet.
+
+**Planned, not yet built — nothing tells anyone the index finished.** `POST /projects` returns immediately and the clone-and-embed runs in a worker, which is the right shape and leaves a gap: the only report of the outcome is the status column on the screen above, so a user who navigates away learns that a twenty-minute index failed by coming back and looking. The same is true of a re-index and of M4's checklist generation. Notifications are a phase-2 item (§2.1); until then, the status column is the whole story and the screens should not imply otherwise.
+
+**Planned, not yet built — editing a project.** A project is currently create-and-delete: there is no `PATCH /projects/{id}`. Two things change under a long-lived project and neither has a repair path today. A repository **moves** — renamed, transferred to another org, migrated to a different host — and its `repo_url` is then wrong. A **PAT expires or is rotated**, and every subsequent clone fails authentication while the project still reports `ready` from its last successful index. In both cases the only recovery is to delete the project and re-create it, which discards its conversations and its checklist modules along with the index, for what is a one-field correction.
+
+The edit is therefore narrow and deliberately not a general update: `repo_url`, `branch`, `name`, and a replacement PAT, gated on `created_by`/`is_admin` like the other destructive operations. Changing `repo_url` or `branch` invalidates the index, so it must either force a reindex or mark the project stale rather than leaving vectors that describe a repository the project no longer points at — that decision, and whether a PAT rotation alone can skip the reindex, is what this needs designing for. Scheduled for a later milestone; the schema above already carries every column it would write.
+
 **Out of scope for v1:** automatic re-index via GitHub webhooks, multi-branch indexing, org-wide repo discovery/browsing, deploy keys (PAT only), per-project access lists (phase 2).
 
 ---
@@ -262,7 +311,7 @@ class Project(BaseModel):
 - As a dev, I can select any ready project and ask questions against its indexed codebase.
 - As a dev, I can ask "how does the withdrawal calculation work?" and get an answer citing the actual files/functions involved.
 - As a dev, I can ask follow-up questions and have AskRepo retain conversation context.
-- As a dev, my in-progress questions aren't visible to my colleagues — I share answers deliberately, by saving them to the QA List (§4.3).
+- As a dev, my in-progress questions aren't visible to my colleagues — a conversation is mine alone.
 
 **Acceptance criteria**
 
@@ -305,79 +354,148 @@ class Message(BaseModel):
 
 `finish_reason` exists because partial answers are kept. Without it a truncated answer is
 indistinguishable from a short one, with two consequences: the sliding window would replay a
-half-sentence as though it were a complete turn, and §4.3's "save to the QA List" would
-publish a cut-off answer to the whole team.
+half-sentence as though it were a complete turn, and a client rendering a truncated answer
+would give no sign that anything was missing.
 
 `messages` carries **no `deleted_at`**, an explicit exception to §5.1 — see that section.
+
+**Conversation privacy has exactly one deliberate inversion, and it is §4.3's.** Every miss
+under `/conversations` is `404` rather than `403`, on all four routes, and `is_admin` is not
+consulted anywhere — an administrator who could read a colleague's conversation would make the
+sentence above false. The QA Checklist's module chat is *shared*: every authenticated user can
+read every turn, because that chat is the justification record for a document the whole team
+relies on, and §4.3 says so. Naming the inversion here is what stops a future reader treating
+it as a bug in the checklist rather than a decision.
 
 **Out of scope for v1:** multi-repo cross-referencing (asking questions across two projects at once), code-writing/edit suggestions, sharing a conversation with a colleague.
 
 ---
 
-### 4.3 QA List
+### 4.3 QA Checklist
 
-**What it does:** A persisted, browsable list of Q&A pairs — either saved from Dev Knowledge sessions or generated by the Mock Data Generator (§4.4). **Shared across the instance**: this is the team's knowledge base and regression set, so anything saved here is visible to everyone.
+**What it does:** A reviewed, generated **manual test plan** for a module of the *indexed application*. A user names a module and points it at a path in the repository; AskRepo reads that code out of the vector index and proposes features, test cases, and expected results; a human reviews every proposal before it enters the checklist; a tester records what they actually observed against each row; and the filtered grid exports to `.xlsx` as the handoff artifact. **Shared across the instance**: a checklist is a team document, so everyone sees every module, every row, and every chat turn about it.
+
+This replaces the QA List that shipped at M4 earlier — a browsable store of saved question/answer pairs. `docs/superpowers/specs/2026-09-01-m4-qa-checklist-design.md` §0 records why that was the wrong artifact. There is no data migration: a saved answer is not a test case, and reshaping one into the other would produce rows whose expected result is a paragraph of prose about the codebase.
 
 **Decisions**
 
-- QA List and Mock Data Generator **share one storage schema** from the start, discriminated by a `source` field. Two tables would have to be merged the moment generated pairs need to appear in the same list view as manual ones.
-- QA pairs are **global**, unlike conversations. Saving to the QA List is the deliberate act of publishing something to colleagues.
+- **Every write to the checklist is a reviewed change set.** Generation and the refinement chat both produce a *pending* list of `add`/`update`/`remove` operations, each with the rationale that argued for it. Applying is the only path that writes a row. A model that could write directly into a shared test plan would put unreviewed assertions in front of a tester who has no way to tell them from reviewed ones.
+- **The generator enumerates; it does not search.** It scrolls every indexed chunk under the module's path rather than running a top-k query, because top-k cannot report what it left out — and a test plan that silently omits a file is worse than one that names the files it covered.
+- **`current_result` is only ever a human's observation.** AskRepo has not run the application, so it never fills that column in, not even as a suggestion. A generated row always arrives `untested` with an empty result.
+- **The module chat is shared, deliberately inverting §4.2.** A conversation is private; this chat is the justification record for a shared document, so every user can read it and the UI says so before anyone types.
+- **Editing a test is gated; recording a result is not.** Changing `feature`, `test_name`, `expected_result` or `notes` requires `created_by` or an admin. Recording `current_result` and `status` is open to every authenticated user — otherwise the cheapest way to make a failing test pass is to edit the expectation.
+- **A module is an entity; a feature is a string.** Modules are rows a user creates and points at a path. Features are a grouping column on the item, because the model discovers them and a table of them would need a reconciliation step every generation.
 
 **User stories**
 
-- As a dev, I can save a Q&A pair from my Dev Knowledge session into the shared QA List with one action.
-- As a dev, I can view all saved Q&A pairs, filtered by project or tag (e.g. "auth", "billing"), including ones my colleagues saved.
-- As a dev, I can see who saved a pair and when.
-- As a dev, I can re-run a saved question against the current index to see if the answer changed (useful after refactors).
-- As a dev, I can mark a Q&A pair pass or fail against its expected result, so it becomes a trusted reference / eval case for the team.
+- As a QA engineer, I can create a module ("Authentication") against a path in an indexed project (`backend/app/auth`).
+- As a QA engineer, I can generate its checklist in the background and come back to a set of proposals rather than a set of rows.
+- As a reviewer, I can see every proposed change with its rationale, tick the ones I accept, and discard the rest — and nothing enters the checklist that I did not tick.
+- As a QA engineer, I can refine the checklist by chat ("add a test for an empty password"), and the reply proposes another change set rather than editing rows behind my back.
+- As a tester, I can record what I observed and mark a row pass, fail, or blocked, even on a checklist somebody else authored.
+- As a QA lead, I can export the filtered grid to `.xlsx` and hand it to someone who does not use AskRepo.
+- As a QA engineer, I can see that a checklist is stale because the repository was reindexed after it was built, and choose whether to regenerate.
 
 **Acceptance criteria**
 
-- Storage: a single Postgres `qa_pairs` table, scoped by `project_id`, readable by every user.
-- List view filterable by project, tag, `source`, `status`, and `created_by`.
-- Any user may create a pair and set its status. Editing or deleting a pair requires `created_by` or admin — same rule as projects, returning `403`.
-- Re-run takes an existing question, re-queries Dev Knowledge, and shows old vs new answer side by side. The re-run does not overwrite the stored answer unless the user saves it.
-- Deleting a project soft-deletes its Q&A pairs.
-- A pair is created from a finished message id, never from answer text in the request body — the server copies `question`, `answer`, `citations`, `model`, and `project_id` out of the message row. A message whose `finish_reason` is anything but `stop` is refused with `409`, so a cut-off answer can never be published to the whole team.
-- The filtered list can be exported as a spreadsheet, for review outside the tool.
+- Storage: four Postgres tables — `checklist_modules`, `checklist_items`, `checklist_change_sets`, `checklist_messages` — scoped by `project_id` and readable by every user. Read scoping goes through the single access resolver (§7), never a route-level filter.
+- `POST /checklist-modules/{id}/generate` returns `202` and runs in the background. It refuses with `409` when a generation is already running (`GENERATION_IN_PROGRESS`), when a change set is already pending (`CHANGE_SET_PENDING`), when the module's path matched nothing in the index (`MODULE_PATH_NOT_INDEXED`), or when the project is not indexed (`PROJECT_NOT_READY`).
+- Generation writes a **pending change set and no items**. `POST /checklist-change-sets/{id}/apply` is the only code path that writes `checklist_items`; applying or discarding a change set already resolved returns `409 CHANGE_SET_ALREADY_RESOLVED`.
+- An `update` or `remove` naming an item that no longer exists at apply time is **skipped, not failed**, and the skipped operation ids are returned in the response so the UI can say so.
+- An operation may only write `feature`, `test_name`, `expected_result` and `notes`. `status`, `current_result` and `created_by` are outside the allowlist, enforced server-side, because `changes` originates in a model's output.
+- Editing a test definition as anyone other than its creator or an admin returns `403 NOT_CHECKLIST_OWNER`. Recording a result (`PUT /checklist-items/{id}/result`) is open to every authenticated user and sets both `current_result` and `status` together.
+- The module chat streams over the same SSE contract as §4.2's answer stream, with one added event carrying the proposed change set. The client sends only an instruction to apply or discard — never proposal content.
+- Deleting a project soft-deletes all four tables; deleting a module soft-deletes its items, change sets, and chat. Nothing reaches Qdrant: the checklist owns no vector points.
+- `GET /checklist-items/export` takes the same filters as the list route and applies **no pagination**, capped at `CHECKLIST_EXPORT_MAX_ROWS` rows with `409 EXPORT_TOO_LARGE` past the cap.
+- No screen shows a coverage percentage or a "complete" badge. The UI states which path was enumerated instead, because that is a claim the system can actually support.
 
-**Schema (shared with §4.4)**
+**Schema**
 
 ```python
-class QAPair(BaseModel):
+class ChecklistModule(BaseModel):
     id: UUID
-    project_id: UUID
-    created_by: UUID                          # attribution; does not scope reads
-    module: str | None
-    question: str
-    answer: str | None                        # null until answered
-    reference_answer: str | None
-    citations: list[Citation]                 # file path + chunk id + line range
-    tags: list[str]
-    source: Literal["manual", "generated"]
-    status: Literal["unreviewed", "pass", "fail"]
+    project_id: UUID                    # FK projects.id
+    created_by: UUID                    # attribution + destructive gate; never scopes reads
+    name: str                           # "Authentication"
+    source_path: str                    # repo-relative dir or file the module covers
+    status: Literal["empty", "generating", "review", "ready", "failed"]
+    error: str | None                   # scrubbed before it is stored
+    indexed_generation: int | None       # the project generation the last run read
+    last_generated_at: datetime | None
+    last_job_id: UUID | None            # the job that holds or held the lease
+    lease_expires_at: datetime | None   # recovers a worker that died mid-run
+    created_at: datetime
+    updated_at: datetime
+    deleted_at: datetime | None
+
+
+class ChecklistItem(BaseModel):
+    id: UUID
+    module_id: UUID
+    project_id: UUID                    # denormalised; the grid and export filter on it
+    feature: str                        # "Login"
+    test_name: str                      # "Rejects a wrong password"
+    expected_result: str                # "401 with code INVALID_CREDENTIALS"
+    current_result: str | None          # a human's observation; AskRepo never writes it
+    status: Literal["untested", "pass", "fail", "blocked"]
+    notes: str | None
+    citations: list[Citation] | None    # file path + line range the expectation came from
+    source: Literal["generated", "manual"]
+    kind: Literal["positive", "negative"]   # proves it works, or that it refuses
+    position: int                       # stable ordering within (module, feature)
+    created_by: UUID
     reviewed_by: UUID | None
     reviewed_at: datetime | None
-    model: str | None                         # model that produced `answer`
-    eval_score: float | None                  # generated + evaluated only
-    last_run_at: datetime | None
-    pending_answer: str | None                # a re-run's result, held server-side
-    pending_citations: list[Citation] | None
-    pending_model: str | None
-    pending_finish_reason: str | None
-    pending_run_at: datetime | None
+    created_at: datetime
+    updated_at: datetime
+    deleted_at: datetime | None
+
+
+class ChecklistChangeSet(BaseModel):
+    id: UUID
+    module_id: UUID
+    origin: Literal["generation", "chat"]
+    message_id: UUID | None             # the chat turn that produced it; null for generation
+    summary: str                        # "3 added, 1 expectation corrected"
+    operations: list[ChangeOperation]   # JSONB; add / update / remove, each with a rationale
+    status: Literal["pending", "applied", "discarded"]
+    resolved_by: UUID | None
+    resolved_at: datetime | None
+    created_by: UUID
+    created_at: datetime
+    updated_at: datetime
+    deleted_at: datetime | None
+
+
+class ChecklistMessage(BaseModel):
+    id: UUID
+    module_id: UUID
+    role: Literal["user", "assistant"]
+    content: str
+    citations: list[Citation] | None
+    model: str | None
+    finish_reason: str | None
+    created_by: UUID                    # who spoke; every user can read it
     created_at: datetime
     updated_at: datetime
     deleted_at: datetime | None
 ```
 
-**Out of scope for v1:** collaborative editing of a single pair, versioned diffing UI.
+`blocked` is a real state, distinct from `fail`: "could not run this because login is broken" is not the same finding as "this behaved wrongly", and without the value testers record it as `fail` and corrupt the pass rate.
+
+Unlike `messages` (§4.2), `checklist_messages` **does** carry `deleted_at`. That exception was justified by conversations being private and deleted wholesale with their parent; a shared, auditable record does not get it.
+
+**At most one `pending` change set per module.** A second generation while one is pending is refused rather than queued: two overlapping diffs against the same items would have to be rebased against each other, and there is no sensible automatic answer to that.
+
+**Positive and negative coverage is data, not a naming convention.** Every test case carries a `kind`: `positive` (the feature does what it should with valid input) or `negative` (it refuses what it should refuse, or degrades safely). A generator left to itself proposes happy paths, because those are what the code most obviously does — so without a field the model must fill in, the absence of failure cases is invisible: the grid looks complete, the export looks complete, and nothing says which half is missing. As a field it can be filtered in the grid, grouped in the `.xlsx`, and counted. The model's answer is narrowed rather than trusted: the **first** word that names a kind decides it, and anything unrecognised becomes `positive`, because a mislabelled happy path is cosmetic while a mislabelled failure case inflates the very coverage the field exists to measure. Reading the first word rather than searching for any negative one is what keeps that default honest — asked for one word a model writes the word and then justifies it, and a positive case is justified by naming what it is not ("positive: valid credentials, not an error case"), so a search would resolve the justification instead of the label. `kind` is on the change set's update allowlist — it describes what a test is *for*, not what anyone observed — but unlike the free-text fields it is checked against the enum, since the filter and the export both depend on it.
+
+**Out of scope for v1:** automated test execution, test-runner or CI integration, per-module RBAC, versioned checklist snapshots, and concurrent refinement (one pending change set per module).
 
 ---
 
 ### 4.4 QA Mock Data Generator
 
-**What it does:** Given a project (or a subset of files/modules), auto-generates synthetic Q&A pairs about the code — used to (a) seed the QA List, and (b) evaluate retrieval/answer quality (a lightweight eval harness).
+**What it does:** Given a project (or a subset of files/modules), auto-generates synthetic Q&A pairs about the code — used to evaluate retrieval/answer quality (a lightweight eval harness).
 
 **User stories**
 
@@ -388,8 +506,8 @@ class QAPair(BaseModel):
 **Acceptance criteria**
 
 - Generation uses an LLM prompted against actual code chunks to produce (question, reference answer, source file) triples — grounded generation, not hallucinated topics.
-- Output writes into the shared `qa_pairs` table (§4.3) with `source="generated"`, `status="unreviewed"`, and the caller as `created_by`.
-- Eval mode: for each generated pair, run it through Dev Knowledge, compare answer vs `reference_answer` (LLM-graded similarity is fine for v1), and store the result in `eval_score` **alongside `status`** — the judge writes the same column a human does through `PUT /qa-pairs/{id}/status`, so the column means the same thing whether a person or a model filled it in.
+- Output writes into **its own storage, defined when M5 is designed**, with the caller as `created_by`. The `qa_pairs` table this originally targeted no longer exists (§4.3), and a generated question/answer pair is not a checklist test case.
+- Eval mode: for each generated pair, run it through Dev Knowledge, compare answer vs `reference_answer` (LLM-graded similarity is fine for v1), and store the result in `eval_score` **alongside `status`** — the judge writes the same column a human would, so it means the same thing whether a person or a model filled it in.
 - Configurable count (10/25/50) and question-type mix.
 - Generation is the most expensive operation in the app; it runs as a background job with an instance-wide concurrency cap, not inline in the request.
 
@@ -406,22 +524,25 @@ class QAPair(BaseModel):
 | Orchestration       | LangGraph                                                  | State graph for classify → retrieve → grade/loop → generate                               |
 | LLM framework       | LangChain                                                  | Prompt templates, output parsers, document loaders/splitters                              |
 | Auth                | bcrypt hashing + JWT access / opaque refresh tokens        | Access token stateless (15 min); refresh token hashed in Postgres so it is revocable      |
-| ORM / migrations    | SQLAlchemy 2.0 + Alembic                                   | users, projects, qa_pairs, conversations, messages, refresh_tokens                        |
+| ORM / migrations    | SQLAlchemy 2.0 + Alembic                                   | users, projects, conversations, messages, the four checklist tables, refresh_tokens       |
 | Rate limiting       | Redis-backed middleware                                    | Login brute-force protection (M0). Redis does **not** back the job queue — see below      |
 | Reverse proxy / TLS | Caddy                                                      | Internal TLS in front of API + frontend. Not internet-facing, so certs may be internal CA |
 | Ingestion           | `git clone --depth 1` per project + filesystem walk        | Working copy deleted after indexing; `/data/repos` is scratch, not a persistent volume    |
 | Background jobs     | Kafka + a separate worker process (M1)                     | Clone + index must not block the request. See note below.                                 |
 | Vector store        | Qdrant                                                     | Shared collection, filtered by `project_id` from the access resolver (§4.1)               |
+| Graph store         | Neo4j Community Edition — **phase 3 only, not in v1**      | Code knowledge graph for reachability questions vector search cannot answer (§2.1). Derived and rebuildable, like Qdrant |
 | Embedding model     | Ollama (nomic-embed-text) + OpenAI / Voyage adapters       | Collection name carries provider+model+width, so a switch targets a different collection  |
-| Chat model          | Ollama (qwen2.5-coder:14b, qwen3:14b) + hosted adapter     | Answers questions. Separate setting from the embedder — commonly local embed, hosted answer |
-| Storage             | Postgres                                                   | Users, projects, qa_pairs, conversations, refresh tokens, encrypted PATs                  |
+| Chat model          | Ollama (qwen2.5-coder:14b, qwen3:14b) or any OpenAI-compatible endpoint; native Anthropic at M4.5 | Answers questions. Separate setting from the embedder — commonly local embed, hosted answer |
+| Storage             | Postgres                                                   | Users, projects, conversations, the checklist tables, refresh tokens, encrypted PATs      |
 | Secrets             | Env-provided encryption key (AES-GCM / Fernet)             | Encrypts PATs at rest; key never committed, rotatable                                     |
 | Frontend            | Next.js (App Router) acting as a backend-for-frontend      | Holds the session in its own httpOnly cookies and calls the API on the browser's behalf, so no token is readable by a script on the page. This is more than the "keep thin" this row originally called for — see `docs/superpowers/specs/2026-08-29-frontend-m0-m2-design.md` §2.1 for the reasoning and the costs |
 | Networking          | VPN / Tailscale only — no public exposure                  | The instance is internal. Admin access to Postgres/Qdrant dashboards likewise             |
 
+**The answerer is a configured provider, and a hosted one costs nothing to try.** `CHAT_PROVIDER` selects the adapter and `CHAT_BASE_URL` / `CHAT_API_KEY` / `CHAT_MODEL` point it somewhere, so any OpenAI-compatible endpoint — OpenRouter, DeepSeek, Kimi, Groq, Together, a self-hosted vLLM — is reachable without new code. Two caveats decide whether it works, and neither announces itself: the model must support tool-calling or a JSON mode, because every structured path in the app runs through `with_structured_output` and a model without it fails as an unusable shape rather than as a clear error; and the **embedding** provider is a different setting with a different cost, since its name is part of the collection name and changing it invalidates the index (§4.1). Local embedder, hosted answerer is the combination to reach for. M4.5 (§6) makes the capability requirement a startup check instead of a runtime surprise, and adds the one provider that is not OpenAI-shaped.
+
 **Bcrypt over argon2id.** argon2id requires 64 MiB per hash by design, a real cost on the single shared VPS that hosts Postgres, Qdrant, Redis, and possibly Ollama. bcrypt keeps the property that matters: each password guess costs real time, and the time is configurable (cost factor). The security difference is negligible in a private network where the attacker is a compromised laptop or an insider with database access.
 
-**No email provider.** Admin-provisioned accounts and admin-driven password reset remove every transactional-email path, so v1 ships without a mail dependency. Adding self-service reset later means adding a provider then.
+**No email provider.** Admin-provisioned accounts and admin-driven password reset remove every transactional-email path, so v1 ships without a mail dependency. Two phase-2 items would each add one — self-service reset and email notifications (§2.1) — and they want the same provider, the same outbound queue and the same deliverability work, so they are specified together or not at all. Note what the absence buys today beyond one less service: this stack has no egress path except the git clone and the model provider, which is why §9 can treat "nothing leaves" as a property rather than a rule to enforce.
 
 **On the job queue.** Running the clone in the API process via `BackgroundTasks` was never viable past a prototype: a restart mid-index loses the job and leaves a Project stuck at `indexing` forever. So M1 moves ingestion into a **separate worker process**, and the queue between them is **Kafka**.
 
@@ -460,7 +581,7 @@ Redis stays in the stack for login rate limiting only. It does not back the queu
   same argument as `refresh_tokens`. `conversations` does carry `deleted_at` and soft-deletes
   normally.
 - **Soft delete does not reach Qdrant.** Vector points have no `deleted_at`, and a query-time filter would be one forgotten call away from serving deleted content. Rule: **Postgres rows are soft-deleted; the corresponding Qdrant points are hard-deleted in the same operation.**
-- **Attribution vs authorization.** `created_by` exists on projects and qa_pairs for attribution and to gate destructive operations. It never scopes reads in phase 1. Read scoping is _only_ ever done through `resolve_project_scope` (§4.1), so phase 2 has exactly one place to change.
+- **Attribution vs authorization.** `created_by` exists on projects, checklist modules and checklist items for attribution and to gate destructive operations. It never scopes reads in phase 1. Read scoping is _only_ ever done through `resolve_project_scope` (§4.1), so phase 2 has exactly one place to change.
 - **Error shape.** Every error the application raises serialises as
   `{"detail": {"code": "SOME_CODE", "message": "..."}}`. `code` is a stable,
   machine-readable identifier drawn from a single enum; `message` is for a person.
@@ -489,11 +610,26 @@ Redis stays in the stack for login rate limiting only. It does not back the queu
 1. **M1 — Project ingestion:** `POST /projects` with repo link → clone + index, status tracking, manual re-index, URL validation, `created_by` gating. Moves ingestion out of the API process into a Kafka-driven worker (§5).
 2. **M2 — Dev Knowledge core (shipped):** RAG Q&A against a ready project (no graph yet), with private conversations, SSE streaming, history-aware query rewriting, and the grounding guardrails above.
 3. **M3 — LangGraph wrap (shipped):** turn the chain into a graph with intent routing (codebase question / conversational / out of scope) and a self-critique loop that **grades retrieval before generating** — when the excerpts do not answer the question, the grader supplies a better query and retrieval runs again. The critique deliberately sits before generation rather than after it: a critic that can reject a finished answer can only run on an answer that finished, which means either buffering the whole draft (reintroducing the silence §4.2 added streaming to remove) or visibly retracting a streamed one. See `docs/superpowers/specs/2026-08-30-m3-langgraph-design.md` §2.1.
-4. **M4 — QA List (shipped):** shared `qa_pairs` storage + save/view/filter/re-run, a pass/fail/unreviewed `status` verdict any user may set, and export of the filtered list to `.xlsx`.
+4. **M4 — QA Checklist (shipped):** modules over an indexed repository, background generation that scrolls the index and proposes a reviewed change set, a shared module chat that proposes further change sets, human-recorded pass/fail/blocked results, and `.xlsx` export. Replaces the QA List that shipped earlier at this milestone — see `docs/superpowers/specs/2026-09-01-m4-qa-checklist-design.md` §0.
 5. **M5 — Mock Data Generator:** generate synthetic Q&A + basic eval scoring.
-6. **M6 — Local vs hosted comparison:** benchmark qwen2.5-coder/qwen3 vs hosted model across nodes.
+6. **M6 — Local vs hosted comparison:** benchmark qwen2.5-coder/qwen3 vs hosted model across nodes. Depends on M4.5 below, which is what makes a hosted model configurable in the first place; M6 measures what M4.5 makes possible.
 
-**Phase 2 (after M6):** per-project RBAC — membership table, roles, and swapping the access resolver's body. Plus self-service password reset (which brings a mail provider into the stack for the first time), an append-only audit trail, and multi-language support — a translated interface and answers in the language the question was asked in, with the search query held to English so retrieval against English source code keeps working. See §2.1 for what each covers and what it costs.
+**M4.5 — Model provider abstraction (inserted between M4 and M5).** The answering model becomes a provider an operator chooses — OpenAI, Anthropic, DeepSeek, OpenRouter, Kimi, or any OpenAI-compatible endpoint — rather than a model that has to run on the box. The motivation is measured rather than theoretical: one reduce call against `qwen2.5-coder:7b` on CPU took **22 minutes**, and a development machine already running Postgres, Qdrant, Redis, Kafka and Ollama has nothing left for a 7-billion-parameter model. A tool nobody can wait for is a tool nobody uses.
+
+Most of this seam already exists and is not part of the milestone. §5's chat rows are already provider-selected — `chat_provider`, `chat_model`, `chat_base_url`, `chat_api_key` — and because the non-Ollama branch is an OpenAI-compatible client, **every OpenAI-compatible endpoint already works by configuration alone**: OpenRouter, DeepSeek, Kimi, Groq, Together, or a self-hosted vLLM. What M4.5 adds is the four things that configuration cannot:
+
+- **A native Anthropic adapter.** It is the one provider on that list whose API is not OpenAI-shaped, so it needs a third `chat_provider` member rather than a base URL.
+- **A capability precondition, probed rather than assumed.** Every structured path in the app — M4's map and reduce steps, the graph's classify and grade nodes — goes through LangChain's `with_structured_output`, which requires tool-calling or a JSON mode. A model lacking it does not degrade politely: the reduce step raises "returned an unusable shape", the job retries, and the module dead-letters with a message that names the symptom and not the cause. This is the trap the milestone exists to close, because an aggregator will serve a model that cannot do it without saying so. The check belongs at startup, beside the embedding-dimension probe that already refuses to guess (§5) — an instance should fail to boot on a model it cannot use, not fail on the first generation.
+- **Retry classification for failure modes a local endpoint does not have.** `429 Too Many Requests`, a quota exhaustion and a provider outage are retryable; a rejected key, a model name that does not exist and a context-length rejection are terminal. The existing classifier (§5's queue notes) was written against an endpoint that fails in neither way, and getting this backwards means either a dead-lettered job that would have succeeded on retry or a retry ladder hammering a provider that has already said no.
+- **A spend bound.** M4 generation is one model call **per file** plus one reduce, so `CHECKLIST_MAP_CONCURRENCY` stops being a CPU knob and becomes a rate-limit and billing knob. Instance-wide concurrency caps already exist; nothing caps *cost*, and the first surprising invoice will come from a module nobody thought was large. Whoever specifies this decides whether the bound is per job, per project or per instance, and whether exceeding it fails the job or degrades to fewer files with the coverage note §4.3 already requires.
+
+**Keep the embedder local even when the answerer is hosted.** The two settings are separate precisely so that is possible, and the asymmetry is not cosmetic: swapping the chat provider is free and reversible, while swapping the embedding provider changes the collection name (§5), invalidates every vector in it, costs a full re-index of every project, and is guarded by `EMBEDDING_MODEL_CHANGED` for exactly that reason. `nomic-embed-text` is a 274 MB model that runs on anything; the multi-gigabyte answerer is what makes a laptop unusable. So the resource problem is solved by moving the chat model alone, at no re-indexing cost — and an instance that moves both has taken on a migration it did not need.
+
+**What this costs is the premise.** §1 describes a self-hosted, single-tenant tool on an organization's own network, and a hosted answerer sends retrieved source code to a third party on every question. That is a deliberate trade an operator makes per instance, not a default — see §9.
+
+**Phase 2 (after M6):** per-project RBAC — membership table, roles, and swapping the access resolver's body. Plus self-service password reset and notifications (in-app and email), which together bring a mail provider into the stack for the first time and with it the instance's first egress path; a per-user answer persona, applied to private answers only and never to the shared checklist; an append-only audit trail; and multi-language support — a translated interface and answers in the language the question was asked in, with the search query held to English so retrieval against English source code keeps working. See §2.1 for what each covers and what it costs.
+
+**Phase 3 (after phase 2, not beside it):** a code knowledge graph in Neo4j Community Edition, making Neo4j the fourth database beside Postgres, Redis and Qdrant — Kafka remains the broker and §5's queue decision is unchanged. It answers the reachability questions vector similarity structurally cannot ("what breaks if I change this"), and it costs a language-aware parser, a fifth stateful service on a box already short of memory, and a backup that is not a hot operation. It follows phase 2 rather than running alongside it because a second query language must not arrive before per-project access has one enforcement point. See §2.1.
 
 ---
 
@@ -504,9 +640,11 @@ Redis stays in the stack for login rate limiting only. It does not back the queu
 - **Destructive gating holds:** user B attempting to delete or re-index user A's project gets `403`; an admin succeeds. Verified by an automated test.
 - **Conversations stay private:** user B cannot list or read user A's conversations, and gets `404` rather than `403`. Verified by an automated test.
 - Can ask Dev Knowledge a real question about a project repository and get a correct, cited answer.
-- QA List has 20+ saved pairs (mix of manual + generated) usable as a shared regression set.
+- A module of a real repository generates a checklist whose proposals a reviewer accepts, a tester records results against it, and the export is usable as the handoff artifact — verified by an automated test.
+- **No generated field claims an observation:** a generated test case always arrives `untested` with an empty `current_result`. Verified by an automated test.
 - Mock Data Generator can produce a usable eval set for a repo in one run, with scores that meaningfully drop when chunking/prompting is deliberately made worse (sanity check that the eval signal is real).
 - Clear, documented comparison of local vs hosted model performance per node type.
+- **Switching the answering model is configuration, not a migration:** an instance moves from a local model to a hosted provider and back by changing `CHAT_*` settings, with no re-index and no change to stored citations. An instance configured with a model that cannot do structured output fails at startup with a message naming that as the cause, rather than on its first generation (M4.5).
 - No secret (password, token, PAT) appears in any log, traceback, or API response.
 - **Phase-2 readiness:** read scoping happens in exactly one function, confirmed by grep — no route filters projects on its own.
 
@@ -520,6 +658,8 @@ Redis stays in the stack for login rate limiting only. It does not back the queu
 - How rigorous should the "eval score" be in v1 — LLM-graded similarity is fast to build but noisy; worth revisiting once M5 is done.
 - Encryption key rotation for stored PATs — re-encrypt in place on rotation, or require re-entry?
 - GitHub webhook auto-reindex — not needed now; worth reconsidering in v2 if re-cloning per re-index becomes painful.
+- **Is the email half of notifications (§2.1) worth a mail provider, or is in-app enough?** In-app costs a table and a polled count and adds no infrastructure and no egress path. Email costs an SMTP dependency, deliverability from a box that is deliberately unreachable, and the §9 egress question — and buys the one thing in-app cannot: reaching someone who is not currently looking at AskRepo, which is the entire point for a generation that takes twenty minutes. A defensible answer is to ship in-app first and treat email as a second decision once there is evidence people miss things.
+- **Immediate or digested, and who decides?** One email per finished index is fine for a team adding a project a week and unusable for a bulk import. A digest needs a schedule, a window, and somewhere to hold undelivered events, which is more machinery than the notification itself. Related: whether the *recipient* or the *operator* owns the preference, since a per-user opt-out is a column while an instance-wide policy is a setting.
 
 ---
 
@@ -534,4 +674,6 @@ The instance is internal, which lowers the threat model but does not empty it. T
 - **Resource exhaustion.** Clones and embeddings are expensive and the box is shared. Mitigation: repo size cap, clone timeout, instance-wide concurrency caps on ingestion and generation.
 - **Brute force.** Internal does not mean unreachable — a compromised laptop is on the network. Login rate limiting and bcrypt stand regardless.
 - **Backups.** Restorable Postgres backups, with the PAT encryption key backed up **separately** from the database.
+- **A hosted answering model sends private source code out of the network (M4.5, §6).** This is the sharpest consequence of making the provider configurable, and it is a change to §1's premise rather than a detail of it: every question ships the retrieved excerpts — real code from a private repository, with file paths — to whichever provider `CHAT_BASE_URL` names. The prompt-injection note below still holds and is unaffected; what changes is the direction. Four things follow. The **API key** joins the PAT and the encryption key as a secret to manage, and unlike them it authorises spending. The provider's **retention and training policy** becomes part of this instance's security posture, which means it is a procurement question and not an engineering one — an aggregator that routes to an undisclosed downstream host cannot answer it at all. **A PAT is never in scope to send**, because only chunk text and paths reach a prompt, and that must stay true when a provider adapter is added. And the choice is per instance and reversible: a hosted answerer requires no re-index (§5), so an organization that decides against it switches back by changing configuration, which is the strongest argument for keeping the embedder local.
+- **Egress, if notifications ship (phase 2, §2.1).** Every mitigation above concerns something coming *in*. Email would be the first thing this instance sends *out*, and it leaves through a host outside the VPN that §5 puts everything else behind. What is at stake is not the message body alone: repository names, module names and file paths are inventory of the organization's private codebases, and they are held here *because* here is internal. The rule that follows is narrow enough to test — an outbound message carries an event type and a link, never content derived from an indexed repository — and it belongs in this section rather than in the feature's own, because the reviewer of a notifications change is the person most likely to add "a helpful preview of the answer" without noticing what it exports.
 - **Not in the threat model:** malicious authenticated users, tenant isolation, and public internet exposure. If the instance is ever published, §4.0 needs self-service account flows and this section needs revisiting — that is a different document.

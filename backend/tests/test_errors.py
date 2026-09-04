@@ -89,3 +89,31 @@ async def test_every_error_code_is_screaming_snake_case() -> None:
     for code in ErrorCode:
         assert code.value == code.value.upper()
         assert " " not in code.value
+
+
+def test_checklist_error_codes_exist() -> None:
+    """Each is raised by a route in this milestone; a client branches on the value."""
+    for name in (
+        "CHECKLIST_MODULE_NOT_FOUND",
+        "CHECKLIST_ITEM_NOT_FOUND",
+        "NOT_CHECKLIST_OWNER",
+        "CHANGE_SET_NOT_FOUND",
+        "CHANGE_SET_PENDING",
+        "CHANGE_SET_ALREADY_RESOLVED",
+        "GENERATION_IN_PROGRESS",
+        "MODULE_PATH_NOT_INDEXED",
+    ):
+        assert ErrorCode[name].value == name
+
+
+def test_qa_error_codes_are_retired() -> None:
+    """Removing an `ErrorCode` member is a deliberate act, permitted here only
+    because the sole producer of each is deleted in the same change and the sole
+    consumer is the in-repo frontend replaced alongside it (spec 6.3)."""
+    for name in ("QA_PAIR_NOT_FOUND", "NOT_QA_PAIR_OWNER", "NO_PENDING_RUN", "ANSWER_INCOMPLETE"):
+        assert name not in ErrorCode.__members__
+
+
+def test_message_not_found_survives() -> None:
+    """Still raised by the conversations surface, which this milestone does not touch."""
+    assert ErrorCode.MESSAGE_NOT_FOUND.value == "MESSAGE_NOT_FOUND"

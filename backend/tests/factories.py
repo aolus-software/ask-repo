@@ -5,9 +5,20 @@ import uuid
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.security import hash_password
-from app.models.conversation import Conversation
+from app.models.checklist import (
+    ChangeSetOrigin,
+    ChangeSetStatus,
+    ChecklistChangeSet,
+    ChecklistItem,
+    ChecklistItemKind,
+    ChecklistItemSource,
+    ChecklistItemStatus,
+    ChecklistMessage,
+    ChecklistModule,
+    ChecklistModuleStatus,
+)
+from app.models.conversation import Conversation, MessageRole
 from app.models.project import Project, ProjectStatus
-from app.models.qa_pair import QAPair, QASource, QAStatus
 from app.models.user import User
 
 
@@ -39,6 +50,7 @@ async def create_project(
     created_by: uuid.UUID | None = None,
     status: ProjectStatus = ProjectStatus.READY,
     repo_url: str = "https://github.com/acme/repo.git",
+    name: str = "repo",
 ) -> Project:
     """A project owned by `created_by`, or by a freshly created user."""
     if created_by is None:
@@ -46,7 +58,7 @@ async def create_project(
     project = Project(
         id=uuid.uuid4(),
         created_by=created_by,
-        name="repo",
+        name=name,
         repo_url=repo_url,
         branch="main",
         status=status.value,
@@ -76,36 +88,131 @@ async def create_conversation(
     return conversation
 
 
-async def create_qa_pair(
+async def create_checklist_module(
     session: AsyncSession,
     *,
     project_id: uuid.UUID | None = None,
     created_by: uuid.UUID | None = None,
-    question: str = "How does login work?",
-    answer: str | None = "It hashes the password with bcrypt.",
-    reference_answer: str | None = None,
-    module: str | None = None,
-    tags: list[str] | None = None,
-    status: QAStatus = QAStatus.UNREVIEWED,
-    source: QASource = QASource.MANUAL,
-) -> QAPair:
-    """A saved pair. `reference_answer` defaults to `answer`, as a real save does."""
+    name: str = "Authentication",
+    source_path: str = "backend/app/api/routes",
+    status: ChecklistModuleStatus = ChecklistModuleStatus.EMPTY,
+    indexed_generation: int | None = None,
+) -> ChecklistModule:
+    """A module against `project_id`, or against a freshly created project."""
     if created_by is None:
         created_by = (await create_user(session)).id
     if project_id is None:
         project_id = (await create_project(session, created_by=created_by)).id
-    pair = QAPair(
+    module = ChecklistModule(
         id=uuid.uuid4(),
         project_id=project_id,
         created_by=created_by,
-        module=module,
-        question=question,
-        answer=answer,
-        reference_answer=answer if reference_answer is None else reference_answer,
-        tags=tags or [],
-        source=source.value,
+        name=name,
+        source_path=source_path,
         status=status.value,
+        indexed_generation=indexed_generation,
     )
-    session.add(pair)
+    session.add(module)
     await session.flush()
-    return pair
+    return module
+
+
+async def create_checklist_item(
+    session: AsyncSession,
+    *,
+    module_id: uuid.UUID | None = None,
+    project_id: uuid.UUID | None = None,
+    created_by: uuid.UUID | None = None,
+    feature: str = "Login",
+    test_name: str = "Rejects a wrong password",
+    expected_result: str = "401 with code INVALID_CREDENTIALS",
+    current_result: str | None = None,
+    status: ChecklistItemStatus = ChecklistItemStatus.UNTESTED,
+    source: ChecklistItemSource = ChecklistItemSource.GENERATED,
+    kind: ChecklistItemKind = ChecklistItemKind.POSITIVE,
+    position: int = 0,
+) -> ChecklistItem:
+    """One test case. `project_id` and `created_by` default to the module's, as a real
+    insert does -- `ChecklistItem.project_id` is denormalised off the module at insert
+    and never updated, because a module cannot move between projects."""
+    module: ChecklistModule
+    if module_id is None:
+        module = await create_checklist_module(session, created_by=created_by)
+    else:
+        fetched = await session.get(ChecklistModule, module_id)
+        if fetched is None:
+            raise ValueError(f"no checklist module {module_id}")
+        module = fetched
+    module_id = module.id
+    if project_id is None:
+        project_id = module.project_id
+    if created_by is None:
+        created_by = module.created_by
+    item = ChecklistItem(
+        id=uuid.uuid4(),
+        module_id=module_id,
+        project_id=project_id,
+        feature=feature,
+        test_name=test_name,
+        expected_result=expected_result,
+        current_result=current_result,
+        status=status.value,
+        source=source.value,
+        kind=kind.value,
+        position=position,
+        created_by=created_by,
+    )
+    session.add(item)
+    await session.flush()
+    return item
+
+
+async def create_checklist_change_set(
+    session: AsyncSession,
+    *,
+    module_id: uuid.UUID | None = None,
+    created_by: uuid.UUID | None = None,
+    origin: ChangeSetOrigin = ChangeSetOrigin.GENERATION,
+    status: ChangeSetStatus = ChangeSetStatus.PENDING,
+    summary: str = "1 added",
+    operations: list[dict[str, object]] | None = None,
+) -> ChecklistChangeSet:
+    """A change set awaiting a decision."""
+    if module_id is None:
+        module = await create_checklist_module(session, created_by=created_by)
+        module_id, created_by = module.id, module.created_by
+    if created_by is None:
+        created_by = (await create_user(session)).id
+    change_set = ChecklistChangeSet(
+        id=uuid.uuid4(),
+        module_id=module_id,
+        origin=origin.value,
+        summary=summary,
+        operations=operations if operations is not None else [],
+        status=status.value,
+        created_by=created_by,
+    )
+    session.add(change_set)
+    await session.flush()
+    return change_set
+
+
+async def create_checklist_message(
+    session: AsyncSession,
+    *,
+    module_id: uuid.UUID,
+    created_by: uuid.UUID,
+    role: MessageRole = MessageRole.USER,
+    content: str = "Add a test for an empty password.",
+) -> ChecklistMessage:
+    """One chat turn against a module."""
+    message = ChecklistMessage(
+        id=uuid.uuid4(),
+        module_id=module_id,
+        role=role.value,
+        content=content,
+        created_by=created_by,
+    )
+    session.add(message)
+    await session.flush()
+    return message

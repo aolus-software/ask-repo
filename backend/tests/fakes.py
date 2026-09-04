@@ -7,7 +7,8 @@ is a second thing to get wrong, and a divergence between them would be invisible
 """
 
 import asyncio
-from collections.abc import AsyncIterator, Awaitable, Callable
+import uuid
+from collections.abc import AsyncGenerator, AsyncIterator, Awaitable, Callable
 from types import SimpleNamespace
 
 from aiokafka import ConsumerRebalanceListener, TopicPartition
@@ -18,7 +19,11 @@ from langchain_core.outputs import ChatGeneration, ChatGenerationChunk, ChatResu
 from langchain_core.runnables import Runnable, RunnableLambda
 from pydantic import BaseModel, Field, PrivateAttr
 
+from app.models.conversation import FinishReason, Intent
 from app.queue.topics import IngestionMessage
+from app.rag.prompts import ExistingItem, Turn
+from app.schemas.checklist import ChangeSetEvent
+from app.schemas.conversation import CitationsEvent, DoneEvent, StreamEvent, TokenEvent
 
 
 class FakeConsumer:
@@ -35,6 +40,7 @@ class FakeConsumer:
         assigned: set[TopicPartition],
         *,
         on_poll: Callable[[], Awaitable[None]] | None = None,
+        records: dict[TopicPartition, list[object]] | None = None,
     ) -> None:
         self._assigned = set(assigned)
         self._paused: set[TopicPartition] = set()
@@ -45,9 +51,36 @@ class FakeConsumer:
         # Lets a test act in the middle of a hold — a rebalance, say — at the one
         # moment a real broker could interrupt: while the loop is parked in a poll.
         self._on_poll = on_poll
+        # Canned records a test can hand straight to `_process`, bypassing `getmany`
+        # entirely — `getmany` below always returns nothing once everything is
+        # paused, which is the real pause contract this fake exists to encode.
+        self.records: dict[TopicPartition, list[object]] = dict(records) if records else {}
 
     def subscribe(self, *, topics: list[str], listener: ConsumerRebalanceListener) -> None:
         self.listener = listener
+
+    @property
+    def paused(self) -> set[TopicPartition]:
+        """Every partition currently paused — lets a test assert pause/resume symmetry."""
+        return set(self._paused)
+
+    @property
+    def poll_count(self) -> int:
+        """Alias for `keep_alive_polls`, read by a test that does not care which
+        loop (ingestion or retry) drove the polling."""
+        return self.keep_alive_polls
+
+    def first_record(self) -> object:
+        """The first canned record given to the constructor.
+
+        A convenience for a test that drives `_process` directly rather than
+        through `run`'s polling loop — `getmany` never hands these back, since it
+        always returns nothing once everything assigned is paused.
+        """
+        for records in self.records.values():
+            if records:
+                return records[0]
+        raise AssertionError("FakeConsumer was constructed with no records")
 
     def assignment(self) -> set[TopicPartition]:
         return set(self._assigned)
@@ -217,6 +250,46 @@ class ScriptedChatModel(BaseChatModel):
         return RunnableLambda(_next)
 
 
+class StructuredScriptedChatModel:
+    """A chat model whose `with_structured_output(schema)` returns scripted objects.
+
+    Keyed by schema class rather than by call order, because generation makes one call
+    per file plus one reduce and the file order is not something a test should have to
+    predict. `prompts_for` records what each schema was asked, which is how a test
+    asserts that the existing items reached the reduce prompt.
+    """
+
+    def __init__(self, scripts: dict[type, list[object]]) -> None:
+        self._scripts = {schema: list(values) for schema, values in scripts.items()}
+        self._prompts: dict[type, list[list[BaseMessage]]] = {}
+
+    def with_structured_output(self, schema: type) -> "_BoundStructured":
+        return _BoundStructured(self, schema)
+
+    def prompts_for(self, schema: type) -> list[list[BaseMessage]]:
+        """Every prompt this schema was invoked with, in call order."""
+        return self._prompts.get(schema, [])
+
+    def _next(self, schema: type, messages: list[BaseMessage]) -> object:
+        self._prompts.setdefault(schema, []).append(messages)
+        script = self._scripts.get(schema) or []
+        if not script:
+            raise AssertionError(f"no scripted response left for {schema.__name__}")
+        # The last entry repeats, so a map step over N files needs one script entry.
+        return script.pop(0) if len(script) > 1 else script[0]
+
+
+class _BoundStructured:
+    """What `with_structured_output` returns: something with `ainvoke`."""
+
+    def __init__(self, parent: StructuredScriptedChatModel, schema: type) -> None:
+        self._parent = parent
+        self._schema = schema
+
+    async def ainvoke(self, messages: list[BaseMessage]) -> object:
+        return self._parent._next(self._schema, messages)
+
+
 class FailingChatModel(ScriptedChatModel):
     """Raises on `ainvoke` and on any structured call — the degradation paths.
 
@@ -240,3 +313,76 @@ class FailingChatModel(ScriptedChatModel):
             raise RuntimeError("scripted structured-output failure")
 
         return RunnableLambda(_raise)
+
+
+class FakeAnswerer:
+    """A scripted stand-in for `app.rag.answerer.Answerer`, for the checklist stream.
+
+    `closed` records whether the last generator this produced ran its `finally` to
+    completion -- which is what `stream_checklist_turn`'s shielded finaliser must
+    still trigger even on a disconnect, because closing the answerer is what
+    releases its concurrency permit (`.claude/rules/rag.md`).
+    """
+
+    def __init__(self, events: list[StreamEvent], *, hang: bool = False) -> None:
+        self._events = events
+        self._hang = hang
+        self.closed = False
+
+    @classmethod
+    def proposing(cls, *, change_set_id: uuid.UUID, message_id: uuid.UUID) -> "FakeAnswerer":
+        """Cites, answers, proposes one change, and terminates with `stop`."""
+        return cls(
+            events=[
+                CitationsEvent(citations=[]),
+                TokenEvent(text="Sure, "),
+                TokenEvent(text="I've added it."),
+                ChangeSetEvent(
+                    change_set_id=change_set_id,
+                    summary="1 proposed change",
+                    operations=[],
+                ),
+                DoneEvent(
+                    message_id=message_id,
+                    model="test-model",
+                    finish_reason=FinishReason.STOP,
+                    cited_indexes=[],
+                    grounding_warnings=[],
+                    intent=Intent.CODEBASE_QUESTION,
+                    retrieval_attempts=1,
+                ),
+            ]
+        )
+
+    @classmethod
+    def hanging_after_one_token(cls) -> "FakeAnswerer":
+        """Yields one token, then hangs -- a stand-in for a client disconnect
+        arriving mid-generation, before any terminator is produced."""
+        return cls(events=[TokenEvent(text="partial")], hang=True)
+
+    async def answer(
+        self,
+        *,
+        question: str,
+        history: list[Turn],
+        project_id: uuid.UUID,
+        generation: int,
+        message_id: uuid.UUID | None,
+        existing_items: list[ExistingItem] | None = None,
+        change_set_id: uuid.UUID | None = None,
+        module_name: str = "",
+    ) -> AsyncGenerator[StreamEvent]:
+        """Yield the scripted events, then hang forever if `hang` was requested.
+
+        The `finally` is what makes `aclose()` observable: a real disconnect cancels
+        the in-flight `anext` and then closes this generator, which throws
+        `GeneratorExit` in wherever it is suspended and runs this block on the way
+        out -- exactly the path `_finalise_checklist_turn` depends on.
+        """
+        try:
+            for event in self._events:
+                yield event
+            if self._hang:
+                await asyncio.Event().wait()
+        finally:
+            self.closed = True

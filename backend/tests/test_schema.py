@@ -141,3 +141,33 @@ async def test_conversations_and_messages_exist_with_the_right_delete_semantics(
     assert ("messages", "deleted_at") not in found
     assert ("messages", "finish_reason") in found
     assert ("messages", "citations") in found
+
+
+async def test_checklist_tables_exist_and_qa_pairs_does_not(db_session: AsyncSession) -> None:
+    """The migration is the source of truth for the schema, not `create_all`."""
+    result = await db_session.execute(
+        text("SELECT table_name FROM information_schema.tables WHERE table_schema = 'public'")
+    )
+    tables = set(result.scalars().all())
+
+    assert {
+        "checklist_modules",
+        "checklist_items",
+        "checklist_change_sets",
+        "checklist_messages",
+    } <= tables
+    assert "qa_pairs" not in tables
+
+
+async def test_checklist_indexes_exist(db_session: AsyncSession) -> None:
+    """Each one serves a query named in spec 3.5; without them the grid scans."""
+    result = await db_session.execute(
+        text("SELECT indexname FROM pg_indexes WHERE schemaname = 'public'")
+    )
+    indexes = set(result.scalars().all())
+
+    assert "ix_checklist_modules_project_id_created_at" in indexes
+    assert "ix_checklist_items_module_id_feature_position" in indexes
+    assert "ix_checklist_items_project_id_status" in indexes
+    assert "ix_checklist_change_sets_module_id_status" in indexes
+    assert "ix_checklist_messages_module_id_created_at" in indexes

@@ -244,26 +244,40 @@ class _RepauseOnRebalance(ConsumerRebalanceListener):
             self._consumer.pause(*assigned)
 
 
-class IngestionConsumer:
-    """The polling loop for one worker."""
+class PausingConsumer[MessageT]:
+    """The polling loop that survives a job longer than `max.poll.interval.ms`.
 
-    def __init__(
-        self,
-        *,
-        settings: Settings,
-        sessionmaker: async_sessionmaker[AsyncSession],
-        producer: TopicProducer,
-        build_pipeline: PipelineFactory,
-        worker_id: str,
-    ) -> None:
-        self.settings = settings
-        self.sessionmaker = sessionmaker
-        self.producer = producer
-        self.build_pipeline = build_pipeline
-        self.worker_id = worker_id
-        # Read by the rebalance listener: partitions handed to us mid-job must
-        # arrive paused, or the keep-alive poll starts eating real work.
-        self._job_in_flight = False
+    Extracted from `IngestionConsumer` at M4 so checklist generation inherits it rather
+    than growing a second copy. A generation over a large module can exceed the poll
+    interval for exactly the same reason an index can, and the fix is the same one --
+    which is why this is one class and not two.
+
+    Three things a subclass supplies and nothing else: which topic and group it is,
+    how to decode a record, and what one job is. Everything load-bearing about the
+    loop -- pause every assigned partition, re-pause on every tick, commit one
+    partition after the work, absorb per-record failures -- stays here, where it is
+    tested once.
+    """
+
+    settings: Settings
+    topic: str
+    group_id: str
+    # Read by the rebalance listener: partitions handed to us mid-job must arrive
+    # paused, or the keep-alive poll starts eating real work. Set by the subclass's
+    # `__init__` and flipped around each job in `_process`.
+    _job_in_flight: bool
+
+    def _decode(self, raw: bytes) -> MessageT:
+        """Parse one record. Raise `TypeError`/`ValueError`/`KeyError` if unparseable."""
+        raise NotImplementedError
+
+    async def _run_job(self, message: MessageT) -> object:
+        """Do the work for one message, in its own session."""
+        raise NotImplementedError
+
+    async def _ensure_topics(self) -> None:
+        """Create this consumer's topics. Idempotent; called once per `run`."""
+        raise NotImplementedError
 
     def _build_consumer(self, **overrides: object) -> AIOKafkaConsumer:
         """The subscribed consumer this loop polls.
@@ -279,7 +293,7 @@ class IngestionConsumer:
         """
         consumer = AIOKafkaConsumer(
             bootstrap_servers=self.settings.kafka_bootstrap_servers,
-            group_id=self.settings.kafka_consumer_group,
+            group_id=self.group_id,
             # The offset moves only after the work is done and durable.
             enable_auto_commit=False,
             auto_offset_reset="earliest",
@@ -288,7 +302,7 @@ class IngestionConsumer:
         # Subscribed here rather than in the constructor so a rebalance listener can
         # be attached — see `_RepauseOnRebalance`.
         consumer.subscribe(
-            topics=[self.settings.kafka_ingest_topic],
+            topics=[self.topic],
             listener=_RepauseOnRebalance(consumer, lambda: self._job_in_flight),
         )
         return consumer
@@ -299,10 +313,7 @@ class IngestionConsumer:
         # off, so without this it would idle on topics that do not exist. Idempotent,
         # which is what makes calling it in both processes correct rather than
         # redundant.
-        await ensure_topics(
-            bootstrap_servers=self.settings.kafka_bootstrap_servers,
-            partitions=self.settings.kafka_ingest_partitions,
-        )
+        await self._ensure_topics()
 
         consumer = self._build_consumer()
         await consumer.start()
@@ -356,7 +367,7 @@ class IngestionConsumer:
         partition already paused, which is what makes re-applying it cheap.
         """
         try:
-            message = IngestionMessage.from_bytes(record.value)
+            message = self._decode(record.value)
         except (TypeError, ValueError, KeyError):
             # Unparseable: no redelivery will fix it, and leaving the offset here makes
             # this record a wall the worker restarts into forever. Move past it.
@@ -420,6 +431,41 @@ class IngestionConsumer:
                 partition,
                 record.offset,
             )
+
+
+class IngestionConsumer(PausingConsumer[IngestionMessage]):
+    """The ingestion polling loop for one worker."""
+
+    def __init__(
+        self,
+        *,
+        settings: Settings,
+        sessionmaker: async_sessionmaker[AsyncSession],
+        producer: TopicProducer,
+        build_pipeline: PipelineFactory,
+        worker_id: str,
+    ) -> None:
+        self.settings = settings
+        self.sessionmaker = sessionmaker
+        self.producer = producer
+        self.build_pipeline = build_pipeline
+        self.worker_id = worker_id
+        self.topic = settings.kafka_ingest_topic
+        self.group_id = settings.kafka_consumer_group
+        # Read by the rebalance listener: partitions handed to us mid-job must
+        # arrive paused, or the keep-alive poll starts eating real work.
+        self._job_in_flight = False
+
+    def _decode(self, raw: bytes) -> IngestionMessage:
+        return IngestionMessage.from_bytes(raw)
+
+    async def _ensure_topics(self) -> None:
+        """The worker may start before the API ever has, and broker auto-creation is
+        off, so without this it would idle on topics that do not exist."""
+        await ensure_topics(
+            bootstrap_servers=self.settings.kafka_bootstrap_servers,
+            partitions=self.settings.kafka_ingest_partitions,
+        )
 
     async def _run_job(self, message: IngestionMessage) -> JobOutcome:
         """One job, in its own session."""

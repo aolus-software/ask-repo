@@ -5,8 +5,8 @@ fixed-delay topic was appended when its delay started, so within a partition the
 is always the earliest-due message and nothing behind it can come due sooner. That is
 what makes "hold the head until it is due" a schedule rather than a guess.
 
-So this consumer reads the head, holds it, re-produces it to the main ingest topic and
-only then commits. It never seeks past a message and never commits one it has not
+So this consumer reads the head, holds it, re-produces it to its job kind's main topic
+and only then commits. It never seeks past a message and never commits one it has not
 re-produced: while the delay is running, the uncommitted offset is the only record
 that the retry is still owed.
 
@@ -27,6 +27,7 @@ re-idding it here would either undo that or hide a duplicate delivery from the c
 import asyncio
 import logging
 import time
+from collections.abc import Callable
 
 from aiokafka import AIOKafkaConsumer, ConsumerRecord, TopicPartition
 from aiokafka.errors import CommitFailedError, IllegalStateError
@@ -39,7 +40,7 @@ from app.config import Settings
 # `pyproject.toml` permits in exactly one module.
 from app.queue.consumer import _RepauseOnRebalance
 from app.queue.protocol import TopicProducer
-from app.queue.topics import IngestionMessage
+from app.queue.topics import JobMessage
 
 logger = logging.getLogger(__name__)
 
@@ -49,7 +50,7 @@ POLL_TIMEOUT_MS = 1000
 ERROR_BACKOFF_SECONDS = 1.0
 
 
-def seconds_until_due(message: IngestionMessage, *, now_ms: int) -> float:
+def seconds_until_due(message: JobMessage, *, now_ms: int) -> float:
     """How long to wait before this message may be re-produced. Never negative."""
     return max(0.0, (message.not_before_ms - now_ms) / 1000)
 
@@ -64,12 +65,26 @@ def _now_ms() -> int:
 
 
 class RetryConsumer:
-    """Drains one retry topic back into the main ingest topic, on schedule."""
+    """Drains one retry topic back into its job kind's main topic, on schedule."""
 
-    def __init__(self, *, settings: Settings, producer: TopicProducer, topic: str) -> None:
+    def __init__(
+        self,
+        *,
+        settings: Settings,
+        producer: TopicProducer,
+        topic: str,
+        decode: Callable[[bytes], JobMessage],
+        destination_topic: str,
+    ) -> None:
+        """`decode` and `destination_topic` are what let one ladder serve both job
+        kinds. They are required rather than defaulted to the ingestion pair: a rung
+        wired to the wrong decoder discards every message it holds as unparseable, and
+        a default is exactly how that mistake gets made silently."""
         self.settings = settings
         self.producer = producer
         self.topic = topic
+        self.decode = decode
+        self.destination_topic = destination_topic
         # Read by the rebalance listener: a partition handed to us while a message is
         # being held must arrive paused, or the keep-alive poll starts eating retries.
         self._waiting = False
@@ -136,7 +151,7 @@ class RetryConsumer:
     ) -> None:
         """Hold the message until it is due, then send it back to the main topic."""
         try:
-            message = IngestionMessage.from_bytes(record.value)
+            message = self.decode(record.value)
         except (TypeError, ValueError, KeyError):
             # Unparseable: no amount of waiting fixes it, and leaving the offset here
             # makes this record a wall that blocks every retry behind it. Move past it.
@@ -150,15 +165,20 @@ class RetryConsumer:
         self._waiting = True
         try:
             await self._wait_until_due(consumer, message)
-            logger.info("re-queueing project %s (attempt %d)", message.project_id, message.attempt)
+            logger.info(
+                "re-queueing a %s job onto %s (attempt %d)",
+                message.original_topic,
+                self.destination_topic,
+                message.attempt,
+            )
             # Forwarded exactly as received — see this module's docstring on the job id.
-            await self.producer.produce_to(self.settings.kafka_ingest_topic, message)
+            await self.producer.produce_to(self.destination_topic, message)
             await self._commit(consumer, partition, record)
         finally:
             self._waiting = False
             self._resume(consumer, paused)
 
-    async def _wait_until_due(self, consumer: AIOKafkaConsumer, message: IngestionMessage) -> None:
+    async def _wait_until_due(self, consumer: AIOKafkaConsumer, message: JobMessage) -> None:
         """Poll without consuming until the delay has elapsed.
 
         Everything assigned is paused, so each poll returns nothing and simply keeps

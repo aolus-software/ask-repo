@@ -8,12 +8,23 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.routes import auth, conversations, health, index, projects, qa_pairs, users
+from app.api.routes import (
+    auth,
+    checklist_change_sets,
+    checklist_items,
+    checklist_modules,
+    conversations,
+    health,
+    index,
+    projects,
+    users,
+)
 from app.config import get_settings
 from app.core.errors import register_exception_handlers
 from app.core.middleware import AuthContextMiddleware
 from app.ingestion.embedder import build_embedder
 from app.queue.producer import KafkaIngestionQueue, ensure_topics
+from app.queue.topics import ALL_CHECKLIST_TOPICS
 from app.rag.chat import build_chat_model
 
 logger = logging.getLogger(__name__)
@@ -56,8 +67,18 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         bootstrap_servers=settings.kafka_bootstrap_servers,
         partitions=settings.kafka_ingest_partitions,
     )
+    # Broker auto-creation is off, and POST /checklist-modules/{id}/generate publishes
+    # from this process -- an unensured topic would make every generate request fail
+    # at produce time.
+    await ensure_topics(
+        bootstrap_servers=settings.kafka_bootstrap_servers,
+        partitions=settings.kafka_checklist_partitions,
+        topics=ALL_CHECKLIST_TOPICS,
+    )
     queue = KafkaIngestionQueue(
-        bootstrap_servers=settings.kafka_bootstrap_servers, topic=settings.kafka_ingest_topic
+        bootstrap_servers=settings.kafka_bootstrap_servers,
+        topic=settings.kafka_ingest_topic,
+        checklist_topic=settings.kafka_checklist_topic,
     )
     await queue.start()
     app.state.ingestion_queue = queue
@@ -114,7 +135,9 @@ def create_app() -> FastAPI:
     app.include_router(users.router)
     app.include_router(projects.router)
     app.include_router(conversations.router)
-    app.include_router(qa_pairs.router)
+    app.include_router(checklist_modules.router)
+    app.include_router(checklist_items.router)
+    app.include_router(checklist_change_sets.router)
 
     return app
 

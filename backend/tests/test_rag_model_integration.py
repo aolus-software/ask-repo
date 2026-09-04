@@ -26,10 +26,19 @@ import re
 import httpx
 import pytest
 
+from app.checklist.model_output import ProposedChangeSet
+from app.checklist.operations import _narrow_kind
 from app.config import Settings
+from app.models.checklist import ChecklistItemKind
 from app.rag.chat import build_chat_model
 from app.rag.graph.state import Classification
-from app.rag.prompts import ANSWER_PROMPT, CLASSIFY_PROMPT, format_spans
+from app.rag.prompts import (
+    ANSWER_PROMPT,
+    CLASSIFY_PROMPT,
+    ExistingItem,
+    build_reduce_prompt,
+    format_spans,
+)
 from app.rag.retriever import RetrievedChunk
 
 pytestmark = pytest.mark.model
@@ -187,3 +196,116 @@ async def test_the_answer_carries_citation_labels(settings: Settings) -> None:
         cited += bool(labels)
 
     assert cited >= 4, f"only {cited}/{len(ANSWERABLE)} answers carried a citation label"
+
+
+async def test_reduce_never_fills_in_a_current_result(settings: Settings) -> None:
+    """The one property no scripted test can check: a real model, asked for a test
+    plan, must not write what actually happens (spec 2.3)."""
+    model = build_chat_model(settings).with_structured_output(ProposedChangeSet)
+    result = await model.ainvoke(
+        build_reduce_prompt(
+            module_name="Authentication",
+            observations=[
+                ("app/auth/login.py", "raises 401 when bcrypt.checkpw fails", 30, 44),
+                ("app/auth/login.py", "returns an access token on success", 45, 52),
+            ],
+            existing=[],
+        )
+    )
+    assert isinstance(result, ProposedChangeSet)
+    assert result.operations
+    for operation in result.operations:
+        assert operation.op == "add"
+        assert operation.expected_result
+        # No field exists for an observation, and none may be smuggled into another.
+        assert "current result" not in operation.expected_result.lower()
+
+
+async def test_reduce_proposes_an_update_rather_than_a_duplicate_add(settings: Settings) -> None:
+    """Regeneration is a diff. A model handed an existing item whose expectation is
+    now wrong must name its id, not add a second row beside it (spec 2.1)."""
+    model = build_chat_model(settings).with_structured_output(ProposedChangeSet)
+    existing = [
+        ExistingItem(
+            id="11111111-1111-1111-1111-111111111111",
+            feature="Login",
+            test_name="Rejects a wrong password",
+            expected_result="Returns 400",
+        )
+    ]
+    result = await model.ainvoke(
+        build_reduce_prompt(
+            module_name="Authentication",
+            observations=[
+                ("app/auth/login.py", "raises 401 INVALID_CREDENTIALS on a wrong password", 30, 44)
+            ],
+            existing=existing,
+        )
+    )
+    assert isinstance(result, ProposedChangeSet)
+    updates = [operation for operation in result.operations if operation.op == "update"]
+    assert updates
+    assert updates[0].item_id == "11111111-1111-1111-1111-111111111111"
+
+
+async def test_reduce_proposes_both_kinds_not_only_one(
+    settings: Settings,
+) -> None:
+    """The property the `kind` field exists to make measurable, in both directions.
+
+    Given observations that name refusals and a success, the plan must cover both --
+    a checklist of only positives says nothing about what happens when the feature is
+    misused, and a checklist of only negatives never establishes that the feature
+    works at all. Both halves have now been the missing one:
+
+    - Negatives went missing when `kind` was optional in the schema and the model
+      omitted it, and again when the prompt described it away from the other
+      per-test fields.
+    - Positives went missing when the prompt's refusal rule matched "validates" and
+      "requires" -- the verbs the map step is itself told to use -- and closed with
+      "if it is not a success path, it is negative". Every observation about a module
+      built out of validation matched, and a real generation came back with no
+      positive rows at all.
+
+    Only a real model can check this. `ScriptedChatModel` returns whatever the test
+    scripted, so the entire unit suite passes against a prompt that asks for neither.
+    """
+    model = build_chat_model(settings).with_structured_output(ProposedChangeSet)
+    result = await model.ainvoke(
+        build_reduce_prompt(
+            module_name="Authentication",
+            observations=[
+                ("app/auth/login.py", "returns an access token on a correct password", 45, 52),
+                ("app/auth/login.py", "raises 401 INVALID_CREDENTIALS on a wrong password", 30, 44),
+                ("app/auth/login.py", "raises 422 when the email field is missing", 20, 29),
+                ("app/auth/login.py", "raises 429 after five attempts in a minute", 53, 61),
+                # The observation that broke this. Phrased with the verb the map step
+                # is instructed to use, it matched the old refusal rule outright --
+                # even though a validation rule is the precondition of a success path
+                # and owes the plan a passing case as well as a failing one.
+                ("app/auth/login.py", "validates the email field is a valid address", 12, 19),
+                ("app/auth/login.py", "requires the account to be active", 62, 70),
+            ],
+            existing=[],
+        )
+    )
+
+    assert isinstance(result, ProposedChangeSet)
+    # Every row needs a name. Asked for a test, a model writes one sentence and puts
+    # it entirely in `expected_result` unless the two fields are described as
+    # different things -- which left every row in the grid blank.
+    for operation in result.operations:
+        assert operation.test_name.strip(), f"unnamed test: {operation!r}"
+        assert operation.expected_result.strip(), f"no expectation: {operation!r}"
+    kinds = [_narrow_kind(operation.kind) for operation in result.operations]
+    # Both halves are asserted, and the raw strings are reported on failure: a kind
+    # that arrived as "positive, not an error case" and narrowed to negative is a
+    # different bug from one the model genuinely labelled negative, and the narrowed
+    # enum alone cannot tell them apart.
+    raw = [operation.kind for operation in result.operations]
+    assert ChecklistItemKind.NEGATIVE in kinds, (
+        f"no negative test proposed for four refusal observations; raw kinds were {raw}"
+    )
+    assert ChecklistItemKind.POSITIVE in kinds, (
+        f"no positive test proposed for a success and two validations; raw kinds were {raw}"
+    )

@@ -1,8 +1,15 @@
-"""End to end against a real broker.
+"""End to end against systems the unit suite fakes.
 
-Everything else in this suite fakes the queue. This file exists for the one property
-that cannot be faked: that a job taking longer than `max.poll.interval.ms` does not
-get the member evicted, redelivered, and run a second time.
+Everything else in this suite fakes the queue and the vector store. This file exists
+for properties that cannot be reproduced against a fake:
+
+- that a job taking longer than `max.poll.interval.ms` does not get the member
+  evicted, redelivered, and run a second time (needs a real broker), and
+- that `QdrantVectorStore.scroll`'s client-side prefix narrowing still matters
+  against Qdrant's real full-text tokenizer (needs real Qdrant) —
+  `InMemoryVectorStore.scroll` collapses the server-side token filter and the
+  client-side prefix check into a single `startswith`, so no unit test can tell
+  whether the narrowing is load-bearing or dead code.
 
 **On the poll interval.** aiokafka's default is five minutes, so a test that runs a
 "long" job for fifteen seconds is not testing anything — it passes with the pause
@@ -25,15 +32,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
 from app.db.session import get_sessionmaker
-from app.ingestion.chunker import LanguageAwareChunker
+from app.ingestion.chunker import Chunk, LanguageAwareChunker
 from app.ingestion.cloner import CloneResult
 from app.ingestion.embedder import FakeEmbedder
 from app.ingestion.pipeline import IngestionPipeline
-from app.ingestion.vector_store import InMemoryVectorStore
+from app.ingestion.vector_store import InMemoryVectorStore, QdrantVectorStore
 from app.models.project import ProjectStatus
 from app.queue.consumer import IngestionConsumer
 from app.queue.producer import KafkaIngestionQueue, ensure_topics
-from app.queue.topics import INGEST_TOPIC, IngestionMessage
+from app.queue.topics import CHECKLIST_TOPIC, INGEST_TOPIC, IngestionMessage
 from app.repositories.project import ProjectRepository
 from tests.factories import create_project
 
@@ -86,7 +93,9 @@ async def producer() -> AsyncIterator[KafkaIngestionQueue]:
         partitions=settings.kafka_ingest_partitions,
     )
     queue = KafkaIngestionQueue(
-        bootstrap_servers=settings.kafka_bootstrap_servers, topic=INGEST_TOPIC
+        bootstrap_servers=settings.kafka_bootstrap_servers,
+        topic=INGEST_TOPIC,
+        checklist_topic=CHECKLIST_TOPIC,
     )
     await queue.start()
     yield queue
@@ -258,3 +267,63 @@ async def test_a_redelivered_message_is_refused_by_the_lease(
         task.cancel()
 
     assert runs == 0, "the lease did not stop a second worker from starting the job"
+
+
+async def test_scroll_narrows_a_match_text_false_positive_against_real_qdrant() -> None:
+    """`QdrantVectorStore.scroll` filters `file_path` with `MatchText`, which is a
+    full-text match over word tokens, not a prefix match: `path_prefix="app/auth"`
+    tokenizes to `{app, auth}`, and Qdrant's server-side filter alone also returns
+    `vendor/app/auth/nested.py`, which shares both word tokens but is not a real
+    prefix match. `scroll` narrows each page with a client-side `startswith` check
+    after the server-side filter to correct for exactly this.
+
+    `InMemoryVectorStore.scroll` cannot exercise this: its fake collapses the
+    server-side token filter and the client-side prefix check into one `startswith`,
+    so it can never diverge from a real prefix match and no unit test run against it
+    can tell whether the client-side narrowing in `QdrantVectorStore.scroll` is still
+    doing anything. This test is pinned against a real collection so that narrowing
+    cannot later be deleted as apparently redundant.
+    """
+    settings = get_settings()
+    # A name that cannot collide with a real collection: those are
+    # `code_chunks__<provider>__<model>__<dimensions>` (`collection_name` in
+    # `app/ingestion/vector_store.py`), never `scroll_probe_*`.
+    collection = f"scroll_probe_{uuid.uuid4().hex}"
+    store = QdrantVectorStore(url=settings.qdrant_url, collection=collection, dimensions=3)
+    await store.ensure_collection()
+    project_id = uuid.uuid4()
+
+    def chunk(path: str) -> Chunk:
+        return Chunk(
+            file_path=path,
+            start_line=1,
+            end_line=2,
+            language="python",
+            symbol=None,
+            chunk_index=0,
+            text="def login(): ...",
+        )
+
+    try:
+        await store.upsert(
+            project_id=project_id,
+            generation=1,
+            chunks=[chunk("app/auth/login.py"), chunk("vendor/app/auth/nested.py")],
+            vectors=[[0.1, 0.2, 0.3], [0.1, 0.2, 0.3]],
+            commit_sha="a" * 40,
+        )
+
+        pages = [
+            page
+            async for page in store.scroll(
+                project_id=project_id, generation=1, path_prefix="app/auth", page_size=10
+            )
+        ]
+
+        payloads = [payload for page in pages for payload in page]
+        assert [payload["file_path"] for payload in payloads] == ["app/auth/login.py"]
+    finally:
+        # Test seam, matching `tests/test_vector_store.py`'s convention of reaching
+        # into the private client where the public surface has no delete-collection
+        # call. Runs even if the assertion above fails.
+        await store._client.delete_collection(collection)

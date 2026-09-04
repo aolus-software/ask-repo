@@ -79,11 +79,20 @@ A few properties are your responsibility, not the code's:
   dev configuration — the Kafka listener is `PLAINTEXT` and anyone who can reach it can
   publish ingestion jobs, which means making the instance clone an arbitrary URL, or read
   the job stream. Kafka must never be reachable beyond the internal network.
-- **The QA List's `.xlsx` export is a new egress path.** It contains code excerpts from
+- **The QA Checklist's `.xlsx` export is an egress path.** It contains code excerpts from
   private repositories, and once a user downloads it, that spreadsheet is outside the
   network boundary the instance otherwise relies on — this is not a new threat, since any
   user could already read the same content through the UI, but it is a new place the content
   can end up.
+- **A generated expected result is model-derived and can be wrong.** The QA Checklist proposes
+  test cases and expected results by reading indexed code; nothing verifies them against a
+  running system. The human review gate — every proposal enters as a pending change set that
+  somebody has to tick before it becomes a row — is the only defence against a plausible-looking
+  wrong expectation entering a shared test plan, which is why it is unskippable and why no route
+  writes checklist rows except the apply path. Treat a checklist as a reviewed document, not as
+  generated output, and treat a passing row as a claim about what a tester saw rather than about
+  what the code does.
+
 - **An indexed repository can influence what the assistant says about it.** Repository
   content is fed to a language model when someone asks a question, so a file containing text
   shaped like an instruction — "ignore previous instructions", an imitation system prompt —
@@ -99,6 +108,26 @@ A few properties are your responsibility, not the code's:
 - **Ollama runs no auth either.** It is an embedding backend on the internal network; treat
   reaching it as equivalent to reaching the worker. If you point `EMBEDDING_PROVIDER` at a
   hosted API instead, `EMBEDDING_API_KEY` becomes a secret to manage like the others.
+
+  The development stack runs it **on the host** rather than in a container, and `make up`
+  additionally asks you to bind it to `0.0.0.0:11434` so the containers can reach it. That
+  binding is what makes an unauthenticated model server reachable from anything else on your
+  network — fine on a laptop behind a firewall, not something to carry onto a shared box.
+  Production keeps Ollama containerised on the Compose network, where nothing publishes its
+  port.
+
+- **Pointing `CHAT_PROVIDER` at a hosted API sends your source code to that provider.** This
+  is worth stating plainly because the setting is a one-line change and the consequence is
+  not: every question ships the retrieved excerpts — real code from your private
+  repositories, with their file paths — to whatever `CHAT_BASE_URL` names. Nothing in the
+  product prevents this and nothing should; running a capable model locally is expensive and
+  choosing otherwise is a legitimate trade. But it is **your** trade to make knowingly, so:
+  treat the provider's retention and training policy as part of this instance's security
+  posture, be aware that an aggregator may route to a downstream host it does not name, and
+  manage `CHAT_API_KEY` as a secret that also authorises spending. Stored PATs are never
+  sent — only chunk text and paths reach a prompt. If you decide against it later, switching
+  back is configuration only: the answering model is not part of the index, so no re-index is
+  needed (unlike `EMBEDDING_PROVIDER`, which is).
 - **The worker is a second process holding the same secrets.** It reads the database, the
   PAT encryption key, and Qdrant. Deploy it with the same care as the API — it is the
   component that actually fetches user-supplied URLs from inside your network (§9's SSRF

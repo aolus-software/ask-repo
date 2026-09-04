@@ -22,9 +22,12 @@ from app.ingestion.vector_store import VectorStoreFactory
 from app.models.project import Project, ProjectStatus
 from app.queue.protocol import IngestionQueue
 from app.queue.topics import INGEST_TOPIC, IngestionMessage
+from app.repositories.checklist_change_set import ChecklistChangeSetRepository
+from app.repositories.checklist_item import ChecklistItemRepository
+from app.repositories.checklist_message import ChecklistMessageRepository
+from app.repositories.checklist_module import ChecklistModuleRepository
 from app.repositories.conversation import ConversationRepository
 from app.repositories.project import ProjectRepository
-from app.repositories.qa_pair import QAPairRepository
 from app.schemas.pagination import ListQuery, PaginatedResponse
 from app.schemas.project import ProjectCreateRequest, ProjectResponse, ReindexResponse
 
@@ -55,7 +58,10 @@ class ProjectService:
         self.store_factory = store_factory
         self._repository = ProjectRepository(session)
         self._conversations = ConversationRepository(session)
-        self._qa_pairs = QAPairRepository(session)
+        self._checklist_modules = ChecklistModuleRepository(session)
+        self._checklist_items = ChecklistItemRepository(session)
+        self._checklist_change_sets = ChecklistChangeSetRepository(session)
+        self._checklist_messages = ChecklistMessageRepository(session)
 
     async def create(
         self, payload: ProjectCreateRequest, *, actor: AuthenticatedUser
@@ -176,6 +182,17 @@ class ProjectService:
         if swept:
             logger.info("Soft-deleted %d conversation(s) with project %s", swept, project.id)
 
+        # Spec 3.7: the whole checklist goes with the project it describes. Four
+        # independent bulk UPDATEs in one transaction -- the order reads as the
+        # containment does rather than because anything depends on it. Nothing here
+        # reaches Qdrant: the checklist owns no vector points, it reads the project's.
+        await self._checklist_items.soft_delete_for_project(project.id)
+        await self._checklist_change_sets.soft_delete_for_project(project.id)
+        await self._checklist_messages.soft_delete_for_project(project.id)
+        modules = await self._checklist_modules.soft_delete_for_project(project.id)
+        if modules:
+            logger.info("Soft-deleted %d checklist module(s) with project %s", modules, project.id)
+
         if project.embedding_collection:
             store = self.store_factory(project.embedding_collection)
             try:
@@ -194,20 +211,6 @@ class ProjectService:
                     ErrorCode.VECTOR_STORE_UNAVAILABLE,
                     "The vector store is unreachable, so the project was not deleted.",
                 ) from error
-
-        # docs/PRD.md:340: deleting a project soft-deletes its QA pairs. Not scoped
-        # by creator — the pairs are shared assets of a shared project.
-        #
-        # Before the Qdrant call, sharing that call's fate, exactly like the
-        # conversation sweep above: nothing commits until the vector delete
-        # succeeds, so a 503 leaves the pairs visible rather than deleting them for
-        # a project that is still there.
-        #
-        # No Qdrant work of its own — a pair's citations are copies and it owns no
-        # points, so §5.1's hard-delete rule does not reach it.
-        swept_pairs = await self._qa_pairs.soft_delete_for_project(project.id)
-        if swept_pairs:
-            logger.info("Soft-deleted %d QA pair(s) with project %s", swept_pairs, project.id)
 
         await self.session.commit()
 

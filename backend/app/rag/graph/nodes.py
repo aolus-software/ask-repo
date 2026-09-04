@@ -19,6 +19,8 @@ from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import BaseMessage
 from langgraph.config import get_stream_writer
 
+from app.checklist.model_output import ProposedChangeSet
+from app.checklist.operations import stored_operation
 from app.models.conversation import FinishReason
 from app.rag.graph.state import Classification, EvidenceVerdict, Intent, TurnState
 from app.rag.grounding import OUT_OF_SCOPE_ANSWER
@@ -27,10 +29,12 @@ from app.rag.prompts import (
     CLASSIFY_PROMPT,
     GRADE_PROMPT,
     HISTORY_ANSWER_PROMPT,
+    build_propose_prompt,
     format_spans,
     to_langchain_history,
 )
 from app.rag.retriever import RetrievedChunk, Retriever
+from app.schemas.checklist import ChangeOperationPayload, ChangeSetEvent
 from app.schemas.conversation import (
     CitationPayload,
     CitationsEvent,
@@ -328,3 +332,75 @@ def build_refuse() -> Node:
         return {"answer": OUT_OF_SCOPE_ANSWER, "failure": None}
 
     return refuse
+
+
+def build_propose_changes(chat_model: BaseChatModel, *, enabled: bool) -> Node:
+    """Decide whether this exchange changes the module's checklist.
+
+    Runs last, after the answer is complete, and emits at most one `ChangeSetEvent`.
+    It never emits a terminator: `Answerer._terminate` is the only place a `DoneEvent`
+    or `ErrorEvent` is constructed, which is what makes "exactly one terminator per
+    stream" structural rather than a rule six nodes have to remember.
+
+    Falls back to proposing nothing rather than failing the turn. A helper node may
+    never be the reason a question goes unanswered -- a proposer that dies costs the
+    user a proposal, and a proposer that can fail the turn costs them the answer.
+
+    `CancelledError` is a `BaseException` and is deliberately not caught: a client
+    that disconnected mid-proposal should stop the turn, not fall back and carry on
+    proposing to nobody.
+    """
+
+    async def propose_changes(state: TurnState) -> dict[str, object]:
+        change_set_id = state["change_set_id"]
+        if not enabled or change_set_id is None or not state["answer"].strip():
+            return {"operations": [], "change_summary": ""}
+
+        try:
+            model = chat_model.with_structured_output(ProposedChangeSet)
+            result = await model.ainvoke(
+                build_propose_prompt(
+                    module_name=state["module_name"],
+                    answer=state["answer"],
+                    existing=state["existing_items"],
+                )
+            )
+        except Exception:
+            logger.exception("proposing checklist changes failed; proposing nothing")
+            return {"operations": [], "change_summary": ""}
+
+        if not isinstance(result, ProposedChangeSet) or not result.operations:
+            return {"operations": [], "change_summary": ""}
+
+        # Citations are the same for every operation this call proposes: the turn had
+        # one retrieval, not one per operation.
+        citations = [citation.model_dump() for citation in to_citations(state["spans"])]
+        operations = [
+            stored
+            for operation in result.operations
+            if (stored := stored_operation(operation, citations=citations)) is not None
+        ]
+
+        if not operations:
+            return {"operations": [], "change_summary": ""}
+
+        summary = result.summary or f"{len(operations)} proposed change(s)"
+
+        try:
+            emit(
+                ChangeSetEvent(
+                    change_set_id=change_set_id,
+                    summary=summary,
+                    # Already guaranteed to validate -- `stored_operation` only
+                    # returns dicts that do -- so this is re-parsing what was proven
+                    # correct, not a second place that decision could diverge.
+                    operations=[ChangeOperationPayload.model_validate(op) for op in operations],
+                )
+            )
+        except Exception:
+            logger.exception("Failed to emit ChangeSetEvent; proposing nothing")
+            return {"operations": [], "change_summary": ""}
+
+        return {"operations": operations, "change_summary": summary}
+
+    return propose_changes

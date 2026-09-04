@@ -8,7 +8,7 @@ one skipped poll rather than two workers indexing the same repository.
 import uuid
 from collections.abc import Sequence
 from datetime import UTC, datetime, timedelta
-from typing import Any, cast
+from typing import Any, NamedTuple, cast
 
 from sqlalchemy import case, func, or_, select, update
 from sqlalchemy.engine import CursorResult
@@ -22,6 +22,13 @@ from app.repositories.base import BaseRepository
 # — spec §4.2 makes five minutes safe only because renewal runs every sixty seconds.
 LEASE_SECONDS = 300
 LEASE_RENEWAL_SECONDS = 60
+
+
+class ProjectSummary(NamedTuple):
+    """The columns a checklist row needs from the project it belongs to."""
+
+    name: str
+    active_generation: int
 
 
 class ProjectRepository(BaseRepository[Project]):
@@ -74,17 +81,6 @@ class ProjectRepository(BaseRepository[Project]):
 
         rows = await self.session.execute(statement)
         return rows.scalars().all(), total
-
-    async def by_ids(self, ids: set[uuid.UUID]) -> Sequence[Project]:
-        """Every live project among `ids`, in one query rather than N.
-
-        Used by the QA export to resolve `project_id` to a name — a 5,000-row
-        export otherwise costs 10,000 round trips if this were a loop.
-        """
-        if not ids:
-            return []
-        result = await self.session.execute(self.active_select().where(Project.id.in_(ids)))
-        return result.scalars().all()
 
     async def claim(
         self, *, project_id: uuid.UUID, job_id: uuid.UUID, worker_id: str, lease_seconds: int
@@ -262,3 +258,25 @@ class ProjectRepository(BaseRepository[Project]):
         )
         rows = await self.session.execute(statement)
         return rows.scalars().all()
+
+    async def names_and_generations(
+        self, project_ids: Sequence[uuid.UUID]
+    ) -> dict[uuid.UUID, ProjectSummary]:
+        """Each project's name and `active_generation`, in one query.
+
+        Read by the checklist module list, which needs both for every row: the name to
+        render the project column, the generation to answer "is this checklist stale?".
+        One statement rather than one per row, and one rather than two -- the
+        alternative is an N+1 on the busiest screen in the feature.
+        """
+        if not project_ids:
+            return {}
+        result = await self.session.execute(
+            select(Project.id, Project.name, Project.active_generation).where(
+                Project.id.in_(project_ids), Project.deleted_at.is_(None)
+            )
+        )
+        return {
+            project_id: ProjectSummary(name=name, active_generation=generation)
+            for project_id, name, generation in result.all()
+        }

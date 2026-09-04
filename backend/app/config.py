@@ -76,6 +76,20 @@ class Settings(BaseSettings):
     kafka_ingest_partitions: int = 2
     kafka_max_attempts: int = 3
 
+    # Checklist generation (docs/PRD.md 4.3, M4). Its own topic family and its own
+    # retry ladder, so a stuck generation does not sit in the queue a reindex waits in.
+    kafka_checklist_topic: str = "askrepo.checklist.generate"
+    # Concurrency is partition count, as it is for ingestion: one generation at a time
+    # per instance, expressed as the topology rather than as a setting someone raises
+    # by accident. Generation is the most expensive operation in the app.
+    kafka_checklist_partitions: int = Field(default=1, ge=1)
+    # How many files the map step reads at once inside one generation. `ge=1` because
+    # zero does not fail -- it reads no file and produces an empty checklist against a
+    # module that is perfectly healthy.
+    checklist_map_concurrency: int = Field(default=4, ge=1)
+    # Points per Qdrant scroll page. `ge=1` for the same reason.
+    checklist_scroll_page_size: int = Field(default=256, ge=1)
+
     # Embedding — provider selected at runtime, dimensions probed rather than declared.
     embedding_provider: Literal["ollama", "openai", "voyage"] = "ollama"
     embedding_model: str = "nomic-embed-text"
@@ -139,11 +153,12 @@ class Settings(BaseSettings):
     # there is one code path rather than two.
     rag_grade_evidence: bool = True
     rag_classify_intent: bool = True
+    rag_propose_changes: bool = True
 
     # Rows above which the export refuses rather than building a workbook in
     # memory. `openpyxl` allocates the whole book even in write-only mode, so this
     # cap is the only thing bounding it.
-    qa_export_max_rows: int = 5000
+    checklist_export_max_rows: int = 5000
 
     # Encrypts stored PATs at rest (docs/PRD.md §9). Backed up separately from
     # the database — a backup holding both is plaintext storage with extra steps.

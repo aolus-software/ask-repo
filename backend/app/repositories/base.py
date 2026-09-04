@@ -9,6 +9,7 @@ Repositories are the only layer allowed to import `select` / `insert` / `update`
 """
 
 import uuid
+from collections.abc import Iterable
 from datetime import UTC, datetime
 from typing import Protocol, cast
 
@@ -63,6 +64,19 @@ class BaseRepository[ModelT: Base]:
             self.active_select().where(model_with_id.id == entity_id)
         )
         return result.scalar_one_or_none()
+
+    async def get_many(self, entity_ids: Iterable[uuid.UUID]) -> list[ModelT]:
+        """Fetch several rows by primary key, excluding soft-deleted ones.
+
+        One statement rather than a loop of `get`: every caller is resolving display
+        names for a page or an export, and the loop form is an N+1 by construction.
+        """
+        ids = list(entity_ids)
+        if not ids:
+            return []
+        model_with_id = cast(type[_HasId], self.model)
+        result = await self.session.execute(self.active_select().where(model_with_id.id.in_(ids)))
+        return list(result.scalars().all())
 
     async def get_including_deleted(self, entity_id: uuid.UUID) -> ModelT | None:
         """Fetch by primary key without the soft-delete filter. Name says so on purpose."""

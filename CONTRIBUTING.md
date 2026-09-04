@@ -11,9 +11,11 @@ planned, what's deliberately out of scope for v1, and which questions are still 
 
 ```bash
 git clone <your-fork> && cd ask-repo
-make setup    # uv sync + bun install
-make infra    # postgres + qdrant + redis + kafka + ollama
-make dev      # both dev servers
+ollama serve       # on the host — it is deliberately not a Compose service
+make setup         # uv sync + bun install
+make pull-models   # nomic-embed-text + qwen2.5-coder:14b into the host ollama
+make infra         # postgres + qdrant + redis + kafka
+make dev           # both dev servers + the worker
 ```
 
 `make help` lists every target. Or run everything in Docker with `make up`, or drive the

@@ -13,9 +13,9 @@ import uuid
 import pytest
 
 from app.models.conversation import FinishReason, Intent
+from app.schemas import SSE_EVENT_MODELS
 from app.schemas.base import ApiModel
 from app.schemas.conversation import (
-    SSE_EVENT_MODELS,
     DoneEvent,
     ErrorEvent,
     TokenEvent,

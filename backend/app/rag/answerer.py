@@ -26,7 +26,7 @@ from app.models.conversation import FinishReason
 from app.rag.graph import build_answer_graph
 from app.rag.graph.state import Intent, TurnState
 from app.rag.grounding import NO_CONTEXT_ANSWER, WEAK_EVIDENCE, grounding_warnings
-from app.rag.prompts import Turn
+from app.rag.prompts import ExistingItem, Turn
 from app.rag.retriever import Retriever
 from app.schemas.conversation import (
     DoneEvent,
@@ -63,12 +63,13 @@ class Answerer:
         model_id: str,
         semaphore: asyncio.Semaphore,
         settings: Settings,
+        propose: bool = False,
     ) -> None:
         self.model_id = model_id
         self.semaphore = semaphore
         self.settings = settings
         self.graph = build_answer_graph(
-            retriever=retriever, chat_model=chat_model, settings=settings
+            retriever=retriever, chat_model=chat_model, settings=settings, propose=propose
         )
 
     async def answer(
@@ -79,6 +80,9 @@ class Answerer:
         project_id: uuid.UUID,
         generation: int,
         message_id: uuid.UUID | None,
+        existing_items: list[ExistingItem] | None = None,
+        change_set_id: uuid.UUID | None = None,
+        module_name: str = "",
     ) -> AsyncGenerator[StreamEvent]:
         """Run the graph, forwarding its events and terminating exactly once.
 
@@ -86,6 +90,10 @@ class Answerer:
         terminating event can name the row the caller is about to write. It is
         `None` on the re-run route, which writes a pending slot on a QA pair rather
         than a message (spec §8.1).
+
+        The last three parameters are the checklist refinement path's, and default to
+        the values that make the proposer a no-op -- so the Ask screen's call site is
+        unchanged and cannot accidentally propose.
         """
         if self.semaphore.locked():
             # Silence for the length of someone else's answer is indistinguishable
@@ -106,6 +114,11 @@ class Answerer:
                 "evidence_ok": False,
                 "answer": "",
                 "failure": None,
+                "module_name": module_name,
+                "existing_items": existing_items or [],
+                "change_set_id": change_set_id,
+                "operations": [],
+                "change_summary": "",
             }
 
             final: TurnState | None = None

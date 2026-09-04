@@ -23,12 +23,13 @@ management — against real repositories rather than tutorial data.
 > out of scope) before anything is retrieved, and on the codebase path a grader
 > checks the retrieved excerpts and re-searches with a better query when they fall
 > short — the loop grades retrieval, not the finished answer, so streaming stays
-> unaffected. M4 added the QA List: save a finished answer into a shared, browsable
-> regression set, filter and re-run it against the current index, mark it pass or
-> fail, and export the filtered list to a spreadsheet. **The M0–M2 and M4 frontend is
+> unaffected. M4 added the QA Checklist: a user names a module, AskRepo generates
+> test cases with expected results grounded in the code, nothing enters the checklist
+> unreviewed, a shared conversation proposes further changes, and testers record
+> pass/fail/blocked results — all exported to `.xlsx`. **The M0–M2 and M4 frontend is
 > shipped too**: sign in, change the forced initial password, add and re-index
 > projects, ask questions with the answer streaming in, manage accounts, and work the
-> QA List — all in a browser, with the session held in httpOnly cookies by Next rather
+> checklist — all in a browser, with the session held in httpOnly cookies by Next rather
 > than in the page. See [Roadmap](#roadmap) for what lands when, and
 > [`docs/PRD.md`](docs/PRD.md) for the full specification.
 
@@ -39,7 +40,7 @@ management — against real repositories rather than tutorial data.
 | **0** | Auth & Accounts | Admin-provisioned email/password accounts, JWT access + revocable refresh tokens |
 | **1** | Project ingestion | Submit a repo URL; AskRepo clones, indexes, and tracks it. Projects are shared instance-wide |
 | **2** | Dev Knowledge | Ask questions against an indexed project; answers cite real file paths and functions. Conversations stay private to each user |
-| **3** | QA List | Shared, browsable Q&A pairs — the team's knowledge base and regression set |
+| **3** | QA Checklist | Generate test cases for a code module, review and refine them via chat, record pass/fail/blocked results, and export as a spreadsheet |
 | **4** | Mock Data Generator | Auto-generate synthetic Q&A pairs from code, plus a lightweight eval score |
 
 ## Stack
@@ -47,7 +48,8 @@ management — against real repositories rather than tutorial data.
 **Backend** FastAPI · Python 3.13 · uv · SQLAlchemy + Alembic · LangGraph · LangChain
 **Frontend** Next.js 16 · React 19 · TypeScript · Tailwind CSS 4 · Bun
 **Data** Postgres 17 · Qdrant · Redis · Kafka
-**Models** Ollama (qwen2.5-coder, qwen3) with a hosted-API adapter for comparison
+**Models** Ollama (qwen2.5-coder, qwen3), run on the host rather than in Compose, with a
+hosted-API adapter for comparison
 **Infra** Docker Compose · Caddy · VPN/Tailscale only, not internet-facing
 
 ## Repository layout
@@ -72,20 +74,34 @@ ask-repo/
 The short version is below; [`docs/installation.md`](docs/installation.md) is the same thing
 step by step, with a troubleshooting section.
 
-**Requirements:** Docker with Compose v2, plus [uv](https://docs.astral.sh/uv/) and
-[Bun](https://bun.sh) if you want to run the apps outside containers.
+**Requirements:** Docker with Compose v2, [Ollama](https://ollama.com) installed **on the
+host**, plus [uv](https://docs.astral.sh/uv/) and [Bun](https://bun.sh) if you want to run the
+apps outside containers.
 
 ```bash
 curl -LsSf https://astral.sh/uv/install.sh | sh   # backend
 curl -fsSL https://bun.sh/install | bash          # frontend
 ```
 
+Ollama is deliberately **not** in the Compose stack. A container gets no GPU on macOS and only
+the Docker VM's memory allowance, so a model inside one runs on CPU in a slice of RAM; run by
+the host it gets Metal and the whole machine. Start it once and pull the models:
+
+```bash
+ollama serve        # or the menu-bar app
+make pull-models    # nomic-embed-text + qwen2.5-coder:14b, ~10 GB
+```
+
+A Linux box with the NVIDIA runtime can put it back in Docker —
+[`docs/configuration.md`](docs/configuration.md#running-ollama-in-docker-anyway).
+
 ### Everything in Docker
 
-One command, nothing else installed:
+The apps and datastores; Ollama still on the host, reached at `host.docker.internal:11434`:
 
 ```bash
 git clone <this-repo> && cd ask-repo
+launchctl setenv OLLAMA_HOST "0.0.0.0:11434"      # macOS: let containers reach it
 BOOTSTRAP_ADMIN_PASSWORD=<a real passphrase> make up
 ```
 
@@ -105,8 +121,13 @@ make setup                                        # uv sync + bun install
 make infra                                        # postgres + qdrant + redis + kafka, waits until healthy
 make migrate                                       # apply database migrations
 BOOTSTRAP_ADMIN_PASSWORD=<a real passphrase> make seed  # create the bootstrap admins
-make dev                                           # both dev servers, Ctrl-C stops both
+make dev                                           # both dev servers + the worker, Ctrl-C stops all
 ```
+
+`make infra` and `make dev` both check that the host Ollama is answering on `:11434` and print
+a warning if it is not — the worker otherwise dies probing embedding dimensions, in a log
+stream interleaved with two others. It is a warning, never a failure, because an instance on a
+hosted embedding or chat provider correctly has no Ollama.
 
 | Service | URL |
 | --- | --- |
@@ -116,12 +137,13 @@ make dev                                           # both dev servers, Ctrl-C st
 | Postgres | `localhost:5432` |
 | Redis | `localhost:6379` |
 | Kafka | `localhost:9092` |
-| Ollama | `localhost:11434` (embeddings) |
+| Ollama | `localhost:11434` (embeddings + answers) — **runs on the host, not in Compose** |
 
-The **ingestion worker** publishes no port — it is reached through Kafka, not HTTP.
-`make up` runs two replicas of it, one per ingest partition. Running the apps locally
-with `make dev` does *not* start a worker; see
-[`backend/README.md`](backend/README.md#the-ingestion-worker) for how to run one.
+The **worker** publishes no port — it is reached through Kafka, not HTTP. It consumes both
+ingestion and checklist-generation jobs, so nothing indexes and no checklist is generated
+without one. `make up` runs two replicas, one per ingest partition; `make dev` runs a single
+one alongside the dev servers, and `make worker` runs one on its own. See
+[`backend/README.md`](backend/README.md#the-ingestion-worker).
 
 Every environment value has a fallback, so this comes up with no `.env` file. To customize,
 create `infra/.env` — every variable it accepts is listed in
@@ -149,11 +171,13 @@ clears that flag.
 | Target | Does |
 | --- | --- |
 | `make setup` | Install backend + frontend dependencies |
-| `make infra` | Start postgres + qdrant + redis + kafka + ollama, wait until healthy |
+| `make infra` | Start postgres + qdrant + redis + kafka, wait until healthy |
+| `make pull-models` | Pull the configured embedding + chat models into the host Ollama |
 | `make migrate` | Apply database migrations |
 | `make seed` | Create the bootstrap admin accounts (idempotent) |
-| `make dev` | Both dev servers together |
+| `make dev` | Both dev servers and the worker together |
 | `make dev-backend` / `make dev-frontend` | One dev server |
+| `make worker` | The ingestion + checklist worker on its own |
 | `make check` | lint + format-check + typecheck + test — what CI runs |
 | `make lint` / `make format` | Both apps |
 | `make test` | Backend test suite |
@@ -162,7 +186,8 @@ clears that flag.
 | `make up` / `make down` | Whole stack in Docker (development) |
 | `make setup-prod` | Check a box is ready to deploy; changes nothing |
 | `make build-prod` / `make up-prod` | Production images and stack — see [`docs/deployment.md`](docs/deployment.md) |
-| `make infra-down` | Stop datastores **and delete their volumes** |
+| `make infra-down` | Stop and remove the datastore containers; data survives |
+| `make infra-reset` | **Deletes every volume in the project.** Asks for confirmation first |
 | `make psql` / `make redis-cli` | Shell into a running datastore |
 | `make clean` | Remove caches and build output |
 
@@ -209,10 +234,12 @@ bunx tsc --noEmit                                 # typecheck
 bunx prettier --write .                           # format
 ```
 
-**Whole stack in Docker**
+**Whole stack in Docker** — apps and datastores in containers, Ollama still on the host at
+`host.docker.internal:11434`. Bind it with `launchctl setenv OLLAMA_HOST "0.0.0.0:11434"`
+first, or a container cannot reach it.
 
 ```bash
-docker compose -f infra/docker-compose.yml --profile ollama up --build
+docker compose -f infra/docker-compose.yml up --build
 docker compose -f infra/docker-compose.yml logs -f backend
 docker compose -f infra/docker-compose.yml down
 ```
@@ -242,14 +269,25 @@ Milestones from [`docs/PRD.md`](docs/PRD.md) §6, built in order:
 - [x] **M2** — Dev Knowledge: streaming RAG Q&A against a ready project, private conversations
 - [x] **M0–M2 frontend** — auth screens, app shell, projects, streamed answers, admin user management
 - [x] **M3** — LangGraph: intent routing + a self-critique loop that grades retrieval before generating
-- [x] **M4** — QA List: shared storage, save / view / filter / re-run, pass/fail status, export
-- [x] **M4 frontend** — the `/qa` grid, the `/qa/[id]` detail page, the re-run panel, save-from-Ask
+- [x] **M4** — QA Checklist: generate test cases from code, shared chat for refinement, apply/discard proposals, result recording, export
+- [x] **M4 frontend** — the `/checklist` module list, the `/checklist/[moduleId]` grid with chat and review panel
+- [ ] **M4.5** — Model provider abstraction: a native Anthropic adapter, a startup check that the
+      configured model can do structured output, hosted-provider retry classification, and a spend
+      bound. Any OpenAI-compatible endpoint (OpenRouter, DeepSeek, Kimi, Groq, vLLM) already works
+      by configuration today — see [PRD §6](docs/PRD.md)
 - [ ] **M5** — Mock Data Generator: synthetic Q&A + eval scoring
 - [ ] **M6** — Local vs hosted model comparison
 
 **Phase 2** (after M6): per-project RBAC — users assigned to projects, roles per project.
 Phase 1 is deliberately built so this is a change to one access-resolver function rather
-than a rewrite (PRD §2.1, §4.1).
+than a rewrite (PRD §2.1, §4.1). Also queued for that phase: notifications (in-app and
+email) for the background jobs that currently finish in silence, self-service password
+reset, a per-user answer persona, an append-only audit trail, and multi-language
+support — see PRD §2.1 for what each costs.
+
+**Phase 3** (after phase 2): a code knowledge graph in Neo4j Community Edition, for the
+"what breaks if I change this" questions vector similarity cannot answer. Neo4j becomes the
+fourth database beside Postgres, Redis and Qdrant; Kafka stays the broker (PRD §2.1).
 
 ## Security
 

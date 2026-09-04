@@ -16,7 +16,7 @@ from typing import Literal, TypedDict
 from pydantic import BaseModel, Field
 
 from app.models.conversation import FinishReason, Intent
-from app.rag.prompts import Turn
+from app.rag.prompts import ExistingItem, Turn
 from app.rag.retriever import RetrievedChunk
 
 __all__ = [
@@ -73,3 +73,17 @@ class TurnState(TypedDict):
     evidence_ok: bool
     answer: str
     failure: FinishReason | None
+    # --- The checklist refinement path (M4) ---
+    #
+    # Present on every turn and empty on the Ask screen's, rather than a second state
+    # (LangGraph binds one schema per compiled graph, and two would mean two graphs,
+    # two adapters, and two places the terminator gets built).
+    #
+    # `change_set_id` is minted by the service before the stream opens, because the
+    # row is written under the shield in `finally` -- so the id cannot come from the
+    # insert, and the `changeSet` event has to carry it anyway (spec 5.2).
+    module_name: str
+    existing_items: list[ExistingItem]
+    change_set_id: uuid.UUID | None
+    operations: list[dict[str, object]]
+    change_summary: str

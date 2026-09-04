@@ -267,3 +267,28 @@ async def test_unknown_sort_field_raises(db_session: AsyncSession) -> None:
             sort="encrypted_pat",
             descending=True,
         )
+
+
+async def test_names_and_generations_resolves_both_in_one_statement(
+    db_session: AsyncSession,
+) -> None:
+    """The checklist list needs a project's name and its active generation together.
+
+    Two separate lookups would be two round trips on the busiest screen in the
+    feature, so they are answered by one select.
+    """
+    first = await create_project(db_session, name="checkout-service")
+    first.active_generation = 3
+    second = await create_project(db_session, name="billing-service")
+    await db_session.flush()
+    repository = ProjectRepository(db_session)
+
+    resolved = await repository.names_and_generations([first.id, second.id])
+
+    assert resolved[first.id].name == "checkout-service"
+    assert resolved[first.id].active_generation == 3
+    assert resolved[second.id].name == "billing-service"
+
+
+async def test_names_and_generations_is_empty_for_no_ids(db_session: AsyncSession) -> None:
+    assert await ProjectRepository(db_session).names_and_generations([]) == {}

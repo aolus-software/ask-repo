@@ -14,8 +14,8 @@ that turns a queued message into an indexing run, the delayed-retry consumers, a
 broker never received. `POST /projects` enqueues and a worker indexes.
 
 M2 through M4 are shipped too: Dev Knowledge (streaming RAG Q&A over an indexed project),
-M3's LangGraph intent routing and corrective retrieval loop, and the QA List — see the
-`### Conversations` and `### QA List` route sections below. Only the Mock Data Generator
+M3's LangGraph intent routing and corrective retrieval loop, and the QA Checklist — see the
+`### Conversations` and `### QA Checklist` route sections below. Only the Mock Data Generator
 (M5) and the local-vs-hosted comparison (M6) remain.
 
 ## Requirements
@@ -29,6 +29,10 @@ The datastores must be up first — `make infra` from the repo root, or
 `docker compose -f infra/docker-compose.yml up -d --wait postgres qdrant redis kafka`.
 Postgres and Redis are enough to run the test suite; Qdrant is needed to index, Kafka to
 enqueue, and Ollama to embed (unless `EMBEDDING_PROVIDER` points at a hosted API).
+
+**Ollama is not one of the containers** — it runs on the host, so `ollama serve` has to be up
+too, and `EMBEDDING_BASE_URL` / `CHAT_BASE_URL` point at plain `http://localhost:11434` when
+the app runs natively. `make pull-models` fetches the configured models.
 
 ```bash
 cd backend
@@ -46,27 +50,30 @@ with the password you set; both are seeded with `must_change_password` set.
 
 ### The ingestion worker
 
-The API only *enqueues* indexing jobs. Nothing indexes until a worker is running, so a
-new project sits at `pending` until you start one — in a second terminal:
+The API only *enqueues* indexing and checklist-generation jobs. Nothing indexes and no
+checklist is generated until a worker is running, so a new project sits at `pending` and a
+module sits at `generating` until one is. `make dev` starts one for you; to run a lone one:
 
 ```bash
-cd backend
-uv run python -m app.worker
+make worker            # or, equivalently:
+cd backend && uv run python -m app.worker
 ```
 
 It is the same codebase with a different entrypoint, so it reads the same `Settings` and
-the same `.env`. One process runs the ingest consumer, one consumer per retry rung, and a
-sweep every 60 seconds that re-enqueues jobs whose produce failed or whose worker died,
-and prunes expired refresh tokens. Run more than one and they share the ingest topic's
+the same `.env`. One process runs the ingest consumer, the checklist consumer, one consumer
+per retry rung of each, and a sweep every 60 seconds that re-enqueues jobs whose produce
+failed or whose worker died, and prunes expired refresh tokens. Run more than one and they share the ingest topic's
 partitions — two is the configured cap (`KAFKA_INGEST_PARTITIONS`).
 
 ## Running in Docker
 
 ```bash
-cd infra && docker compose --profile ollama up --build
+cd infra && docker compose up --build
 ```
 
-That brings up the API alongside Postgres, Qdrant, Redis, Kafka, and the frontend.
+That brings up the API alongside Postgres, Qdrant, Redis, Kafka, and the frontend. Ollama
+stays on the host; the containers reach it at `host.docker.internal:11434`, which needs it
+bound to `0.0.0.0` (`launchctl setenv OLLAMA_HOST "0.0.0.0:11434"` on macOS).
 Source is bind-mounted, so `--reload` picks up your edits — which is also why this image is
 **not** a production one. See [`../docs/deployment.md`](../docs/deployment.md).
 
@@ -170,46 +177,51 @@ A `: keep-alive` comment goes out every 15 seconds during any gap, and the respo
 `Cache-Control: no-cache` and `X-Accel-Buffering: no` so a proxy does not accumulate the
 stream and deliver it in one piece.
 
-### QA List
+### QA Checklist
 
-The shared regression set. Access matches projects and inverts conversations: every
-authenticated user reads every pair, and `created_by` (or an admin) gates editing, deleting,
-and re-running. Setting `status` is the one write deliberately open to everyone — any user may
-mark a pair `pass` or `fail` (`docs/PRD.md:338`).
+Modules over an indexed repository — a user names a module ("Authentication"), points it at a path in the repository, and requests generation. A background job enumerates the module's files, proposes features and test cases with expected results grounded in the code, and produces a change set for review. Nothing generated enters the checklist unreviewed. Access matches projects and inverts conversations: every authenticated user reads every module and every module's chat, and `created_by` (or an admin) gates editing and deleting. Recording a test result is deliberately open to every authenticated user — a tester must be able to record what they observed without being able to rewrite what was expected.
+
+**Checklist Modules**
 
 | Method | Path | Auth | Description |
 | --- | --- | --- | --- |
-| `GET` | `/qa-pairs` | any user | List saved pairs, paginated; filters for project, module, tag, source, status, creator, and search |
-| `GET` | `/qa-pairs/tags` | any user | Distinct tags across the caller's scope, for the filter combobox |
-| `GET` | `/qa-pairs/export` | any user | The same filters as the list route, as a downloadable `.xlsx` |
-| `GET` | `/qa-pairs/{id}` | any user | One pair, with its citations and any pending re-run |
-| `POST` | `/qa-pairs` | any user | Publish a finished assistant answer from a conversation the caller owns |
-| `PATCH` | `/qa-pairs/{id}` | creator or admin | Edit module, question, expected result, or tags |
-| `PUT` | `/qa-pairs/{id}/status` | any user | Record pass / fail / unreviewed |
-| `POST` | `/qa-pairs/{id}/rerun` | creator or admin | Re-run the saved question; **streams the new answer** into a pending slot |
-| `POST` | `/qa-pairs/{id}/rerun/accept` | creator or admin | Save the pending re-run over the stored answer; resets `status` to unreviewed |
-| `DELETE` | `/qa-pairs/{id}/rerun` | creator or admin | Discard the pending re-run, leaving the stored answer untouched |
-| `DELETE` | `/qa-pairs/{id}` | creator or admin | Soft-delete a pair |
+| `GET` | `/checklist-modules` | any user | List modules for readable projects, paginated |
+| `POST` | `/checklist-modules` | any user | Name a module and point it at a path in the indexed repository |
+| `GET` | `/checklist-modules/{id}` | any user | One module with its test cases, grouped by feature |
+| `PATCH` | `/checklist-modules/{id}` | creator or admin | Rename or re-point the module |
+| `DELETE` | `/checklist-modules/{id}` | creator or admin | Soft-delete the module, its items, its change sets, and its chat |
+| `POST` | `/checklist-modules/{id}/generate` | any user | Publish a generation job; returns the module in `generating` status |
+| `GET` | `/checklist-modules/{id}/change-sets` | any user | List the module's proposed change sets, newest first |
+| `GET` | `/checklist-modules/{id}/messages` | any user | Read the module's refinement chat |
+| `POST` | `/checklist-modules/{id}/messages` | any user | Refine the checklist by chat; **streams the reply and proposes changes** |
 
-`POST /qa-pairs` never takes answer text in the body — only a `messageId`. The server copies
-the question and answer out of the message rows itself, and refuses with `409
-ANSWER_INCOMPLETE` unless that message is a finished (`finishReason: "stop"`) assistant answer
-in a conversation the caller owns; a stranger's conversation is `404`, never `403`, because
-conversations are private.
+**Checklist Items**
 
-`POST /qa-pairs/{id}/rerun` follows the same pre-flight/stream split as
-`POST /conversations/{id}/messages`: everything that can return a status code other than `200`
-— ownership, project readiness, the embedding-model guard — runs before the stream starts, and
-the result lands in the pair's pending slot rather than overwriting the stored answer. A human
-then calls `rerun/accept` to publish it or `DELETE .../rerun` to throw it away; accepting always
-resets `status` to `unreviewed`; because a stale `pass` badge over a replaced answer is worse
-than no badge at all.
+| Method | Path | Auth | Description |
+| --- | --- | --- | --- |
+| `GET` | `/checklist-items` | any user | List test cases across modules, paginated; filters for project, module, feature, status, source, kind |
+| `POST` | `/checklist-items` | any user | Add a test case by hand |
+| `PATCH` | `/checklist-items/{id}` | creator or admin | Edit what a test expects (name, feature, expected result, notes) |
+| `PUT` | `/checklist-items/{id}/result` | **any user** | Record a test result (current result and status); open to every user |
+| `DELETE` | `/checklist-items/{id}` | creator or admin | Soft-delete the test case |
+| `GET` | `/checklist-items/export` | any user | Export the filtered checklist as `.xlsx`, regardless of pagination limit |
+| `POST` | `/checklist-items/clear-results` | **any user** | Reset the recorded result on every row the filter selects, within one module |
 
-`GET /qa-pairs/export` and `GET /qa-pairs/tags` are declared **before** `GET /qa-pairs/{id}` in
-the router: FastAPI matches path segments in declaration order, so a literal path declared
-after a parameterised one would be swallowed as a malformed id and 422 every request. The
-export is capped at `QA_EXPORT_MAX_ROWS` (default 5000) rows and returns `409
-EXPORT_TOO_LARGE` over that, since `openpyxl` builds the whole workbook in memory.
+**Checklist Change Sets**
+
+| Method | Path | Auth | Description |
+| --- | --- | --- | --- |
+| `POST` | `/checklist-change-sets/{id}/apply` | any user | Apply the named operations, or all of them; nothing is written to the checklist until this is called |
+| `POST` | `/checklist-change-sets/{id}/discard` | any user | Throw the proposal away; nothing is written to the checklist |
+
+Nothing generated enters the checklist unreviewed: generation writes a *pending change set*, and `POST /checklist-change-sets/{id}/apply` is the only path that writes `checklist_items`.
+
+`POST /checklist-modules/{id}/messages` follows the same pre-flight/stream split as
+`POST /conversations/{id}/messages`: everything that needs a status code happens before the stream opens, and the streamed proposal is written server-side into a change set rather than posted back by the client.
+
+`GET /checklist-items/export` and `POST /checklist-items/clear-results` are declared **before** the parameterised `/checklist-items/{item_id}` routes because FastAPI matches in declaration order: a literal segment declared after a parameterised one is swallowed as an id, so a `GET /checklist-items/{item_id}` added later would take the export's requests unless the export stays first. The export is capped at `checklist_export_max_rows` (default 5000) rows and returns `409 EXPORT_TOO_LARGE` over that limit, since `openpyxl` builds the whole workbook in memory.
+
+Recording a result is open to every authenticated user while editing what a test expects is not: a tester must be able to record what they saw without being able to rewrite what was expected.
 
 ## Layout
 
@@ -231,7 +243,10 @@ backend/
 │   │       ├── auth.py     # POST /auth/login, /refresh, /change-password, ...
 │   │       ├── users.py    # /users CRUD + reset-password
 │   │       ├── projects.py # /projects CRUD + reindex
-│   │       └── conversations.py # /conversations CRUD + the SSE answer endpoint
+│   │       ├── conversations.py # /conversations CRUD + the SSE answer endpoint
+│   │       ├── checklist_modules.py # /checklist-modules CRUD + generate + chat
+│   │       ├── checklist_items.py   # /checklist-items CRUD + export
+│   │       └── checklist_change_sets.py # apply + discard change sets
 │   ├── core/
 │   │   ├── access.py     # the phase-2 access-resolver seam
 │   │   ├── crypto.py     # SecretBox (PAT encryption at rest) + scrub
@@ -266,6 +281,7 @@ backend/
 │   │       ├── state.py  # TurnState — the shared dict every node reads and writes
 │   │       ├── nodes.py  # classify → retrieve → grade/loop → generate, each with a fallback
 │   │       └── build.py  # wires the nodes into the compiled graph, incl. routing edges
+│   ├── checklist/        # QA Checklist: modules, generation, chat, change sets
 │   ├── worker.py          # the worker entrypoint: consumers + the reconcile sweep
 │   ├── models/            # SQLAlchemy models: User, RefreshToken, Project, Conversation, Message
 │   ├── repositories/      # the only layer that issues `select`

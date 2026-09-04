@@ -5,8 +5,8 @@ Next.js UI for AskRepo — the codebase-aware assistant described in
 
 The M0–M2 and M4 screens are shipped: sign-in and the forced first-login password change, the
 dashboard, projects (list, detail, create, re-index, delete), Dev Knowledge with streamed
-answers, admin user management, and the QA List — the `/qa` grid and the `/qa/[id]` detail
-page, with a re-run panel and export.
+answers, admin user management, and the QA Checklist — the `/checklist` module list and the
+`/checklist/[moduleId]` grid with chat and review panel.
 
 This layer is **not** a thin client. It acts as a backend-for-frontend: it holds the session in
 its own httpOnly cookies and calls the [backend](../backend/README.md) on the browser's behalf,
@@ -30,7 +30,7 @@ bun dev
 Then open <http://localhost:3000>. It expects the API on
 <http://localhost:8000> — start that too (see the
 [backend README](../backend/README.md)), or bring up the whole stack with
-`cd infra && docker compose --profile ollama up --build`.
+`cd infra && docker compose up --build`.
 
 ## Scripts
 
@@ -80,7 +80,7 @@ frontend/
 │   ├── layout.tsx         # fonts, theme, query provider, toaster
 │   ├── globals.css        # Tailwind entry + theme tokens (only file with raw hex)
 │   ├── (auth)/            # shell-less: /login, /change-password
-│   ├── (app)/             # the shell: dashboard, projects, ask, qa (/qa, /qa/[id]), settings
+│   ├── (app)/             # the shell: dashboard, projects, ask, checklist (/checklist, /checklist/[moduleId]), settings
 │   └── api/
 │       ├── [...path]/     # the API forwarding route the browser talks to
 │       └── auth/          # login, refresh, logout — the only cookie writers
