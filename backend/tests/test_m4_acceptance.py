@@ -90,6 +90,7 @@ def _scripted_model() -> StructuredScriptedChatModel:
                     summary="1 added",
                     operations=[
                         ProposedOperation(
+                            kind="positive",
                             op="add",
                             feature="Login",
                             test_name="Rejects a request with no user",

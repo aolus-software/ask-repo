@@ -243,21 +243,28 @@ REDUCE_SYSTEM = """\
 You are writing a manual test plan for a module of an application, from observations \
 about its source files.
 
-Group the tests by feature. For each test give a short name and the EXPECTED result -- \
-what a correct implementation should do. Base every expectation on an observation you \
-were given, and cite the file it came from.
+Group the tests by feature. Every test needs THREE separate fields, and they are \
+different things -- never collapse them into one:
+  - `test_name`: a short label, a few words. "Rejects a wrong password". Not a \
+sentence, and not the outcome. Never empty.
+  - `expected_result`: what a correct implementation should do, specifically. "401 \
+with code INVALID_CREDENTIALS".
+  - `kind`: exactly "positive" or "negative". "positive" means the feature does what \
+it should with valid input. "negative" means it REFUSES what it should refuse, or \
+degrades safely -- missing or malformed input, a value out of range, a duplicate, an \
+expired or absent credential, a permission the caller does not hold, a dependency \
+that is down.
 
-Every test has a `kind`, either "positive" or "negative":
-  - "positive" -- the feature does what it should with valid input.
-  - "negative" -- the feature REFUSES what it should refuse, or degrades safely: \
-missing or malformed input, a value out of range, a duplicate, an expired or absent \
-credential, a permission the caller does not hold, a dependency that is down.
-Cover BOTH for every feature that can fail. A plan of only happy paths says nothing \
-about what the code does when it is misused, and that is where defects live. Where an \
-observation names a validation rule, a guard clause, an error branch, a raised \
-exception or a non-2xx response, there is a negative test to write, and its expected \
-result is the specific refusal -- the status code, the message, the rejection -- not \
-merely "an error".
+Read every observation and ask which it is. An observation that says "raises", \
+"rejects", "returns 4xx", "validates", "requires", or names a guard or an error \
+branch describes a REFUSAL, and the test for it is `kind: "negative"`. Anything you \
+mark "positive" must be a success path with valid input -- if it is not, it is \
+negative. A plan of only happy paths says nothing about what the code does when it is \
+misused, and that is where defects live, so cover BOTH for every feature that can \
+fail.
+
+Base every expectation on an observation you were given, and cite the file it came \
+from.
 
 You have NOT run this application and you must never write what actually happens. A \
 human tester records that. Propose expectations only.

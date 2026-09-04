@@ -15,6 +15,7 @@ from app.schemas.checklist import ChangeOperationPayload
 def test_a_valid_update_round_trips() -> None:
     item_id = str(uuid.uuid4())
     operation = ProposedOperation(
+        kind="positive",
         op="update",
         item_id=item_id,
         feature="Login",
@@ -32,6 +33,7 @@ def test_a_valid_update_round_trips() -> None:
 
 def test_an_add_operation_has_no_target_and_is_not_dropped() -> None:
     operation = ProposedOperation(
+        kind="positive",
         op="add",
         item_id="",
         feature="Auth",
@@ -51,6 +53,7 @@ def test_an_add_operation_has_no_target_and_is_not_dropped() -> None:
 @pytest.mark.parametrize("op", ["update", "remove"])
 def test_a_non_uuid_item_id_is_dropped_regardless_of_op(op: Literal["update", "remove"]) -> None:
     operation = ProposedOperation(
+        kind="positive",
         op=op,
         item_id="item-3",
         feature="Login",
@@ -66,6 +69,7 @@ def test_a_non_uuid_item_id_is_dropped_regardless_of_op(op: Literal["update", "r
 
 def test_dropping_a_bad_operation_logs_a_warning(caplog: pytest.LogCaptureFixture) -> None:
     operation = ProposedOperation(
+        kind="positive",
         op="update",
         item_id="the login one",
         feature="Login",
@@ -83,10 +87,14 @@ def test_dropping_a_bad_operation_logs_a_warning(caplog: pytest.LogCaptureFixtur
 
 def test_every_surviving_dict_validates_as_change_operation_payload() -> None:
     operations = [
-        ProposedOperation(op="add", item_id="", rationale="new"),
-        ProposedOperation(op="update", item_id=str(uuid.uuid4()), rationale="edit"),
-        ProposedOperation(op="remove", item_id=str(uuid.uuid4()), rationale="stale"),
-        ProposedOperation(op="update", item_id="not-a-uuid", rationale="dropped"),
+        ProposedOperation(kind="positive", op="add", item_id="", rationale="new"),
+        ProposedOperation(
+            kind="positive", op="update", item_id=str(uuid.uuid4()), rationale="edit"
+        ),
+        ProposedOperation(
+            kind="positive", op="remove", item_id=str(uuid.uuid4()), rationale="stale"
+        ),
+        ProposedOperation(kind="positive", op="update", item_id="not-a-uuid", rationale="dropped"),
     ]
 
     results = [stored_operation(operation) for operation in operations]
@@ -98,7 +106,7 @@ def test_every_surviving_dict_validates_as_change_operation_payload() -> None:
 
 
 def test_each_call_mints_a_distinct_id() -> None:
-    operation = ProposedOperation(op="add", item_id="", rationale="new")
+    operation = ProposedOperation(kind="positive", op="add", item_id="", rationale="new")
 
     first = stored_operation(operation)
     second = stored_operation(operation)
@@ -121,6 +129,7 @@ def test_an_add_survives_whatever_the_model_put_in_item_id(item_id: str) -> None
     pending set, and the only way out is Discard.
     """
     operation = ProposedOperation(
+        kind="positive",
         op="add",
         item_id=item_id,
         feature="Login",
@@ -142,7 +151,7 @@ def test_a_hallucinated_item_id_still_drops_an_update_or_remove(
 ) -> None:
     """The opposite case, and it must stay a drop: these name a row to change, so an
     id that parses as nothing targets nothing."""
-    proposed = ProposedOperation(op=op, item_id="the login one", rationale="r")
+    proposed = ProposedOperation(kind="positive", op=op, item_id="the login one", rationale="r")
 
     assert stored_operation(proposed) is None
 
@@ -185,7 +194,9 @@ def test_kind_is_narrowed_and_never_drops_the_operation(raw: str, expected: str)
 def test_kind_is_absent_on_an_update_or_remove() -> None:
     """Only an `add` carries a kind directly; an update moves it through `changes`,
     where the allowlist checks it against the enum."""
-    stored = stored_operation(ProposedOperation(op="remove", item_id=str(uuid.uuid4())))
+    stored = stored_operation(
+        ProposedOperation(kind="positive", op="remove", item_id=str(uuid.uuid4()))
+    )
 
     assert stored is not None
     assert stored["kind"] is None

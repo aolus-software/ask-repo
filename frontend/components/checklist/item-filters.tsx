@@ -48,7 +48,10 @@ export function ItemFilters({
   onFiltersChange: (filters: Partial<ChecklistItemListParams>) => void;
 }) {
   return (
-    <>
+    // One row, not four stacked full-width controls. Unlike `ListToolbar`'s filters
+    // slot these are rendered directly by the screen, so the row has to be declared
+    // here or each child becomes its own block.
+    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
       <div>
         <Input
           placeholder="Filter by feature"
@@ -157,6 +160,6 @@ export function ItemFilters({
           </SelectContent>
         </Select>
       </div>
-    </>
+    </div>
   );
 }

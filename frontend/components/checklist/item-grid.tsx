@@ -1,15 +1,32 @@
 "use client";
 
-import { Trash2 } from "lucide-react";
+import { ClipboardCheck, Pencil, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 
 import { Sources } from "@/components/ask/sources";
 import { ResultCell } from "@/components/checklist/result-cell";
+import { StatusBadge } from "@/components/feedback/status-badge";
 import { ConfirmDialog } from "@/components/form/confirm-dialog";
+import { FormDialog } from "@/components/form/form-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Field, FieldError, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   Table,
   TableBody,
@@ -18,23 +35,21 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import {
   useDeleteChecklistItem,
   useSaveChecklistItemResult,
   useUpdateChecklistItemDetail,
 } from "@/hooks/use-checklist-mutations";
-import { isApiError } from "@/lib/api/errors";
-import type { ChecklistItemKind, ChecklistItemResponse } from "@/lib/api/types";
+import { fieldError, isApiError } from "@/lib/api/errors";
+import type {
+  ChecklistItemKind,
+  ChecklistItemResponse,
+  ChecklistItemStatus,
+} from "@/lib/api/types";
 import { canManageProject } from "@/lib/can";
 import { groupByFeature } from "@/lib/checklist/operations";
+import type { StatusTone } from "@/lib/status";
 
 const COLUMN_COUNT = 6;
 
@@ -49,6 +64,25 @@ export const KIND_LABELS: Record<ChecklistItemKind, string> = {
   negative: "Negative",
 };
 
+const RESULT_LABELS: Record<ChecklistItemStatus, string> = {
+  untested: "Untested",
+  pass: "Pass",
+  fail: "Fail",
+  blocked: "Blocked",
+};
+
+/**
+ * `blocked` is a warning, not a danger. "Could not run this" is a different finding
+ * from "this behaved wrongly", and colouring them alike is how a blocked test ends up
+ * recorded as a failure and the pass rate stops meaning anything.
+ */
+const RESULT_TONES: Record<ChecklistItemStatus, StatusTone> = {
+  untested: "neutral",
+  pass: "success",
+  fail: "danger",
+  blocked: "warning",
+};
+
 interface Draft {
   testName: string;
   expectedResult: string;
@@ -59,14 +93,17 @@ interface Draft {
 /**
  * The grid, grouped by feature.
  *
- * Two kinds of write live here and they are gated differently, which is the point of
- * the screen (spec 2.5). The definition columns — test name, expected result, notes —
- * are editable only by the person who wrote the row or an admin. The result columns
- * are editable by everyone, because a tester who did not author the checklist must be
- * able to record what they saw without being able to rewrite what was expected.
+ * Both writes open a dialog rather than expanding the row. Editing in place put a
+ * textarea, a select and a save button inside a single cell, which made every row
+ * tall enough to push the next one off screen -- a tester working down a checklist
+ * could see one test at a time. The row now states the outcome; the dialogs do the
+ * writing.
  *
- * The grouping comes from `groupByFeature`, which is pure and tested on its own; this
- * component computes nothing about ordering.
+ * The split between the two dialogs is the access model, not a layout choice
+ * (spec 2.5): **Record result** is open to everyone on every row, while **Edit** is
+ * gated on `created_by`/`is_admin`. A tester must be able to record what they saw
+ * without being able to rewrite what was expected, because otherwise the cheapest way
+ * to make a failing test pass is to edit the expectation.
  */
 export function ItemGrid({
   items,
@@ -77,7 +114,8 @@ export function ItemGrid({
   moduleId: string;
   user: { id: string; isAdmin: boolean };
 }) {
-  const [editingId, setEditingId] = useState<string | null>(null);
+  const [recording, setRecording] = useState<ChecklistItemResponse | null>(null);
+  const [editing, setEditing] = useState<ChecklistItemResponse | null>(null);
   const [draft, setDraft] = useState<Draft | null>(null);
   const [pendingDelete, setPendingDelete] = useState<ChecklistItemResponse | null>(
     null,
@@ -91,7 +129,7 @@ export function ItemGrid({
   const canEdit = (item: ChecklistItemResponse) => canManageProject(user, item);
 
   function startEditing(item: ChecklistItemResponse) {
-    setEditingId(item.id);
+    setEditing(item);
     setDraft({
       testName: item.testName,
       expectedResult: item.expectedResult,
@@ -101,16 +139,20 @@ export function ItemGrid({
   }
 
   function stopEditing() {
-    setEditingId(null);
+    setEditing(null);
     setDraft(null);
   }
 
-  function saveDefinition(item: ChecklistItemResponse) {
-    if (!draft) return;
+  function saveDefinition(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!editing || !draft) return;
     updateDetail.mutate(
-      { itemId: item.id, ...draft },
+      { itemId: editing.id, ...draft },
       {
-        onSuccess: stopEditing,
+        onSuccess: () => {
+          toast.success("Test case updated");
+          stopEditing();
+        },
         onError: (error) => reportFailure(error),
       },
     );
@@ -126,7 +168,7 @@ export function ItemGrid({
 
   return (
     <>
-      {/* The page body must never scroll horizontally; seven columns of prose will not
+      {/* The page body must never scroll horizontally; six columns of prose will not
           fit a phone, so the table scrolls inside its own container. */}
       <div className="overflow-x-auto">
         <Table>
@@ -151,158 +193,88 @@ export function ItemGrid({
                   </span>
                 </TableCell>
               </TableRow>,
-              ...group.items.map((item) => {
-                const isEditing = editingId === item.id && draft !== null;
-                return (
-                  <TableRow key={item.id} className="align-top">
-                    <TableCell className="min-w-56">
-                      {isEditing && draft ? (
-                        <Input
-                          aria-label="Test name"
-                          value={draft.testName}
-                          onChange={(event) =>
-                            setDraft({ ...draft, testName: event.target.value })
-                          }
-                        />
-                      ) : null}
-                      {isEditing && draft ? (
-                        <Select
-                          value={draft.kind}
-                          onValueChange={(value: string | null | undefined) =>
-                            setDraft({
-                              ...draft,
-                              kind: (value as ChecklistItemKind) ?? draft.kind,
-                            })
-                          }
-                        >
-                          <SelectTrigger className="mt-2 w-full" aria-label="Kind">
-                            <SelectValue>
-                              {(value: string) =>
-                                KIND_LABELS[value as ChecklistItemKind]
-                              }
-                            </SelectValue>
-                          </SelectTrigger>
-                          <SelectContent>
-                            {Object.entries(KIND_LABELS).map(([value, label]) => (
-                              <SelectItem key={value} value={value}>
-                                {label}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      ) : (
-                        <div className="flex flex-col gap-1 text-sm">
-                          <span>{item.testName}</span>
-                          <div className="flex flex-wrap gap-1">
-                            {/* Only negatives are badged. Positive is the norm, and
-                                badging every row would make the column noise rather
-                                than a signal -- the question this answers is "does
-                                this feature have failure coverage at all?". */}
-                            {item.kind === "negative" ? (
-                              <Badge
-                                variant="outline"
-                                className="text-warning-foreground border-warning/60 w-fit text-xs font-normal"
-                              >
-                                Negative
-                              </Badge>
-                            ) : null}
-                            {item.source === "manual" ? (
-                              <Badge
-                                variant="outline"
-                                className="w-fit text-xs font-normal"
-                              >
-                                Hand-written
-                              </Badge>
-                            ) : null}
-                          </div>
-                        </div>
-                      )}
-                    </TableCell>
-
-                    <TableCell className="min-w-56 text-sm">
-                      {isEditing && draft ? (
-                        <Textarea
-                          aria-label="Expected result"
-                          value={draft.expectedResult}
-                          onChange={(event) =>
-                            setDraft({ ...draft, expectedResult: event.target.value })
-                          }
-                          className="min-h-20"
-                        />
-                      ) : (
-                        item.expectedResult
-                      )}
-                    </TableCell>
-
-                    <TableCell>
-                      <ResultCell
-                        item={item}
-                        canEditDefinition={canEdit(item)}
-                        isSaving={
-                          saveResult.isPending &&
-                          saveResult.variables?.itemId === item.id
-                        }
-                        onSave={(input) =>
-                          saveResult.mutate(
-                            { itemId: item.id, ...input },
-                            { onError: (error) => reportFailure(error) },
-                          )
-                        }
-                      />
-                    </TableCell>
-
-                    <TableCell className="text-muted-foreground min-w-40 text-sm">
-                      {isEditing && draft ? (
-                        <Textarea
-                          aria-label="Notes"
-                          value={draft.notes ?? ""}
-                          onChange={(event) =>
-                            setDraft({ ...draft, notes: event.target.value || null })
-                          }
-                          className="min-h-20"
-                        />
-                      ) : (
-                        (item.notes ?? "—")
-                      )}
-                    </TableCell>
-
-                    <TableCell className="min-w-40">
-                      {/* The same component the answer stream renders its sources with.
-                          That reuse is why `citations` carries the answer's shape. */}
-                      {item.citations && item.citations.length > 0 ? (
-                        <Sources citations={item.citations} citedIndexes={[]} />
-                      ) : (
-                        <span className="text-muted-foreground text-sm">—</span>
-                      )}
-                    </TableCell>
-
-                    <TableCell className="text-right">
-                      {isEditing ? (
-                        <div className="flex justify-end gap-2">
-                          <Button
-                            size="sm"
+              ...group.items.map((item) => (
+                <TableRow key={item.id} className="align-top">
+                  <TableCell className="min-w-56">
+                    <div className="flex flex-col gap-1 text-sm">
+                      <span className="font-medium">{item.testName}</span>
+                      <div className="flex flex-wrap gap-1">
+                        {/* Only negatives are badged. Positive is the norm, and
+                            badging every row would make the column noise rather than
+                            a signal -- the question this answers is "does this
+                            feature have failure coverage at all?". */}
+                        {item.kind === "negative" ? (
+                          <Badge
                             variant="outline"
-                            onClick={stopEditing}
-                            disabled={updateDetail.isPending}
+                            className="text-warning-foreground border-warning/60 w-fit text-xs font-normal"
                           >
-                            Cancel
-                          </Button>
-                          <Button
-                            size="sm"
-                            onClick={() => saveDefinition(item)}
-                            disabled={updateDetail.isPending}
+                            Negative
+                          </Badge>
+                        ) : null}
+                        {item.source === "manual" ? (
+                          <Badge
+                            variant="outline"
+                            className="w-fit text-xs font-normal"
                           >
-                            Save
-                          </Button>
-                        </div>
-                      ) : canEdit(item) ? (
-                        <div className="flex justify-end gap-1">
+                            Hand-written
+                          </Badge>
+                        ) : null}
+                      </div>
+                    </div>
+                  </TableCell>
+
+                  <TableCell className="min-w-56 text-sm">
+                    {item.expectedResult}
+                  </TableCell>
+
+                  <TableCell className="min-w-44">
+                    <div className="flex flex-col gap-1">
+                      <StatusBadge
+                        tone={RESULT_TONES[item.status]}
+                        label={RESULT_LABELS[item.status]}
+                        className="w-fit"
+                      />
+                      {item.currentResult ? (
+                        <span className="text-muted-foreground text-sm">
+                          {item.currentResult}
+                        </span>
+                      ) : null}
+                    </div>
+                  </TableCell>
+
+                  <TableCell className="text-muted-foreground min-w-40 text-sm">
+                    {item.notes ?? "—"}
+                  </TableCell>
+
+                  <TableCell className="min-w-40">
+                    {/* The same component the answer stream renders its sources with.
+                        That reuse is why `citations` carries the answer's shape. */}
+                    {item.citations && item.citations.length > 0 ? (
+                      <Sources citations={item.citations} citedIndexes={[]} />
+                    ) : (
+                      <span className="text-muted-foreground text-sm">—</span>
+                    )}
+                  </TableCell>
+
+                  <TableCell className="text-right">
+                    <div className="flex justify-end gap-1">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => setRecording(item)}
+                      >
+                        <ClipboardCheck className="size-4" />
+                        Record result
+                      </Button>
+                      {canEdit(item) ? (
+                        <>
                           <Button
-                            size="sm"
+                            size="icon"
                             variant="ghost"
+                            aria-label={`Edit ${item.testName}`}
                             onClick={() => startEditing(item)}
                           >
-                            Edit
+                            <Pencil className="size-4" />
                           </Button>
                           <Button
                             size="icon"
@@ -312,16 +284,145 @@ export function ItemGrid({
                           >
                             <Trash2 className="size-4" />
                           </Button>
-                        </div>
+                        </>
                       ) : null}
-                    </TableCell>
-                  </TableRow>
-                );
-              }),
+                    </div>
+                  </TableCell>
+                </TableRow>
+              )),
             ])}
           </TableBody>
         </Table>
       </div>
+
+      {/* A plain Dialog rather than `FormDialog`: `ResultCell` owns its own fields and
+          its own submit, and it is deliberately presentational so the same component
+          renders in a test without a query client. */}
+      <Dialog
+        open={recording !== null}
+        onOpenChange={(open) => {
+          if (!open) setRecording(null);
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Record a result</DialogTitle>
+            <DialogDescription>{recording?.testName}</DialogDescription>
+          </DialogHeader>
+          {recording ? (
+            <>
+              <p className="text-muted-foreground text-sm">
+                Expected: {recording.expectedResult}
+              </p>
+              <ResultCell
+                item={recording}
+                canEditDefinition={canEdit(recording)}
+                isSaving={saveResult.isPending}
+                onSave={(input) =>
+                  saveResult.mutate(
+                    { itemId: recording.id, ...input },
+                    {
+                      onSuccess: () => {
+                        toast.success("Result recorded");
+                        setRecording(null);
+                      },
+                      onError: (error) => reportFailure(error),
+                    },
+                  )
+                }
+              />
+            </>
+          ) : null}
+        </DialogContent>
+      </Dialog>
+
+      <FormDialog
+        open={editing !== null}
+        onOpenChange={(open) => {
+          if (!open) stopEditing();
+        }}
+        title="Edit the test case"
+        description="What it is called, what it should do, and why it exists. The recorded result is not editable here."
+        submitLabel="Save changes"
+        isPending={updateDetail.isPending}
+        error={updateDetail.error}
+        onSubmit={saveDefinition}
+      >
+        {draft ? (
+          <>
+            <Field>
+              <FieldLabel htmlFor="edit-test-name">Test name</FieldLabel>
+              <Input
+                id="edit-test-name"
+                value={draft.testName}
+                onChange={(event) =>
+                  setDraft({ ...draft, testName: event.target.value })
+                }
+                aria-invalid={Boolean(fieldError(updateDetail.error, "testName"))}
+              />
+              {fieldError(updateDetail.error, "testName") ? (
+                <FieldError>{fieldError(updateDetail.error, "testName")}</FieldError>
+              ) : null}
+            </Field>
+
+            <Field>
+              <FieldLabel htmlFor="edit-expected">Expected result</FieldLabel>
+              <Textarea
+                id="edit-expected"
+                className="min-h-24"
+                value={draft.expectedResult}
+                onChange={(event) =>
+                  setDraft({ ...draft, expectedResult: event.target.value })
+                }
+                aria-invalid={Boolean(fieldError(updateDetail.error, "expectedResult"))}
+              />
+              {fieldError(updateDetail.error, "expectedResult") ? (
+                <FieldError>
+                  {fieldError(updateDetail.error, "expectedResult")}
+                </FieldError>
+              ) : null}
+            </Field>
+
+            <Field>
+              <FieldLabel htmlFor="edit-kind">Kind</FieldLabel>
+              <Select
+                value={draft.kind}
+                onValueChange={(value: string | null | undefined) =>
+                  setDraft({
+                    ...draft,
+                    kind: (value as ChecklistItemKind) ?? draft.kind,
+                  })
+                }
+              >
+                <SelectTrigger id="edit-kind" className="w-full">
+                  <SelectValue>
+                    {(value: string) => KIND_LABELS[value as ChecklistItemKind]}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  {Object.entries(KIND_LABELS).map(([value, label]) => (
+                    <SelectItem key={value} value={value}>
+                      {label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </Field>
+
+            <Field>
+              <FieldLabel htmlFor="edit-notes">Notes</FieldLabel>
+              <Textarea
+                id="edit-notes"
+                className="min-h-20"
+                value={draft.notes ?? ""}
+                onChange={(event) =>
+                  setDraft({ ...draft, notes: event.target.value || null })
+                }
+              />
+            </Field>
+          </>
+        ) : null}
+      </FormDialog>
 
       <ConfirmDialog
         open={pendingDelete !== null}

@@ -37,16 +37,47 @@ class ProposedOperation(BaseModel):
     whole change set.
     """
 
-    op: Literal["add", "update", "remove"]
-    item_id: str = ""
+    op: Literal["add", "update", "remove"] = Field(
+        description="add a missing test, update an existing one, or remove a dead one"
+    )
+    item_id: str = Field(
+        default="", description="the id of the existing item, for update and remove only"
+    )
     # A `str`, not the enum, for the same reason `item_id` is: a model that answers
     # "edge case" or "Negative" must not fail parsing and destroy the whole change
     # set. It is narrowed to the enum in `stored_operation`, which defaults rather
     # than drops.
-    kind: str = ""
-    feature: str = ""
-    test_name: str = ""
-    expected_result: str = ""
+    # Required, not defaulted, and that is the whole point: a field with a default is
+    # optional in the JSON schema the model is handed, and it simply omits it -- every
+    # operation came back with an empty kind, which `_narrow_kind` then read as
+    # positive. Still a `str` rather than the enum, so a junk value costs one
+    # mislabelled test rather than the whole change set.
+    kind: str = Field(
+        description=(
+            "'positive' if the test proves the feature works with valid input, "
+            "'negative' if it proves the feature refuses what it should refuse"
+        ),
+    )
+    feature: str = Field(default="", description="the feature this test belongs to, e.g. 'Login'")
+    # Described, not just named. These two are the fields a model most readily
+    # collapses into one: asked for a test it writes a single sentence, and with no
+    # description to separate them it lands entirely in `expected_result`, leaving
+    # every row in the grid with a blank name.
+    test_name: str = Field(
+        default="",
+        description=(
+            "SHORT label for the test, a few words naming what is being tested, "
+            "e.g. 'Rejects a wrong password'. Never a full sentence, and never the "
+            "expected outcome."
+        ),
+    )
+    expected_result: str = Field(
+        default="",
+        description=(
+            "what a CORRECT implementation should do, specifically -- the status "
+            "code, message or state, e.g. '401 with code INVALID_CREDENTIALS'"
+        ),
+    )
     changes: dict[str, str] = Field(default_factory=dict)
     rationale: str = ""
     # File paths the expectation came from. Resolved to full citations by the

@@ -5,6 +5,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/api/client";
 import { endpoints } from "@/lib/api/endpoints";
 import type {
+  ChecklistItemKind,
   ChecklistItemResponse,
   ChecklistItemStatus,
   ChecklistModuleDetailResponse,
@@ -132,6 +133,7 @@ export function useUpdateChecklistItemDetail(moduleId: string) {
       feature?: string;
       testName?: string;
       expectedResult?: string;
+      kind?: ChecklistItemKind;
       notes?: string | null;
     }) => {
       const { itemId, ...changes } = input;

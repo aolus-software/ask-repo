@@ -108,6 +108,7 @@ async def test_generation_writes_a_pending_change_set_and_no_items(
                     summary="1 added",
                     operations=[
                         ProposedOperation(
+                            kind="positive",
                             op="add",
                             feature="Login",
                             test_name="Rejects an unknown user",
@@ -168,6 +169,7 @@ async def test_operations_carry_a_citation_resolved_from_the_index(
                     summary="1 added",
                     operations=[
                         ProposedOperation(
+                            kind="positive",
                             op="add",
                             feature="Login",
                             test_name="t",

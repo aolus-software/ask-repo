@@ -859,6 +859,7 @@ async def test_propose_node_emits_a_change_set_event() -> None:
                 summary="1 added",
                 operations=[
                     ProposedOperation(
+                        kind="positive",
                         op="add",
                         feature="Login",
                         test_name="Rejects an empty password",
@@ -1005,6 +1006,7 @@ async def test_propose_node_drops_invalid_operations_one_at_a_time() -> None:
                 summary="2 changes",
                 operations=[
                     ProposedOperation(
+                        kind="positive",
                         op="update",
                         item_id="not-a-uuid",  # This one will not validate
                         feature="Login",
@@ -1013,6 +1015,7 @@ async def test_propose_node_drops_invalid_operations_one_at_a_time() -> None:
                         rationale="item_id is not a UUID.",
                     ),
                     ProposedOperation(
+                        kind="positive",
                         op="add",
                         feature="Auth",
                         test_name="Valid operation",

@@ -407,6 +407,7 @@ async def test_a_proposing_answerer_emits_citations_then_tokens_then_change_set_
                 summary="1 test",
                 operations=[
                     ProposedOperation(
+                        kind="positive",
                         op="add",
                         feature="Login",
                         test_name="Empty password",
