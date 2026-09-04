@@ -15,14 +15,36 @@ guarantee belongs here, at the one place data enters, not at each place it leave
 """
 
 import logging
+import re
 import uuid
 
 from pydantic import ValidationError
 
 from app.checklist.model_output import ProposedOperation
+from app.models.checklist import ChecklistItemKind
 from app.schemas.checklist import ChangeOperationPayload
 
 logger = logging.getLogger(__name__)
+
+# What a model actually writes when asked for a positive/negative kind. Anything
+# unrecognised falls back to `positive` rather than dropping the operation -- the
+# lesson `item_id` taught: a field the model fills in freely must never be able to
+# delete a test case it also proposed.
+_NEGATIVE_WORDS = frozenset({"negative", "negatif", "failure", "error", "edge", "invalid", "sad"})
+
+
+def _narrow_kind(raw: str) -> ChecklistItemKind:
+    """The model's `kind` as the enum, defaulting to positive.
+
+    Defaulting to *positive* specifically: a mislabelled happy path is a cosmetic
+    error, while a mislabelled failure case inflates the negative coverage the field
+    exists to measure.
+    """
+    # Word-wise and punctuation-blind: models answer "edge case", "edge-case",
+    # "negative test", "error path" as readily as the bare word.
+    if set(re.split(r"[^a-z]+", raw.lower())) & _NEGATIVE_WORDS:
+        return ChecklistItemKind.NEGATIVE
+    return ChecklistItemKind.POSITIVE
 
 
 def stored_operation(
@@ -56,6 +78,7 @@ def stored_operation(
         "feature": operation.feature or None,
         "testName": operation.test_name or None,
         "expectedResult": operation.expected_result or None,
+        "kind": _narrow_kind(operation.kind).value if operation.op == "add" else None,
         "changes": operation.changes or None,
         "citations": citations or None,
         "rationale": operation.rationale or "No rationale given.",

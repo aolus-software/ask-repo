@@ -39,6 +39,11 @@ class ProposedOperation(BaseModel):
 
     op: Literal["add", "update", "remove"]
     item_id: str = ""
+    # A `str`, not the enum, for the same reason `item_id` is: a model that answers
+    # "edge case" or "Negative" must not fail parsing and destroy the whole change
+    # set. It is narrowed to the enum in `stored_operation`, which defaults rather
+    # than drops.
+    kind: str = ""
     feature: str = ""
     test_name: str = ""
     expected_result: str = ""

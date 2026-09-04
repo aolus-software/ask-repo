@@ -8,6 +8,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { ConfirmDialog } from "@/components/form/confirm-dialog";
 import { FormError } from "@/components/form/form-error";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -37,6 +38,7 @@ const FIELD_LABELS: Record<string, string> = {
   expectedResult: "Expected result",
   currentResult: "Current result",
   status: "Status",
+  kind: "Kind",
   notes: "Notes",
 };
 
@@ -218,7 +220,20 @@ export function ChangeSetPanel({
                   onToggle={() => toggle(operation.id)}
                   orphaned={false}
                 >
-                  <p className="font-medium">{operation.testName}</p>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <p className="font-medium">{operation.testName}</p>
+                    {/* Badged before the reviewer decides, not after: knowing which
+                        proposals are failure cases is most of what tells them
+                        whether the set is worth accepting. */}
+                    {operation.kind === "negative" ? (
+                      <Badge
+                        variant="outline"
+                        className="text-warning-foreground border-warning/60 text-xs font-normal"
+                      >
+                        Negative
+                      </Badge>
+                    ) : null}
+                  </div>
                   <p className="text-muted-foreground text-sm">{operation.feature}</p>
                   {operation.expectedResult ? (
                     <p className="mt-1 text-sm">{operation.expectedResult}</p>

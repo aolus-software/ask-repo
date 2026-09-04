@@ -33,6 +33,7 @@ class ChecklistItemRepository(BaseRepository[ChecklistItem]):
         feature: str | None = None,
         status: str | None = None,
         source: str | None = None,
+        kind: str | None = None,
         search: str | None = None,
     ) -> Select[tuple[ChecklistItem]]:
         """The base query the page, the count, and the export are all built from."""
@@ -49,6 +50,8 @@ class ChecklistItemRepository(BaseRepository[ChecklistItem]):
             statement = statement.where(ChecklistItem.status == status)
         if source:
             statement = statement.where(ChecklistItem.source == source)
+        if kind:
+            statement = statement.where(ChecklistItem.kind == kind)
         if search:
             term = f"%{search.strip()}%"
             statement = statement.where(
@@ -71,6 +74,7 @@ class ChecklistItemRepository(BaseRepository[ChecklistItem]):
         feature: str | None = None,
         status: str | None = None,
         source: str | None = None,
+        kind: str | None = None,
         search: str | None = None,
     ) -> tuple[list[ChecklistItem], int]:
         """One page of items, plus the unpaginated total for the same filters."""
@@ -84,6 +88,7 @@ class ChecklistItemRepository(BaseRepository[ChecklistItem]):
             feature=feature,
             status=status,
             source=source,
+            kind=kind,
             search=search,
         )
         column = getattr(ChecklistItem, sort)
@@ -105,6 +110,7 @@ class ChecklistItemRepository(BaseRepository[ChecklistItem]):
         feature: str | None = None,
         status: str | None = None,
         source: str | None = None,
+        kind: str | None = None,
         search: str | None = None,
     ) -> list[ChecklistItem]:
         """Every matching item, up to `cap + 1` rows, in the grid's own order.
@@ -121,6 +127,7 @@ class ChecklistItemRepository(BaseRepository[ChecklistItem]):
             feature=feature,
             status=status,
             source=source,
+            kind=kind,
             search=search,
         )
         rows = await self.session.execute(

@@ -10,6 +10,7 @@ from app.models.checklist import (
     ChangeSetStatus,
     ChecklistChangeSet,
     ChecklistItem,
+    ChecklistItemKind,
     ChecklistItemSource,
     ChecklistItemStatus,
     ChecklistMessage,
@@ -128,6 +129,7 @@ async def create_checklist_item(
     current_result: str | None = None,
     status: ChecklistItemStatus = ChecklistItemStatus.UNTESTED,
     source: ChecklistItemSource = ChecklistItemSource.GENERATED,
+    kind: ChecklistItemKind = ChecklistItemKind.POSITIVE,
     position: int = 0,
 ) -> ChecklistItem:
     """One test case. `project_id` and `created_by` default to the module's, as a real
@@ -156,6 +158,7 @@ async def create_checklist_item(
         current_result=current_result,
         status=status.value,
         source=source.value,
+        kind=kind.value,
         position=position,
         created_by=created_by,
     )

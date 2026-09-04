@@ -15,6 +15,7 @@ const item = {
   notes: null,
   citations: null,
   source: "generated" as const,
+  kind: "positive" as const,
   position: 0,
   createdBy: "someone-else",
   reviewedBy: null,

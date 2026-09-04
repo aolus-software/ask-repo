@@ -71,6 +71,7 @@ class ChecklistItemService:
                 feature=query.feature,
                 status=query.status.value if query.status else None,
                 source=query.source.value if query.source else None,
+                kind=query.kind.value if query.kind else None,
                 search=query.search,
             )
         except ValueError as error:
@@ -108,6 +109,7 @@ class ChecklistItemService:
                 status=ChecklistItemStatus.UNTESTED.value,
                 notes=payload.notes,
                 source=ChecklistItemSource.MANUAL.value,
+                kind=payload.kind.value,
                 position=await self.items.next_position(
                     module_id=module.id, feature=payload.feature.strip()
                 ),
@@ -133,6 +135,8 @@ class ChecklistItemService:
             item.test_name = payload.test_name.strip()
         if payload.expected_result is not None:
             item.expected_result = payload.expected_result.strip()
+        if payload.kind is not None:
+            item.kind = payload.kind.value
         if payload.notes is not None:
             item.notes = payload.notes
         item.updated_at = datetime.now(UTC)
@@ -183,6 +187,7 @@ class ChecklistItemService:
             feature=query.feature,
             status=query.status.value if query.status else None,
             source=query.source.value if query.source else None,
+            kind=query.kind.value if query.kind else None,
             search=query.search,
         )
         if len(rows) > cap:

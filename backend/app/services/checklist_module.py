@@ -297,6 +297,7 @@ class ChecklistModuleService:
                     feature=item.feature,
                     test_name=item.test_name,
                     expected_result=item.expected_result,
+                    kind=item.kind,
                 )
                 for item in await self.items.list_for_module(module_id)
             ],

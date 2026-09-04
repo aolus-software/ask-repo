@@ -18,6 +18,13 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import {
   useDeleteChecklistItem,
@@ -25,7 +32,7 @@ import {
   useUpdateChecklistItemDetail,
 } from "@/hooks/use-checklist-mutations";
 import { isApiError } from "@/lib/api/errors";
-import type { ChecklistItemResponse } from "@/lib/api/types";
+import type { ChecklistItemKind, ChecklistItemResponse } from "@/lib/api/types";
 import { canManageProject } from "@/lib/can";
 import { groupByFeature } from "@/lib/checklist/operations";
 
@@ -36,9 +43,16 @@ function reportFailure(error: unknown): void {
   toast.error(isApiError(error) ? error.message : "That did not save. Try again.");
 }
 
+/** Shown wherever a kind is chosen or displayed, so the wording never diverges. */
+export const KIND_LABELS: Record<ChecklistItemKind, string> = {
+  positive: "Positive",
+  negative: "Negative",
+};
+
 interface Draft {
   testName: string;
   expectedResult: string;
+  kind: ChecklistItemKind;
   notes: string | null;
 }
 
@@ -81,6 +95,7 @@ export function ItemGrid({
     setDraft({
       testName: item.testName,
       expectedResult: item.expectedResult,
+      kind: item.kind,
       notes: item.notes,
     });
   }
@@ -149,17 +164,57 @@ export function ItemGrid({
                             setDraft({ ...draft, testName: event.target.value })
                           }
                         />
+                      ) : null}
+                      {isEditing && draft ? (
+                        <Select
+                          value={draft.kind}
+                          onValueChange={(value: string | null | undefined) =>
+                            setDraft({
+                              ...draft,
+                              kind: (value as ChecklistItemKind) ?? draft.kind,
+                            })
+                          }
+                        >
+                          <SelectTrigger className="mt-2 w-full" aria-label="Kind">
+                            <SelectValue>
+                              {(value: string) =>
+                                KIND_LABELS[value as ChecklistItemKind]
+                              }
+                            </SelectValue>
+                          </SelectTrigger>
+                          <SelectContent>
+                            {Object.entries(KIND_LABELS).map(([value, label]) => (
+                              <SelectItem key={value} value={value}>
+                                {label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
                       ) : (
                         <div className="flex flex-col gap-1 text-sm">
                           <span>{item.testName}</span>
-                          {item.source === "manual" ? (
-                            <Badge
-                              variant="outline"
-                              className="w-fit text-xs font-normal"
-                            >
-                              Hand-written
-                            </Badge>
-                          ) : null}
+                          <div className="flex flex-wrap gap-1">
+                            {/* Only negatives are badged. Positive is the norm, and
+                                badging every row would make the column noise rather
+                                than a signal -- the question this answers is "does
+                                this feature have failure coverage at all?". */}
+                            {item.kind === "negative" ? (
+                              <Badge
+                                variant="outline"
+                                className="text-warning-foreground border-warning/60 w-fit text-xs font-normal"
+                              >
+                                Negative
+                              </Badge>
+                            ) : null}
+                            {item.source === "manual" ? (
+                              <Badge
+                                variant="outline"
+                                className="w-fit text-xs font-normal"
+                              >
+                                Hand-written
+                              </Badge>
+                            ) : null}
+                          </div>
                         </div>
                       )}
                     </TableCell>

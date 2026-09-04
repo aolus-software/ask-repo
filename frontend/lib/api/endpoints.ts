@@ -120,6 +120,7 @@ export function checklistItemListQueryString(params: ChecklistItemListParams): s
   if (params.feature) search.set("feature", params.feature);
   if (params.status) search.set("status", params.status);
   if (params.source) search.set("source", params.source);
+  if (params.kind) search.set("kind", params.kind);
   const qs = search.toString();
   return qs ? `?${qs}` : "";
 }

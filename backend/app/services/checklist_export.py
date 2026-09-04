@@ -26,6 +26,9 @@ COLUMNS: tuple[tuple[str, int], ...] = (
     ("Expected result", 60),
     ("Current result", 60),
     ("Status", 14),
+    # Beside Status rather than at the end: a reader scanning the sheet for negative
+    # coverage is asking a question about outcomes, not about provenance.
+    ("Kind", 12),
     ("Notes", 40),
     ("Source", 12),
     ("Reviewed by", 22),
@@ -85,6 +88,7 @@ def build_workbook(
                 item.expected_result,
                 item.current_result,
                 item.status,
+                item.kind,
                 item.notes,
                 item.source,
                 names.get(item.reviewed_by, "") if item.reviewed_by else "",

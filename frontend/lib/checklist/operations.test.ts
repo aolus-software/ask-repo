@@ -20,6 +20,7 @@ function item(
     notes: null,
     citations: null,
     source: "generated",
+    kind: "positive",
     position,
     createdBy: "u",
     reviewedBy: null,

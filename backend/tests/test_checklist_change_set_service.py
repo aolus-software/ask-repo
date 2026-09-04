@@ -10,6 +10,7 @@ from app.config import Settings
 from app.core.errors import AppError, ErrorCode
 from app.models.checklist import (
     ChangeSetStatus,
+    ChecklistItemKind,
     ChecklistItemSource,
     ChecklistItemStatus,
     ChecklistModuleStatus,
@@ -355,3 +356,47 @@ async def test_an_operation_on_an_item_from_another_module_is_skipped(
     assert result.change_set.status is ChangeSetStatus.APPLIED
     await db_session.refresh(item)
     assert item.feature != "Mutated feature"
+
+
+async def test_apply_ignores_an_unrecognised_kind_in_an_update(
+    db_session: AsyncSession,
+) -> None:
+    """`kind` is on the update allowlist, but unlike the free-text fields it is
+    checked against the enum: the grid filters and the export group on it, so a value
+    outside the enum would be invisible to both. The existing kind is left alone
+    rather than defaulted -- an update saying nothing comprehensible about kind is not
+    a statement that the test became positive."""
+    module = await create_checklist_module(db_session, status=ChecklistModuleStatus.REVIEW)
+    item = await create_checklist_item(
+        db_session,
+        module_id=module.id,
+        project_id=module.project_id,
+        created_by=module.created_by,
+        kind=ChecklistItemKind.NEGATIVE,
+    )
+    change_set = await create_checklist_change_set(
+        db_session,
+        module_id=module.id,
+        status=ChangeSetStatus.PENDING,
+        operations=[
+            {
+                "op": "update",
+                "id": str(uuid.uuid4()),
+                "itemId": str(item.id),
+                "changes": {"kind": "whatever", "testName": "renamed"},
+                "rationale": "r",
+            }
+        ],
+    )
+    service = ChecklistChangeSetService(db_session, Settings())
+
+    await service.apply(
+        change_set.id,
+        ChangeSetApplyRequest(operation_ids=None),
+        actor=authenticated(await create_user(db_session)),
+    )
+
+    await db_session.refresh(item)
+    assert item.kind == ChecklistItemKind.NEGATIVE.value
+    # The rest of the operation still applied -- one bad field is not a skipped op.
+    assert item.test_name == "renamed"

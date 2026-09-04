@@ -145,3 +145,47 @@ def test_a_hallucinated_item_id_still_drops_an_update_or_remove(
     proposed = ProposedOperation(op=op, item_id="the login one", rationale="r")
 
     assert stored_operation(proposed) is None
+
+
+@pytest.mark.parametrize(
+    ("raw", "expected"),
+    [
+        ("negative", "negative"),
+        ("Negative", "negative"),
+        ("edge case", "negative"),
+        ("edge-case", "negative"),
+        ("error_path", "negative"),
+        ("sad path", "negative"),
+        ("positive", "positive"),
+        ("happy path", "positive"),
+        ("", "positive"),
+        ("nonsense", "positive"),
+    ],
+)
+def test_kind_is_narrowed_and_never_drops_the_operation(raw: str, expected: str) -> None:
+    """The model writes prose where an enum was asked for, so the value is narrowed.
+
+    Word-wise and punctuation-blind, because "edge case", "edge-case" and "negative
+    test" are all answers a model gives to the same question. Anything unrecognised
+    falls back to positive rather than dropping the operation -- the same lesson
+    `item_id` taught. Positive specifically: a mislabelled happy path is cosmetic,
+    while a mislabelled failure case inflates the negative coverage the field exists
+    to measure.
+    """
+    operation = ProposedOperation(
+        op="add", kind=raw, feature="Login", test_name="t", expected_result="e", rationale="r"
+    )
+
+    stored = stored_operation(operation)
+
+    assert stored is not None
+    assert stored["kind"] == expected
+
+
+def test_kind_is_absent_on_an_update_or_remove() -> None:
+    """Only an `add` carries a kind directly; an update moves it through `changes`,
+    where the allowlist checks it against the enum."""
+    stored = stored_operation(ProposedOperation(op="remove", item_id=str(uuid.uuid4())))
+
+    assert stored is not None
+    assert stored["kind"] is None

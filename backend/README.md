@@ -193,7 +193,7 @@ Modules over an indexed repository — a user names a module ("Authentication"),
 
 | Method | Path | Auth | Description |
 | --- | --- | --- | --- |
-| `GET` | `/checklist-items` | any user | List test cases across modules, paginated; filters for project, module, feature, status, source |
+| `GET` | `/checklist-items` | any user | List test cases across modules, paginated; filters for project, module, feature, status, source, kind |
 | `POST` | `/checklist-items` | any user | Add a test case by hand |
 | `PATCH` | `/checklist-items/{id}` | creator or admin | Edit what a test expects (name, feature, expected result, notes) |
 | `PUT` | `/checklist-items/{id}/result` | **any user** | Record a test result (current result and status); open to every user |

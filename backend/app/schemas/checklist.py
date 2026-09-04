@@ -17,6 +17,7 @@ from app.models.checklist import (
     MAX_SOURCE_PATH_CHARS,
     ChangeSetOrigin,
     ChangeSetStatus,
+    ChecklistItemKind,
     ChecklistItemSource,
     ChecklistItemStatus,
     ChecklistModuleStatus,
@@ -49,6 +50,7 @@ class ChecklistItemListQuery(ListQuery):
     feature: str | None = None
     status: ChecklistItemStatus | None = None
     source: ChecklistItemSource | None = None
+    kind: ChecklistItemKind | None = None
 
 
 class ChecklistModuleCreateRequest(ApiModel):
@@ -111,6 +113,7 @@ class ChecklistItemResponse(ApiModel):
     notes: str | None
     citations: list[CitationPayload] | None
     source: ChecklistItemSource
+    kind: ChecklistItemKind
     position: int
     created_by: uuid.UUID
     reviewed_by: uuid.UUID | None
@@ -132,6 +135,7 @@ class ChecklistItemCreateRequest(ApiModel):
     feature: str = Field(min_length=1, max_length=MAX_MODULE_NAME_CHARS)
     test_name: str = Field(min_length=1, max_length=MAX_TEST_NAME_CHARS)
     expected_result: str = Field(min_length=1, max_length=MAX_PROSE_CHARS)
+    kind: ChecklistItemKind = ChecklistItemKind.POSITIVE
     notes: str | None = Field(default=None, max_length=MAX_PROSE_CHARS)
 
 
@@ -146,6 +150,7 @@ class ChecklistItemUpdateRequest(ApiModel):
     feature: str | None = Field(default=None, min_length=1, max_length=MAX_MODULE_NAME_CHARS)
     test_name: str | None = Field(default=None, min_length=1, max_length=MAX_TEST_NAME_CHARS)
     expected_result: str | None = Field(default=None, min_length=1, max_length=MAX_PROSE_CHARS)
+    kind: ChecklistItemKind | None = None
     notes: str | None = Field(default=None, max_length=MAX_PROSE_CHARS)
 
 
@@ -181,6 +186,8 @@ class ChangeOperationPayload(ApiModel):
     feature: str | None = None
     test_name: str | None = None
     expected_result: str | None = None
+    # Present on `add`; an `update` moves it through `changes` like any other field.
+    kind: ChecklistItemKind | None = None
     citations: list[CitationPayload] | None = None
     # Field name to new value, for `update`. The keys are the camelCase field names
     # the client already knows from `ChecklistItemResponse`.

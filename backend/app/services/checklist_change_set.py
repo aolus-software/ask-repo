@@ -28,6 +28,7 @@ from app.models.checklist import (
     ChangeSetStatus,
     ChecklistChangeSet,
     ChecklistItem,
+    ChecklistItemKind,
     ChecklistItemSource,
     ChecklistItemStatus,
     ChecklistModule,
@@ -54,6 +55,10 @@ UPDATABLE_FIELDS = {
     "feature": "feature",
     "testName": "test_name",
     "expectedResult": "expected_result",
+    # Safe to let a proposal move: `kind` describes what the test is for, not what
+    # anyone observed. Unlike the free-text fields it is checked against the enum in
+    # the loop below, because the grid filters and the export group on it.
+    "kind": "kind",
     "notes": "notes",
 }
 
@@ -221,6 +226,9 @@ class ChecklistChangeSetService:
                     # `generated` means a model proposed it and a human reviewed it.
                     # This path is the only place that combination is produced.
                     source=ChecklistItemSource.GENERATED.value,
+                    # Narrowed to the enum in `stored_operation`, which defaults to
+                    # positive rather than dropping an operation over its label.
+                    kind=(operation.kind or ChecklistItemKind.POSITIVE).value,
                     position=await self.items.next_position(module_id=module.id, feature=feature),
                     created_by=actor.id,
                 )
@@ -240,6 +248,14 @@ class ChecklistChangeSetService:
             attribute = UPDATABLE_FIELDS.get(key)
             if attribute is None:
                 logger.warning("ignoring unknown field %r in change set update", key)
+                continue
+            # The free-text fields take whatever the model wrote; `kind` cannot,
+            # because the grid filters and the export group on it, and an
+            # unrecognised value would be invisible to both. Skipped rather than
+            # defaulted: unlike a generated `add`, an update that says nothing
+            # comprehensible about kind should leave the existing one alone.
+            if attribute == "kind" and value not in set(ChecklistItemKind):
+                logger.warning("ignoring unrecognised kind %r in change set update", value)
                 continue
             setattr(item, attribute, value)
         item.updated_at = datetime.now(UTC)

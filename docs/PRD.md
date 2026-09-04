@@ -398,6 +398,7 @@ class ChecklistItem(BaseModel):
     notes: str | None
     citations: list[Citation] | None    # file path + line range the expectation came from
     source: Literal["generated", "manual"]
+    kind: Literal["positive", "negative"]   # proves it works, or that it refuses
     position: int                       # stable ordering within (module, feature)
     created_by: UUID
     reviewed_by: UUID | None
@@ -442,6 +443,8 @@ class ChecklistMessage(BaseModel):
 Unlike `messages` (§4.2), `checklist_messages` **does** carry `deleted_at`. That exception was justified by conversations being private and deleted wholesale with their parent; a shared, auditable record does not get it.
 
 **At most one `pending` change set per module.** A second generation while one is pending is refused rather than queued: two overlapping diffs against the same items would have to be rebased against each other, and there is no sensible automatic answer to that.
+
+**Positive and negative coverage is data, not a naming convention.** Every test case carries a `kind`: `positive` (the feature does what it should with valid input) or `negative` (it refuses what it should refuse, or degrades safely). A generator left to itself proposes happy paths, because those are what the code most obviously does — so without a field the model must fill in, the absence of failure cases is invisible: the grid looks complete, the export looks complete, and nothing says which half is missing. As a field it can be filtered in the grid, grouped in the `.xlsx`, and counted. The model's answer is narrowed rather than trusted: anything unrecognised becomes `positive`, because a mislabelled happy path is cosmetic while a mislabelled failure case inflates the very coverage the field exists to measure. `kind` is on the change set's update allowlist — it describes what a test is *for*, not what anyone observed — but unlike the free-text fields it is checked against the enum, since the filter and the export both depend on it.
 
 **Out of scope for v1:** automated test execution, test-runner or CI integration, per-module RBAC, versioned checklist snapshots, and concurrent refinement (one pending change set per module).
 

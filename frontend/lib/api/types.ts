@@ -188,6 +188,8 @@ export type ChecklistModuleStatus =
   "empty" | "generating" | "review" | "ready" | "failed";
 export type ChecklistItemStatus = "untested" | "pass" | "fail" | "blocked";
 export type ChecklistItemSource = "generated" | "manual";
+/** Whether a case proves the feature works, or that it refuses what it should. */
+export type ChecklistItemKind = "positive" | "negative";
 export type ChangeSetOrigin = "generation" | "chat";
 export type ChangeSetStatus = "pending" | "applied" | "discarded";
 
@@ -228,6 +230,7 @@ export interface ChecklistItemResponse {
   notes: string | null;
   citations: CitationPayload[] | null;
   source: ChecklistItemSource;
+  kind: ChecklistItemKind;
   position: number;
   createdBy: string;
   reviewedBy: string | null;
@@ -252,6 +255,8 @@ export interface ChangeOperation {
   feature?: string | null;
   testName?: string | null;
   expectedResult?: string | null;
+  /** Present on `add`; an `update` moves it through `changes` like any other field. */
+  kind?: ChecklistItemKind | null;
   citations?: CitationPayload[] | null;
   changes?: Record<string, string> | null;
 }
@@ -307,4 +312,5 @@ export interface ChecklistItemListParams extends ListParams {
   feature?: string;
   status?: ChecklistItemStatus;
   source?: ChecklistItemSource;
+  kind?: ChecklistItemKind;
 }

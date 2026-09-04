@@ -57,6 +57,21 @@ class ChecklistItemSource(StrEnum):
     MANUAL = "manual"
 
 
+class ChecklistItemKind(StrEnum):
+    """Whether the case proves the feature works, or that it refuses what it should.
+
+    Data rather than a naming convention, because a checklist is judged on its
+    negative coverage and a convention cannot be counted. A generator left to itself
+    proposes happy paths -- they are what the code most obviously does -- so without
+    a field the model must fill in, the absence of failure cases is invisible: the
+    grid looks complete, the export looks complete, and nothing anywhere says which
+    half is missing (spec 3.2).
+    """
+
+    POSITIVE = "positive"
+    NEGATIVE = "negative"
+
+
 class ChangeSetOrigin(StrEnum):
     """Which of the two producers emitted this change set."""
 
@@ -129,6 +144,8 @@ class ChecklistItem(Base, TimestampMixin, SoftDeleteMixin):
         Index("ix_checklist_items_module_id_feature_position", "module_id", "feature", "position"),
         # The status filter across modules, and the export.
         Index("ix_checklist_items_project_id_status", "project_id", "status"),
+        # The same, for the positive/negative filter.
+        Index("ix_checklist_items_project_id_kind", "project_id", "kind"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(
@@ -159,6 +176,12 @@ class ChecklistItem(Base, TimestampMixin, SoftDeleteMixin):
     # renders on a test case with no new component (spec 3.2).
     citations: Mapped[list[dict[str, object]] | None] = mapped_column(JSONB, nullable=True)
     source: Mapped[str] = mapped_column(String(16), nullable=False)
+    # Defaulted rather than nullable: every test case is one or the other, and a NULL
+    # would mean "nobody said", which is a third state the grid would have to render
+    # and the filter would have to exclude.
+    kind: Mapped[str] = mapped_column(
+        String(16), nullable=False, default=ChecklistItemKind.POSITIVE.value
+    )
     position: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
 
     created_by: Mapped[uuid.UUID] = mapped_column(

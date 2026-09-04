@@ -9,6 +9,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import type {
+  ChecklistItemKind,
   ChecklistItemListParams,
   ChecklistItemSource,
   ChecklistItemStatus,
@@ -32,6 +33,11 @@ const STATUS_LABELS: Record<ChecklistItemStatus, string> = {
 const SOURCE_LABELS: Record<ChecklistItemSource, string> = {
   generated: "Generated",
   manual: "Manual",
+};
+
+const KIND_LABELS: Record<ChecklistItemKind, string> = {
+  positive: "Positive",
+  negative: "Negative",
 };
 
 export function ItemFilters({
@@ -67,12 +73,50 @@ export function ItemFilters({
             })
           }
         >
-          <SelectTrigger>
-            <SelectValue placeholder="All statuses" />
+          <SelectTrigger className="w-full">
+            {/* Base UI renders the raw selected value, not the item's label, so
+                without this the trigger reads "any" or "pass" instead of the
+                wording in the menu. */}
+            <SelectValue>
+              {(value: string) =>
+                value === ANY
+                  ? "All statuses"
+                  : STATUS_LABELS[value as ChecklistItemStatus]
+              }
+            </SelectValue>
           </SelectTrigger>
           <SelectContent>
             <SelectItem value={ANY}>All statuses</SelectItem>
             {Object.entries(STATUS_LABELS).map(([key, label]) => (
+              <SelectItem key={key} value={key}>
+                {label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
+      <div>
+        {/* The filter this whole field exists for: "show me the failure coverage". */}
+        <Select
+          value={currentFilters.kind ?? ANY}
+          onValueChange={(value) =>
+            onFiltersChange({
+              ...currentFilters,
+              kind: value === ANY ? undefined : (value as ChecklistItemKind),
+            })
+          }
+        >
+          <SelectTrigger className="w-full">
+            <SelectValue>
+              {(value: string) =>
+                value === ANY ? "All kinds" : KIND_LABELS[value as ChecklistItemKind]
+              }
+            </SelectValue>
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value={ANY}>All kinds</SelectItem>
+            {Object.entries(KIND_LABELS).map(([key, label]) => (
               <SelectItem key={key} value={key}>
                 {label}
               </SelectItem>
@@ -91,8 +135,17 @@ export function ItemFilters({
             })
           }
         >
-          <SelectTrigger>
-            <SelectValue placeholder="All sources" />
+          <SelectTrigger className="w-full">
+            {/* Base UI renders the raw selected value, not the item's label, so
+                without this the trigger reads "any" or "pass" instead of the
+                wording in the menu. */}
+            <SelectValue>
+              {(value: string) =>
+                value === ANY
+                  ? "All sources"
+                  : SOURCE_LABELS[value as ChecklistItemSource]
+              }
+            </SelectValue>
           </SelectTrigger>
           <SelectContent>
             <SelectItem value={ANY}>All sources</SelectItem>

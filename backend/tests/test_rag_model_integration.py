@@ -27,7 +27,9 @@ import httpx
 import pytest
 
 from app.checklist.model_output import ProposedChangeSet
+from app.checklist.operations import _narrow_kind
 from app.config import Settings
+from app.models.checklist import ChecklistItemKind
 from app.rag.chat import build_chat_model
 from app.rag.graph.state import Classification
 from app.rag.prompts import (
@@ -244,3 +246,39 @@ async def test_reduce_proposes_an_update_rather_than_a_duplicate_add(settings: S
     updates = [operation for operation in result.operations if operation.op == "update"]
     assert updates
     assert updates[0].item_id == "11111111-1111-1111-1111-111111111111"
+
+
+async def test_reduce_proposes_negative_cases_not_only_happy_paths(
+    settings: Settings,
+) -> None:
+    """The property the `kind` field exists to make measurable.
+
+    A generator left to itself proposes happy paths: they are what the code most
+    obviously does. Given observations that name a refusal and a success, the plan
+    must cover both -- a checklist of only positives says nothing about what happens
+    when the feature is misused, which is where defects live.
+
+    Only a real model can check this. `ScriptedChatModel` returns whatever the test
+    scripted, so the entire unit suite passes against a prompt that never asks for a
+    negative case at all.
+    """
+    model = build_chat_model(settings).with_structured_output(ProposedChangeSet)
+    result = await model.ainvoke(
+        build_reduce_prompt(
+            module_name="Authentication",
+            observations=[
+                ("app/auth/login.py", "returns an access token on a correct password", 45, 52),
+                ("app/auth/login.py", "raises 401 INVALID_CREDENTIALS on a wrong password", 30, 44),
+                ("app/auth/login.py", "raises 422 when the email field is missing", 20, 29),
+                ("app/auth/login.py", "raises 429 after five attempts in a minute", 53, 61),
+            ],
+            existing=[],
+        )
+    )
+
+    assert isinstance(result, ProposedChangeSet)
+    kinds = [_narrow_kind(operation.kind) for operation in result.operations]
+    assert ChecklistItemKind.NEGATIVE in kinds, (
+        f"no negative test proposed for three refusal observations; kinds were {kinds}"
+    )
+    assert ChecklistItemKind.POSITIVE in kinds, f"no positive test proposed; kinds were {kinds}"
