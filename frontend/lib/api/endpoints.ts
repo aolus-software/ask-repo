@@ -43,6 +43,7 @@ export const endpoints = {
   checklistItems: {
     list: "/checklist-items",
     export: "/checklist-items/export",
+    clearResults: "/checklist-items/clear-results",
     detail: (id: string) => `/checklist-items/${id}`,
     result: (id: string) => `/checklist-items/${id}/result`,
   },

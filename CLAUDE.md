@@ -15,7 +15,7 @@ disagree, that is a contradiction to report — not a doc to quietly rewrite.
 **Status: M0, M1, M2, M3, and M4 (backend) shipped.** The backend serves an index route, health
 checks, the full auth/accounts surface (admin-provisioned users, login, forced first-login
 password change, session rotation, login rate limiting), the project CRUD routes, the
-conversation routes that answer questions about an indexed project, and the seventeen QA
+conversation routes that answer questions about an indexed project, and the eighteen QA
 Checklist routes that name modules over a repository, generate reviewed test plans for them,
 refine them by chat, record results, and export the grid to `.xlsx`. **All four
 datastores are read** — Postgres, Redis, Qdrant, and Kafka. The worker reads a chat model as
@@ -47,7 +47,7 @@ holds the generator, the model's output contracts, and the file rebuild; `app/qu
 holds the job handler the worker runs; `app/services/checklist_module.py`,
 `checklist_item.py`, `checklist_change_set.py` and `checklist_export.py` hold the business rules;
 and `checklist_modules.py`, `checklist_items.py` and `checklist_change_sets.py` put them behind
-seventeen routes.
+eighteen routes.
 
 Two facts about it outrank the rest. **The generator scrolls the index; it does not search it**
 — top-k retrieval cannot report what it left out, and a test plan that silently omits a file is

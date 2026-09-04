@@ -1,5 +1,7 @@
 """Item business rules. The two writes, and the split between them, are the point."""
 
+import uuid
+
 import pytest
 from fastapi import status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -12,6 +14,7 @@ from app.schemas.checklist import (
     ChecklistItemListQuery,
     ChecklistItemResultRequest,
     ChecklistItemUpdateRequest,
+    ChecklistResultsClearRequest,
 )
 from app.services.checklist_item import ChecklistItemService
 from tests.factories import create_checklist_item, create_checklist_module, create_user
@@ -294,3 +297,50 @@ async def test_delete_is_gated_and_hides_the_item(db_session: AsyncSession) -> N
         ChecklistItemListQuery(module_id=module.id), actor=authenticated(creator)
     )
     assert item.id not in {row.id for row in remaining.items}
+
+
+async def test_clear_results_is_open_to_a_user_who_did_not_create_the_checklist(
+    db_session: AsyncSession,
+) -> None:
+    """Ungated, exactly like the result write it undoes (spec 2.5).
+
+    Gating this on `created_by` would let a tester record an observation and then not
+    be allowed to take it back, which is the mirror image of the reason recording is
+    open in the first place.
+    """
+    module = await create_checklist_module(db_session)
+    item = await create_checklist_item(
+        db_session,
+        module_id=module.id,
+        project_id=module.project_id,
+        created_by=module.created_by,
+        status=ChecklistItemStatus.PASS,
+        current_result="200 OK",
+    )
+    service = ChecklistItemService(db_session, Settings())
+    stranger = authenticated(await create_user(db_session))
+
+    response = await service.clear_results(
+        ChecklistResultsClearRequest(module_id=module.id), actor=stranger
+    )
+
+    assert response.cleared_count == 1
+    await db_session.refresh(item)
+    assert item.status == ChecklistItemStatus.UNTESTED.value
+    assert item.current_result is None
+
+
+async def test_clear_results_404s_on_a_module_outside_the_scope(
+    db_session: AsyncSession,
+) -> None:
+    """Bounded rather than gated: the request names one module and the module has to
+    be readable, so nothing can widen the blast radius past it."""
+    service = ChecklistItemService(db_session, Settings())
+
+    with pytest.raises(AppError) as caught:
+        await service.clear_results(
+            ChecklistResultsClearRequest(module_id=uuid.uuid4()),
+            actor=authenticated(await create_user(db_session)),
+        )
+
+    assert caught.value.status_code == 404

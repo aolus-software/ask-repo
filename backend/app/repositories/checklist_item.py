@@ -11,7 +11,7 @@ from typing import Any, cast
 from sqlalchemy import CursorResult, Select, func, select, update
 
 from app.core.access import ProjectScope
-from app.models.checklist import ChecklistItem
+from app.models.checklist import ChecklistItem, ChecklistItemStatus
 from app.repositories.base import BaseRepository
 
 
@@ -211,6 +211,55 @@ class ChecklistItemRepository(BaseRepository[ChecklistItem]):
             update(ChecklistItem)
             .where(ChecklistItem.module_id == module_id, ChecklistItem.deleted_at.is_(None))
             .values(deleted_at=func.now(), updated_at=func.now())
+        )
+        return cast(CursorResult[Any], result).rowcount
+
+    async def clear_results(
+        self,
+        *,
+        scope: ProjectScope,
+        module_id: uuid.UUID,
+        feature: str | None = None,
+        status: str | None = None,
+        source: str | None = None,
+        kind: str | None = None,
+        search: str | None = None,
+    ) -> int:
+        """Reset the recorded result on every row the filter selects. Returns how many.
+
+        The filter is the one on screen, so a tester can re-run just the failures or
+        just the negatives without touching the rest. `module_id` is required rather
+        than optional: every other filter narrows, so a missing one widens, and an
+        omitted module would silently clear a whole project's observations.
+
+        The rows are selected through `_scoped`, which applies the access resolver like
+        every other read -- an empty scope renders `WHERE false` and clears nothing.
+
+        `reviewed_by` and `reviewed_at` go with the result. `untested` means nobody has
+        looked; a name left behind would say somebody did, which is the same reasoning
+        `ChecklistItemService.set_result` applies to a single row.
+        """
+        selected = self._scoped(
+            scope,
+            module_id=module_id,
+            feature=feature,
+            status=status,
+            source=source,
+            kind=kind,
+            search=search,
+        )
+        result = await self.session.execute(
+            update(ChecklistItem)
+            .where(ChecklistItem.id.in_(select(selected.subquery().c.id)))
+            .values(
+                current_result=None,
+                status=ChecklistItemStatus.UNTESTED.value,
+                reviewed_by=None,
+                reviewed_at=None,
+                # Bulk UPDATE: `onupdate` does not fire on this path
+                # (.claude/rules/persistence.md).
+                updated_at=func.now(),
+            )
         )
         return cast(CursorResult[Any], result).rowcount
 

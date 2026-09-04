@@ -6,6 +6,7 @@ import { apiFetch } from "@/lib/api/client";
 import { endpoints } from "@/lib/api/endpoints";
 import type {
   ChecklistItemKind,
+  ChecklistItemListParams,
   ChecklistItemResponse,
   ChecklistItemStatus,
   ChecklistModuleDetailResponse,
@@ -171,6 +172,37 @@ export function useCreateChecklistItem(moduleId: string) {
       apiFetch<ChecklistItemResponse>(endpoints.checklistItems.list, {
         method: "POST",
         body: JSON.stringify({ moduleId, ...input }),
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: keys.checklistModules.detail(moduleId),
+      });
+      queryClient.invalidateQueries({ queryKey: keys.checklistItems.all });
+    },
+  });
+}
+
+/**
+ * Clear the recorded results the grid is currently filtered to.
+ *
+ * Ungated like the result write it undoes. The filter travels with the request rather
+ * than the client sending ids: the server re-runs the same scoped query the list did,
+ * so what is cleared is what the filter selects at that moment, not a list the browser
+ * assembled and might have stale.
+ */
+export function useClearChecklistResults(moduleId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (filters: Partial<ChecklistItemListParams>) =>
+      apiFetch<{ clearedCount: number }>(endpoints.checklistItems.clearResults, {
+        method: "POST",
+        body: JSON.stringify({
+          moduleId,
+          feature: filters.feature,
+          status: filters.status,
+          source: filters.source,
+          kind: filters.kind,
+        }),
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({

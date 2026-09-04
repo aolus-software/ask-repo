@@ -86,11 +86,12 @@ def _checklist_routes(app: FastAPI) -> list[APIRoute]:
     ]
 
 
-def test_the_checklist_surface_is_the_seventeen_routes_the_spec_names(app: FastAPI) -> None:
+def test_the_checklist_surface_is_the_eighteen_routes_the_spec_names(app: FastAPI) -> None:
     """A count, so a route silently dropped during a refactor is a failure here.
 
-    Seventeen is `docs/superpowers/specs/2026-09-01-m4-qa-checklist-design.md` §6's
-    table. Changing this number means changing that table in the same commit.
+    Seventeen was `docs/superpowers/specs/2026-09-01-m4-qa-checklist-design.md` §6's
+    table; `POST /checklist-items/clear-results` is the eighteenth. Changing this
+    number means changing that table, and `backend/README.md`, in the same commit.
     """
     mounted = {
         (method, route.path)
@@ -111,6 +112,7 @@ def test_the_checklist_surface_is_the_seventeen_routes_the_spec_names(app: FastA
         ("GET", "/checklist-items"),
         ("POST", "/checklist-items"),
         ("GET", "/checklist-items/export"),
+        ("POST", "/checklist-items/clear-results"),
         ("PATCH", "/checklist-items/{item_id}"),
         ("PUT", "/checklist-items/{item_id}/result"),
         ("DELETE", "/checklist-items/{item_id}"),

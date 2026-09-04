@@ -1,11 +1,12 @@
 "use client";
 
-import { Download, Plus, Sparkles } from "lucide-react";
+import { Download, Eraser, Plus, Sparkles } from "lucide-react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 
 import { ChangeSetPanel } from "@/components/checklist/change-set-panel";
 import { CreateItemDialog } from "@/components/checklist/create-item-dialog";
+import { ConfirmDialog } from "@/components/form/confirm-dialog";
 import { ChatPanel } from "@/components/checklist/chat-panel";
 import { ItemFilters } from "@/components/checklist/item-filters";
 import { ItemGrid } from "@/components/checklist/item-grid";
@@ -19,6 +20,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { useGenerateChecklistModule } from "@/hooks/use-checklist-mutations";
 import { useSession } from "@/hooks/use-session";
 import { useChecklistModule, useModuleChangeSets } from "@/hooks/use-checklist";
+import { useClearChecklistResults } from "@/hooks/use-checklist-mutations";
 import { checklistItemListQueryString } from "@/lib/api/endpoints";
 import { isApiError } from "@/lib/api/errors";
 import type { ChecklistItemListParams } from "@/lib/api/types";
@@ -29,6 +31,8 @@ export function ModuleScreen({ moduleId }: { moduleId: string }) {
   const generate = useGenerateChecklistModule(moduleId);
   const [filters, setFilters] = useState<Partial<ChecklistItemListParams>>({});
   const [addingItem, setAddingItem] = useState(false);
+  const [confirmingClear, setConfirmingClear] = useState(false);
+  const clearResults = useClearChecklistResults(moduleId);
 
   const checklistModule = query.data;
   const pendingChangeSetId = checklistModule?.pendingChangeSetId ?? null;
@@ -50,9 +54,14 @@ export function ModuleScreen({ moduleId }: { moduleId: string }) {
         (!filters.feature ||
           item.feature.toLowerCase().includes(filters.feature.toLowerCase())) &&
         (!filters.status || item.status === filters.status) &&
-        (!filters.source || item.source === filters.source),
+        (!filters.source || item.source === filters.source) &&
+        (!filters.kind || item.kind === filters.kind),
     );
   }, [checklistModule?.items, filters]);
+
+  // Counted from the rows on screen so the button can name the number, and hidden
+  // entirely at zero -- an enabled control that would do nothing is worse than none.
+  const recordedCount = items.filter((item) => item.status !== "untested").length;
 
   if (query.isLoading) {
     return (
@@ -190,7 +199,47 @@ export function ModuleScreen({ moduleId }: { moduleId: string }) {
 
       <ItemFilters currentFilters={filters} onFiltersChange={setFilters} />
 
+      {/* Beside the filters, not in the header: what it clears is whatever they
+          select, so it belongs where the user can see the selection. */}
+      {recordedCount > 0 ? (
+        <div className="flex justify-end">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setConfirmingClear(true)}
+            disabled={clearResults.isPending}
+          >
+            <Eraser className="size-4" />
+            Clear {recordedCount} recorded {recordedCount === 1 ? "result" : "results"}
+          </Button>
+        </div>
+      ) : null}
+
       <ItemGrid items={items} moduleId={moduleId} user={user} />
+
+      <ConfirmDialog
+        open={confirmingClear}
+        onOpenChange={setConfirmingClear}
+        title="Clear these recorded results?"
+        description={`This resets ${recordedCount} ${recordedCount === 1 ? "result" : "results"} to untested and discards what was observed. Only the rows the current filter selects are affected. The test cases stay.`}
+        confirmLabel="Clear results"
+        isPending={clearResults.isPending}
+        error={clearResults.error}
+        onConfirm={() =>
+          clearResults.mutate(filters, {
+            onSuccess: (data) => {
+              toast.success(
+                `Cleared ${data.clearedCount} recorded ${data.clearedCount === 1 ? "result" : "results"}`,
+              );
+              setConfirmingClear(false);
+            },
+            onError: (error) =>
+              toast.error(
+                isApiError(error) ? error.message : "That did not clear. Try again.",
+              ),
+          })
+        }
+      />
 
       <CreateItemDialog
         moduleId={moduleId}

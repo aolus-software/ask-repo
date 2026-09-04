@@ -154,6 +154,30 @@ class ChecklistItemUpdateRequest(ApiModel):
     notes: str | None = Field(default=None, max_length=MAX_PROSE_CHARS)
 
 
+class ChecklistResultsClearRequest(ApiModel):
+    """Which recorded results to reset. The filters the grid is showing.
+
+    `module_id` is required while every other field is optional, and that asymmetry is
+    the safety property: the others narrow, so an omitted one widens, and a request
+    that forgot the module would clear a whole project's observations. Nothing here
+    can widen past one module.
+    """
+
+    module_id: uuid.UUID
+    feature: str | None = None
+    status: ChecklistItemStatus | None = None
+    source: ChecklistItemSource | None = None
+    kind: ChecklistItemKind | None = None
+    search: str | None = None
+
+
+class ChecklistResultsClearResponse(ApiModel):
+    """How many rows were reset. Reported because the caller filtered, and a filter
+    that matched nothing is worth seeing rather than a silent success."""
+
+    cleared_count: int
+
+
 class ChecklistItemResultRequest(ApiModel):
     """Record what a tester observed. Open to every authenticated user.
 

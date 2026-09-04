@@ -1,5 +1,7 @@
 """Item persistence: scoping, grid ordering, positions, and the export read."""
 
+from datetime import UTC, datetime
+
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.access import ProjectScope
@@ -130,3 +132,72 @@ async def test_soft_delete_for_module_hides_the_items(db_session: AsyncSession) 
 
     assert await repository.soft_delete_for_module(module.id) == 1
     assert await repository.list_for_module(module.id) == []
+
+
+async def test_clear_results_resets_only_the_filtered_rows(db_session: AsyncSession) -> None:
+    """Scoped to the filter on screen, not the whole module.
+
+    Clearing is how a tester starts a fresh round against a new build, and it is
+    usually partial: re-run the failures, or re-run the negatives. Applying it to
+    everything visible on the module would destroy the results the filter was hiding.
+    """
+    module = await create_checklist_module(db_session)
+    failed = await create_checklist_item(
+        db_session,
+        module_id=module.id,
+        project_id=module.project_id,
+        created_by=module.created_by,
+        status=ChecklistItemStatus.FAIL,
+        current_result="500",
+    )
+    passed = await create_checklist_item(
+        db_session,
+        module_id=module.id,
+        project_id=module.project_id,
+        created_by=module.created_by,
+        status=ChecklistItemStatus.PASS,
+        current_result="200 OK",
+    )
+    failed.reviewed_by = module.created_by
+    failed.reviewed_at = datetime.now(UTC)
+    await db_session.flush()
+    repository = ChecklistItemRepository(db_session)
+
+    cleared = await repository.clear_results(
+        scope=ProjectScope.all(), module_id=module.id, status=ChecklistItemStatus.FAIL.value
+    )
+
+    assert cleared == 1
+    await db_session.refresh(failed)
+    await db_session.refresh(passed)
+    assert failed.status == ChecklistItemStatus.UNTESTED.value
+    assert failed.current_result is None
+    # `untested` means nobody has looked, so a name left on it would say somebody did.
+    assert failed.reviewed_by is None
+    assert failed.reviewed_at is None
+    # The row the filter excluded keeps everything.
+    assert passed.status == ChecklistItemStatus.PASS.value
+    assert passed.current_result == "200 OK"
+
+
+async def test_clear_results_will_not_reach_outside_the_scope(
+    db_session: AsyncSession,
+) -> None:
+    """The access resolver bounds it like every other read. An empty scope clears
+    nothing rather than everything -- `in_(())` renders `WHERE false`."""
+    module = await create_checklist_module(db_session)
+    item = await create_checklist_item(
+        db_session,
+        module_id=module.id,
+        project_id=module.project_id,
+        created_by=module.created_by,
+        status=ChecklistItemStatus.PASS,
+        current_result="200 OK",
+    )
+    repository = ChecklistItemRepository(db_session)
+
+    cleared = await repository.clear_results(scope=ProjectScope.of([]), module_id=module.id)
+
+    assert cleared == 0
+    await db_session.refresh(item)
+    assert item.status == ChecklistItemStatus.PASS.value

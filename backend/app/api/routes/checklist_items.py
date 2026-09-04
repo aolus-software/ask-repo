@@ -19,6 +19,8 @@ from app.schemas.checklist import (
     ChecklistItemResponse,
     ChecklistItemResultRequest,
     ChecklistItemUpdateRequest,
+    ChecklistResultsClearRequest,
+    ChecklistResultsClearResponse,
 )
 from app.schemas.errors import ERROR_RESPONSES
 from app.schemas.pagination import PaginatedResponse
@@ -76,6 +78,29 @@ async def export_checklist(
         media_type=XLSX_MEDIA_TYPE,
         headers={"Content-Disposition": 'attachment; filename="qa-checklist.xlsx"'},
     )
+
+
+@router.post(
+    "/clear-results",
+    response_model=ChecklistResultsClearResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Clear the recorded results the filter selects",
+    responses={code: ERROR_RESPONSES[code] for code in (401, 403, 404, 422)},
+)
+async def clear_checklist_results(
+    payload: ChecklistResultsClearRequest,
+    current_user: CurrentUser,
+    service: ChecklistItemServiceDep,
+) -> ChecklistResultsClearResponse:
+    """Reset the result on every row the filter selects, in one module.
+
+    Ungated like the result write it undoes (spec 2.5), and `200` rather than `204`
+    because the count is the answer -- a filter that matched nothing is worth seeing.
+
+    Declared before the parameterised item routes: FastAPI matches in declaration
+    order, so a literal segment after a parameterised one is swallowed as an id.
+    """
+    return await service.clear_results(payload, actor=current_user)
 
 
 @router.post(

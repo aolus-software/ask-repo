@@ -199,6 +199,7 @@ Modules over an indexed repository — a user names a module ("Authentication"),
 | `PUT` | `/checklist-items/{id}/result` | **any user** | Record a test result (current result and status); open to every user |
 | `DELETE` | `/checklist-items/{id}` | creator or admin | Soft-delete the test case |
 | `GET` | `/checklist-items/export` | any user | Export the filtered checklist as `.xlsx`, regardless of pagination limit |
+| `POST` | `/checklist-items/clear-results` | **any user** | Reset the recorded result on every row the filter selects, within one module |
 
 **Checklist Change Sets**
 
@@ -212,7 +213,7 @@ Nothing generated enters the checklist unreviewed: generation writes a *pending 
 `POST /checklist-modules/{id}/messages` follows the same pre-flight/stream split as
 `POST /conversations/{id}/messages`: everything that needs a status code happens before the stream opens, and the streamed proposal is written server-side into a change set rather than posted back by the client.
 
-`GET /checklist-items/export` is declared **before** the parameterised `/checklist-items/{item_id}` routes because FastAPI matches in declaration order: a literal segment declared after a parameterised one is swallowed as an id, so a `GET /checklist-items/{item_id}` added later would take the export's requests unless the export stays first. The export is capped at `checklist_export_max_rows` (default 5000) rows and returns `409 EXPORT_TOO_LARGE` over that limit, since `openpyxl` builds the whole workbook in memory.
+`GET /checklist-items/export` and `POST /checklist-items/clear-results` are declared **before** the parameterised `/checklist-items/{item_id}` routes because FastAPI matches in declaration order: a literal segment declared after a parameterised one is swallowed as an id, so a `GET /checklist-items/{item_id}` added later would take the export's requests unless the export stays first. The export is capped at `checklist_export_max_rows` (default 5000) rows and returns `409 EXPORT_TOO_LARGE` over that limit, since `openpyxl` builds the whole workbook in memory.
 
 Recording a result is open to every authenticated user while editing what a test expects is not: a tester must be able to record what they saw without being able to rewrite what was expected.
 

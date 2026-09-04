@@ -37,6 +37,8 @@ from app.schemas.checklist import (
     ChecklistItemResponse,
     ChecklistItemResultRequest,
     ChecklistItemUpdateRequest,
+    ChecklistResultsClearRequest,
+    ChecklistResultsClearResponse,
 )
 from app.schemas.pagination import PaginatedResponse
 from app.services.checklist_export import build_workbook
@@ -217,6 +219,34 @@ class ChecklistItemService:
         """Module ids mapped to names, in one query."""
         modules = await self.modules.get_many({row.module_id for row in rows})
         return {module.id: module.name for module in modules}
+
+    async def clear_results(
+        self, payload: ChecklistResultsClearRequest, *, actor: AuthenticatedUser
+    ) -> ChecklistResultsClearResponse:
+        """Reset the recorded results the filter selects.
+
+        Ungated, exactly like recording one (spec 2.5). Clearing a result is
+        un-recording it, so gating it on `created_by` would mean a tester could write
+        an observation and then not be allowed to take it back -- and the reason the
+        write is open is that a tester must be able to say what they saw without
+        needing the checklist's author.
+
+        It is bounded instead of gated: the request names one module, the module must
+        be in the caller's scope, and the rows are selected through the same scoped
+        query every read uses.
+        """
+        await self._require_readable_module(payload.module_id, actor)
+        cleared = await self.items.clear_results(
+            scope=access.resolve_project_scope(actor),
+            module_id=payload.module_id,
+            feature=payload.feature,
+            status=payload.status.value if payload.status else None,
+            source=payload.source.value if payload.source else None,
+            kind=payload.kind.value if payload.kind else None,
+            search=payload.search,
+        )
+        await self.session.commit()
+        return ChecklistResultsClearResponse(cleared_count=cleared)
 
     async def _require_readable(
         self, item_id: uuid.UUID, actor: AuthenticatedUser
