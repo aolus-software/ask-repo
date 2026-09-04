@@ -206,7 +206,7 @@ export function ItemGrid({
                         {item.kind === "negative" ? (
                           <Badge
                             variant="outline"
-                            className="text-warning-foreground border-warning/60 w-fit text-xs font-normal"
+                            className="text-warning border-warning/60 w-fit text-xs font-normal"
                           >
                             Negative
                           </Badge>

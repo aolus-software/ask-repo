@@ -1,10 +1,11 @@
 "use client";
 
-import { Download, Sparkles } from "lucide-react";
+import { Download, Plus, Sparkles } from "lucide-react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 
 import { ChangeSetPanel } from "@/components/checklist/change-set-panel";
+import { CreateItemDialog } from "@/components/checklist/create-item-dialog";
 import { ChatPanel } from "@/components/checklist/chat-panel";
 import { ItemFilters } from "@/components/checklist/item-filters";
 import { ItemGrid } from "@/components/checklist/item-grid";
@@ -27,6 +28,7 @@ export function ModuleScreen({ moduleId }: { moduleId: string }) {
   const query = useChecklistModule(moduleId);
   const generate = useGenerateChecklistModule(moduleId);
   const [filters, setFilters] = useState<Partial<ChecklistItemListParams>>({});
+  const [addingItem, setAddingItem] = useState(false);
 
   const checklistModule = query.data;
   const pendingChangeSetId = checklistModule?.pendingChangeSetId ?? null;
@@ -148,6 +150,11 @@ export function ModuleScreen({ moduleId }: { moduleId: string }) {
             response is a binary body the browser should save itself, and the filters
             are the ones on screen so the sheet matches the grid.
           */}
+          <Button variant="outline" onClick={() => setAddingItem(true)}>
+            <Plus className="size-4" />
+            Add test case
+          </Button>
+
           <Button
             variant="outline"
             nativeButton={false}
@@ -184,6 +191,12 @@ export function ModuleScreen({ moduleId }: { moduleId: string }) {
       <ItemFilters currentFilters={filters} onFiltersChange={setFilters} />
 
       <ItemGrid items={items} moduleId={moduleId} user={user} />
+
+      <CreateItemDialog
+        moduleId={moduleId}
+        open={addingItem}
+        onOpenChange={setAddingItem}
+      />
 
       <ChatPanel
         moduleId={moduleId}

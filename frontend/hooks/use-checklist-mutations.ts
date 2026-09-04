@@ -151,6 +151,36 @@ export function useUpdateChecklistItemDetail(moduleId: string) {
   });
 }
 
+/**
+ * Add a test case by hand.
+ *
+ * No change set: the indirection exists to keep *model-authored* rows out of the
+ * checklist unreviewed, and a human typing a test case is already the review. The
+ * server stamps `source: "manual"` and `status: "untested"` itself, so neither is in
+ * the request -- a hand-written row must not be able to arrive pre-passed.
+ */
+export function useCreateChecklistItem(moduleId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: {
+      feature: string;
+      testName: string;
+      expectedResult: string;
+      kind: ChecklistItemKind;
+    }) =>
+      apiFetch<ChecklistItemResponse>(endpoints.checklistItems.list, {
+        method: "POST",
+        body: JSON.stringify({ moduleId, ...input }),
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: keys.checklistModules.detail(moduleId),
+      });
+      queryClient.invalidateQueries({ queryKey: keys.checklistItems.all });
+    },
+  });
+}
+
 export function useDeleteChecklistItem(moduleId: string) {
   const queryClient = useQueryClient();
   return useMutation({
