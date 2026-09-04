@@ -67,7 +67,7 @@ The `Makefile` at the root wraps everything; `make help` lists all targets.
 ```bash
 make setup            # install backend + frontend dependencies
 make infra            # start postgres + qdrant + redis + kafka + ollama, wait until healthy
-make dev              # both dev servers together (needs `make infra` first)
+make dev              # both dev servers + the worker (needs `make infra` first)
 make check            # lint + format-check + typecheck + test, as CI would
 make test-one T=tests/test_api_model.py
 make up               # whole stack in Docker, apps included (development)
@@ -223,6 +223,16 @@ Two consequences: a worker that dies holding a lease is recovered when the lease
 reconcile sweep in `app/worker.py` re-enqueues it), and a duplicate delivery is *supposed* to be
 cheap — it costs one refused claim. That is why the consumer can safely absorb an error and leave
 the offset uncommitted.
+
+**The checklist sweep is the exception, and it has to be.** A project leaves `pending` the moment
+anyone claims it, so it stops matching the sweep on its own. A module is already `generating`
+before its claim and stays `generating` throughout, so status says nothing about whether a worker
+holds it — and the sweep re-publishes with a deliberately fresh `job_id` so the claim *cannot*
+refuse it. A duplicate there costs a whole generation, not a refused claim. `claim_stranded`
+therefore stamps `updated_at` on the rows it returns, which is what stops the 60-second tick
+re-publishing the same module forever. For the same reason a run that fails but is coming back
+calls `ChecklistModuleRepository.defer`: rolling back alone leaves a five-minute lease owned by a
+run that is over, and the retry is then refused by its own dead predecessor.
 
 ### A long job pauses its partitions and keeps polling
 

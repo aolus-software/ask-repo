@@ -46,18 +46,19 @@ with the password you set; both are seeded with `must_change_password` set.
 
 ### The ingestion worker
 
-The API only *enqueues* indexing jobs. Nothing indexes until a worker is running, so a
-new project sits at `pending` until you start one — in a second terminal:
+The API only *enqueues* indexing and checklist-generation jobs. Nothing indexes and no
+checklist is generated until a worker is running, so a new project sits at `pending` and a
+module sits at `generating` until one is. `make dev` starts one for you; to run a lone one:
 
 ```bash
-cd backend
-uv run python -m app.worker
+make worker            # or, equivalently:
+cd backend && uv run python -m app.worker
 ```
 
 It is the same codebase with a different entrypoint, so it reads the same `Settings` and
-the same `.env`. One process runs the ingest consumer, one consumer per retry rung, and a
-sweep every 60 seconds that re-enqueues jobs whose produce failed or whose worker died,
-and prunes expired refresh tokens. Run more than one and they share the ingest topic's
+the same `.env`. One process runs the ingest consumer, the checklist consumer, one consumer
+per retry rung of each, and a sweep every 60 seconds that re-enqueues jobs whose produce
+failed or whose worker died, and prunes expired refresh tokens. Run more than one and they share the ingest topic's
 partitions — two is the configured cap (`KAFKA_INGEST_PARTITIONS`).
 
 ## Running in Docker

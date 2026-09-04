@@ -106,7 +106,7 @@ make setup                                        # uv sync + bun install
 make infra                                        # postgres + qdrant + redis + kafka, waits until healthy
 make migrate                                       # apply database migrations
 BOOTSTRAP_ADMIN_PASSWORD=<a real passphrase> make seed  # create the bootstrap admins
-make dev                                           # both dev servers, Ctrl-C stops both
+make dev                                           # both dev servers + the worker, Ctrl-C stops all
 ```
 
 | Service | URL |
@@ -119,10 +119,11 @@ make dev                                           # both dev servers, Ctrl-C st
 | Kafka | `localhost:9092` |
 | Ollama | `localhost:11434` (embeddings) |
 
-The **ingestion worker** publishes no port — it is reached through Kafka, not HTTP.
-`make up` runs two replicas of it, one per ingest partition. Running the apps locally
-with `make dev` does *not* start a worker; see
-[`backend/README.md`](backend/README.md#the-ingestion-worker) for how to run one.
+The **worker** publishes no port — it is reached through Kafka, not HTTP. It consumes both
+ingestion and checklist-generation jobs, so nothing indexes and no checklist is generated
+without one. `make up` runs two replicas, one per ingest partition; `make dev` runs a single
+one alongside the dev servers, and `make worker` runs one on its own. See
+[`backend/README.md`](backend/README.md#the-ingestion-worker).
 
 Every environment value has a fallback, so this comes up with no `.env` file. To customize,
 create `infra/.env` — every variable it accepts is listed in
@@ -153,8 +154,9 @@ clears that flag.
 | `make infra` | Start postgres + qdrant + redis + kafka + ollama, wait until healthy |
 | `make migrate` | Apply database migrations |
 | `make seed` | Create the bootstrap admin accounts (idempotent) |
-| `make dev` | Both dev servers together |
+| `make dev` | Both dev servers and the worker together |
 | `make dev-backend` / `make dev-frontend` | One dev server |
+| `make worker` | The ingestion + checklist worker on its own |
 | `make check` | lint + format-check + typecheck + test — what CI runs |
 | `make lint` / `make format` | Both apps |
 | `make test` | Backend test suite |

@@ -34,7 +34,7 @@ DATASTORES := postgres qdrant redis kafka ollama
         docker-start-pg docker-start-redis docker-start-qdrant docker-start-kafka \
         docker-stop-pg docker-stop-redis docker-stop-qdrant docker-stop-kafka \
         psql redis-cli \
-        dev dev-backend dev-frontend \
+        dev dev-backend dev-frontend worker \
         build build-frontend \
         lint lint-backend lint-frontend \
         format format-check format-backend format-frontend \
@@ -119,10 +119,14 @@ redis-cli: ## Open a redis-cli shell on the running redis
 
 ## ─── Dev servers ───────────────────────────────────────────────────────────
 
-dev: ## Run backend + frontend dev servers together (Ctrl-C stops both)
-	@echo "backend :8000 (docs at /docs)   frontend :3000"
+# The worker runs here too, and it is not option∆al for a working instance: the API only
+# *enqueues* indexing and checklist generation. Without it a new project sits at
+# `pending` and a generated checklist never arrives, with nothing on screen saying why.
+dev: ## Run backend + frontend dev servers and the worker together (Ctrl-C stops all)
+	@echo "backend :8000 (docs at /docs)   frontend :3000   worker: ingest + checklist"
 	@trap 'kill 0' INT TERM; \
 		( cd $(BACKEND) && uv run uvicorn app.main:app --reload --port 8000 ) & \
+		( cd $(BACKEND) && uv run python -m app.worker ) & \
 		( cd $(FRONTEND) && bun dev ) & \
 		wait
 
@@ -131,6 +135,11 @@ dev-backend: ## Run the backend dev server only
 
 dev-frontend: ## Run the frontend dev server only
 	cd $(FRONTEND) && bun dev
+
+# No --reload: the worker holds Kafka group memberships and a database lease, and a
+# reload mid-job drops both, leaving the row to be recovered by the stranded sweep.
+worker: ## Run the ingestion + checklist worker only
+	cd $(BACKEND) && uv run python -m app.worker
 
 ## ─── Quality ───────────────────────────────────────────────────────────────
 

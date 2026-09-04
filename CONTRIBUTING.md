@@ -13,7 +13,7 @@ planned, what's deliberately out of scope for v1, and which questions are still 
 git clone <your-fork> && cd ask-repo
 make setup    # uv sync + bun install
 make infra    # postgres + qdrant + redis + kafka + ollama
-make dev      # both dev servers
+make dev      # both dev servers + the worker
 ```
 
 `make help` lists every target. Or run everything in Docker with `make up`, or drive the

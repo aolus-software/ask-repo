@@ -94,7 +94,7 @@ make setup    # uv sync + bun install
 make infra    # postgres, qdrant, redis, kafka, ollama — waits until each is healthy
 make migrate  # apply database migrations
 BOOTSTRAP_ADMIN_PASSWORD='<a real passphrase>' make seed
-make dev      # both dev servers; Ctrl-C stops both
+make dev      # both dev servers + the worker; Ctrl-C stops all
 ```
 
 Two differences from Path 1 that catch people out:
@@ -102,11 +102,12 @@ Two differences from Path 1 that catch people out:
 - **`make migrate` and `make seed` are yours to run.** Only the *container* start command runs
   them. Running the apps on the host skips that entirely, so a fresh database has no tables
   and no accounts until you run these two.
-- **`make dev` does not start a worker.** It runs the API and the frontend, nothing else.
-  Projects you add will sit at `pending` forever until you start one, in a third terminal:
+- **`make dev` starts the worker for you**, alongside the API and the frontend, because
+  without it a project sits at `pending` forever and a generated checklist never arrives.
+  To run one on its own — a second worker, or a restart without bouncing the servers:
 
   ```bash
-  cd backend && uv run python -m app.worker
+  make worker
   ```
 
   That is the same codebase with a different entrypoint, reading the same `Settings` and the
@@ -239,8 +240,9 @@ runs two replicas, one per ingest partition.
 
 | Command | Does |
 | --- | --- |
-| `make dev` | Both dev servers |
+| `make dev` | Both dev servers **and the worker** |
 | `make dev-backend` / `make dev-frontend` | One of them |
+| `make worker` | The ingestion + checklist worker on its own |
 | `make check` | lint + format-check + typecheck + test — what CI would run |
 | `make test` | Backend suite |
 | `make test-one T=tests/test_api_model.py` | One file, or `T=-k\ camel_case` |
@@ -271,8 +273,9 @@ Re-running it costs you the multi-gigabyte model pull as well as the index.
 ## When it does not work
 
 **A project stays at `pending` forever.**
-Nothing is consuming the queue. On Path 2, `make dev` starts no worker — run
-`cd backend && uv run python -m app.worker`. On Path 1, check `docker compose logs worker`;
+Nothing is consuming the queue. On Path 2, check that `make dev` printed the worker line and
+did not die on startup; `make worker` runs one on its own. On Path 1, check
+`docker compose logs worker`;
 the usual cause is the next entry.
 
 **The worker restart-loops at startup.**
