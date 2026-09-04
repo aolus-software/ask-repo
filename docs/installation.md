@@ -250,7 +250,7 @@ runs two replicas, one per ingest partition.
 | `make migrate` / `make seed` | Migrations, bootstrap admins |
 | `make psql` / `make redis-cli` | Shell into a running datastore |
 | `make up` / `make down` | Whole stack in Docker |
-| `make infra` / `make infra-stop` | Datastores only |
+| `make infra` / `make infra-stop` / `make infra-down` | Datastores only; none of them delete data |
 | `make clean` | Caches and build output |
 
 **`make infra` must be running before `make test`.** The backend suite runs against real
@@ -261,12 +261,17 @@ Postgres and real Redis — never SQLite, never a mock.
 | Command | Keeps your data? |
 | --- | --- |
 | `make down` | **Yes** — stops containers, volumes survive |
-| `make infra-stop` | **Yes** — stops datastores only |
-| `make infra-down` | **No.** Runs `docker compose down -v` |
+| `make infra-stop` | **Yes** — stops datastores, containers stay |
+| `make infra-down` | **Yes** — stops and removes the containers, volumes survive |
+| `make infra-reset` | **No.** Runs `docker compose down -v`, after asking you to confirm |
 
-`make infra-down` deletes **every** volume in the project — Postgres, Qdrant, Redis, Kafka,
-*and* the downloaded Ollama models. The name suggests it only touches datastores; it does not.
-Re-running it costs you the multi-gigabyte model pull as well as the index.
+`make infra-reset` deletes **every** volume in the project — Postgres, Qdrant, Redis, Kafka,
+*and* the downloaded Ollama models. Coming back from it costs `make migrate && make seed` plus
+the multi-gigabyte model pull, not just the index. It prompts for the word `delete` before doing
+anything, and a non-interactive invocation aborts instead of proceeding.
+
+Nothing named `down` deletes data: `make down`, `make infra-down` and `make down-prod` all keep
+their volumes, and the destructive path has its own name so it cannot be a typo.
 
 ---
 

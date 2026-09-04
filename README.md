@@ -165,7 +165,8 @@ clears that flag.
 | `make up` / `make down` | Whole stack in Docker (development) |
 | `make setup-prod` | Check a box is ready to deploy; changes nothing |
 | `make build-prod` / `make up-prod` | Production images and stack — see [`docs/deployment.md`](docs/deployment.md) |
-| `make infra-down` | Stop datastores **and delete their volumes** |
+| `make infra-down` | Stop and remove the datastore containers; data survives |
+| `make infra-reset` | **Deletes every volume in the project.** Asks for confirmation first |
 | `make psql` / `make redis-cli` | Shell into a running datastore |
 | `make clean` | Remove caches and build output |
 

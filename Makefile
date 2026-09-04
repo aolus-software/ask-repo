@@ -30,7 +30,7 @@ DATASTORES := postgres qdrant redis kafka ollama
 
 .DEFAULT_GOAL := help
 .PHONY: help setup setup-backend setup-frontend \
-        infra infra-stop infra-down infra-logs infra-status migrate seed \
+        infra infra-stop infra-down infra-reset infra-logs infra-status migrate seed \
         docker-start-pg docker-start-redis docker-start-qdrant docker-start-kafka \
         docker-stop-pg docker-stop-redis docker-stop-qdrant docker-stop-kafka \
         psql redis-cli \
@@ -72,8 +72,21 @@ infra: ## Start postgres + qdrant + redis + kafka + ollama (detached), wait unti
 infra-stop: ## Stop the datastores, keep their data
 	$(COMPOSE) stop $(DATASTORES)
 
-infra-down: ## Stop the datastores and DELETE their volumes
-	$(COMPOSE) down -v
+infra-down: ## Stop and remove the datastore containers, keep their data
+	$(COMPOSE) down
+
+# Separated from `infra-down` on the same principle the production section states:
+# deleting volumes should not be one typo away from a target you run every day. The
+# prompt is the guard -- a non-tty `read` returns empty, so a scripted or piped
+# invocation aborts rather than wiping a volume nobody was watching.
+infra-reset: ## DESTRUCTIVE — delete every volume in the project (asks first)
+	@printf '\n  \033[31mThis deletes every volume in the project.\033[0m\n'
+	@printf '  Postgres rows, the Qdrant index, Redis, Kafka, and the downloaded\n'
+	@printf '  Ollama models all go. Coming back costs `make migrate && make seed`\n'
+	@printf '  plus a multi-gigabyte model pull.\n\n'
+	@printf '  Type "delete" to confirm: '; read -r reply; \
+		[ "$$reply" = delete ] || { printf '  aborted — nothing was deleted\n\n'; exit 1; }; \
+		$(COMPOSE) down -v
 
 infra-status: ## Show datastore health
 	$(COMPOSE) ps $(DATASTORES)
