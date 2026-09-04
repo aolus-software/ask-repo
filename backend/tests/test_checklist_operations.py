@@ -106,3 +106,42 @@ def test_each_call_mints_a_distinct_id() -> None:
     assert first is not None
     assert second is not None
     assert first["id"] != second["id"]
+
+
+@pytest.mark.parametrize("item_id", ["new", "auth-1", "null", "N/A", "item-3"])
+def test_an_add_survives_whatever_the_model_put_in_item_id(item_id: str) -> None:
+    """An `add` has no target, so its `item_id` is noise -- never a reason to drop it.
+
+    The field exists in the schema the model is handed, and a model handed a field
+    fills it in: `"new"`, `"auth-1"`, the feature name. Validating that noise as a
+    `uuid.UUID` dropped every generated addition, so a generation that proposed eight
+    test cases stored a change set of zero -- with a summary still claiming eight,
+    because the summary counts the model's list and not the stored one. The screen
+    then offers nothing to tick while Generate and the chat sit disabled behind the
+    pending set, and the only way out is Discard.
+    """
+    operation = ProposedOperation(
+        op="add",
+        item_id=item_id,
+        feature="Login",
+        test_name="rejects an empty password",
+        expected_result="422",
+        rationale="r",
+    )
+
+    stored = stored_operation(operation)
+
+    assert stored is not None
+    assert stored["itemId"] is None
+    ChangeOperationPayload.model_validate(stored)
+
+
+@pytest.mark.parametrize("op", ["update", "remove"])
+def test_a_hallucinated_item_id_still_drops_an_update_or_remove(
+    op: Literal["update", "remove"],
+) -> None:
+    """The opposite case, and it must stay a drop: these name a row to change, so an
+    id that parses as nothing targets nothing."""
+    proposed = ProposedOperation(op=op, item_id="the login one", rationale="r")
+
+    assert stored_operation(proposed) is None

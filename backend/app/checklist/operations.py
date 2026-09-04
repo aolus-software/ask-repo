@@ -34,17 +34,25 @@ def stored_operation(
 
     Stored in the shape `ChangeOperationPayload` parses, so the apply path and the
     diff UI read one thing rather than translating between two. Returns `None` when
-    the model's `item_id` is not representable as a `uuid.UUID | None` -- an `add`
-    has no target and its empty `item_id` becomes `None`, never a drop, but a
-    hallucinated id on an `update` or `remove` (`"item-3"`, `"the login one"`) fails
-    validation and is dropped rather than stored.
+    the model's `item_id` is not representable as a `uuid.UUID | None` -- a
+    hallucinated id on an `update` or `remove` (`"item-3"`, `"the login one"`) names
+    no row, so the operation is dropped rather than stored.
+
+    **An `add` is never dropped for its `item_id`.** An addition has no target, so
+    whatever sits in that field is noise -- and a model handed a schema with an
+    `item_id` field fills it in regardless: `"new"`, `"auth-1"`, the feature name.
+    Validating that noise as a `uuid.UUID` dropped every generated addition, so a
+    generation that proposed eight test cases stored zero operations while its summary
+    still claimed eight (the summary counts the model's list, not the stored one). The
+    review screen then had nothing to tick, with Generate and the chat both disabled
+    behind the pending change set.
     """
     payload: dict[str, object] = {
         "op": operation.op,
         # Minted here, not by the model: each operation needs its own id so apply
         # can be selective, and an id the model chose could collide or repeat.
         "id": str(uuid.uuid4()),
-        "itemId": operation.item_id or None,
+        "itemId": None if operation.op == "add" else (operation.item_id or None),
         "feature": operation.feature or None,
         "testName": operation.test_name or None,
         "expectedResult": operation.expected_result or None,

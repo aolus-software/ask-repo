@@ -19,6 +19,7 @@ from app.checklist.model_output import (
     ProposedChangeSet,
     ProposedOperation,
 )
+from app.checklist.source import ModuleSource
 from app.config import Settings
 from app.db.session import get_sessionmaker
 from app.ingestion.chunker import Chunk
@@ -531,3 +532,18 @@ async def test_a_sibling_map_task_is_cancelled_on_failure(db_session: AsyncSessi
     # Give an orphaned sibling task time to finish its sleep, if one is still running.
     await asyncio.sleep(0.3)
     assert outcomes == ["cancelled"]
+
+
+def test_the_summary_counts_stored_operations_not_proposed_ones() -> None:
+    """A dropped operation must not still be counted in the line above the panel.
+
+    `_to_operations` drops an `update` that names no row, so counting the model's
+    proposal describes a change set the reader cannot see -- "8 added" over an empty
+    panel, which reads as a broken screen rather than a dropped operation.
+    """
+    source = ModuleSource(files=[], partial_paths=[])
+    stored: list[dict[str, object]] = [{"op": "add"}, {"op": "add"}, {"op": "remove"}]
+
+    summary = ChecklistGenerator._summarise(stored, source=source)
+
+    assert summary.startswith("2 added; 0 updated; 1 removed;")

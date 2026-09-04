@@ -113,7 +113,7 @@ class ChecklistGenerator:
         finally:
             await self._stop_renewal(renewal, module_id=module_id)
 
-        summary = self._summarise(proposal, source=source)
+        summary = self._summarise(operations, source=source)
         change_set = ChecklistChangeSet(
             id=uuid.uuid4(),
             module_id=module_id,
@@ -312,11 +312,18 @@ class ChecklistGenerator:
         return operations
 
     @staticmethod
-    def _summarise(proposal: ProposedChangeSet, *, source: ModuleSource) -> str:
-        """One line, naming the coverage bound rather than hiding it (spec 4.6)."""
+    def _summarise(operations: list[dict[str, object]], *, source: ModuleSource) -> str:
+        """One line, naming the coverage bound rather than hiding it (spec 4.6).
+
+        Counts the **stored** operations, not the model's proposal. `_to_operations`
+        can drop one -- an `update` naming a row that does not exist -- and a summary
+        counting the proposal would then describe a change set the reader cannot see.
+        That divergence is not cosmetic: it once read "8 added" above an empty panel,
+        which looks like a broken screen rather than a dropped operation.
+        """
         counts = {"add": 0, "update": 0, "remove": 0}
-        for operation in proposal.operations:
-            counts[operation.op] += 1
+        for operation in operations:
+            counts[str(operation["op"])] += 1
         parts = [
             f"{counts['add']} added",
             f"{counts['update']} updated",
