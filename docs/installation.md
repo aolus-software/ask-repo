@@ -29,10 +29,17 @@ Versions are pinned where it matters: Python **≥ 3.13**, Bun **1.3.14**, Next 
 `uv` installs the right Python itself, so you do not need one on the system. No Node version
 is required — Bun runs the frontend.
 
+**Ollama runs on the host, not in Docker.** Install it from [ollama.com](https://ollama.com)
+and leave `ollama serve` running (the menu-bar app does this for you). It is deliberately out
+of the Compose stack: a container gets no GPU on macOS and only the Docker VM's memory
+allowance, so a model inside one runs on CPU inside a slice of RAM, while the host process
+gets Metal and the whole machine. A Linux box with the NVIDIA runtime can put it back —
+[configuration.md](configuration.md#running-ollama-in-docker-anyway).
+
 **Disk and memory.** The Ollama models are the bulk of it: `nomic-embed-text` is ~270 MB and
 `qwen2.5-coder:14b` is ~9 GB resident while answering. On a 16 GB machine, use
 `qwen2.5-coder:7b` (~4.7 GB) instead — see
-[configuration.md](configuration.md#pointing-at-an-ollama-running-on-the-host).
+[configuration.md](configuration.md#ollama-runs-on-the-host-not-in-docker).
 
 ---
 
@@ -40,12 +47,19 @@ is required — Bun runs the frontend.
 
 ```bash
 git clone <this-repo> && cd ask-repo
+launchctl setenv OLLAMA_HOST '0.0.0.0:11434'   # macOS: then restart Ollama.app
 BOOTSTRAP_ADMIN_PASSWORD='<a real passphrase>' make up
 ```
 
-That is the whole install. `make up` builds both images and starts nine containers: Postgres,
-Qdrant, Redis, Kafka, Ollama, the API, two ingestion workers, and the frontend. It runs in the
+That is the whole install. `make up` builds both images and starts eight containers: Postgres,
+Qdrant, Redis, Kafka, the API, two ingestion workers, and the frontend. It runs in the
 **foreground** — `Ctrl-C` stops it, and `make down` cleans up if you detach.
+
+**Ollama is the ninth piece and it is not a container.** The API and workers reach it at
+`host.docker.internal:11434`, which is the address Docker gives a container for the machine
+outside. That only works if Ollama is listening on all interfaces rather than loopback, which
+is what the `launchctl setenv` line above does — skip it and every embed fails with a
+connection refused.
 
 **`BOOTSTRAP_ADMIN_PASSWORD` must be set on that first run.** It is the one variable with no
 default anywhere, deliberately: a password committed to this repository would be a password
@@ -73,12 +87,15 @@ Worth knowing, because the first run is slower than every run after it:
    This is where a worker dies if Ollama is not reachable.
 
 **No model is pre-pulled.** The first question you ask blocks on a multi-gigabyte download.
-Pull them ahead of time:
+Pull them ahead of time, on the host:
 
 ```bash
-docker compose -f infra/docker-compose.yml exec ollama ollama pull nomic-embed-text
-docker compose -f infra/docker-compose.yml exec ollama ollama pull qwen2.5-coder:14b
+ollama pull nomic-embed-text
+ollama pull qwen2.5-coder:14b
 ```
+
+Or `make pull-models`, which reads `backend/.env` and pulls whatever this checkout is
+configured for rather than the defaults.
 
 Then continue at [First login](#first-login).
 
@@ -90,12 +107,20 @@ The normal development loop — containers hold the data, both apps run natively
 reload.
 
 ```bash
-make setup    # uv sync + bun install
-make infra    # postgres, qdrant, redis, kafka, ollama — waits until each is healthy
-make migrate  # apply database migrations
+ollama serve       # on the host, if it is not already running
+make setup         # uv sync + bun install
+make pull-models   # nomic-embed-text + qwen2.5-coder:14b into the host Ollama
+make infra         # postgres, qdrant, redis, kafka — waits until each is healthy
+make migrate       # apply database migrations
 BOOTSTRAP_ADMIN_PASSWORD='<a real passphrase>' make seed
-make dev      # both dev servers + the worker; Ctrl-C stops all
+make dev           # both dev servers + the worker; Ctrl-C stops all
 ```
+
+On this path the apps run natively, so they reach Ollama at plain `localhost:11434` — no
+`OLLAMA_HOST` change and no `host.docker.internal`. `make infra`, `make dev` and `make worker`
+each check that something answers there and print a warning if not; it is a warning rather
+than a failure, because an instance pointed at a hosted embedding or chat provider has no
+Ollama by design.
 
 Two differences from Path 1 that catch people out:
 
@@ -134,10 +159,12 @@ What each setting does is in [`configuration.md`](configuration.md).
 **Datastores**
 
 ```bash
-docker compose -f infra/docker-compose.yml --profile ollama \
-  up -d --wait postgres qdrant redis kafka ollama
+docker compose -f infra/docker-compose.yml up -d --wait postgres qdrant redis kafka
 docker compose -f infra/docker-compose.yml ps            # check health
 ```
+
+Ollama is not in that list and is not started by Compose. Run it yourself
+(`ollama serve`) and pull `nomic-embed-text` and `qwen2.5-coder:14b`.
 
 **Backend** (from `backend/`)
 
@@ -160,14 +187,19 @@ bun dev
 **Whole stack**
 
 ```bash
-docker compose -f infra/docker-compose.yml --profile ollama up --build
+docker compose -f infra/docker-compose.yml up --build
 ```
 
-**`--profile ollama` is not optional**, and it is the single most common way a manual start
-fails. Without it, Ollama never starts, `EMBEDDING_BASE_URL` still points at
-`http://ollama:11434`, and both workers restart-loop on a DNS failure while probing embedding
-dimensions. Every `make` target bakes the profile in, which is why this only bites people who
-run Compose directly.
+**Bind Ollama to all interfaces first**, and it is the single most common way a manual start
+fails. `EMBEDDING_BASE_URL` defaults to `http://host.docker.internal:11434`; if Ollama is
+listening on loopback only, both workers restart-loop on a connection refused while probing
+embedding dimensions. On macOS that is
+`launchctl setenv OLLAMA_HOST "0.0.0.0:11434"` followed by a restart of Ollama.app; elsewhere
+it is `OLLAMA_HOST=0.0.0.0:11434 ollama serve`.
+
+To run Ollama in a container instead, add `--profile ollama` **and** set both
+`EMBEDDING_BASE_URL` and `CHAT_BASE_URL` to `http://ollama:11434` in `infra/.env` — the
+profile alone starts a service nothing is pointed at.
 
 ---
 
@@ -227,7 +259,7 @@ widen it deliberately.
 | Postgres | `localhost:5432` |
 | Redis | `localhost:6379` |
 | Kafka | `localhost:9092` |
-| Ollama | `localhost:11434` |
+| Ollama | `localhost:11434` — a host process, not a container |
 
 The **ingestion worker publishes no port** — it is reached through Kafka, not HTTP. `make up`
 runs two replicas, one per ingest partition.
@@ -265,10 +297,11 @@ Postgres and real Redis — never SQLite, never a mock.
 | `make infra-down` | **Yes** — stops and removes the containers, volumes survive |
 | `make infra-reset` | **No.** Runs `docker compose down -v`, after asking you to confirm |
 
-`make infra-reset` deletes **every** volume in the project — Postgres, Qdrant, Redis, Kafka,
-*and* the downloaded Ollama models. Coming back from it costs `make migrate && make seed` plus
-the multi-gigabyte model pull, not just the index. It prompts for the word `delete` before doing
-anything, and a non-interactive invocation aborts instead of proceeding.
+`make infra-reset` deletes **every** volume in the project — Postgres, Qdrant, Redis and
+Kafka. Coming back from it costs `make migrate && make seed` plus a re-index of every project.
+Your Ollama models survive: they live in the host's `~/.ollama`, not in a Compose volume. It
+prompts for the word `delete` before doing anything, and a non-interactive invocation aborts
+instead of proceeding.
 
 Nothing named `down` deletes data: `make down`, `make infra-down` and `make down-prod` all keep
 their volumes, and the destructive path has its own name so it cannot be a typo.
@@ -285,10 +318,11 @@ the usual cause is the next entry.
 
 **The worker restart-loops at startup.**
 It probes the embedding model for its vector width before doing anything else, and that is a
-live network call. Either Ollama is not running (started Compose without `--profile ollama`),
-or `EMBEDDING_BASE_URL` points somewhere unreachable. Inside a container, `localhost` is *that
-container* — the model server is at `http://ollama:11434`, or `http://host.docker.internal:11434`
-for a host-native Ollama.
+live network call. Either Ollama is not running on the host, or `EMBEDDING_BASE_URL` points
+somewhere unreachable. Inside a container, `localhost` is *that container* — the model server
+is at `http://host.docker.internal:11434`, and reaching it needs Ollama bound to `0.0.0.0`
+rather than loopback. On Path 2 the apps run natively, so plain `http://localhost:11434` is
+correct and no binding change is needed.
 
 **Every question returns `409 EMBEDDING_MODEL_CHANGED`.**
 The project was indexed with a different embedding model from the one now configured. The
@@ -300,12 +334,15 @@ reindex the project.
 `make infra` first. The suite needs real Postgres and Redis.
 
 **The first question takes minutes.**
-No model was pre-pulled; it is downloading. Watch `docker compose logs -f ollama`.
+No model was pre-pulled; it is downloading. `make pull-models` does it up front, and
+`ollama ps` on the host shows what is loaded.
 
 **Port already in use.**
 Every published port is overridable in `infra/.env` — `FRONTEND_PORT`, `BACKEND_PORT`,
-`POSTGRES_PORT`, `REDIS_PORT`, `QDRANT_HTTP_PORT`, `QDRANT_GRPC_PORT`, `KAFKA_PORT`,
-`OLLAMA_PORT`. See [`infra/.env.example`](../infra/.env.example).
+`POSTGRES_PORT`, `REDIS_PORT`, `QDRANT_HTTP_PORT`, `QDRANT_GRPC_PORT`, `KAFKA_PORT`. See
+[`infra/.env.example`](../infra/.env.example). `OLLAMA_PORT` is listed there too but is only
+read when the containerised `ollama` profile is on; a host Ollama on a non-default port is
+told to `EMBEDDING_BASE_URL` and `CHAT_BASE_URL` directly.
 
 **`seed-admins` refuses to run.**
 `BOOTSTRAP_ADMIN_PASSWORD` is unset, or fails the password policy (12 characters minimum, not
@@ -314,9 +351,11 @@ already exist it exits successfully without looking at the password at all — t
 idempotent by design, because it runs on every container start.
 
 **Answers are slow, or the machine swaps.**
-On macOS especially: Ollama in Docker never gets the Apple GPU, so everything is CPU-only.
-Point the stack at a host-native Ollama —
-[configuration.md](configuration.md#pointing-at-an-ollama-running-on-the-host).
+Check that you are on the host Ollama and not a container you re-enabled: in Docker on macOS
+it never gets the Apple GPU, so everything is CPU-only. Failing that, `CHAT_MODEL` is too big
+for the machine — `qwen2.5-coder:7b` is ~4.7 GB against the 14b's ~9.5 GB resident, and it can
+be swapped freely because nothing is indexed with it.
+[configuration.md](configuration.md#ollama-runs-on-the-host-not-in-docker).
 
 ---
 

@@ -189,7 +189,7 @@ acceptable substitute for that.
 | --- | --- | --- |
 | `EMBEDDING_PROVIDER` | `ollama` | `ollama`, `openai`, or `voyage` |
 | `EMBEDDING_MODEL` | `nomic-embed-text` | Model that turns code chunks and questions into vectors |
-| `EMBEDDING_BASE_URL` | `http://localhost:11434` | Endpoint. Inside Compose, `http://ollama:11434` — `localhost` in a container is that container |
+| `EMBEDDING_BASE_URL` | `http://localhost:11434` | Endpoint. Ollama runs on the host, so this is right for `make dev`. Inside Compose it is `http://host.docker.internal:11434` — `localhost` in a container is that container |
 | `EMBEDDING_API_KEY` | *empty* | Required for `openai` and `voyage`; ignored by `ollama` |
 | `EMBEDDING_BATCH_SIZE` | `64` | Chunks embedded per request. Must be ≥ 1 |
 
@@ -238,7 +238,7 @@ answers with a hosted model, or the reverse.
 | --- | --- | --- |
 | `CHAT_PROVIDER` | `ollama` | `ollama` or `openai` |
 | `CHAT_MODEL` | `qwen2.5-coder:14b` | The answering model |
-| `CHAT_BASE_URL` | `http://localhost:11434` | Endpoint. Inside Compose, `http://ollama:11434` |
+| `CHAT_BASE_URL` | `http://localhost:11434` | Endpoint. Inside Compose, `http://host.docker.internal:11434` |
 | `CHAT_API_KEY` | *empty* | Required for `openai`; ignored by `ollama` |
 | `CHAT_TEMPERATURE` | `0.1` | Low but not zero: answers about code should be reproducible, not creative. `0.0`–`2.0` |
 | `CHAT_TIMEOUT_SECONDS` | `180` | Whole-answer budget. Expiry ends the turn with `finishReason=timeout` |
@@ -366,7 +366,7 @@ compose network itself (`QDRANT_URL`, `REDIS_URL`, `KAFKA_BOOTSTRAP_SERVERS`, an
 | `REDIS_PORT` | `6379` |
 | `QDRANT_HTTP_PORT` / `QDRANT_GRPC_PORT` | `6333` / `6334` |
 | `KAFKA_PORT` | `9092` |
-| `OLLAMA_PORT` | `11434` |
+| `OLLAMA_PORT` | `11434` — only read when the containerised `ollama` profile is on |
 
 `CORS_ORIGINS` is derived from `FRONTEND_PORT`, so changing the frontend port keeps the API
 in agreement automatically.
@@ -377,41 +377,68 @@ in agreement automatically.
 | --- | --- |
 | `APP_ENV` / `APP_NAME` / `DEBUG` | `development` / `AskRepo API` / `true` |
 | `TRUSTED_PROXY_HOPS` | `0` — nothing sits in front of the API in the dev stack |
-| `EMBEDDING_PROVIDER` / `EMBEDDING_MODEL` / `EMBEDDING_BASE_URL` / `EMBEDDING_API_KEY` | `ollama` / `nomic-embed-text` / `http://ollama:11434` / empty |
-| `CHAT_PROVIDER` / `CHAT_MODEL` / `CHAT_BASE_URL` / `CHAT_API_KEY` | `ollama` / `qwen2.5-coder:14b` / `http://ollama:11434` / empty |
+| `EMBEDDING_PROVIDER` / `EMBEDDING_MODEL` / `EMBEDDING_BASE_URL` / `EMBEDDING_API_KEY` | `ollama` / `nomic-embed-text` / `http://host.docker.internal:11434` / empty |
+| `CHAT_PROVIDER` / `CHAT_MODEL` / `CHAT_BASE_URL` / `CHAT_API_KEY` | `ollama` / `qwen2.5-coder:14b` / `http://host.docker.internal:11434` / empty |
 | `API_URL` | `http://backend:8000` |
 | `KAFKA_CLUSTER_ID` | a fixed KRaft cluster id |
 
-The Ollama service sits behind a Compose **profile**. `docker compose up` without
-`--profile ollama` never starts it, and the worker crash-loops probing embedding dimensions
-against nothing. `make up` adds the profile for you.
+### Ollama runs on the host, not in Docker
 
-### Pointing at an Ollama running on the host
+**This is the default, and it needs no `infra/.env` entry.** The containerised `ollama`
+service still exists, but it sits behind a Compose profile that is off — `make infra` starts
+four datastores and `make up` starts the apps against a model server you run yourself:
 
-The most common reason to create `infra/.env` at all, and on a Mac usually the right call:
-
-```dotenv
-EMBEDDING_BASE_URL=http://host.docker.internal:11434
-CHAT_BASE_URL=http://host.docker.internal:11434
+```bash
+ollama serve        # or the menu-bar app
+make pull-models    # pulls the configured EMBEDDING_MODEL and CHAT_MODEL
+make infra
+make dev
 ```
 
-Then start **without** `--profile ollama` — the container is no longer wanted.
+`make dev` and `make worker` check `http://localhost:11434` first and print a warning if
+nothing answers. It is a warning and never a failure, because an instance on a hosted
+embedding or chat provider legitimately has no Ollama at all.
 
 Why: Ollama inside Docker on macOS never gets Metal, because the Apple GPU is not passed
 through to Linux containers. Every embed and every generated token is CPU-only, and a model
 larger than the Docker VM's memory allocation cannot load at all — it thrashes and starves
 the rest of the stack. A host-native Ollama gets Metal and the machine's full RAM.
 
-`localhost` inside a container is that container; `host.docker.internal` is the machine. This
-is the same reasoning that makes the in-network default the service name `ollama` rather than
-`localhost`.
+**Two different endpoints for the same server, and that is not a mistake.** Under `make dev`
+the API and worker run on the host, so `backend/.env` uses `http://localhost:11434`. Under
+`make up` they run in containers, where `localhost` is the container itself and
+`host.docker.internal` is the machine outside — which is why the Compose defaults use the
+latter. Docker Desktop resolves that name natively; on Linux the `extra_hosts:
+host.docker.internal:host-gateway` entry on `backend` and `worker` supplies it.
 
-On the host, once:
+Two host-side notes for `make up`: bind Ollama to all interfaces so a container can reach it,
+and expect it to be reachable by anything else on your network while it is —
 
 ```bash
 launchctl setenv OLLAMA_HOST "0.0.0.0:11434"   # then restart Ollama.app
-ollama pull nomic-embed-text
 ```
+
+#### Running Ollama in Docker anyway
+
+On a Linux box with the NVIDIA runtime, the container is the right answer. Two steps, and the
+second is not optional:
+
+```bash
+make infra OLLAMA_IN_DOCKER=1     # any non-empty value re-enables the profile
+```
+
+```dotenv
+# infra/.env — the URLs default to the host, so without these the containers
+# talk straight past the service you just started.
+EMBEDDING_BASE_URL=http://ollama:11434
+CHAT_BASE_URL=http://ollama:11434
+```
+
+Then pull into the container rather than with `make pull-models`:
+`docker compose -f infra/docker-compose.yml exec ollama ollama pull nomic-embed-text`.
+
+The production stack (`docker-compose.prod.yml`, all the `-prod` targets) is unchanged: it
+still runs Ollama in a container behind the profile, which `make pull-models-prod` feeds.
 
 **`EMBEDDING_MODEL` is load-bearing once a project is indexed.** The collection is named for
 provider + model + width, and the project row records what it was indexed with — change the

@@ -66,8 +66,9 @@ The `Makefile` at the root wraps everything; `make help` lists all targets.
 
 ```bash
 make setup            # install backend + frontend dependencies
-make infra            # start postgres + qdrant + redis + kafka + ollama, wait until healthy
-make dev              # both dev servers + the worker (needs `make infra` first)
+make infra            # start postgres + qdrant + redis + kafka, wait until healthy
+make pull-models      # pull the embedding + chat models into the HOST ollama
+make dev              # both dev servers + the worker (needs `make infra` and `ollama serve`)
 make check            # lint + format-check + typecheck + test, as CI would
 make test-one T=tests/test_api_model.py
 make up               # whole stack in Docker, apps included (development)
@@ -76,6 +77,15 @@ make setup-prod       # preflight a deploy box; then build-prod / migrate-prod /
 
 Single-service datastore control: `make docker-start-pg`, `docker-start-redis`,
 `docker-start-qdrant`, and the matching `docker-stop-*`. Shells: `make psql`, `make redis-cli`.
+
+**Ollama is not a Compose service in the development stack.** It runs on the host, because a
+container gets no GPU on macOS and only the Docker VM's memory allowance — the same 22-minute
+CPU reduce call `docs/PRD.md` §6 cites for M4.5. `make dev` and `make worker` warn (never
+fail) when nothing answers on `:11434`, since a hosted-provider instance correctly has none.
+The container is still in `docker-compose.yml` behind its profile: `make infra
+OLLAMA_IN_DOCKER=1` re-enables it, and that also requires `EMBEDDING_BASE_URL` and
+`CHAT_BASE_URL` set to `http://ollama:11434` in `infra/.env`, because they now default to the
+host. The **production** stack is unchanged and still runs Ollama in a container.
 
 The underlying commands, if you need them directly:
 
@@ -95,9 +105,12 @@ bun run build                             # catches type errors the dev server t
 bun lint
 
 # Whole stack — from infra/
-docker compose --profile ollama up --build   # backend, worker, frontend, postgres, qdrant, redis, kafka, ollama
-#   ^ the profile is required: without it ollama never starts and the worker
-#     crash-loops probing embedding dimensions. `make up` adds it for you.
+docker compose up --build                 # backend, worker, frontend, postgres, qdrant, redis, kafka
+#   ^ ollama is NOT here: it runs on the host and the app containers reach it at
+#     host.docker.internal:11434, so bind it with
+#     `launchctl setenv OLLAMA_HOST "0.0.0.0:11434"` or the worker crash-loops
+#     probing embedding dimensions. `make infra OLLAMA_IN_DOCKER=1` puts the
+#     container back, and then both base URLs must be set to http://ollama:11434.
 docker compose config --quiet             # validate before committing compose changes
 docker compose logs -f backend
 ```

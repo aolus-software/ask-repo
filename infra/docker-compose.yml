@@ -11,7 +11,10 @@
 # Postgres  localhost:5432          (projects, users, refresh tokens)
 # Redis     localhost:6379          (rate limiting)
 # Kafka     localhost:9092          (ingestion job queue, M1)
-# Ollama    localhost:11434         (embeddings + answers; behind the `ollama` profile)
+#
+# Ollama is NOT in this stack by default. It runs on the host — `ollama serve` —
+# and the app containers reach it at host.docker.internal:11434. See the `ollama`
+# service near the bottom for why, and for how to opt back into the container.
 #
 # `worker` runs the ingestion consumers (2 replicas, one per ingest partition) and
 # publishes no port — it is reached through Kafka, not over HTTP.
@@ -40,9 +43,13 @@ x-app-env: &app-env
   # collection the worker never wrote to.
   EMBEDDING_PROVIDER: ${EMBEDDING_PROVIDER:-ollama}
   EMBEDDING_MODEL: ${EMBEDDING_MODEL:-nomic-embed-text}
-  # Points at the `ollama` service below. `localhost:11434` inside a container is
-  # that container, not the model server.
-  EMBEDDING_BASE_URL: ${EMBEDDING_BASE_URL:-http://ollama:11434}
+  # Points at the model server on the HOST, not at a service in this file.
+  # `localhost:11434` inside a container is that container, and `host.docker.internal`
+  # is the address Docker gives it for the machine outside — resolved by Docker
+  # Desktop natively, and on Linux by the `extra_hosts` entry on each app service.
+  # If you opt into the containerised `ollama` service below, override this and
+  # CHAT_BASE_URL to `http://ollama:11434` in infra/.env.
+  EMBEDDING_BASE_URL: ${EMBEDDING_BASE_URL:-http://host.docker.internal:11434}
   EMBEDDING_API_KEY: ${EMBEDDING_API_KEY:-}
 
 services:
@@ -160,8 +167,13 @@ services:
       # EMBEDDING_BASE_URL for the host — `localhost` here is this container.
       CHAT_PROVIDER: ${CHAT_PROVIDER:-ollama}
       CHAT_MODEL: ${CHAT_MODEL:-qwen2.5-coder:14b}
-      CHAT_BASE_URL: ${CHAT_BASE_URL:-http://ollama:11434}
+      CHAT_BASE_URL: ${CHAT_BASE_URL:-http://host.docker.internal:11434}
       CHAT_API_KEY: ${CHAT_API_KEY:-}
+    # Docker Desktop resolves host.docker.internal on its own; the Linux daemon does
+    # not, and `host-gateway` is what gives it the same name there. Both app services
+    # need it because both talk to the model server on the host.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     volumes:
       # Source bind-mount for hot reload. The venv lives in /opt/venv, so it survives.
       - ../backend:/app
@@ -197,6 +209,8 @@ services:
       replicas: 2
     environment:
       <<: *app-env
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     volumes:
       - ../backend:/app
       # Scratch, deliberately not a named volume: the working copy is deleted after
@@ -217,21 +231,29 @@ services:
       - "${OLLAMA_PORT:-11434}:11434"
     volumes:
       - ollama_models:/root/.ollama
-    # Behind a profile so an instance on a hosted embedding/chat provider does not
-    # run a container it has no use for.
+    # OFF by default, and that is a performance decision rather than a preference.
+    # A container gets no GPU on macOS and only the Docker VM's memory allowance, so
+    # a model here runs on CPU inside a slice of RAM — a reduce call against a 7B
+    # model on CPU took 22 minutes (docs/PRD.md §6, M4.5). Run by the host instead,
+    # `ollama serve` gets Metal and the whole machine. So the default is:
     #
-    # The Makefile enables it for you (`COMPOSE := docker compose … --profile ollama`),
-    # so `make up` and `make infra` just work. Invoking compose DIRECTLY does not:
-    # without `--profile ollama` this service never starts, and since the shipped
-    # EMBEDDING_BASE_URL points at it, the worker dies at startup probing embedding
-    # dimensions with "Name or service not known" and restart-loops. Run either
-    #   make up
-    # or
-    #   docker compose --profile ollama up --build
+    #   ollama serve          # on the host
+    #   make infra            # four datastores, no model server
+    #   make dev              # apps on the host, talking to localhost:11434
     #
-    # No model is pre-pulled. `ollama` fetches on first use, so the first question
-    # after a fresh `make up` waits on a multi-gigabyte download of CHAT_MODEL.
-    # Pull ahead of time with:
+    # ...and `make up` points the app containers at host.docker.internal:11434.
+    #
+    # This service stays for the box where the container IS the right answer — a
+    # Linux host with the NVIDIA runtime, or a machine where you want the models in
+    # a volume. Two steps to opt in, and the second is not optional:
+    #
+    #   1. make infra OLLAMA_IN_DOCKER=1   (or `docker compose --profile ollama up`)
+    #   2. set EMBEDDING_BASE_URL and CHAT_BASE_URL to http://ollama:11434 in
+    #      infra/.env — they default to the host, so without this the containers
+    #      talk past the service you just started.
+    #
+    # No model is pre-pulled either way. On the host that is `make pull-models`;
+    # here it is:
     #   docker compose exec ollama ollama pull qwen2.5-coder:14b
     #   docker compose exec ollama ollama pull nomic-embed-text
     profiles: ["ollama"]

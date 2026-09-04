@@ -30,7 +30,7 @@ bun dev
 Then open <http://localhost:3000>. It expects the API on
 <http://localhost:8000> — start that too (see the
 [backend README](../backend/README.md)), or bring up the whole stack with
-`cd infra && docker compose --profile ollama up --build`.
+`cd infra && docker compose up --build`.
 
 ## Scripts
 

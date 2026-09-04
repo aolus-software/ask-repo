@@ -30,6 +30,10 @@ The datastores must be up first — `make infra` from the repo root, or
 Postgres and Redis are enough to run the test suite; Qdrant is needed to index, Kafka to
 enqueue, and Ollama to embed (unless `EMBEDDING_PROVIDER` points at a hosted API).
 
+**Ollama is not one of the containers** — it runs on the host, so `ollama serve` has to be up
+too, and `EMBEDDING_BASE_URL` / `CHAT_BASE_URL` point at plain `http://localhost:11434` when
+the app runs natively. `make pull-models` fetches the configured models.
+
 ```bash
 cd backend
 cp .env.example .env                              # optional — every value has a default
@@ -64,10 +68,12 @@ partitions — two is the configured cap (`KAFKA_INGEST_PARTITIONS`).
 ## Running in Docker
 
 ```bash
-cd infra && docker compose --profile ollama up --build
+cd infra && docker compose up --build
 ```
 
-That brings up the API alongside Postgres, Qdrant, Redis, Kafka, and the frontend.
+That brings up the API alongside Postgres, Qdrant, Redis, Kafka, and the frontend. Ollama
+stays on the host; the containers reach it at `host.docker.internal:11434`, which needs it
+bound to `0.0.0.0` (`launchctl setenv OLLAMA_HOST "0.0.0.0:11434"` on macOS).
 Source is bind-mounted, so `--reload` picks up your edits — which is also why this image is
 **not** a production one. See [`../docs/deployment.md`](../docs/deployment.md).
 

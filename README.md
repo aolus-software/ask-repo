@@ -48,7 +48,8 @@ management — against real repositories rather than tutorial data.
 **Backend** FastAPI · Python 3.13 · uv · SQLAlchemy + Alembic · LangGraph · LangChain
 **Frontend** Next.js 16 · React 19 · TypeScript · Tailwind CSS 4 · Bun
 **Data** Postgres 17 · Qdrant · Redis · Kafka
-**Models** Ollama (qwen2.5-coder, qwen3) with a hosted-API adapter for comparison
+**Models** Ollama (qwen2.5-coder, qwen3), run on the host rather than in Compose, with a
+hosted-API adapter for comparison
 **Infra** Docker Compose · Caddy · VPN/Tailscale only, not internet-facing
 
 ## Repository layout
@@ -73,20 +74,34 @@ ask-repo/
 The short version is below; [`docs/installation.md`](docs/installation.md) is the same thing
 step by step, with a troubleshooting section.
 
-**Requirements:** Docker with Compose v2, plus [uv](https://docs.astral.sh/uv/) and
-[Bun](https://bun.sh) if you want to run the apps outside containers.
+**Requirements:** Docker with Compose v2, [Ollama](https://ollama.com) installed **on the
+host**, plus [uv](https://docs.astral.sh/uv/) and [Bun](https://bun.sh) if you want to run the
+apps outside containers.
 
 ```bash
 curl -LsSf https://astral.sh/uv/install.sh | sh   # backend
 curl -fsSL https://bun.sh/install | bash          # frontend
 ```
 
+Ollama is deliberately **not** in the Compose stack. A container gets no GPU on macOS and only
+the Docker VM's memory allowance, so a model inside one runs on CPU in a slice of RAM; run by
+the host it gets Metal and the whole machine. Start it once and pull the models:
+
+```bash
+ollama serve        # or the menu-bar app
+make pull-models    # nomic-embed-text + qwen2.5-coder:14b, ~10 GB
+```
+
+A Linux box with the NVIDIA runtime can put it back in Docker —
+[`docs/configuration.md`](docs/configuration.md#running-ollama-in-docker-anyway).
+
 ### Everything in Docker
 
-One command, nothing else installed:
+The apps and datastores; Ollama still on the host, reached at `host.docker.internal:11434`:
 
 ```bash
 git clone <this-repo> && cd ask-repo
+launchctl setenv OLLAMA_HOST "0.0.0.0:11434"      # macOS: let containers reach it
 BOOTSTRAP_ADMIN_PASSWORD=<a real passphrase> make up
 ```
 
@@ -109,6 +124,11 @@ BOOTSTRAP_ADMIN_PASSWORD=<a real passphrase> make seed  # create the bootstrap a
 make dev                                           # both dev servers + the worker, Ctrl-C stops all
 ```
 
+`make infra` and `make dev` both check that the host Ollama is answering on `:11434` and print
+a warning if it is not — the worker otherwise dies probing embedding dimensions, in a log
+stream interleaved with two others. It is a warning, never a failure, because an instance on a
+hosted embedding or chat provider correctly has no Ollama.
+
 | Service | URL |
 | --- | --- |
 | Frontend | <http://localhost:3000> |
@@ -117,7 +137,7 @@ make dev                                           # both dev servers + the work
 | Postgres | `localhost:5432` |
 | Redis | `localhost:6379` |
 | Kafka | `localhost:9092` |
-| Ollama | `localhost:11434` (embeddings) |
+| Ollama | `localhost:11434` (embeddings + answers) — **runs on the host, not in Compose** |
 
 The **worker** publishes no port — it is reached through Kafka, not HTTP. It consumes both
 ingestion and checklist-generation jobs, so nothing indexes and no checklist is generated
@@ -151,7 +171,8 @@ clears that flag.
 | Target | Does |
 | --- | --- |
 | `make setup` | Install backend + frontend dependencies |
-| `make infra` | Start postgres + qdrant + redis + kafka + ollama, wait until healthy |
+| `make infra` | Start postgres + qdrant + redis + kafka, wait until healthy |
+| `make pull-models` | Pull the configured embedding + chat models into the host Ollama |
 | `make migrate` | Apply database migrations |
 | `make seed` | Create the bootstrap admin accounts (idempotent) |
 | `make dev` | Both dev servers and the worker together |
@@ -213,10 +234,12 @@ bunx tsc --noEmit                                 # typecheck
 bunx prettier --write .                           # format
 ```
 
-**Whole stack in Docker**
+**Whole stack in Docker** — apps and datastores in containers, Ollama still on the host at
+`host.docker.internal:11434`. Bind it with `launchctl setenv OLLAMA_HOST "0.0.0.0:11434"`
+first, or a container cannot reach it.
 
 ```bash
-docker compose -f infra/docker-compose.yml --profile ollama up --build
+docker compose -f infra/docker-compose.yml up --build
 docker compose -f infra/docker-compose.yml logs -f backend
 docker compose -f infra/docker-compose.yml down
 ```

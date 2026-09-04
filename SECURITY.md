@@ -109,6 +109,13 @@ A few properties are your responsibility, not the code's:
   reaching it as equivalent to reaching the worker. If you point `EMBEDDING_PROVIDER` at a
   hosted API instead, `EMBEDDING_API_KEY` becomes a secret to manage like the others.
 
+  The development stack runs it **on the host** rather than in a container, and `make up`
+  additionally asks you to bind it to `0.0.0.0:11434` so the containers can reach it. That
+  binding is what makes an unauthenticated model server reachable from anything else on your
+  network — fine on a laptop behind a firewall, not something to carry onto a shared box.
+  Production keeps Ollama containerised on the Compose network, where nothing publishes its
+  port.
+
 - **Pointing `CHAT_PROVIDER` at a hosted API sends your source code to that provider.** This
   is worth stating plainly because the setting is a one-line change and the consequence is
   not: every question ships the retrieved excerpts — real code from your private

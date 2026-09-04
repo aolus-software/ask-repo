@@ -3,7 +3,7 @@
 #   make help        list every target
 #   make setup       install backend + frontend dependencies
 #   make infra       start postgres, qdrant, redis and kafka only
-#   make dev         run both dev servers (needs `make infra` first)
+#   make dev         run both dev servers (needs `make infra` and a host `ollama serve`)
 #   make check       lint + typecheck + test everything, as CI would
 #
 # Targets are grouped: setup, infra (datastores), dev, quality, docker, prod, clean.
@@ -12,10 +12,18 @@
 # suffix, use infra/docker-compose.prod.yml, and are documented in
 # docs/deployment.md. Start with `make setup-prod`, which checks a box is ready.
 
-# The ollama profile is on by default: the shipped EMBEDDING_PROVIDER is `ollama`,
-# so a stack without it has a default pointing at nothing. An instance on a hosted
-# embedding provider can override this to a bare `docker compose`.
-COMPOSE := docker compose -f infra/docker-compose.yml --profile ollama
+# Ollama runs on the HOST, not in a container, and that is a performance decision
+# rather than a preference. Docker Desktop hands a container no GPU on macOS and
+# caps it at the VM's memory allowance, so a model inside one runs on CPU inside a
+# slice of RAM. The same model under a host `ollama serve` gets Metal and the whole
+# machine. `make infra` therefore starts four datastores and leaves the model server
+# to you: `ollama serve` (or the menu-bar app), then `make pull-models`.
+#
+# The containerised ollama is still in the compose file, behind its profile, for a
+# box where that is the right answer. Opt back in with any non-empty value:
+#   make infra OLLAMA_IN_DOCKER=1
+OLLAMA_PROFILE := $(if $(OLLAMA_IN_DOCKER),--profile ollama,)
+COMPOSE := docker compose -f infra/docker-compose.yml $(OLLAMA_PROFILE)
 
 # The production stack is a STANDALONE file, never layered onto the development one:
 # Compose merges `volumes` by target path rather than replacing the list, so
@@ -26,7 +34,12 @@ BACKEND  := backend
 FRONTEND := frontend
 
 # Datastore services — the ones you run in Docker while developing the apps locally.
-DATASTORES := postgres qdrant redis kafka ollama
+# Ollama is not among them: it runs on the host. See OLLAMA_PROFILE above.
+DATASTORES := postgres qdrant redis kafka $(if $(OLLAMA_IN_DOCKER),ollama,)
+
+# Where the host model server is expected to answer. Only the preflight check reads
+# this — the apps get their endpoint from EMBEDDING_BASE_URL / CHAT_BASE_URL.
+OLLAMA_URL ?= http://localhost:11434
 
 .DEFAULT_GOAL := help
 .PHONY: help setup setup-backend setup-frontend \
@@ -34,6 +47,7 @@ DATASTORES := postgres qdrant redis kafka ollama
         docker-start-pg docker-start-redis docker-start-qdrant docker-start-kafka \
         docker-stop-pg docker-stop-redis docker-stop-qdrant docker-stop-kafka \
         psql redis-cli \
+        ollama-check pull-models \
         dev dev-backend dev-frontend worker \
         build build-frontend \
         lint lint-backend lint-frontend \
@@ -65,9 +79,10 @@ setup-frontend: ## Install frontend dependencies
 
 ## ─── Datastores ────────────────────────────────────────────────────────────
 
-infra: ## Start postgres + qdrant + redis + kafka + ollama (detached), wait until healthy
+infra: ## Start postgres + qdrant + redis + kafka (detached), wait until healthy
 	$(COMPOSE) up -d --wait $(DATASTORES)
-	@echo "postgres :5432   qdrant :6333   redis :6379   kafka :9092   ollama :11434"
+	@echo "postgres :5432   qdrant :6333   redis :6379   kafka :9092"
+	@$(MAKE) --no-print-directory ollama-check
 
 infra-stop: ## Stop the datastores, keep their data
 	$(COMPOSE) stop $(DATASTORES)
@@ -81,9 +96,9 @@ infra-down: ## Stop and remove the datastore containers, keep their data
 # invocation aborts rather than wiping a volume nobody was watching.
 infra-reset: ## DESTRUCTIVE — delete every volume in the project (asks first)
 	@printf '\n  \033[31mThis deletes every volume in the project.\033[0m\n'
-	@printf '  Postgres rows, the Qdrant index, Redis, Kafka, and the downloaded\n'
-	@printf '  Ollama models all go. Coming back costs `make migrate && make seed`\n'
-	@printf '  plus a multi-gigabyte model pull.\n\n'
+	@printf '  Postgres rows, the Qdrant index, Redis and Kafka all go. Coming back\n'
+	@printf '  costs `make migrate && make seed` plus a re-index of every project.\n'
+	@printf '  Your Ollama models are safe: they live on the host, not in a volume.\n\n'
 	@printf '  Type "delete" to confirm: '; read -r reply; \
 		[ "$$reply" = delete ] || { printf '  aborted — nothing was deleted\n\n'; exit 1; }; \
 		$(COMPOSE) down -v
@@ -130,12 +145,34 @@ psql: ## Open a psql shell on the running postgres
 redis-cli: ## Open a redis-cli shell on the running redis
 	$(COMPOSE) exec redis redis-cli
 
+## ─── Models (on the host, not in Docker) ───────────────────────────────────
+
+# A warning, never a failure. An instance configured for a hosted embedding or chat
+# provider has no host Ollama and is entirely correct; failing here would block it.
+# The warning exists because the alternative is silent: the worker dies at startup
+# probing embedding dimensions, restart-loops, and says so in a log stream that is
+# interleaved with two others and scrolling.
+ollama-check: ## Warn (don't fail) if the host Ollama is not answering
+	@curl -fsS -m 2 $(OLLAMA_URL)/api/version >/dev/null 2>&1 && \
+		printf '  ollama  %s  ok\n' '$(OLLAMA_URL)' || { \
+		printf '\n  \033[33mNo Ollama answering at %s.\033[0m\n' '$(OLLAMA_URL)'; \
+		printf '  It runs on the host now, not in Docker. Start it with `ollama serve`\n'; \
+		printf '  (or the menu-bar app), then `make pull-models`. Ignore this if you\n'; \
+		printf '  set EMBEDDING_PROVIDER / CHAT_PROVIDER to a hosted API.\n\n'; }
+
+# The host equivalent of pull-models-prod. Reads backend/.env so it pulls the models
+# this checkout is actually configured for, not the defaults.
+pull-models: ## Pull the configured embedding + chat models into the host Ollama
+	@set -a; [ -f $(BACKEND)/.env ] && . ./$(BACKEND)/.env; set +a; \
+	ollama pull $${EMBEDDING_MODEL:-nomic-embed-text}; \
+	ollama pull $${CHAT_MODEL:-qwen2.5-coder:14b}
+
 ## ─── Dev servers ───────────────────────────────────────────────────────────
 
 # The worker runs here too, and it is not option∆al for a working instance: the API only
 # *enqueues* indexing and checklist generation. Without it a new project sits at
 # `pending` and a generated checklist never arrives, with nothing on screen saying why.
-dev: ## Run backend + frontend dev servers and the worker together (Ctrl-C stops all)
+dev: ollama-check ## Run backend + frontend dev servers and the worker together (Ctrl-C stops all)
 	@echo "backend :8000 (docs at /docs)   frontend :3000   worker: ingest + checklist"
 	@trap 'kill 0' INT TERM; \
 		( cd $(BACKEND) && uv run uvicorn app.main:app --reload --port 8000 ) & \
@@ -151,7 +188,7 @@ dev-frontend: ## Run the frontend dev server only
 
 # No --reload: the worker holds Kafka group memberships and a database lease, and a
 # reload mid-job drops both, leaving the row to be recovered by the stranded sweep.
-worker: ## Run the ingestion + checklist worker only
+worker: ollama-check ## Run the ingestion + checklist worker only
 	cd $(BACKEND) && uv run python -m app.worker
 
 ## ─── Quality ───────────────────────────────────────────────────────────────
