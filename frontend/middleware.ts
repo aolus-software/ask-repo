@@ -69,6 +69,12 @@ function redirectToLogin(request: NextRequest): NextResponse {
 }
 
 export const config = {
-  // /api/* is the proxy's own concern; it refreshes for itself.
-  matcher: ["/((?!api|_next/static|_next/image|favicon.ico|.*\\.svg$).*)"],
+  // /api/* is the proxy's own concern; it refreshes for itself. Public static
+  // assets (the brand logo, manifest icons, the generated manifest route) must
+  // be excluded too: the login screen renders /logo.png while unauthenticated,
+  // and gating it here redirected the image to HTML, which is what broke both
+  // next/image optimization and the manifest fetch.
+  matcher: [
+    "/((?!api|_next/static|_next/image|favicon.ico|manifest.webmanifest|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)",
+  ],
 };
