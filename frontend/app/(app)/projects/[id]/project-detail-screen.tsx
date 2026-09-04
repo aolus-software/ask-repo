@@ -65,7 +65,7 @@ export function ProjectDetailScreen({ id }: { id: string }) {
               Ask about this project
             </Button>
           ) : null}
-          <ProjectRowActions project={project} />
+          <ProjectRowActions project={project} context="detail" />
         </div>
       </div>
 

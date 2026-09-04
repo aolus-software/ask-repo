@@ -2,6 +2,7 @@
 
 import {
   ExternalLink,
+  Eye,
   MessagesSquare,
   MoreHorizontal,
   RefreshCw,
@@ -26,7 +27,20 @@ import { isApiError } from "@/lib/api/errors";
 import type { ProjectResponse } from "@/lib/api/types";
 import { canManageProject } from "@/lib/can";
 
-export function ProjectRowActions({ project }: { project: ProjectResponse }) {
+/**
+ * The actions menu for a project, in a list row or on the project's own page.
+ *
+ * `context` changes only the first entry. On the detail page "View detail" would link
+ * to the page the user is already reading, so it becomes the one destination the page
+ * cannot reach on its own -- the repository itself.
+ */
+export function ProjectRowActions({
+  project,
+  context = "list",
+}: {
+  project: ProjectResponse;
+  context?: "list" | "detail";
+}) {
   const user = useSession();
   const [confirmingReindex, setConfirmingReindex] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
@@ -49,10 +63,23 @@ export function ProjectRowActions({ project }: { project: ProjectResponse }) {
           <MoreHorizontal className="size-4" />
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
-          <DropdownMenuItem render={<Link href={`/projects/${project.id}`} />}>
-            <ExternalLink className="size-4" />
-            Open
-          </DropdownMenuItem>
+          {context === "detail" ? (
+            // `noreferrer` alongside `noopener`: the repository host has no business
+            // learning which internal instance linked to it.
+            <DropdownMenuItem
+              render={
+                <a href={project.repoUrl} target="_blank" rel="noopener noreferrer" />
+              }
+            >
+              <ExternalLink className="size-4" />
+              Open repository
+            </DropdownMenuItem>
+          ) : (
+            <DropdownMenuItem render={<Link href={`/projects/${project.id}`} />}>
+              <Eye className="size-4" />
+              View detail
+            </DropdownMenuItem>
+          )}
           {project.status === "ready" ? (
             <DropdownMenuItem render={<Link href={`/ask?projectId=${project.id}`} />}>
               <MessagesSquare className="size-4" />

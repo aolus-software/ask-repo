@@ -1,6 +1,7 @@
 "use client";
 
-import { Edit2, MoreHorizontal, Play, Trash2 } from "lucide-react";
+import { Edit2, Eye, MoreHorizontal, Play, Trash2 } from "lucide-react";
+import Link from "next/link";
 import { useState } from "react";
 import { toast } from "sonner";
 
@@ -82,6 +83,15 @@ export function ModuleRowActions({ module }: { module: ChecklistModuleResponse }
           <MoreHorizontal className="size-4" />
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
+          {/*
+            A real link, not an onClick router push: the module name in the row is one
+            too, and a menu entry that cannot be middle-clicked or opened in a new tab
+            behaves differently from the thing beside it for no reason.
+          */}
+          <DropdownMenuItem render={<Link href={`/checklist/${module.id}`} />}>
+            <Eye className="size-4" />
+            View detail
+          </DropdownMenuItem>
           {isGenerating ? (
             <Tooltip>
               <TooltipTrigger>
