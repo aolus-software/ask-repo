@@ -1,6 +1,7 @@
 "use client";
 
 import { Loader2 } from "lucide-react";
+import Image from "next/image";
 import { useSearchParams } from "next/navigation";
 import { useState } from "react";
 
@@ -76,6 +77,25 @@ export function LoginScreen() {
 
   return (
     <Card className="w-full max-w-sm">
+      {/*
+        A sibling of CardHeader rather than a child of it: that header is a grid with
+        `gap-1`, which is far too tight under a 3rem mark, and a bare `img` as Card's
+        own first child would be taken for a cover image and have its top padding
+        stripped. Sitting in Card's flex column instead gives the documented card
+        spacing for free; the padding is matched to the header's.
+
+        Decorative (`alt=""`) — the title below already reads "Sign in to AskRepo".
+      */}
+      <div className="px-(--card-spacing)">
+        <Image
+          src="/logo.png"
+          alt=""
+          width={48}
+          height={48}
+          className="size-12"
+          priority
+        />
+      </div>
       <CardHeader>
         <CardTitle className="text-xl font-semibold">Sign in to AskRepo</CardTitle>
         <CardDescription>

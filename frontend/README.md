@@ -79,6 +79,8 @@ frontend/
 ├── app/
 │   ├── layout.tsx         # fonts, theme, query provider, toaster
 │   ├── globals.css        # Tailwind entry + theme tokens (only file with raw hex)
+│   ├── manifest.ts        # web app manifest — served at /manifest.webmanifest
+│   ├── favicon.ico icon.png apple-icon.png   # copies of ../assets/favicon/
 │   ├── (auth)/            # shell-less: /login, /change-password
 │   ├── (app)/             # the shell: dashboard, projects, ask, checklist (/checklist, /checklist/[moduleId]), settings
 │   └── api/
@@ -94,8 +96,14 @@ frontend/
 │   ├── auth/              # cookie names + single-flight refresh
 │   ├── ask/               # SSE parser, pending-question carrier
 │   └── query/ nav.ts status.ts dates.ts can.ts
+├── public/                # logo.png + the two android-chrome sizes the manifest names
 └── .env.example
 ```
+
+`../assets/` holds the brand source files. The icons under `app/` and `public/` are copies of
+them, because Next resolves `favicon.ico` / `icon.png` / `apple-icon.png` by file convention
+inside `app/` and the manifest needs stable public URLs — neither can point outside the app.
+Re-export from `../assets/` when the mark changes.
 
 ## Configuration
 
