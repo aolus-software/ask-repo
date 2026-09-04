@@ -248,12 +248,23 @@ Milestones from [`docs/PRD.md`](docs/PRD.md) §6, built in order:
 - [x] **M3** — LangGraph: intent routing + a self-critique loop that grades retrieval before generating
 - [x] **M4** — QA Checklist: generate test cases from code, shared chat for refinement, apply/discard proposals, result recording, export
 - [x] **M4 frontend** — the `/checklist` module list, the `/checklist/[moduleId]` grid with chat and review panel
+- [ ] **M4.5** — Model provider abstraction: a native Anthropic adapter, a startup check that the
+      configured model can do structured output, hosted-provider retry classification, and a spend
+      bound. Any OpenAI-compatible endpoint (OpenRouter, DeepSeek, Kimi, Groq, vLLM) already works
+      by configuration today — see [PRD §6](docs/PRD.md)
 - [ ] **M5** — Mock Data Generator: synthetic Q&A + eval scoring
 - [ ] **M6** — Local vs hosted model comparison
 
 **Phase 2** (after M6): per-project RBAC — users assigned to projects, roles per project.
 Phase 1 is deliberately built so this is a change to one access-resolver function rather
-than a rewrite (PRD §2.1, §4.1).
+than a rewrite (PRD §2.1, §4.1). Also queued for that phase: notifications (in-app and
+email) for the background jobs that currently finish in silence, self-service password
+reset, a per-user answer persona, an append-only audit trail, and multi-language
+support — see PRD §2.1 for what each costs.
+
+**Phase 3** (after phase 2): a code knowledge graph in Neo4j Community Edition, for the
+"what breaks if I change this" questions vector similarity cannot answer. Neo4j becomes the
+fourth database beside Postgres, Redis and Qdrant; Kafka stays the broker (PRD §2.1).
 
 ## Security
 

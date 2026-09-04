@@ -108,6 +108,19 @@ A few properties are your responsibility, not the code's:
 - **Ollama runs no auth either.** It is an embedding backend on the internal network; treat
   reaching it as equivalent to reaching the worker. If you point `EMBEDDING_PROVIDER` at a
   hosted API instead, `EMBEDDING_API_KEY` becomes a secret to manage like the others.
+
+- **Pointing `CHAT_PROVIDER` at a hosted API sends your source code to that provider.** This
+  is worth stating plainly because the setting is a one-line change and the consequence is
+  not: every question ships the retrieved excerpts — real code from your private
+  repositories, with their file paths — to whatever `CHAT_BASE_URL` names. Nothing in the
+  product prevents this and nothing should; running a capable model locally is expensive and
+  choosing otherwise is a legitimate trade. But it is **your** trade to make knowingly, so:
+  treat the provider's retention and training policy as part of this instance's security
+  posture, be aware that an aggregator may route to a downstream host it does not name, and
+  manage `CHAT_API_KEY` as a secret that also authorises spending. Stored PATs are never
+  sent — only chunk text and paths reach a prompt. If you decide against it later, switching
+  back is configuration only: the answering model is not part of the index, so no re-index is
+  needed (unlike `EMBEDDING_PROVIDER`, which is).
 - **The worker is a second process holding the same secrets.** It reads the database, the
   PAT encryption key, and Qdrant. Deploy it with the same care as the API — it is the
   component that actually fetches user-supplied URLs from inside your network (§9's SSRF
