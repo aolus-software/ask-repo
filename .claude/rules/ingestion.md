@@ -35,6 +35,28 @@ the partition key, not the service's busy check.
 - A duplicate delivery must stay **cheap** — one refused claim. That is what licenses the
   consumer to absorb an error and leave the offset uncommitted.
 
+## The checklist sweep buys its own cheapness, because the claim cannot
+
+Everything above holds for projects because a project leaves `pending` the instant anyone claims
+it, so it stops matching `ProjectRepository.find_stranded` unaided. A checklist module is already
+`generating` before its claim and stays `generating` for the whole run: **its status carries no
+information about whether a worker holds it.** The only signal is the lease, and there is a window
+after every failure where the row looks abandoned.
+
+That makes the last bullet above false on this path. `reconcile_modules_once` re-publishes with a
+deliberately fresh `job_id` so the claim cannot refuse the replacement — which means a duplicate
+costs a **whole generation**, not a refused claim. Two writes buy back what the claim cannot:
+
+- **`claim_stranded` stamps `updated_at` on the rows it returns**, so a swept module falls outside
+  the window and the next tick passes over it. Selecting without stamping publishes the same
+  module on every tick, forever, for as long as it sits in `generating` with nobody on it — one
+  full generation per minute. It also makes concurrent sweeps safe: the UPDATE matches once.
+- **A run that fails but is coming back calls `defer`**, which drops the lease and leaves the
+  status alone. `claim` commits *before* generation starts, so rolling back a failed run leaves a
+  five-minute lease owned by a run that is over, and the retry scheduled a minute later is refused
+  by its own dead predecessor. The module is then untouchable until the lease lapses — by which
+  point the sweep has decided it was abandoned and published a second job for it as well.
+
 ## Long jobs pause their partitions and keep polling
 
 aiokafka measures liveness as *fetcher idle time*: go longer than `max.poll.interval.ms` without

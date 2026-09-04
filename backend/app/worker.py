@@ -78,16 +78,23 @@ async def reconcile_modules_once(
     """Re-enqueue every generation that was lost. Returns how many.
 
     Covers the same two gaps as `reconcile_once` does for projects: the route committed
-    the row but the produce failed, and a worker died holding a lease. Safe to run on
-    every worker concurrently -- the claim deduplicates.
+    the row but the produce failed, and a worker died holding a lease.
+
+    `claim_stranded` **takes** the rows rather than merely finding them, and that is
+    what makes this safe to run repeatedly and on every worker at once. The claim
+    cannot deduplicate here the way it does for ingestion: the message below carries a
+    deliberately fresh `job_id`, so it is guaranteed claimable and a duplicate costs a
+    whole generation instead of one skipped poll. Selecting without stamping publishes
+    the same module on every tick for as long as it sits in `generating` with nobody on
+    it -- one full generation per minute, indefinitely.
     """
-    stranded = await repository.find_stranded(generating_older_than_seconds=STRANDED_AFTER_SECONDS)
-    for module in stranded:
-        logger.info("re-enqueueing stranded checklist module %s", module.id)
+    stranded = await repository.claim_stranded(generating_older_than_seconds=STRANDED_AFTER_SECONDS)
+    for module_id in stranded:
+        logger.info("re-enqueueing stranded checklist module %s", module_id)
         await producer.produce_to(
             topic,
             ChecklistJobMessage(
-                module_id=module.id,
+                module_id=module_id,
                 # A fresh job id: reusing the old one could match `last_job_id` and
                 # the claim would refuse the replacement message.
                 job_id=uuid.uuid4(),

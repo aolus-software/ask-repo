@@ -109,7 +109,8 @@ async def handle_checklist_message(
         return JobOutcome.DEAD_LETTERED
     except RetryableIngestionError as error:
         # No status write: the job is coming back, and `failed` would lie about it.
-        await session.rollback()
+        # The lease still goes, though -- see `_defer`.
+        await _defer(message, repository=repository, worker_id=worker_id, session=session)
         logger.warning(
             "checklist generation for module %s failed retryably: %s",
             message.module_id,
@@ -121,7 +122,6 @@ async def handle_checklist_message(
         # Unclassified: retried exactly once, then dead-lettered, so a bug neither
         # silently eats jobs nor loops forever. Reaching this means a failure mode
         # nobody classified, and the fix is to classify it rather than widen the net.
-        await session.rollback()
         logger.exception("unclassified failure generating module %s", message.module_id)
         if message.attempt >= 1:
             await _fail(
@@ -133,10 +133,36 @@ async def handle_checklist_message(
             )
             await _route_failure(message, producer=producer, max_attempts=0)
             return JobOutcome.DEAD_LETTERED
+        await _defer(message, repository=repository, worker_id=worker_id, session=session)
         await _route_failure(message, producer=producer, max_attempts=max_attempts)
         return JobOutcome.RETRY_SCHEDULED
 
     return JobOutcome.COMPLETED
+
+
+async def _defer(
+    message: ChecklistJobMessage,
+    *,
+    repository: ChecklistModuleRepository,
+    worker_id: str,
+    session: AsyncSession,
+) -> None:
+    """Drop the lease of a run that ended but is coming back.
+
+    `claim` commits before generation starts, so rolling back a failed run leaves a
+    five-minute lease owned by a run that is over. The retry scheduled a minute later
+    is then refused by its own dead predecessor, and the module sits untouchable until
+    the lease lapses -- by which point the stranded sweep has decided it was abandoned
+    and re-published it as well.
+
+    The rollback still happens first: whatever the failed run left in this session is
+    not wanted, and only the lease release should survive.
+    """
+    await session.rollback()
+    if await repository.defer(module_id=message.module_id, worker_id=worker_id):
+        await session.commit()
+    else:
+        await session.rollback()
 
 
 async def _fail(

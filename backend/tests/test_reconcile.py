@@ -229,3 +229,28 @@ async def test_reconcile_re_enqueues_a_module_whose_worker_died(
     # A fresh job id: reusing the old one could match `last_job_id` and the claim
     # would refuse the replacement message.
     assert message.job_id != module.last_job_id
+
+
+async def test_a_swept_module_is_not_swept_again_on_the_next_tick(
+    db_session: AsyncSession,
+) -> None:
+    """The sweep publishes with a fresh `job_id` so the claim cannot refuse it, which
+    means every duplicate costs a whole generation rather than one skipped poll. A
+    module that stays in `generating` -- because the run that was working on it died --
+    would otherwise be re-published on every 60-second tick, indefinitely."""
+    module = await create_checklist_module(db_session, status=ChecklistModuleStatus.GENERATING)
+    module.lease_expires_at = datetime.now(UTC) - timedelta(seconds=1)
+    module.updated_at = datetime.now(UTC) - timedelta(seconds=600)
+    await db_session.flush()
+    queue = InMemoryIngestionQueue()
+    repository = ChecklistModuleRepository(db_session)
+
+    first = await reconcile_modules_once(
+        repository=repository, producer=queue, topic=CHECKLIST_TOPIC
+    )
+    second = await reconcile_modules_once(
+        repository=repository, producer=queue, topic=CHECKLIST_TOPIC
+    )
+
+    assert (first, second) == (1, 0)
+    assert len(queue.produced) == 1

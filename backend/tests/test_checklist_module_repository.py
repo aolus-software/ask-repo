@@ -152,9 +152,9 @@ async def test_find_stranded_returns_a_module_whose_lease_expired(
     await db_session.flush()
     repository = ChecklistModuleRepository(db_session)
 
-    stranded = await repository.find_stranded(generating_older_than_seconds=120)
+    stranded = await repository.claim_stranded(generating_older_than_seconds=120)
 
-    assert [row.id for row in stranded] == [module.id]
+    assert stranded == [module.id]
 
 
 async def test_soft_delete_for_project_takes_every_creators_modules(
@@ -172,3 +172,70 @@ async def test_soft_delete_for_project_takes_every_creators_modules(
         scope=ProjectScope.all(), page=1, limit=25, sort="created_at", descending=True
     )
     assert rows == []
+
+
+async def test_claim_stranded_stamps_the_rows_it_returns(db_session: AsyncSession) -> None:
+    """A swept module must not be swept again on the next tick.
+
+    The sweep publishes with a fresh `job_id` precisely so the claim cannot refuse
+    it, which means a duplicate costs a whole generation rather than one skipped
+    poll. Stamping `updated_at` is what stops the 60-second tick re-publishing the
+    same module until something else changes it.
+    """
+    module = await create_checklist_module(db_session, status=ChecklistModuleStatus.GENERATING)
+    module.lease_expires_at = datetime.now(UTC) - timedelta(seconds=10)
+    module.updated_at = datetime.now(UTC) - timedelta(seconds=600)
+    await db_session.flush()
+    repository = ChecklistModuleRepository(db_session)
+
+    first = await repository.claim_stranded(generating_older_than_seconds=120)
+    second = await repository.claim_stranded(generating_older_than_seconds=120)
+
+    assert first == [module.id]
+    assert second == []
+
+
+async def test_defer_drops_the_lease_and_stays_generating(db_session: AsyncSession) -> None:
+    """A run that ended but is coming back releases its lease.
+
+    The claim commits before generation starts, so a failure that only rolls back
+    leaves a 300-second lease held by a run that is over -- and the retry scheduled
+    one minute later is refused by its own dead predecessor. Status stays
+    `generating` because the job really is coming back; `failed` would lie.
+    """
+    module = await create_checklist_module(db_session, status=ChecklistModuleStatus.GENERATING)
+    repository = ChecklistModuleRepository(db_session)
+    job_id = uuid.uuid4()
+    assert await repository.claim(
+        module_id=module.id, job_id=job_id, worker_id="worker-a", lease_seconds=LEASE_SECONDS
+    )
+
+    assert await repository.defer(module_id=module.id, worker_id="worker-a") is True
+
+    await db_session.refresh(module)
+    assert module.lease_owner is None
+    assert module.lease_expires_at is None
+    assert module.status == ChecklistModuleStatus.GENERATING.value
+    # The successor can now take it, which is the whole point.
+    assert await repository.claim(
+        module_id=module.id,
+        job_id=uuid.uuid4(),
+        worker_id="worker-b",
+        lease_seconds=LEASE_SECONDS,
+    )
+
+
+async def test_defer_refuses_when_another_worker_owns_the_lease(
+    db_session: AsyncSession,
+) -> None:
+    """Same guard as `release`: a run that lost its lease cannot write to the row."""
+    module = await create_checklist_module(db_session, status=ChecklistModuleStatus.GENERATING)
+    repository = ChecklistModuleRepository(db_session)
+    assert await repository.claim(
+        module_id=module.id,
+        job_id=uuid.uuid4(),
+        worker_id="worker-a",
+        lease_seconds=LEASE_SECONDS,
+    )
+
+    assert await repository.defer(module_id=module.id, worker_id="worker-b") is False

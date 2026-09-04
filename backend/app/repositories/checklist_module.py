@@ -199,19 +199,33 @@ class ChecklistModuleRepository(BaseRepository[ChecklistModule]):
             .values(status=ChecklistModuleStatus.REVIEW.value, updated_at=func.now())
         )
 
-    async def find_stranded(
-        self, *, generating_older_than_seconds: int
-    ) -> Sequence[ChecklistModule]:
-        """Modules whose generation was lost: the produce failed, or a worker died.
+    async def claim_stranded(self, *, generating_older_than_seconds: int) -> Sequence[uuid.UUID]:
+        """Take the modules whose generation was lost, and stamp them so they stay taken.
 
         Two gaps the queue cannot close on its own, matching
-        `ProjectRepository.find_stranded`. Safe to run on every worker concurrently --
-        the claim deduplicates, so a duplicate message costs one skipped poll.
+        `ProjectRepository.find_stranded`: the produce failed, or a worker died.
+
+        Unlike the project sweep this one **writes**, and it has to. A project leaves
+        `pending` the moment anyone claims it, so it stops matching on its own; a
+        module is already `generating` before the claim and stays `generating`
+        throughout, so status says nothing about whether a worker holds it. Worse, the
+        caller re-publishes with a deliberately fresh `job_id` so the claim cannot
+        refuse the message -- which means a duplicate costs a whole generation, not one
+        skipped poll.
+
+        Stamping `updated_at` is what closes that: the row falls outside
+        `generating_older_than_seconds` again, so the next tick passes over it, and a
+        concurrent sweep on another worker matches nothing because this UPDATE already
+        moved the row. Selecting and then re-publishing without this is an unbounded
+        loop -- one full generation per tick, forever, for as long as the module sits
+        in `generating` with nobody on it.
         """
         cutoff = datetime.now(UTC) - timedelta(seconds=generating_older_than_seconds)
         now = datetime.now(UTC)
         result = await self.session.execute(
-            self.active_select().where(
+            update(ChecklistModule)
+            .where(
+                ChecklistModule.deleted_at.is_(None),
                 ChecklistModule.status == ChecklistModuleStatus.GENERATING.value,
                 ChecklistModule.updated_at < cutoff,
                 or_(
@@ -219,8 +233,43 @@ class ChecklistModuleRepository(BaseRepository[ChecklistModule]):
                     ChecklistModule.lease_expires_at < now,
                 ),
             )
+            # Bulk UPDATE: `onupdate` does not fire on this path
+            # (.claude/rules/persistence.md).
+            .values(updated_at=now)
+            .returning(ChecklistModule.id)
         )
-        return result.scalars().all()
+        return list(result.scalars().all())
+
+    async def defer(self, *, module_id: uuid.UUID, worker_id: str) -> bool:
+        """Drop our lease but leave the module `generating`. True if we still held it.
+
+        For a run that has ended and is coming back -- a retryable failure, or the one
+        retry an unclassified failure is allowed. `claim` commits before generation
+        starts, so a failure that merely rolls back leaves a five-minute lease owned by
+        a run that is over, and the retry scheduled one minute later is refused by its
+        own dead predecessor. The module then waits out the full lease before anything
+        can touch it, which is long enough for the stranded sweep to decide it was
+        abandoned.
+
+        `status` stays `generating` for the reason the retry path already gives:
+        the job really is coming back, and `failed` would lie about it. `updated_at`
+        moves so the sweep measures its window from this moment rather than from the
+        claim.
+
+        Guarded on `lease_owner` like `release`: a run that lost its lease has no right
+        to write to the row.
+        """
+        now = datetime.now(UTC)
+        result = await self.session.execute(
+            update(ChecklistModule)
+            .where(
+                ChecklistModule.id == module_id,
+                ChecklistModule.deleted_at.is_(None),
+                ChecklistModule.lease_owner == worker_id,
+            )
+            .values(lease_owner=None, lease_expires_at=None, updated_at=now)
+        )
+        return cast(CursorResult[Any], result).rowcount == 1
 
     async def soft_delete_for_project(self, project_id: uuid.UUID) -> int:
         """Soft-delete every module of a project, for every creator.

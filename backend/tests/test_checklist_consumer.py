@@ -172,3 +172,59 @@ async def test_a_failed_generation_leaves_existing_items_untouched(
     await db_session.refresh(item)
     assert item.current_result == "Observed 401"
     assert item.deleted_at is None
+
+
+async def test_a_retryable_failure_releases_the_lease_for_its_own_retry(
+    db_session: AsyncSession,
+) -> None:
+    """The retry must be able to claim the module the failed run was holding.
+
+    `claim` commits before generation starts, so a failure that only rolls back leaves
+    a five-minute lease owned by a run that is over. The retry lands a minute later and
+    is refused by its own dead predecessor, and the module then sits in `generating`
+    with nobody on it -- long enough for the stranded sweep to re-publish it as well,
+    which is how one failure became a generation every tick.
+    """
+    module = await create_checklist_module(db_session)
+    repository = ChecklistModuleRepository(db_session)
+
+    await handle_checklist_message(
+        _message(module.id),
+        generator=_Generator(RetryableIngestionError("embedder blipped")),
+        repository=repository,
+        producer=InMemoryIngestionQueue(),
+        worker_id="w1",
+        max_attempts=3,
+        session=db_session,
+    )
+
+    await db_session.refresh(module)
+    assert module.lease_owner is None
+    assert module.status == ChecklistModuleStatus.GENERATING.value
+    assert await repository.claim(
+        module_id=module.id, job_id=uuid.uuid4(), worker_id="w1", lease_seconds=300
+    )
+
+
+async def test_an_unclassified_first_failure_releases_the_lease_too(
+    db_session: AsyncSession,
+) -> None:
+    """Same reasoning as the retryable path: attempt 0 is coming back, so it defers
+    rather than failing, and a deferred run keeps no lease."""
+    module = await create_checklist_module(db_session)
+    repository = ChecklistModuleRepository(db_session)
+
+    outcome = await handle_checklist_message(
+        _message(module.id, attempt=0),
+        generator=_Generator(RuntimeError("ollama fell over")),
+        repository=repository,
+        producer=InMemoryIngestionQueue(),
+        worker_id="w1",
+        max_attempts=3,
+        session=db_session,
+    )
+
+    assert outcome is JobOutcome.RETRY_SCHEDULED
+    await db_session.refresh(module)
+    assert module.lease_owner is None
+    assert module.status == ChecklistModuleStatus.GENERATING.value
