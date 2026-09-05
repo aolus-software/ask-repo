@@ -57,8 +57,8 @@ stops retrying instead of burning the retry ladder; a boot-time capability probe
 (`app/rag/capability.py`) runs in both `app/main.py`'s lifespan and `app/worker.py`'s startup and
 fails the process if the configured chat model cannot do structured output, rather than failing
 on the first generation; and `CHECKLIST_MAX_FILES_PER_JOB` caps how many files one checklist
-generation run maps, reporting the excess in the same coverage note `partial_paths` already
-populates.
+generation run maps, reporting the excess in `skipped_paths` — a coverage note alongside the
+pre-existing `partial_paths`, not the same field.
 
 Two facts about it outrank the rest. **The generator scrolls the index; it does not search it**
 — top-k retrieval cannot report what it left out, and a test plan that silently omits a file is
