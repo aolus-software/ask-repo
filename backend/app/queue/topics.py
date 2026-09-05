@@ -184,3 +184,71 @@ def checklist_next_destination(*, attempt: int, max_attempts: int) -> tuple[str,
     if attempt >= max_attempts - 1 or attempt >= len(CHECKLIST_RETRY_TOPICS):
         return CHECKLIST_DLQ_TOPIC, 0
     return CHECKLIST_RETRY_TOPICS[attempt]
+
+
+MOCK_DATA_TOPIC = "askrepo.mock-data.generate"
+MOCK_DATA_DLQ_TOPIC = "askrepo.mock-data.dlq"
+
+# Its own ladder, like the checklist's: a stuck mock-data generation must not sit in
+# the queue a project reindex or a checklist run is waiting in.
+MOCK_DATA_RETRY_TOPICS: tuple[tuple[str, int], ...] = (
+    ("askrepo.mock-data.retry.1m", 60),
+    ("askrepo.mock-data.retry.10m", 600),
+)
+
+ALL_MOCK_DATA_TOPICS = (
+    MOCK_DATA_TOPIC,
+    *[topic for topic, _ in MOCK_DATA_RETRY_TOPICS],
+    MOCK_DATA_DLQ_TOPIC,
+)
+
+
+@dataclass(frozen=True, slots=True)
+class MockDataJobMessage:
+    """One request to generate one module's mock dataset.
+
+    `job_id` is minted per enqueue and recorded on the dataset when the run finishes --
+    see `MockDataDatasetRepository.claim`, the same "new request vs redelivery" test
+    `ChecklistModuleRepository.claim` runs. `count` rides on the message rather than
+    being re-read from a request at generation time: the job may run long after the
+    request that queued it, on a worker that never saw the original HTTP body.
+    """
+
+    dataset_id: uuid.UUID
+    job_id: uuid.UUID
+    attempt: int
+    not_before_ms: int
+    original_topic: str
+    count: int
+
+    def to_bytes(self) -> bytes:
+        """Serialise for the wire."""
+        payload = asdict(self)
+        payload["dataset_id"] = str(self.dataset_id)
+        payload["job_id"] = str(self.job_id)
+        return json.dumps(payload).encode()
+
+    @classmethod
+    def from_bytes(cls, raw: bytes) -> "MockDataJobMessage":
+        """Parse a message off the wire."""
+        payload = json.loads(raw)
+        return cls(
+            dataset_id=uuid.UUID(payload["dataset_id"]),
+            job_id=uuid.UUID(payload["job_id"]),
+            attempt=int(payload["attempt"]),
+            not_before_ms=int(payload["not_before_ms"]),
+            original_topic=str(payload["original_topic"]),
+            count=int(payload["count"]),
+        )
+
+    def key(self) -> bytes:
+        """Partition key. Orders one dataset's messages within one topic; the lease on
+        the dataset row is what stops two runs racing, not this."""
+        return str(self.dataset_id).encode()
+
+
+def mock_data_next_destination(*, attempt: int, max_attempts: int) -> tuple[str, int]:
+    """Where a mock-data generation goes after failing, and how long it waits."""
+    if attempt >= max_attempts - 1 or attempt >= len(MOCK_DATA_RETRY_TOPICS):
+        return MOCK_DATA_DLQ_TOPIC, 0
+    return MOCK_DATA_RETRY_TOPICS[attempt]

@@ -5527,7 +5527,11 @@ describe("consumeMockDataStream", () => {
 
 - [ ] **Step 3: Run it to see it fail**
 
+<<<<<<< HEAD
 Run: `cd frontend && bun test lib/mock-data/stream.test.ts`
+=======
+Run: `cd frontend && bunx vitest run lib/mock-data/stream.test.ts`
+>>>>>>> c050297978477ec7216e5a1195b62477791b4aa4
 Expected: FAIL — `lib/mock-data/stream.ts` does not exist yet.
 
 - [ ] **Step 4: Add the wire types**
@@ -5728,7 +5732,11 @@ export async function consumeMockDataStream(
 
 - [ ] **Step 7: Run the stream test again**
 
+<<<<<<< HEAD
 Run: `cd frontend && bun test lib/mock-data/stream.test.ts`
+=======
+Run: `cd frontend && bunx vitest run lib/mock-data/stream.test.ts`
+>>>>>>> c050297978477ec7216e5a1195b62477791b4aa4
 Expected: PASS (2 passed)
 
 - [ ] **Step 8: Write the query and mutation hooks**
@@ -6674,7 +6682,11 @@ items-start justify-between gap-4">` down to the closing `<ChatPanel ... />`) in
 
 - [ ] **Step 13: Run the frontend test suite and the type check**
 
+<<<<<<< HEAD
 Run: `cd frontend && bun test && bun run build`
+=======
+Run: `cd frontend && bun run test && bun run build`
+>>>>>>> c050297978477ec7216e5a1195b62477791b4aa4
 Expected: both pass. `bun run build` is what catches a type error the dev server
 tolerates (per `CLAUDE.md`'s frontend commands section) — this is the check that matters
 most in this task, since Step 12 is a hand-placed move of existing JSX.

@@ -14,6 +14,13 @@ from app.models.checklist import (
     ChecklistModuleStatus,
 )
 from app.models.conversation import Conversation, FinishReason, Message, MessageRole
+from app.models.mock_data import (
+    MockDataChangeSet,
+    MockDataDataset,
+    MockDataDatasetStatus,
+    MockDataMessage,
+    MockDataRecord,
+)
 from app.models.project import Project, ProjectStatus
 from app.models.refresh_token import RefreshToken, RevokedReason
 from app.models.user import User
@@ -33,6 +40,11 @@ __all__ = [
     "FinishReason",
     "Message",
     "MessageRole",
+    "MockDataChangeSet",
+    "MockDataDataset",
+    "MockDataDatasetStatus",
+    "MockDataMessage",
+    "MockDataRecord",
     "Project",
     "ProjectStatus",
     "RefreshToken",

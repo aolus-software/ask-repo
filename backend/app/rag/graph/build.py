@@ -5,6 +5,8 @@ Deliberately free of business logic. Every decision a node makes lives in
 change of policy is a change to one node rather than to the graph's shape.
 """
 
+from typing import Literal
+
 from langchain_core.language_models import BaseChatModel
 from langchain_core.runnables import RunnableLambda
 from langgraph.graph import END, START, StateGraph
@@ -17,6 +19,7 @@ from app.rag.graph.nodes import (
     build_generate,
     build_grade,
     build_propose_changes,
+    build_propose_mock_data_changes,
     build_refuse,
     build_retrieve,
 )
@@ -66,13 +69,15 @@ def build_answer_graph(
     retriever: Retriever,
     chat_model: BaseChatModel,
     settings: Settings,
-    propose: bool = False,
+    propose_target: Literal["checklist", "mock_data"] | None = None,
 ) -> CompiledStateGraph[TurnState, None, TurnState, TurnState]:
     """The compiled answer graph for one instance's configuration.
 
-    `propose` adds a trailing node that proposes checklist operations. One graph shape
-    with an optional tail rather than two graphs, because a second graph would need a
-    second adapter -- and the adapter is where the single terminator is built.
+    `propose_target` adds a trailing node that proposes changes against one content
+    type. `None` (the Ask screen's case) adds no trailing node at all. One graph shape
+    with an optional, selectable tail rather than three graphs, because a second graph
+    would need a second adapter -- and the adapter is where the single terminator is
+    built.
     """
     max_attempts = settings.rag_max_retrieval_attempts
 
@@ -124,7 +129,7 @@ def build_answer_graph(
         {"retrieve": "retrieve", "generate": "generate"},
     )
     graph.add_edge("refuse", END)
-    if propose:
+    if propose_target == "checklist":
         graph.add_node(
             "propose_changes",
             RunnableLambda(build_propose_changes(chat_model, enabled=settings.rag_propose_changes)),
@@ -138,6 +143,18 @@ def build_answer_graph(
         graph.add_edge("generate", "propose_changes")
         graph.add_edge("answer_from_history", "propose_changes")
         graph.add_edge("propose_changes", END)
+    elif propose_target == "mock_data":
+        # Same wiring as the checklist tail above, and for the same reasons: both
+        # answering routes feed it, `refuse` does not.
+        graph.add_node(
+            "propose_mock_data_changes",
+            RunnableLambda(
+                build_propose_mock_data_changes(chat_model, enabled=settings.rag_propose_changes)
+            ),
+        )
+        graph.add_edge("generate", "propose_mock_data_changes")
+        graph.add_edge("answer_from_history", "propose_mock_data_changes")
+        graph.add_edge("propose_mock_data_changes", END)
     else:
         graph.add_edge("generate", END)
         graph.add_edge("answer_from_history", END)
