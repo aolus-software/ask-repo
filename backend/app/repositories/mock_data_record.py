@@ -20,7 +20,7 @@ class MockDataRecordRepository(BaseRepository[MockDataRecord]):
     model = MockDataRecord
 
     async def list_for_module(self, module_id: uuid.UUID) -> list[MockDataRecord]:
-        """Every live record of one module, newest first."""
+        """Every live record of one module, oldest first — the order a generated batch was produced in."""
         result = await self.session.execute(
             self.active_select()
             .where(MockDataRecord.checklist_module_id == module_id)
