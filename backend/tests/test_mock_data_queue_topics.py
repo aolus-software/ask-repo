@@ -5,7 +5,6 @@ import uuid
 from app.queue.topics import (
     MOCK_DATA_DLQ_TOPIC,
     MOCK_DATA_TOPIC,
-    MOCK_DATA_RETRY_TOPICS,
     JobMessage,
     MockDataJobMessage,
     mock_data_next_destination,
