@@ -11,6 +11,7 @@ from app.models.checklist import ChecklistModuleStatus
 from app.queue.checklist import JobOutcome, handle_checklist_message
 from app.queue.protocol import InMemoryIngestionQueue
 from app.queue.topics import CHECKLIST_DLQ_TOPIC, CHECKLIST_TOPIC, ChecklistJobMessage
+from app.rag.errors import RetryableChatError, TerminalChatError
 from app.repositories.checklist_module import ChecklistModuleRepository
 from tests.factories import create_checklist_item, create_checklist_module
 
@@ -228,3 +229,49 @@ async def test_an_unclassified_first_failure_releases_the_lease_too(
     await db_session.refresh(module)
     assert module.lease_owner is None
     assert module.status == ChecklistModuleStatus.GENERATING.value
+
+
+async def test_a_retryable_chat_failure_goes_to_the_ladder_too(
+    db_session: AsyncSession,
+) -> None:
+    """`RetryableChatError` must be routed exactly like `RetryableIngestionError` --
+    the taxonomy is separate (M4.5 spec 2.1) but the dispatch is shared."""
+    module = await create_checklist_module(db_session)
+    queue = InMemoryIngestionQueue()
+
+    await handle_checklist_message(
+        _message(module.id),
+        generator=_Generator(RetryableChatError("rate limited")),
+        repository=ChecklistModuleRepository(db_session),
+        producer=queue,
+        worker_id="w1",
+        max_attempts=3,
+        session=db_session,
+    )
+
+    assert queue.produced[0][0].startswith("askrepo.checklist.retry")
+    await db_session.refresh(module)
+    assert module.status == ChecklistModuleStatus.GENERATING.value
+
+
+async def test_a_terminal_chat_failure_dead_letters_too(
+    db_session: AsyncSession,
+) -> None:
+    """`TerminalChatError` must be routed exactly like `TerminalIngestionError`."""
+    module = await create_checklist_module(db_session)
+    queue = InMemoryIngestionQueue()
+
+    await handle_checklist_message(
+        _message(module.id),
+        generator=_Generator(TerminalChatError("unknown model")),
+        repository=ChecklistModuleRepository(db_session),
+        producer=queue,
+        worker_id="w1",
+        max_attempts=3,
+        session=db_session,
+    )
+
+    await db_session.refresh(module)
+    assert module.status == ChecklistModuleStatus.FAILED.value
+    assert module.error == "generation failed: TerminalChatError."
+    assert queue.produced[0][0] == CHECKLIST_DLQ_TOPIC

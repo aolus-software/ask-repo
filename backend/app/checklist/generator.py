@@ -27,6 +27,7 @@ from app.models.checklist import (
     ChecklistChangeSet,
     ChecklistModuleStatus,
 )
+from app.rag.errors import TerminalChatError, classify_chat_error
 from app.rag.prompts import (
     ExistingItem,
     build_map_prompt,
@@ -229,7 +230,10 @@ class ChecklistGenerator:
     async def _observe(self, file: ModuleFile) -> list[tuple[str, str, int, int]]:
         """One call for one file: what it exposes, raises, returns, and validates."""
         model = self.chat_model.with_structured_output(FileObservations)
-        result = await model.ainvoke(build_map_prompt(file))
+        try:
+            result = await model.ainvoke(build_map_prompt(file))
+        except Exception as error:
+            raise classify_chat_error(error) or error from error
         if not isinstance(result, FileObservations):
             return []
         return [
@@ -264,16 +268,19 @@ class ChecklistGenerator:
         observations = [entry for task in tasks for entry in task.result()]
 
         model = self.chat_model.with_structured_output(ProposedChangeSet)
-        result = await model.ainvoke(
-            build_reduce_prompt(
-                module_name=module_name,
-                observations=observations,
-                existing=existing,
-                partial_paths=source.partial_paths,
+        try:
+            result = await model.ainvoke(
+                build_reduce_prompt(
+                    module_name=module_name,
+                    observations=observations,
+                    existing=existing,
+                    partial_paths=source.partial_paths,
+                )
             )
-        )
+        except Exception as error:
+            raise classify_chat_error(error) or error from error
         if not isinstance(result, ProposedChangeSet):
-            raise RetryableIngestionError("the reduce step returned an unusable shape")
+            raise TerminalChatError("the reduce step returned an unusable shape")
         return result
 
     def _to_operations(
