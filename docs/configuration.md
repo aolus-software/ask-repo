@@ -236,10 +236,10 @@ answers with a hosted model, or the reverse.
 
 | Variable | Default | What it does |
 | --- | --- | --- |
-| `CHAT_PROVIDER` | `ollama` | `ollama` or `openai` |
+| `CHAT_PROVIDER` | `ollama` | `ollama`, `openai`, or `anthropic` |
 | `CHAT_MODEL` | `qwen2.5-coder:14b` | The answering model |
-| `CHAT_BASE_URL` | `http://localhost:11434` | Endpoint. Inside Compose, `http://host.docker.internal:11434` |
-| `CHAT_API_KEY` | *empty* | Required for `openai`; ignored by `ollama` |
+| `CHAT_BASE_URL` | `http://localhost:11434` | Endpoint. Inside Compose, `http://host.docker.internal:11434`. For `anthropic`, `https://api.anthropic.com` — there is no default that guesses it, the same as `openai` |
+| `CHAT_API_KEY` | *empty* | Required for `openai` and `anthropic`; ignored by `ollama` |
 | `CHAT_TEMPERATURE` | `0.1` | Low but not zero: answers about code should be reproducible, not creative. `0.0`–`2.0` |
 | `CHAT_TIMEOUT_SECONDS` | `180` | Whole-answer budget. Expiry ends the turn with `finishReason=timeout` |
 | `CHAT_MAX_CONCURRENCY` | `2` | Answers generated at once, instance-wide |

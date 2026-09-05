@@ -118,7 +118,7 @@ class Settings(BaseSettings):
     # Chat model — the answering LLM (docs/PRD.md §5). Separate from the embedding
     # provider on purpose: the two are different models with different endpoints,
     # and an instance commonly runs a local embedder with a hosted answerer.
-    chat_provider: Literal["ollama", "openai"] = "ollama"
+    chat_provider: Literal["ollama", "openai", "anthropic"] = "ollama"
     chat_model: str = "qwen2.5-coder:14b"
     chat_base_url: str = "http://localhost:11434"
     chat_api_key: str | None = None
