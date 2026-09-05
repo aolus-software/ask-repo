@@ -58,8 +58,8 @@ async def test_a_failing_probe_blocks_before_anything_else_is_built(
 async def test_a_working_model_passes_through_unchanged(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    fake = _RespondingChatModel()
-    monkeypatch.setattr("app.worker.build_chat_model", lambda settings: cast(BaseChatModel, fake))
+    fake = cast(BaseChatModel, _RespondingChatModel())
+    monkeypatch.setattr("app.worker.build_chat_model", lambda settings: fake)
 
     result = await _build_chat_model(Settings())
 
