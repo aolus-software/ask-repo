@@ -25,6 +25,7 @@ from app.core.middleware import AuthContextMiddleware
 from app.ingestion.embedder import build_embedder
 from app.queue.producer import KafkaIngestionQueue, ensure_topics
 from app.queue.topics import ALL_CHECKLIST_TOPICS
+from app.rag.capability import probe_structured_output
 from app.rag.chat import build_chat_model
 
 logger = logging.getLogger(__name__)
@@ -75,6 +76,10 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         partitions=settings.kafka_checklist_partitions,
         topics=ALL_CHECKLIST_TOPICS,
     )
+    # A live call, deliberately after the test guard above: an instance should fail
+    # to boot on a model it cannot use, not fail on the first generation
+    # (`docs/PRD.md` §6).
+    await probe_structured_output(app.state.chat_model)
     queue = KafkaIngestionQueue(
         bootstrap_servers=settings.kafka_bootstrap_servers,
         topic=settings.kafka_ingest_topic,

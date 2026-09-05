@@ -18,6 +18,7 @@ from app.config import Settings, get_settings
 from app.main import lifespan
 from app.queue.producer import KafkaIngestionQueue, ensure_topics
 from app.queue.topics import ALL_TOPICS, CHECKLIST_TOPIC, DLQ_TOPIC, INGEST_TOPIC, IngestionMessage
+from app.rag.errors import TerminalChatError
 
 # Broker error codes, from the Kafka protocol. `create_topics` reports these in the
 # response body rather than raising, so the producer has to read them.
@@ -406,3 +407,47 @@ async def test_the_lifespan_stops_the_producer_when_the_app_raises(
             raise RuntimeError("serving failed")
 
     assert StubQueue.instances[0].stopped is True
+
+
+async def test_the_lifespan_skips_the_chat_probe_in_the_test_environment(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Mirrors the Kafka guard above: a live probe would make every test-suite boot
+    depend on a reachable model endpoint (M4.5 spec 3.2)."""
+
+    async def forbidden(chat_model: object) -> None:
+        raise AssertionError("the lifespan must not probe the chat model when APP_ENV=test")
+
+    monkeypatch.setattr("app.main.probe_structured_output", forbidden)
+
+    assert get_settings().app_env == "test"
+    application = FastAPI()
+    async with lifespan(application):
+        pass
+
+
+async def test_the_lifespan_probes_the_chat_model_outside_the_test_environment(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An unreachable or incapable chat model must fail *before* the app starts
+    serving (`docs/PRD.md` §6), which for an ASGI lifespan means the exception
+    propagates out of `lifespan` unhandled."""
+    settings = Settings(app_env="development")
+    monkeypatch.setattr("app.main.get_settings", lambda: settings)
+
+    async def noop(
+        *, bootstrap_servers: str, partitions: int, topics: tuple[str, ...] = ()
+    ) -> None:
+        return None
+
+    monkeypatch.setattr("app.main.ensure_topics", noop)
+
+    async def failing_probe(chat_model: object) -> None:
+        raise TerminalChatError("chat model probe failed: AuthenticationError")
+
+    monkeypatch.setattr("app.main.probe_structured_output", failing_probe)
+
+    application = FastAPI()
+    with pytest.raises(TerminalChatError, match="AuthenticationError"):
+        async with lifespan(application):
+            pass
