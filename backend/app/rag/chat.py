@@ -27,6 +27,21 @@ def build_chat_model(settings: Settings) -> BaseChatModel:
             temperature=settings.chat_temperature,
         )
 
+    if settings.chat_provider == "anthropic":
+        from langchain_anthropic import ChatAnthropic
+
+        return ChatAnthropic(
+            # `model_name` here, not `model`: the field's alias is what mypy's
+            # pydantic plugin synthesizes into the constructor signature, and
+            # `populate_by_name` isn't enough to make it accept the bare field name too.
+            model_name=settings.chat_model,
+            base_url=settings.chat_base_url,
+            api_key=settings.chat_api_key or "",  # type: ignore[arg-type]  # SecretStr coerces
+            temperature=settings.chat_temperature,
+            timeout=None,
+            stop=None,
+        )
+
     from langchain_openai import ChatOpenAI
 
     return ChatOpenAI(

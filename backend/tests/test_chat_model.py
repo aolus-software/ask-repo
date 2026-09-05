@@ -1,5 +1,6 @@
 """Provider selection for the answering model."""
 
+from langchain_anthropic import ChatAnthropic
 from langchain_ollama import ChatOllama
 from langchain_openai import ChatOpenAI
 
@@ -19,6 +20,7 @@ def settings_for(provider: str) -> Settings:
 def test_the_factory_selects_by_provider() -> None:
     assert isinstance(build_chat_model(settings_for("ollama")), ChatOllama)
     assert isinstance(build_chat_model(settings_for("openai")), ChatOpenAI)
+    assert isinstance(build_chat_model(settings_for("anthropic")), ChatAnthropic)
 
 
 def test_the_configured_temperature_reaches_the_model() -> None:
