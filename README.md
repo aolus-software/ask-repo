@@ -45,7 +45,7 @@ management — against real repositories rather than tutorial data.
 | **1** | Project ingestion | Submit a repo URL; AskRepo clones, indexes, and tracks it. Projects are shared instance-wide |
 | **2** | Dev Knowledge | Ask questions against an indexed project; answers cite real file paths and functions. Conversations stay private to each user |
 | **3** | QA Checklist | Generate test cases for a code module, review and refine them via chat, record pass/fail/blocked results, and export as a spreadsheet |
-| **4** | Mock Data Generator | Auto-generate synthetic Q&A pairs from code, plus a lightweight eval score |
+| **4** | Mock Data Generator | Generate sample data records for a QA Checklist module, grounded in that feature's actual schema, reviewed via chat and exported as JSON/xlsx |
 
 ## Stack
 
@@ -280,15 +280,15 @@ Milestones from [`docs/PRD.md`](docs/PRD.md) §6, built in order:
       configured model can do structured output, hosted-provider retry classification, and a spend
       bound. Any OpenAI-compatible endpoint (OpenRouter, DeepSeek, Kimi, Groq, vLLM) already works
       by configuration today — see [PRD §6](docs/PRD.md)
-- [ ] **M5** — Mock Data Generator: synthetic Q&A + eval scoring
+- [ ] **M5** — Mock Data Generator: grounded sample records for a checklist module, generate/chat/apply, JSON + xlsx export
 - [ ] **M6** — Local vs hosted model comparison
 
 **Phase 2** (after M6): per-project RBAC — users assigned to projects, roles per project.
 Phase 1 is deliberately built so this is a change to one access-resolver function rather
 than a rewrite (PRD §2.1, §4.1). Also queued for that phase: notifications (in-app and
 email) for the background jobs that currently finish in silence, self-service password
-reset, a per-user answer persona, an append-only audit trail, and multi-language
-support — see PRD §2.1 for what each costs.
+reset, a per-user answer persona, an append-only audit trail, multi-language support, and
+the synthetic Q&A eval harness M5 originally targeted — see PRD §2.1 for what each costs.
 
 **Phase 3** (after phase 2): a code knowledge graph in Neo4j Community Edition, for the
 "what breaks if I change this" questions vector similarity cannot answer. Neo4j becomes the
