@@ -372,6 +372,11 @@ async def test_the_lifespan_owns_the_producer_outside_the_test_environment(
     monkeypatch.setattr("app.main.ensure_topics", record_ensure_topics)
     monkeypatch.setattr("app.main.KafkaIngestionQueue", StubQueue)
 
+    async def noop_probe(chat_model: object) -> None:
+        return None
+
+    monkeypatch.setattr("app.main.probe_structured_output", noop_probe)
+
     application = FastAPI()
     async with lifespan(application):
         queue = StubQueue.instances[0]
@@ -400,6 +405,11 @@ async def test_the_lifespan_stops_the_producer_when_the_app_raises(
 
     monkeypatch.setattr("app.main.ensure_topics", noop)
     monkeypatch.setattr("app.main.KafkaIngestionQueue", StubQueue)
+
+    async def noop_probe(chat_model: object) -> None:
+        return None
+
+    monkeypatch.setattr("app.main.probe_structured_output", noop_probe)
 
     application = FastAPI()
     with pytest.raises(RuntimeError, match="serving failed"):
