@@ -39,6 +39,9 @@ yarn-error.log*
 *.sqlite3
 *.db
 
+# ---- Agent worktrees ----
+.claude/worktrees/
+
 # ---- Editors / OS ----
 .vscode/*
 !.vscode/extensions.json
