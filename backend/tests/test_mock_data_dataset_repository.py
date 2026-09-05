@@ -5,7 +5,7 @@ from datetime import UTC, datetime, timedelta
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.mock_data import MockDataDataset, MockDataDatasetStatus
+from app.models.mock_data import MockDataDatasetStatus
 from app.repositories.mock_data_dataset import MockDataDatasetRepository
 from tests.factories import create_checklist_module
 
