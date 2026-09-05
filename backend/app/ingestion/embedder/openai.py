@@ -45,6 +45,10 @@ class OpenAIEmbedder:
 
         if response.status_code in (401, 403):
             raise TerminalIngestionError("Embedding provider rejected the credentials.")
+        if response.status_code in (400, 404, 422):
+            raise TerminalIngestionError(
+                f"Embedding provider rejected the request ({response.status_code})."
+            )
         if response.status_code >= 400:
             raise RetryableIngestionError(f"Embedding provider returned {response.status_code}.")
         return [item["embedding"] for item in response.json()["data"]]
