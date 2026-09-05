@@ -9,7 +9,7 @@ second PAT decrypt, no second URL-validation surface, and no second `scrub` obli
 
 import logging
 from collections.abc import Iterable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 logger = logging.getLogger(__name__)
@@ -31,10 +31,15 @@ class ModuleFile:
 
 @dataclass(frozen=True, slots=True)
 class ModuleSource:
-    """Everything the generator has to read, plus what it could not read whole."""
+    """Everything the generator has to read, plus what it could not read whole or at
+    all."""
 
     files: list[ModuleFile]
     partial_paths: list[str]
+    # Paths dropped by the per-job file cap (`CHECKLIST_MAX_FILES_PER_JOB`), never by
+    # `rebuild_files` itself -- which is why it defaults empty here rather than being
+    # a parameter this function fills in (M4.5 spec 4.1).
+    skipped_paths: list[str] = field(default_factory=list)
 
 
 def trim_overlap(previous: str, current: str, *, chunk_overlap: int) -> str:

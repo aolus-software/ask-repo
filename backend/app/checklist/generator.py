@@ -9,6 +9,7 @@ makes a failed reindex leave the previous index serving.
 import asyncio
 import logging
 import uuid
+from dataclasses import replace
 from datetime import UTC, datetime
 
 from langchain_core.language_models import BaseChatModel
@@ -43,6 +44,22 @@ from app.repositories.checklist_module import (
 from app.repositories.project import ProjectRepository
 
 logger = logging.getLogger(__name__)
+
+
+def _apply_file_cap(source: ModuleSource, *, max_files: int) -> ModuleSource:
+    """`source`, unless it exceeds `max_files` -- the excess moves to `skipped_paths`.
+
+    `rebuild_files` already sorts `files` by path, so the cut is deterministic and
+    reviewable rather than arbitrary (M4.5 spec 4.1).
+    """
+    if len(source.files) <= max_files:
+        return source
+    kept, excess = source.files[:max_files], source.files[max_files:]
+    return replace(
+        source,
+        files=kept,
+        skipped_paths=[*source.skipped_paths, *(file.path for file in excess)],
+    )
 
 
 class ChecklistGenerator:
@@ -98,6 +115,7 @@ class ChecklistGenerator:
                 generation=project.active_generation,
                 path_prefix=module.source_path,
             )
+            source = _apply_file_cap(source, max_files=self.settings.checklist_max_files_per_job)
             existing = [
                 ExistingItem(
                     id=str(item.id),
@@ -115,7 +133,9 @@ class ChecklistGenerator:
         finally:
             await self._stop_renewal(renewal, module_id=module_id)
 
-        summary = self._summarise(operations, source=source)
+        summary = self._summarise(
+            operations, source=source, max_files=self.settings.checklist_max_files_per_job
+        )
         change_set = ChecklistChangeSet(
             id=uuid.uuid4(),
             module_id=module_id,
@@ -275,6 +295,7 @@ class ChecklistGenerator:
                     observations=observations,
                     existing=existing,
                     partial_paths=source.partial_paths,
+                    skipped_paths=source.skipped_paths,
                 )
             )
         except Exception as error:
@@ -320,7 +341,9 @@ class ChecklistGenerator:
         return operations
 
     @staticmethod
-    def _summarise(operations: list[dict[str, object]], *, source: ModuleSource) -> str:
+    def _summarise(
+        operations: list[dict[str, object]], *, source: ModuleSource, max_files: int
+    ) -> str:
         """One line, naming the coverage bound rather than hiding it (spec 4.6).
 
         Counts the **stored** operations, not the model's proposal. `_to_operations`
@@ -340,4 +363,8 @@ class ChecklistGenerator:
         ]
         if source.partial_paths:
             parts.append(f"partial: {', '.join(source.partial_paths)}")
+        if source.skipped_paths:
+            parts.append(
+                f"skipped: {len(source.skipped_paths)} files over the {max_files}-file cap"
+            )
         return "; ".join(parts)

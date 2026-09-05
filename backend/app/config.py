@@ -89,6 +89,10 @@ class Settings(BaseSettings):
     checklist_map_concurrency: int = Field(default=4, ge=1)
     # Points per Qdrant scroll page. `ge=1` for the same reason.
     checklist_scroll_page_size: int = Field(default=256, ge=1)
+    # Per-generation cap on files mapped -- one model call per file, so this bounds
+    # the worst-case cost of a single run rather than a rolling budget (M4.5 spec 4).
+    # Files beyond it are reported skipped, not processed.
+    checklist_max_files_per_job: int = Field(default=200, ge=1)
 
     # Embedding — provider selected at runtime, dimensions probed rather than declared.
     embedding_provider: Literal["ollama", "openai", "voyage"] = "ollama"

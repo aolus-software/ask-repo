@@ -96,3 +96,16 @@ def test_propose_prompt_permits_proposing_nothing() -> None:
         ].content
     )
     assert "empty" in system.lower() or "no operations" in system.lower()
+
+
+def test_reduce_prompt_names_files_skipped_by_the_cap() -> None:
+    """The model must not claim coverage of a file it was never shown (M4.5 spec 4.2)."""
+    body = str(
+        build_reduce_prompt(
+            module_name="Auth",
+            observations=[],
+            existing=[],
+            skipped_paths=["app/auth/legacy.py"],
+        )[-1].content
+    )
+    assert "app/auth/legacy.py" in body

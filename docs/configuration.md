@@ -289,6 +289,7 @@ your `.env` rather than assuming it carried over.
 | `KAFKA_CHECKLIST_PARTITIONS` | `1` | Partitions on that topic, which is the ceiling on how many generations run at once — one consumer may own a partition, so `1` means one generation at a time across the instance. Raise it only alongside worker replicas; more partitions than workers buys nothing. Lowering it later is not possible without deleting the topic. |
 | `CHECKLIST_MAP_CONCURRENCY` | `4` | How many files the generator observes concurrently in its map step. Each is one model call, so this multiplies load on a server that may already serialise inference: too high and every generation gets slower rather than the batch finishing sooner. Too low and a large module takes minutes longer than it needs to. |
 | `CHECKLIST_SCROLL_PAGE_SIZE` | `256` | Points fetched per Qdrant scroll page while enumerating a module's files. It bounds memory per page, not the total: the generator reads every matching chunk regardless, so this trades round trips against the size of one response. |
+| `CHECKLIST_MAX_FILES_PER_JOB` | `200` | Files mapped per generation run before the rest are reported skipped rather than processed. One model call per file, so this bounds the worst-case cost of a single run rather than cumulative spend — a module larger than this needs more than one generation pass to cover in full. |
 
 ---
 

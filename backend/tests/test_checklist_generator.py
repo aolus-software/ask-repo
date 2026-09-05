@@ -629,6 +629,55 @@ def test_the_summary_counts_stored_operations_not_proposed_ones() -> None:
     source = ModuleSource(files=[], partial_paths=[])
     stored: list[dict[str, object]] = [{"op": "add"}, {"op": "add"}, {"op": "remove"}]
 
-    summary = ChecklistGenerator._summarise(stored, source=source)
+    summary = ChecklistGenerator._summarise(stored, source=source, max_files=200)
 
     assert summary.startswith("2 added; 0 updated; 1 removed;")
+
+
+async def test_files_beyond_the_cap_are_skipped_not_mapped(db_session: AsyncSession) -> None:
+    """One model call per file (M4.5 spec 4), so a generation must never map more
+    files than `CHECKLIST_MAX_FILES_PER_JOB` allows -- the excess is reported, not
+    read."""
+    project = await create_project(db_session)
+    project.active_generation = 1
+    project.embedding_collection = "in-memory"
+    module = await create_checklist_module(
+        db_session, project_id=project.id, source_path="app/auth"
+    )
+    store = InMemoryVectorStore(dimensions=8)
+    await _index(store, project_id=project.id, path="app/auth/a.py")
+    await _index(store, project_id=project.id, path="app/auth/b.py")
+    await _index(store, project_id=project.id, path="app/auth/c.py")
+    map_calls: list[str] = []
+
+    class _CountingBound:
+        def __init__(self, schema: type) -> None:
+            self._schema = schema
+
+        async def ainvoke(self, messages: list[BaseMessage]) -> object:
+            if self._schema is FileObservations:
+                map_calls.append(str(messages[-1].content))
+                return FileObservations(behaviours=[])
+            return ProposedChangeSet(summary="none", operations=[])
+
+    class _CountingChatModel:
+        def with_structured_output(self, schema: type) -> _CountingBound:
+            return _CountingBound(schema)
+
+    generator = ChecklistGenerator(
+        db_session,
+        Settings(checklist_max_files_per_job=2),
+        store_factory=lambda _: store,
+        chat_model=cast(BaseChatModel, _CountingChatModel()),
+    )
+    job_id = uuid.uuid4()
+    await ChecklistModuleRepository(db_session).claim(
+        module_id=module.id, job_id=job_id, worker_id="w1", lease_seconds=300
+    )
+
+    await generator.run(module_id=module.id, job_id=job_id, worker_id="w1")
+
+    assert len(map_calls) == 2
+    change_set = await ChecklistChangeSetRepository(db_session).pending_for_module(module.id)
+    assert change_set is not None
+    assert "skipped: 1 files over the 2-file cap" in change_set.summary
