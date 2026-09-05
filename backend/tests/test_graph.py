@@ -2,7 +2,7 @@
 
 import asyncio
 import uuid
-from typing import cast
+from typing import Literal, cast
 
 import pytest
 from langchain_core.language_models import BaseChatModel
@@ -210,6 +210,9 @@ def base_state(**overrides: object) -> TurnState:
         "change_set_id": None,
         "operations": [],
         "change_summary": "",
+        "existing_records": [],
+        "record_operations": [],
+        "record_change_summary": "",
     }
     state.update(overrides)  # type: ignore[typeddict-item]  # test helper takes arbitrary overrides
     return state
@@ -635,7 +638,7 @@ def graph_for(
     retriever: Retriever | None = None,
     *,
     max_attempts: int = 2,
-    propose: bool = False,
+    propose_target: Literal["checklist", "mock_data"] | None = None,
 ) -> CompiledStateGraph[TurnState, None, TurnState, TurnState]:
     """A compiled graph over fakes, with settings overridden per test."""
     from app.config import Settings
@@ -646,7 +649,7 @@ def graph_for(
         retriever=retriever if retriever is not None else RecordingRetriever(),
         chat_model=chat_model,
         settings=Settings(rag_max_retrieval_attempts=max_attempts),
-        propose=propose,
+        propose_target=propose_target,
     )
 
 
@@ -963,7 +966,7 @@ async def test_the_proposing_graph_runs_propose_after_generate_and_after_history
             EvidenceVerdict(sufficient=True),
         ],
     )
-    graph = graph_for(model, RecordingRetriever(), propose=True)
+    graph = graph_for(model, RecordingRetriever(), propose_target="checklist")
     nodes = set(graph.get_graph().nodes)
     assert "propose_changes" in nodes
     edges = {(edge.source, edge.target) for edge in graph.get_graph().edges}
@@ -986,6 +989,178 @@ def test_the_default_graph_has_no_proposer() -> None:
     )
     graph = graph_for(model, RecordingRetriever())
     assert "propose_changes" not in set(graph.get_graph().nodes)
+
+
+@pytest.mark.asyncio
+async def test_propose_mock_data_node_emits_a_change_set_event() -> None:
+    """The mock-data proposer mirrors the checklist one: at most one event, after the
+    last token, and never a terminator (`.claude/rules/rag.md`)."""
+    from app.mockdata.model_output import ProposedMockDataOperation, ProposedMockDataSet
+    from app.rag.graph.nodes import build_propose_mock_data_changes
+    from app.schemas.mock_data import MockDataChangeSetEvent
+    from tests.fakes import ScriptedChatModel
+
+    change_set_id = uuid.uuid4()
+    chat = ScriptedChatModel(
+        structured_results=[
+            ProposedMockDataSet(
+                schema_found=True,
+                field_keys=["name"],
+                summary="1 record added",
+                operations=[
+                    ProposedMockDataOperation(op="add", fields={"name": "Acme"}, rationale="r")
+                ],
+            )
+        ]
+    )
+
+    events, state = await run_node(
+        build_propose_mock_data_changes(chat, enabled=True),
+        base_state(
+            answer="Here is a sample record.",
+            module_name="Projects",
+            existing_records=[],
+            change_set_id=change_set_id,
+        ),
+    )
+
+    emitted = [event for event in events if isinstance(event, MockDataChangeSetEvent)]
+    assert len(emitted) == 1
+    assert emitted[0].change_set_id == change_set_id
+    assert emitted[0].operations[0].fields == {"name": "Acme"}
+    assert state["record_change_summary"] == "1 record added"
+    assert len(state["record_operations"]) == 1
+    # The checklist path shares the turn and must come back untouched.
+    assert state["operations"] == []
+    assert state["change_summary"] == ""
+
+
+@pytest.mark.asyncio
+async def test_propose_mock_data_node_makes_no_model_call_when_disabled() -> None:
+    """`rag_propose_changes` off means the node costs nothing at all -- the scripted
+    model would raise if it were called."""
+    from app.rag.graph.nodes import build_propose_mock_data_changes
+    from tests.fakes import ScriptedChatModel
+
+    chat = ScriptedChatModel(structured_results=[])  # would raise if called
+
+    _, state = await run_node(
+        build_propose_mock_data_changes(chat, enabled=False),
+        base_state(answer="answer", module_name="Projects", change_set_id=uuid.uuid4()),
+    )
+
+    assert state["record_operations"] == []
+    assert state["record_change_summary"] == ""
+
+
+@pytest.mark.asyncio
+async def test_propose_mock_data_node_emits_nothing_when_the_model_proposes_nothing() -> None:
+    """'Why does this record have that date?' is a legitimate turn that changes the
+    dataset not at all."""
+    from app.mockdata.model_output import ProposedMockDataSet
+    from app.rag.graph.nodes import build_propose_mock_data_changes
+    from app.schemas.mock_data import MockDataChangeSetEvent
+    from tests.fakes import ScriptedChatModel
+
+    chat = ScriptedChatModel(
+        structured_results=[ProposedMockDataSet(schema_found=True, operations=[])]
+    )
+
+    events, state = await run_node(
+        build_propose_mock_data_changes(chat, enabled=True),
+        base_state(answer="Because the seed data is fixed.", change_set_id=uuid.uuid4()),
+    )
+
+    assert [event for event in events if isinstance(event, MockDataChangeSetEvent)] == []
+    assert state["record_operations"] == []
+
+
+@pytest.mark.asyncio
+async def test_propose_mock_data_node_falls_back_rather_than_failing_the_turn() -> None:
+    """A helper node may never be the reason a question goes unanswered
+    (`.claude/rules/rag.md`). A proposer that dies costs the proposal, not the answer."""
+    from app.rag.graph.nodes import build_propose_mock_data_changes
+    from app.schemas.mock_data import MockDataChangeSetEvent
+
+    class _Exploding:
+        def with_structured_output(self, schema: type) -> "_Exploding":
+            return self
+
+        async def ainvoke(self, messages: object) -> object:
+            raise RuntimeError("model down")
+
+    events, state = await run_node(
+        build_propose_mock_data_changes(_Exploding(), enabled=True),  # type: ignore[arg-type]  # duck-typed stand-in raises from ainvoke, not a BaseChatModel
+        base_state(answer="An answer.", change_set_id=uuid.uuid4()),
+    )
+
+    assert state["record_operations"] == []
+    assert [event for event in events if isinstance(event, MockDataChangeSetEvent)] == []
+
+
+@pytest.mark.asyncio
+async def test_propose_mock_data_node_does_not_swallow_a_disconnect() -> None:
+    """`CancelledError` is a `BaseException` and is deliberately not caught, exactly as
+    in the checklist proposer: a client that went away should stop the turn."""
+    from app.rag.graph.nodes import build_propose_mock_data_changes
+
+    class _Cancelling:
+        def with_structured_output(self, schema: type) -> "_Cancelling":
+            return self
+
+        async def ainvoke(self, messages: object) -> object:
+            raise asyncio.CancelledError()
+
+    # Called directly rather than through `run_node` for the reason the checklist
+    # proposer's own cancellation test records: LangGraph rewraps a node-raised
+    # CancelledError as NodeCancelledError, which is an `Exception` subclass.
+    node = build_propose_mock_data_changes(_Cancelling(), enabled=True)  # type: ignore[arg-type]  # duck-typed stand-in raises from ainvoke, not a BaseChatModel
+    with pytest.raises(asyncio.CancelledError):
+        await node(base_state(answer="a", change_set_id=uuid.uuid4()))
+
+
+@pytest.mark.asyncio
+async def test_the_mock_data_graph_proposes_mock_data_and_not_checklist_items() -> None:
+    """The third target is additive: choosing it wires its own trailing node and leaves
+    the checklist proposer out of the graph entirely."""
+    from tests.fakes import ScriptedChatModel
+    from tests.test_answerer import RecordingRetriever
+
+    model = ScriptedChatModel(
+        tokens=["x"],
+        structured_results=[
+            Classification(intent="codebase_question", search_query="q"),
+            EvidenceVerdict(sufficient=True),
+        ],
+    )
+    graph = graph_for(model, RecordingRetriever(), propose_target="mock_data")
+    nodes = set(graph.get_graph().nodes)
+
+    assert "propose_mock_data_changes" in nodes
+    assert "propose_changes" not in nodes
+    edges = {(edge.source, edge.target) for edge in graph.get_graph().edges}
+    assert ("generate", "propose_mock_data_changes") in edges
+    assert ("answer_from_history", "propose_mock_data_changes") in edges
+    assert ("refuse", "propose_mock_data_changes") not in edges
+
+
+def test_the_default_graph_has_neither_proposer() -> None:
+    """The Ask screen must grow neither a checklist nor a mock-data proposal."""
+    from tests.fakes import ScriptedChatModel
+    from tests.test_answerer import RecordingRetriever
+
+    model = ScriptedChatModel(
+        tokens=["x"],
+        structured_results=[
+            Classification(intent="codebase_question", search_query="q"),
+            EvidenceVerdict(sufficient=True),
+        ],
+    )
+    graph = graph_for(model, RecordingRetriever())
+    nodes = set(graph.get_graph().nodes)
+
+    assert "propose_changes" not in nodes
+    assert "propose_mock_data_changes" not in nodes
 
 
 @pytest.mark.asyncio

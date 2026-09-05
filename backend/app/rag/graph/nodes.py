@@ -21,6 +21,8 @@ from langgraph.config import get_stream_writer
 
 from app.checklist.model_output import ProposedChangeSet
 from app.checklist.operations import stored_operation
+from app.mockdata.model_output import ProposedMockDataSet
+from app.mockdata.operations import stored_mock_data_operation
 from app.models.conversation import FinishReason
 from app.rag.graph.state import Classification, EvidenceVerdict, Intent, TurnState
 from app.rag.grounding import OUT_OF_SCOPE_ANSWER
@@ -29,6 +31,7 @@ from app.rag.prompts import (
     CLASSIFY_PROMPT,
     GRADE_PROMPT,
     HISTORY_ANSWER_PROMPT,
+    build_mock_data_propose_prompt,
     build_propose_prompt,
     format_spans,
     to_langchain_history,
@@ -42,6 +45,7 @@ from app.schemas.conversation import (
     StreamEvent,
     TokenEvent,
 )
+from app.schemas.mock_data import MockDataChangeOperationPayload, MockDataChangeSetEvent
 
 logger = logging.getLogger(__name__)
 
@@ -404,3 +408,74 @@ def build_propose_changes(chat_model: BaseChatModel, *, enabled: bool) -> Node:
         return {"operations": operations, "change_summary": summary}
 
     return propose_changes
+
+
+def build_propose_mock_data_changes(chat_model: BaseChatModel, *, enabled: bool) -> Node:
+    """Decide whether this exchange changes the module's mock dataset.
+
+    Structurally identical to `build_propose_changes`, targeting `mock_data_records`
+    instead of `checklist_items` -- see that function's docstring for the degrade and
+    single-terminator reasoning, which applies here unchanged.
+
+    It writes only the `record_*` half of the state, so the checklist proposer's fields
+    come back from a mock-data turn exactly as the adapter set them. Only one of the two
+    is ever wired into a compiled graph (`build_answer_graph`'s `propose_target`), so
+    they never both run.
+    """
+
+    async def propose_mock_data_changes(state: TurnState) -> dict[str, object]:
+        change_set_id = state["change_set_id"]
+        if not enabled or change_set_id is None or not state["answer"].strip():
+            return {"record_operations": [], "record_change_summary": ""}
+
+        try:
+            model = chat_model.with_structured_output(ProposedMockDataSet)
+            result = await model.ainvoke(
+                build_mock_data_propose_prompt(
+                    module_name=state["module_name"],
+                    answer=state["answer"],
+                    existing=state["existing_records"],
+                )
+            )
+        except Exception:
+            logger.exception("proposing mock-data changes failed; proposing nothing")
+            return {"record_operations": [], "record_change_summary": ""}
+
+        if not isinstance(result, ProposedMockDataSet) or not result.operations:
+            return {"record_operations": [], "record_change_summary": ""}
+
+        operations = [
+            stored
+            for operation in result.operations
+            if (
+                stored := stored_mock_data_operation(
+                    operation, field_keys=result.field_keys or None
+                )
+            )
+            is not None
+        ]
+        if not operations:
+            return {"record_operations": [], "record_change_summary": ""}
+
+        summary = result.summary or f"{len(operations)} proposed change(s)"
+
+        try:
+            emit(
+                MockDataChangeSetEvent(
+                    change_set_id=change_set_id,
+                    summary=summary,
+                    # Already guaranteed to validate -- `stored_mock_data_operation`
+                    # only returns dicts that do -- so this is re-parsing what was
+                    # proven correct, not a second place that decision could diverge.
+                    operations=[
+                        MockDataChangeOperationPayload.model_validate(op) for op in operations
+                    ],
+                )
+            )
+        except Exception:
+            logger.exception("Failed to emit MockDataChangeSetEvent; proposing nothing")
+            return {"record_operations": [], "record_change_summary": ""}
+
+        return {"record_operations": operations, "record_change_summary": summary}
+
+    return propose_mock_data_changes
