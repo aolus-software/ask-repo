@@ -12,10 +12,11 @@ import asyncio
 import logging
 import uuid
 
+from langchain_core.language_models import BaseChatModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.checklist.generator import ChecklistGenerator
-from app.config import get_settings
+from app.config import Settings, get_settings
 from app.db.session import get_sessionmaker
 from app.ingestion.chunker import LanguageAwareChunker
 from app.ingestion.embedder import build_embedder, probe_dimensions
@@ -33,6 +34,7 @@ from app.queue.topics import (
     ChecklistJobMessage,
     IngestionMessage,
 )
+from app.rag.capability import probe_structured_output
 from app.rag.chat import build_chat_model
 from app.repositories.checklist_module import ChecklistModuleRepository
 from app.repositories.project import ProjectRepository
@@ -134,6 +136,17 @@ async def reconcile_loop(*, producer: TopicProducer, topic: str, checklist_topic
             logger.exception("reconcile tick failed")
 
 
+async def _build_chat_model(settings: Settings) -> BaseChatModel:
+    """The answering model, confirmed capable of structured output before anything
+    is built on top of it (`docs/PRD.md` §6). Extracted so the ordering guarantee --
+    a bad model blocks before the ingestion pipeline is ever constructed -- is a
+    single testable unit rather than an assertion about `main`'s statement order.
+    """
+    chat_model = build_chat_model(settings)
+    await probe_structured_output(chat_model)
+    return chat_model
+
+
 async def main() -> None:
     """Start the consumers and the sweep, and run until cancelled."""
     logging.basicConfig(level=logging.INFO)
@@ -168,6 +181,11 @@ async def main() -> None:
     )
     logger.info("worker %s using collection %s", worker_id, collection)
 
+    # Confirmed capable of structured output before the ingestion pipeline -- or the
+    # checklist generator that answers with it -- is ever built (`docs/PRD.md` §6).
+    chat_model = await _build_chat_model(settings)
+    store_factory = build_store_factory(settings)
+
     def build_pipeline(session: AsyncSession) -> IngestionPipeline:
         """A pipeline bound to one job's session."""
         return IngestionPipeline(
@@ -189,12 +207,6 @@ async def main() -> None:
         build_pipeline=build_pipeline,
         worker_id=worker_id,
     )
-
-    # The worker answers with a chat model now, not only an embedder: generation maps
-    # and reduces through one. Constructed here rather than per job -- building it
-    # opens no connection, and one per message would rebuild a client per generation.
-    chat_model = build_chat_model(settings)
-    store_factory = build_store_factory(settings)
 
     def build_generator(session: AsyncSession) -> ChecklistGenerator:
         """A generator bound to one job's session."""
