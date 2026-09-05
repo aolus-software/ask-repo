@@ -22,9 +22,7 @@ class RetryableChatError(ChatError):
 _RETRYABLE_EXCEPTION_NAMES = frozenset(
     {"RateLimitError", "APIConnectionError", "APITimeoutError", "InternalServerError"}
 )
-_TERMINAL_EXCEPTION_NAMES = frozenset(
-    {"AuthenticationError", "NotFoundError", "BadRequestError"}
-)
+_TERMINAL_EXCEPTION_NAMES = frozenset({"AuthenticationError", "NotFoundError", "BadRequestError"})
 
 
 def classify_chat_error(error: Exception) -> ChatError | None:

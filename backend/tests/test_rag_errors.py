@@ -17,9 +17,7 @@ from app.rag.errors import RetryableChatError, TerminalChatError, classify_chat_
         ("BadRequestError", TerminalChatError),
     ],
 )
-def test_known_exception_names_are_classified(
-    name: str, expected: type[Exception]
-) -> None:
+def test_known_exception_names_are_classified(name: str, expected: type[Exception]) -> None:
     """Built locally rather than imported from `openai`/`anthropic`: classification is
     by class name alone, so a fake with the right name must classify identically to
     the real SDK exception it stands in for (M4.5 spec 2.1)."""
