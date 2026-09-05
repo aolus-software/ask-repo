@@ -276,7 +276,7 @@ Milestones from [`docs/PRD.md`](docs/PRD.md) §6, built in order:
 - [x] **M3** — LangGraph: intent routing + a self-critique loop that grades retrieval before generating
 - [x] **M4** — QA Checklist: generate test cases from code, shared chat for refinement, apply/discard proposals, result recording, export
 - [x] **M4 frontend** — the `/checklist` module list, the `/checklist/[moduleId]` grid with chat and review panel
-- [ ] **M4.5** — Model provider abstraction: a native Anthropic adapter, a startup check that the
+- [x] **M4.5** — Model provider abstraction: a native Anthropic adapter, a startup check that the
       configured model can do structured output, hosted-provider retry classification, and a spend
       bound. Any OpenAI-compatible endpoint (OpenRouter, DeepSeek, Kimi, Groq, vLLM) already works
       by configuration today — see [PRD §6](docs/PRD.md)

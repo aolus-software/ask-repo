@@ -85,6 +85,10 @@ Worth knowing, because the first run is slower than every run after it:
    ingest topic. Kafka's own auto-create is off.
 4. The two workers probe the embedding model for its vector width — a **live call to Ollama**.
    This is where a worker dies if Ollama is not reachable.
+5. The API and each worker also probe the configured **chat** model for structured-output
+   support — one live call, against whatever `CHAT_PROVIDER`/`CHAT_BASE_URL`/`CHAT_MODEL`
+   names. An instance whose chat model cannot do tool-calling or JSON mode, or whose endpoint
+   is unreachable, fails to boot here rather than on the first generation.
 
 **No model is pre-pulled.** The first question you ask blocks on a multi-gigabyte download.
 Pull them ahead of time, on the host:

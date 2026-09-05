@@ -250,6 +250,10 @@ Raising `CHAT_MAX_CONCURRENCY` against Ollama does not shorten the queue. Ollama
 inference internally, so more concurrent answers means every answer is slower, on a box
 already running Postgres, Qdrant, Redis and Kafka.
 
+Boot now performs one live structured-output call against the configured chat model, in both
+the API and each worker. An instance whose model cannot do tool-calling or JSON mode, or whose
+endpoint is unreachable, fails to start here rather than on the first generation.
+
 ### Retrieval
 
 | Variable | Default | What it does |
