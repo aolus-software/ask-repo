@@ -22,6 +22,7 @@ from app.schemas.conversation import (
     StreamEvent,
     TokenEvent,
 )
+from app.schemas.mock_data import MockDataChangeSetEvent
 
 SSE_EVENT_MODELS: tuple[type[StreamEvent], ...] = (
     StatusEvent,
@@ -30,6 +31,7 @@ SSE_EVENT_MODELS: tuple[type[StreamEvent], ...] = (
     DoneEvent,
     ErrorEvent,
     ChangeSetEvent,
+    MockDataChangeSetEvent,
 )
 
 __all__ = ["SSE_EVENT_MODELS"]
