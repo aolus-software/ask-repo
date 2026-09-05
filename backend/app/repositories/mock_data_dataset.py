@@ -17,6 +17,7 @@ from typing import Any, cast
 from sqlalchemy import func, or_, select, update
 from sqlalchemy.engine import CursorResult
 
+from app.models.checklist import ChecklistModule
 from app.models.mock_data import MockDataDataset, MockDataDatasetStatus
 from app.repositories.base import BaseRepository
 
@@ -186,8 +187,6 @@ class MockDataDatasetRepository(BaseRepository[MockDataDataset]):
 
     async def soft_delete_for_project(self, project_id: uuid.UUID) -> int:
         """Soft-delete every dataset row of every module of a project."""
-        from app.models.checklist import ChecklistModule  # local import: avoids a cycle
-
         modules = select(ChecklistModule.id).where(ChecklistModule.project_id == project_id)
         result = await self.session.execute(
             update(MockDataDataset)
