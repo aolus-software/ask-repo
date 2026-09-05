@@ -124,3 +124,10 @@ def test_line_range_spans_the_whole_file() -> None:
     )
 
     assert (source.files[0].start_line, source.files[0].end_line) == (1, 40)
+
+
+def test_skipped_paths_defaults_empty() -> None:
+    """`rebuild_files` never populates it -- only the generator's file cap does
+    (M4.5 spec 4.1)."""
+    source = rebuild_files([_payload(file_path="a.py", chunk_index=0, text="A0")], chunk_overlap=0)
+    assert source.skipped_paths == []

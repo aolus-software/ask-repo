@@ -31,6 +31,7 @@ from app.queue.topics import (
     ChecklistJobMessage,
     checklist_next_destination,
 )
+from app.rag.errors import RetryableChatError, TerminalChatError
 from app.repositories.checklist_module import LEASE_SECONDS, ChecklistModuleRepository
 
 logger = logging.getLogger(__name__)
@@ -82,7 +83,7 @@ async def handle_checklist_message(
 
     try:
         await generator.run(module_id=message.module_id, job_id=message.job_id, worker_id=worker_id)
-    except TerminalIngestionError as error:
+    except (TerminalIngestionError, TerminalChatError) as error:
         # `module.error` is read back by every authenticated user on this shared
         # instance (`app/schemas/checklist.py`'s `ChecklistModuleResponse.error`), and
         # a `TerminalIngestionError`'s text can originate from anywhere downstream,
@@ -107,7 +108,7 @@ async def handle_checklist_message(
         )
         await _route_failure(message, producer=producer, max_attempts=0)
         return JobOutcome.DEAD_LETTERED
-    except RetryableIngestionError as error:
+    except (RetryableIngestionError, RetryableChatError) as error:
         # No status write: the job is coming back, and `failed` would lie about it.
         # The lease still goes, though -- see `_defer`.
         await _defer(message, repository=repository, worker_id=worker_id, session=session)

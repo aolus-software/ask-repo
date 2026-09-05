@@ -26,6 +26,7 @@ from app.ingestion.chunker import Chunk
 from app.ingestion.errors import TerminalIngestionError
 from app.ingestion.vector_store import InMemoryVectorStore
 from app.models.checklist import ChangeSetOrigin, ChangeSetStatus, ChecklistModuleStatus
+from app.rag.errors import RetryableChatError, TerminalChatError
 from app.repositories.checklist_change_set import ChecklistChangeSetRepository
 from app.repositories.checklist_item import ChecklistItemRepository
 from app.repositories.checklist_module import ChecklistModuleRepository
@@ -76,6 +77,25 @@ class _RaisingBound:
         if self._schema is FileObservations:
             raise TerminalIngestionError("the map step failed")
         raise AssertionError("the reduce step should never be reached")
+
+
+class _NamedFailureBound:
+    def __init__(self, exception_class: type[Exception]) -> None:
+        self._exception_class = exception_class
+
+    async def ainvoke(self, messages: list[object]) -> object:
+        raise self._exception_class("provider said no")
+
+
+class _NamedFailureChatModel:
+    """`with_structured_output(...).ainvoke` always raises an exception whose class
+    is named after a real SDK exception, without importing either SDK."""
+
+    def __init__(self, *, exception_name: str) -> None:
+        self._exception_class = type(exception_name, (Exception,), {})
+
+    def with_structured_output(self, schema: type) -> _NamedFailureBound:
+        return _NamedFailureBound(self._exception_class)
 
 
 async def test_generation_writes_a_pending_change_set_and_no_items(
@@ -536,6 +556,69 @@ async def test_a_sibling_map_task_is_cancelled_on_failure(db_session: AsyncSessi
     assert outcomes == ["cancelled"]
 
 
+async def test_a_classifiable_map_failure_is_reraised_as_its_classified_type(
+    db_session: AsyncSession,
+) -> None:
+    """`_observe`'s `ainvoke` failure must reach `run` as a `RetryableChatError`, not
+    the raw SDK-shaped exception -- otherwise the consumer's unclassified-failure
+    safety net handles a failure mode `classify_chat_error` already knows about
+    (M4.5 spec 2.2)."""
+    project = await create_project(db_session)
+    project.active_generation = 1
+    project.embedding_collection = "in-memory"
+    module = await create_checklist_module(
+        db_session, project_id=project.id, source_path="app/auth"
+    )
+    store = InMemoryVectorStore(dimensions=8)
+    await _index(store, project_id=project.id, path="app/auth/login.py")
+    generator = ChecklistGenerator(
+        db_session,
+        Settings(),
+        store_factory=lambda _: store,
+        chat_model=cast(BaseChatModel, _NamedFailureChatModel(exception_name="RateLimitError")),
+    )
+    job_id = uuid.uuid4()
+    await ChecklistModuleRepository(db_session).claim(
+        module_id=module.id, job_id=job_id, worker_id="w1", lease_seconds=300
+    )
+
+    with pytest.raises(RetryableChatError):
+        await generator.run(module_id=module.id, job_id=job_id, worker_id="w1")
+
+
+async def test_the_reduce_step_returning_an_unusable_shape_is_terminal(
+    db_session: AsyncSession,
+) -> None:
+    """A model that cannot produce the requested shape will not produce it on a
+    retry either -- this is a bug in the model's structured-output support, not a
+    transient failure (M4.5 spec 2.2)."""
+    project = await create_project(db_session)
+    project.active_generation = 1
+    project.embedding_collection = "in-memory"
+    module = await create_checklist_module(
+        db_session, project_id=project.id, source_path="app/auth"
+    )
+    store = InMemoryVectorStore(dimensions=8)
+    await _index(store, project_id=project.id, path="app/auth/login.py")
+    chat = StructuredScriptedChatModel(
+        {
+            FileObservations: [FileObservations(behaviours=[])],
+            # Wrong shape for `ProposedChangeSet`: the reduce step must reject it.
+            ProposedChangeSet: [FileObservations(behaviours=[])],
+        }
+    )
+    generator = ChecklistGenerator(
+        db_session, Settings(), store_factory=lambda _: store, chat_model=cast(BaseChatModel, chat)
+    )
+    job_id = uuid.uuid4()
+    await ChecklistModuleRepository(db_session).claim(
+        module_id=module.id, job_id=job_id, worker_id="w1", lease_seconds=300
+    )
+
+    with pytest.raises(TerminalChatError):
+        await generator.run(module_id=module.id, job_id=job_id, worker_id="w1")
+
+
 def test_the_summary_counts_stored_operations_not_proposed_ones() -> None:
     """A dropped operation must not still be counted in the line above the panel.
 
@@ -546,6 +629,55 @@ def test_the_summary_counts_stored_operations_not_proposed_ones() -> None:
     source = ModuleSource(files=[], partial_paths=[])
     stored: list[dict[str, object]] = [{"op": "add"}, {"op": "add"}, {"op": "remove"}]
 
-    summary = ChecklistGenerator._summarise(stored, source=source)
+    summary = ChecklistGenerator._summarise(stored, source=source, max_files=200)
 
     assert summary.startswith("2 added; 0 updated; 1 removed;")
+
+
+async def test_files_beyond_the_cap_are_skipped_not_mapped(db_session: AsyncSession) -> None:
+    """One model call per file (M4.5 spec 4), so a generation must never map more
+    files than `CHECKLIST_MAX_FILES_PER_JOB` allows -- the excess is reported, not
+    read."""
+    project = await create_project(db_session)
+    project.active_generation = 1
+    project.embedding_collection = "in-memory"
+    module = await create_checklist_module(
+        db_session, project_id=project.id, source_path="app/auth"
+    )
+    store = InMemoryVectorStore(dimensions=8)
+    await _index(store, project_id=project.id, path="app/auth/a.py")
+    await _index(store, project_id=project.id, path="app/auth/b.py")
+    await _index(store, project_id=project.id, path="app/auth/c.py")
+    map_calls: list[str] = []
+
+    class _CountingBound:
+        def __init__(self, schema: type) -> None:
+            self._schema = schema
+
+        async def ainvoke(self, messages: list[BaseMessage]) -> object:
+            if self._schema is FileObservations:
+                map_calls.append(str(messages[-1].content))
+                return FileObservations(behaviours=[])
+            return ProposedChangeSet(summary="none", operations=[])
+
+    class _CountingChatModel:
+        def with_structured_output(self, schema: type) -> _CountingBound:
+            return _CountingBound(schema)
+
+    generator = ChecklistGenerator(
+        db_session,
+        Settings(checklist_max_files_per_job=2),
+        store_factory=lambda _: store,
+        chat_model=cast(BaseChatModel, _CountingChatModel()),
+    )
+    job_id = uuid.uuid4()
+    await ChecklistModuleRepository(db_session).claim(
+        module_id=module.id, job_id=job_id, worker_id="w1", lease_seconds=300
+    )
+
+    await generator.run(module_id=module.id, job_id=job_id, worker_id="w1")
+
+    assert len(map_calls) == 2
+    change_set = await ChecklistChangeSetRepository(db_session).pending_for_module(module.id)
+    assert change_set is not None
+    assert "skipped: 1 files over the 2-file cap" in change_set.summary

@@ -178,3 +178,19 @@ def test_checklist_generation_defaults_to_one_partition() -> None:
     """The instance-wide generation cap is the topology, not a setting one can raise
     by accident -- the same move `kafka_ingest_partitions` makes for ingestion."""
     assert Settings().kafka_checklist_partitions == 1
+
+
+def test_chat_provider_accepts_anthropic() -> None:
+    """The third provider `build_chat_model` branches on (M4.5 spec 1)."""
+    assert Settings(chat_provider="anthropic").chat_provider == "anthropic"
+
+
+def test_checklist_max_files_per_job_defaults_to_200() -> None:
+    assert Settings().checklist_max_files_per_job == 200
+
+
+def test_checklist_max_files_per_job_rejects_zero() -> None:
+    """Zero would not fail the job -- it would cap every generation to an empty map
+    step and produce an empty checklist against a perfectly healthy module."""
+    with pytest.raises(ValidationError, match="checklist_max_files_per_job"):
+        Settings(checklist_max_files_per_job=0)

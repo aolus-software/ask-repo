@@ -39,6 +39,10 @@ Four core features, sitting on top of an auth foundation:
 
 **Phase 1 (this document).** Flat access. Every authenticated user can see and query every project. No roles beyond a single `is_admin` flag. Destructive operations are limited to the project's creator or an admin.
 
+**Phase 1.1 (deferred, generalization).** Same access model as phase 1 — this is not a phase-2 item and does not touch the access resolver. What changes is the audience: phase 1 is built for the team that stood the instance up and already knows its own repository's layout; phase 1.1 is the same feature set opened to people who did not write the code and have never seen its directory structure — a QA lead evaluating the tool, a contractor, anyone whose first contact with the repository is through AskRepo itself. Concretely, that means UI surfaces that currently assume the user can type a correct repository-relative path from memory need a friendlier alternative before that audience can use them.
+
+- **QA Checklist module path picker.** §4.3's `POST /checklist-modules` scopes a module to `source_path`, a repository-relative path. Today it is a free-typed field with no browsing and no validation against the indexed repository: a typo'd path returns `201` and only fails later and silently, when generation cannot match anything under it (`MODULE_PATH_NOT_INDEXED` at generate time, not at create time). That is tolerable for someone who already knows the tree; it is a wall for someone who does not. The fix is a picker backed by a new read of the project's own indexed `file_path` values already sitting in the vector store — a distinct scroll, no vector search and no chat-model call, cached per `(project, active_generation)` and invalidated on reindex the same way every other generation-scoped read is — so a user browses or searches the real tree instead of guessing at it, and an unmatched path is rejected at creation instead of failing the background job.
+
 **Phase 2 (deferred, not specified here).** Six things, in no committed order:
 
 - **Per-project RBAC.** Users are assigned to projects and see only their own. Roles per project (viewer / editor / owner). Phase 1's `created_by` becomes the seed for the first membership row; the access resolver named in §2 becomes the enforcement point.
@@ -620,8 +624,8 @@ Most of this seam already exists and is not part of the milestone. §5's chat ro
 
 - **A native Anthropic adapter.** It is the one provider on that list whose API is not OpenAI-shaped, so it needs a third `chat_provider` member rather than a base URL.
 - **A capability precondition, probed rather than assumed.** Every structured path in the app — M4's map and reduce steps, the graph's classify and grade nodes — goes through LangChain's `with_structured_output`, which requires tool-calling or a JSON mode. A model lacking it does not degrade politely: the reduce step raises "returned an unusable shape", the job retries, and the module dead-letters with a message that names the symptom and not the cause. This is the trap the milestone exists to close, because an aggregator will serve a model that cannot do it without saying so. The check belongs at startup, beside the embedding-dimension probe that already refuses to guess (§5) — an instance should fail to boot on a model it cannot use, not fail on the first generation.
-- **Retry classification for failure modes a local endpoint does not have.** `429 Too Many Requests`, a quota exhaustion and a provider outage are retryable; a rejected key, a model name that does not exist and a context-length rejection are terminal. The existing classifier (§5's queue notes) was written against an endpoint that fails in neither way, and getting this backwards means either a dead-lettered job that would have succeeded on retry or a retry ladder hammering a provider that has already said no.
-- **A spend bound.** M4 generation is one model call **per file** plus one reduce, so `CHECKLIST_MAP_CONCURRENCY` stops being a CPU knob and becomes a rate-limit and billing knob. Instance-wide concurrency caps already exist; nothing caps *cost*, and the first surprising invoice will come from a module nobody thought was large. Whoever specifies this decides whether the bound is per job, per project or per instance, and whether exceeding it fails the job or degrades to fewer files with the coverage note §4.3 already requires.
+- **Retry classification for failure modes a local endpoint does not have.** `429 Too Many Requests`, a quota exhaustion and a provider outage are retryable; a rejected key, a model name that does not exist and a context-length rejection are terminal. The existing classifier (§5's queue notes) was written against an endpoint that fails in neither way, and getting this backwards means either a dead-lettered job that would have succeeded on retry or a retry ladder hammering a provider that has already said no. The embedding provider's classifier has the identical bug today — a 404 or a 400/422 is bucketed as retryable — and this milestone fixes both in the same change.
+- **A spend bound.** M4 generation is one model call **per file** plus one reduce, so `CHECKLIST_MAP_CONCURRENCY` stops being a CPU knob and becomes a rate-limit and billing knob. Instance-wide concurrency caps already exist; nothing caps *cost*, and the first surprising invoice will come from a module nobody thought was large. This is settled, not a live contradiction: the bound is `CHECKLIST_MAX_FILES_PER_JOB` (default 200), a per-job cap on the number of files one generation run maps — a property of a single run, not of cumulative usage, so it needs no per-project or per-instance state. Exceeding it does not fail the job; it degrades to the first 200 files (sorted by path, for a deterministic cut) with the rest reported skipped in the same coverage note §4.3 already requires.
 
 **Keep the embedder local even when the answerer is hosted.** The two settings are separate precisely so that is possible, and the asymmetry is not cosmetic: swapping the chat provider is free and reversible, while swapping the embedding provider changes the collection name (§5), invalidates every vector in it, costs a full re-index of every project, and is guarded by `EMBEDDING_MODEL_CHANGED` for exactly that reason. `nomic-embed-text` is a 274 MB model that runs on anything; the multi-gigabyte answerer is what makes a laptop unusable. So the resource problem is solved by moving the chat model alone, at no re-indexing cost — and an instance that moves both has taken on a migration it did not need.
 
@@ -647,6 +651,24 @@ Most of this seam already exists and is not part of the milestone. §5's chat ro
 - **Switching the answering model is configuration, not a migration:** an instance moves from a local model to a hosted provider and back by changing `CHAT_*` settings, with no re-index and no change to stored citations. An instance configured with a model that cannot do structured output fails at startup with a message naming that as the cause, rather than on its first generation (M4.5).
 - No secret (password, token, PAT) appears in any log, traceback, or API response.
 - **Phase-2 readiness:** read scoping happens in exactly one function, confirmed by grep — no route filters projects on its own.
+
+**Known bugs — must be fixed before phase 1 is considered complete/published.** Neither is a
+missing feature; both are regressions against behaviour this document already promises
+elsewhere, found during M4.5 work and deliberately deferred rather than fixed inline.
+
+- **Re-index does not update project status.** §4.1's `POST /projects/{id}/reindex` enqueues
+  the job but never sets `reindex_in_progress` on the project row before returning, so the
+  response — and therefore the frontend's poll-while-reindexing behaviour — never observes a
+  state change. A user who triggers a re-index sees no visible change on the project page
+  until the run finishes and `active_generation`/`last_indexed_commit` update, which reads as
+  "nothing happened." Fix belongs in `ProjectService.reindex`.
+- **A QA Checklist chat reply disappears after navigating away and back.** §4.3 promises the
+  module chat is a persisted, shared record every user can read — and the backend does persist
+  it correctly, including the shielded write on disconnect (`.claude/rules/rag.md`). The gap is
+  the frontend: the chat panel's messages query has no `refetchOnMount`/`refetchInterval`, so
+  React Query serves a stale cached list (empty, or missing the latest turn) when the component
+  remounts within its staleTime window. Fix belongs in the checklist chat panel's query
+  configuration, not the backend.
 
 ---
 

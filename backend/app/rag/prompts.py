@@ -362,6 +362,7 @@ def build_reduce_prompt(
     observations: list[tuple[str, str, int, int]],
     existing: list[ExistingItem],
     partial_paths: list[str] | None = None,
+    skipped_paths: list[str] | None = None,
 ) -> list[BaseMessage]:
     """One call: every file's observations plus the module's existing items."""
     partial_note = (
@@ -370,11 +371,17 @@ def build_reduce_prompt(
         if partial_paths
         else ""
     )
+    skipped_note = (
+        f"\nFiles never read, over this generation's file cap: {', '.join(skipped_paths)}. "
+        "Do not claim coverage of these either.\n"
+        if skipped_paths
+        else ""
+    )
     return [
         SystemMessage(content=REDUCE_SYSTEM),
         HumanMessage(
             content=(
-                f"Module: {module_name}\n{partial_note}\n"
+                f"Module: {module_name}\n{partial_note}{skipped_note}\n"
                 f"Observations:\n{_format_observations(observations)}\n\n"
                 f"Existing checklist:\n{format_existing_items(existing)}"
             )

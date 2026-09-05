@@ -12,7 +12,7 @@ organization runs one instance on its own internal network.
 the security model. It outranks every other doc and outranks the code. When code and the PRD
 disagree, that is a contradiction to report — not a doc to quietly rewrite.
 
-**Status: M0, M1, M2, M3, and M4 (backend) shipped.** The backend serves an index route, health
+**Status: M0, M1, M2, M3, M4 (backend), and M4.5 shipped.** The backend serves an index route, health
 checks, the full auth/accounts surface (admin-provisioned users, login, forced first-login
 password change, session rotation, login rate limiting), the project CRUD routes, the
 conversation routes that answer questions about an indexed project, and the eighteen QA
@@ -48,6 +48,17 @@ holds the job handler the worker runs; `app/services/checklist_module.py`,
 `checklist_item.py`, `checklist_change_set.py` and `checklist_export.py` hold the business rules;
 and `checklist_modules.py`, `checklist_items.py` and `checklist_change_sets.py` put them behind
 eighteen routes.
+
+M4.5 is shipped too, backend-only — no new routes and no frontend surface. `app/rag/chat.py`'s
+`build_chat_model` gained a native Anthropic branch alongside `ollama` and `openai`; a new
+`app/rag/errors.py` taxonomy (`TerminalChatError` / `RetryableChatError`, classified by exception
+name) is wired into checklist generation's retry path so a rejected key or an unknown model
+stops retrying instead of burning the retry ladder; a boot-time capability probe
+(`app/rag/capability.py`) runs in both `app/main.py`'s lifespan and `app/worker.py`'s startup and
+fails the process if the configured chat model cannot do structured output, rather than failing
+on the first generation; and `CHECKLIST_MAX_FILES_PER_JOB` caps how many files one checklist
+generation run maps, reporting the excess in `skipped_paths` — a coverage note alongside the
+pre-existing `partial_paths`, not the same field.
 
 Two facts about it outrank the rest. **The generator scrolls the index; it does not search it**
 — top-k retrieval cannot report what it left out, and a test plan that silently omits a file is
