@@ -297,7 +297,7 @@ your `.env` rather than assuming it carried over.
 
 ### QA Mock Data Generator
 
-| Setting | Default | What it does |
+| Variable | Default | What it does |
 | --- | --- | --- |
 | `MOCK_DATA_EXPORT_MAX_ROWS` | `5000` | Records the `.xlsx`/`.json` export will build before refusing with `409 EXPORT_TOO_LARGE`. Same reasoning as `CHECKLIST_EXPORT_MAX_ROWS`: `openpyxl` builds the whole workbook in memory. |
 | `KAFKA_MOCK_DATA_TOPIC` | `askrepo.mock-data.generate` | The topic mock-data generation jobs are published to. Its own topic and retry ladder, so a stuck generation does not sit in the queue a reindex or a checklist run is waiting in. |
