@@ -87,8 +87,11 @@ async def test_voyage_documents_and_queries_use_different_input_types() -> None:
 @pytest.mark.parametrize(
     ("status", "expected"),
     [
+        (400, TerminalIngestionError),
         (401, TerminalIngestionError),
         (403, TerminalIngestionError),
+        (404, TerminalIngestionError),
+        (422, TerminalIngestionError),
         (500, RetryableIngestionError),
         (503, RetryableIngestionError),
     ],
@@ -96,11 +99,11 @@ async def test_voyage_documents_and_queries_use_different_input_types() -> None:
 async def test_status_codes_are_classified_consistently_across_providers(
     provider: str, status: int, expected: type[IngestionError]
 ) -> None:
-    """401/403 never retry — a bad key stays bad. Every other >= 400 does, because
-    it might be a transient provider outage. This must hold identically for every
-    provider: a classifier that only checks one status code, or that is wired to
-    only one provider, would leave the other providers' failures misrouted with
-    nothing to catch it."""
+    """401/403/400/404/422 never retry -- a bad key or a malformed/unsupported
+    request stays bad. Every other >= 400 does, because it might be a transient
+    provider outage. This must hold identically for every provider: a classifier
+    that only checks one status code, or that is wired to only one provider, would
+    leave the other providers' failures misrouted with nothing to catch it."""
     transport = httpx.MockTransport(lambda request: httpx.Response(status, text="error"))
     embedder = _build(provider, transport)
 
