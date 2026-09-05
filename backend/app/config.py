@@ -94,6 +94,17 @@ class Settings(BaseSettings):
     # Files beyond it are reported skipped, not processed.
     checklist_max_files_per_job: int = Field(default=200, ge=1)
 
+    # Mock data generation (docs/PRD.md 4.4, M5). Its own topic family and retry ladder,
+    # matching the checklist's reasoning exactly -- a stuck generation must not sit in
+    # the queue a reindex or a checklist run is waiting in. No dedicated "max concurrent
+    # generations" setting: cost is already bounded by `chat_max_concurrency` and by one
+    # consumer loop per worker, the same way checklist generation is.
+    kafka_mock_data_topic: str = "askrepo.mock-data.generate"
+    kafka_mock_data_partitions: int = Field(default=1, ge=1)
+    mock_data_scroll_page_size: int = Field(default=256, ge=1)
+    mock_data_max_files_per_job: int = Field(default=200, ge=1)
+    mock_data_export_max_rows: int = 5000
+
     # Embedding — provider selected at runtime, dimensions probed rather than declared.
     embedding_provider: Literal["ollama", "openai", "voyage"] = "ollama"
     embedding_model: str = "nomic-embed-text"

@@ -295,6 +295,16 @@ your `.env` rather than assuming it carried over.
 | `CHECKLIST_SCROLL_PAGE_SIZE` | `256` | Points fetched per Qdrant scroll page while enumerating a module's files. It bounds memory per page, not the total: the generator reads every matching chunk regardless, so this trades round trips against the size of one response. |
 | `CHECKLIST_MAX_FILES_PER_JOB` | `200` | Files mapped per generation run before the rest are reported skipped rather than processed. One model call per file, so this bounds the worst-case cost of a single run rather than cumulative spend — a module larger than this needs more than one generation pass to cover in full. |
 
+### QA Mock Data Generator
+
+| Setting | Default | What it does |
+| --- | --- | --- |
+| `MOCK_DATA_EXPORT_MAX_ROWS` | `5000` | Records the `.xlsx`/`.json` export will build before refusing with `409 EXPORT_TOO_LARGE`. Same reasoning as `CHECKLIST_EXPORT_MAX_ROWS`: `openpyxl` builds the whole workbook in memory. |
+| `KAFKA_MOCK_DATA_TOPIC` | `askrepo.mock-data.generate` | The topic mock-data generation jobs are published to. Its own topic and retry ladder, so a stuck generation does not sit in the queue a reindex or a checklist run is waiting in. |
+| `KAFKA_MOCK_DATA_PARTITIONS` | `1` | Partitions on that topic — the ceiling on how many mock-data generations run at once across the instance. Raise only alongside worker replicas. |
+| `MOCK_DATA_SCROLL_PAGE_SIZE` | `256` | Points fetched per Qdrant scroll page while enumerating a module's files for schema detection. |
+| `MOCK_DATA_MAX_FILES_PER_JOB` | `200` | Files read per generation run before the rest are reported skipped. Unlike the checklist generator this is a single model call over the concatenated (capped) source, not a map-reduce — schema-shaped code is typically small relative to a whole module. |
+
 ---
 
 ## Values that fail silently
