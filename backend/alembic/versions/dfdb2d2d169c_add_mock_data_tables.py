@@ -153,9 +153,7 @@ def upgrade() -> None:
         ),
         sa.PrimaryKeyConstraint("id", name=op.f("pk_mock_data_change_sets")),
     )
-    op.create_index(
-        "ix_mock_data_change_sets_created_by", "mock_data_change_sets", ["created_by"]
-    )
+    op.create_index("ix_mock_data_change_sets_created_by", "mock_data_change_sets", ["created_by"])
     op.create_index(
         "ix_mock_data_change_sets_module_id_status",
         "mock_data_change_sets",

@@ -1,7 +1,9 @@
 """camelCase-on-the-wire checks, mirroring test_checklist_schemas.py."""
 
 import uuid
+from datetime import UTC, datetime
 
+from app.models.mock_data import MockDataDatasetStatus
 from app.schemas.mock_data import (
     MockDataChangeOperationPayload,
     MockDataChangeSetEvent,
@@ -17,8 +19,8 @@ def test_record_response_serialises_camel_case() -> None:
         checklist_module_id=uuid.uuid4(),
         fields={"name": "Acme"},
         created_by=uuid.uuid4(),
-        created_at="2026-01-01T00:00:00Z",
-        updated_at="2026-01-01T00:00:00Z",
+        created_at=datetime(2026, 1, 1, tzinfo=UTC),
+        updated_at=datetime(2026, 1, 1, tzinfo=UTC),
     )
     dumped = payload.model_dump(by_alias=True)
     assert "checklistModuleId" in dumped
@@ -29,15 +31,15 @@ def test_dataset_response_serialises_camel_case() -> None:
     payload = MockDataDatasetResponse(
         id=uuid.uuid4(),
         checklist_module_id=uuid.uuid4(),
-        status="empty",
+        status=MockDataDatasetStatus.EMPTY,
         error=None,
         indexed_generation=None,
         last_generated_at=None,
         stale=False,
         record_count=0,
         pending_change_set_id=None,
-        created_at="2026-01-01T00:00:00Z",
-        updated_at="2026-01-01T00:00:00Z",
+        created_at=datetime(2026, 1, 1, tzinfo=UTC),
+        updated_at=datetime(2026, 1, 1, tzinfo=UTC),
     )
     dumped = payload.model_dump(by_alias=True)
     assert dumped["pendingChangeSetId"] is None
@@ -56,7 +58,9 @@ def test_change_set_event_has_event_name() -> None:
         summary="2 records proposed",
         operations=[
             MockDataChangeOperationPayload(
-                op="add", id=uuid.uuid4(), rationale="matches the Project schema",
+                op="add",
+                id=uuid.uuid4(),
+                rationale="matches the Project schema",
                 fields={"name": "Acme"},
             )
         ],

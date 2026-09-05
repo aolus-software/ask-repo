@@ -102,9 +102,7 @@ class MockDataChangeSet(Base, TimestampMixin, SoftDeleteMixin):
 
     __tablename__ = "mock_data_change_sets"
     __table_args__ = (
-        Index(
-            "ix_mock_data_change_sets_module_id_status", "checklist_module_id", "status"
-        ),
+        Index("ix_mock_data_change_sets_module_id_status", "checklist_module_id", "status"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(

@@ -33,9 +33,7 @@ async def test_claim_refuses_a_live_lease(db_session: AsyncSession) -> None:
     await db_session.commit()
 
     job_id = uuid.uuid4()
-    assert await repo.claim(
-        dataset_id=dataset.id, job_id=job_id, worker_id="w1", lease_seconds=300
-    )
+    assert await repo.claim(dataset_id=dataset.id, job_id=job_id, worker_id="w1", lease_seconds=300)
     await db_session.commit()
 
     assert not await repo.claim(
@@ -118,9 +116,7 @@ async def test_release_is_refused_once_the_lease_moved_on(db_session: AsyncSessi
     first, second = uuid.uuid4(), uuid.uuid4()
 
     await repo.claim(dataset_id=dataset.id, job_id=first, worker_id="w1", lease_seconds=0)
-    await repo.claim(
-        dataset_id=dataset.id, job_id=second, worker_id="w2", lease_seconds=300
-    )
+    await repo.claim(dataset_id=dataset.id, job_id=second, worker_id="w2", lease_seconds=300)
 
     assert not await repo.release(
         dataset_id=dataset.id,
@@ -141,9 +137,7 @@ async def test_release_is_refused_on_a_soft_deleted_dataset(
     repo = MockDataDatasetRepository(db_session)
     dataset = await repo.get_or_create_for_module(module.id)
     job_id = uuid.uuid4()
-    await repo.claim(
-        dataset_id=dataset.id, job_id=job_id, worker_id="w1", lease_seconds=300
-    )
+    await repo.claim(dataset_id=dataset.id, job_id=job_id, worker_id="w1", lease_seconds=300)
     await repo.soft_delete(dataset)
 
     assert not await repo.release(
@@ -173,9 +167,7 @@ async def test_renew_lease_refuses_when_another_worker_owns_the_lease(
     module = await create_checklist_module(db_session)
     repo = MockDataDatasetRepository(db_session)
     dataset = await repo.get_or_create_for_module(module.id)
-    await repo.claim(
-        dataset_id=dataset.id, job_id=uuid.uuid4(), worker_id="w1", lease_seconds=300
-    )
+    await repo.claim(dataset_id=dataset.id, job_id=uuid.uuid4(), worker_id="w1", lease_seconds=300)
     await db_session.commit()
 
     assert not await repo.renew_lease(dataset_id=dataset.id, worker_id="w2", lease_seconds=300)
@@ -207,9 +199,7 @@ async def test_defer_drops_the_lease_and_stays_generating(db_session: AsyncSessi
     repo = MockDataDatasetRepository(db_session)
     dataset = await repo.get_or_create_for_module(module.id)
     job_id = uuid.uuid4()
-    assert await repo.claim(
-        dataset_id=dataset.id, job_id=job_id, worker_id="w1", lease_seconds=300
-    )
+    assert await repo.claim(dataset_id=dataset.id, job_id=job_id, worker_id="w1", lease_seconds=300)
 
     assert await repo.defer(dataset_id=dataset.id, worker_id="w1") is True
 

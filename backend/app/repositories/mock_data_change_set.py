@@ -32,9 +32,7 @@ class MockDataChangeSetRepository(BaseRepository[MockDataChangeSet]):
         )
         return result.scalar_one_or_none()
 
-    async def list_for_module(
-        self, module_id: uuid.UUID, *, limit: int
-    ) -> list[MockDataChangeSet]:
+    async def list_for_module(self, module_id: uuid.UUID, *, limit: int) -> list[MockDataChangeSet]:
         """This module's mock-data change sets, newest first."""
         result = await self.session.execute(
             self.active_select()

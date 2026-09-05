@@ -42,8 +42,7 @@ def stored_mock_data_operation(
         and set(operation.fields) != set(field_keys)
     ):
         logger.warning(
-            "dropping proposed add operation whose fields %r do not match the batch's"
-            " key set %r",
+            "dropping proposed add operation whose fields %r do not match the batch's key set %r",
             sorted(operation.fields),
             sorted(field_keys),
         )
