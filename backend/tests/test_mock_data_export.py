@@ -13,6 +13,7 @@ from fastapi import status
 from openpyxl import load_workbook
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import Settings
 from app.core.errors import AppError
 from app.models.mock_data import MockDataRecord
 from app.services.mock_data_dataset import MockDataDatasetService
@@ -62,10 +63,74 @@ def test_build_mock_data_workbook_unions_field_keys_across_records() -> None:
     assert [cell.value for cell in sheet[3]] == ["Globex", "2026-01-01"]
 
 
-async def test_export_refuses_over_the_row_cap(db_session: AsyncSession) -> None:
-    """Async test: service rejects export when record count exceeds cap."""
-    from app.config import Settings
+async def test_export_json_succeeds_under_cap(db_session: AsyncSession) -> None:
+    """export_json returns JSON array when records are under cap."""
+    # Create project with embedding_collection
+    project = await create_project(db_session)
+    project.embedding_collection = "col"
+    project.embedding_model = "test-model"
 
+    # Create module and record
+    module = await create_checklist_module(db_session, project_id=project.id)
+    user = await create_user(db_session)
+    actor = authenticated(user)
+
+    await create_mock_data_record(
+        db_session, module_id=module.id, fields={"name": "TestService"}, created_by=user.id
+    )
+    await db_session.commit()
+
+    # Create service with max_rows=5
+    settings = Settings(mock_data_export_max_rows=5)
+    service = MockDataDatasetService(db_session, settings)
+
+    # Should return valid JSON bytes
+    result = await service.export_json(module.id, actor=actor)
+    payload = json.loads(result)
+    assert isinstance(payload, list)
+    assert len(payload) == 1
+    assert payload[0]["name"] == "TestService"
+
+
+async def test_export_xlsx_succeeds_under_cap(db_session: AsyncSession) -> None:
+    """export_xlsx returns valid workbook when records are under cap."""
+    # Create project with embedding_collection
+    project = await create_project(db_session)
+    project.embedding_collection = "col"
+    project.embedding_model = "test-model"
+
+    # Create module and records
+    module = await create_checklist_module(db_session, project_id=project.id)
+    user = await create_user(db_session)
+    actor = authenticated(user)
+
+    await create_mock_data_record(
+        db_session, module_id=module.id, fields={"name": "Acme"}, created_by=user.id
+    )
+    await create_mock_data_record(
+        db_session,
+        module_id=module.id,
+        fields={"name": "Globex", "start": "2026-01-01"},
+        created_by=user.id,
+    )
+    await db_session.commit()
+
+    # Create service with max_rows=10
+    settings = Settings(mock_data_export_max_rows=10)
+    service = MockDataDatasetService(db_session, settings)
+
+    # Should return valid workbook bytes
+    result = await service.export_xlsx(module.id, actor=actor)
+    book = load_workbook(BytesIO(result))
+    sheet = book.active
+    header = [cell.value for cell in sheet[1]]
+    assert header == ["name", "start"]
+    assert [cell.value for cell in sheet[2]] == ["Acme", None]
+    assert [cell.value for cell in sheet[3]] == ["Globex", "2026-01-01"]
+
+
+async def test_export_refuses_over_the_row_cap(db_session: AsyncSession) -> None:
+    """Service rejects export when record count exceeds cap."""
     # Create project with embedding_collection
     project = await create_project(db_session)
     project.embedding_collection = "col"
@@ -89,3 +154,25 @@ async def test_export_refuses_over_the_row_cap(db_session: AsyncSession) -> None
     with pytest.raises(AppError) as excinfo:
         await service.export_json(module.id, actor=actor)
     assert excinfo.value.status_code == status.HTTP_409_CONFLICT
+
+
+async def test_export_json_404s_on_nonexistent_module(db_session: AsyncSession) -> None:
+    """export_json raises 404 for nonexistent module id."""
+    service = MockDataDatasetService(db_session, Settings())
+    user = await create_user(db_session)
+
+    with pytest.raises(AppError) as excinfo:
+        await service.export_json(uuid.uuid4(), actor=authenticated(user))
+
+    assert excinfo.value.status_code == status.HTTP_404_NOT_FOUND
+
+
+async def test_export_xlsx_404s_on_nonexistent_module(db_session: AsyncSession) -> None:
+    """export_xlsx raises 404 for nonexistent module id."""
+    service = MockDataDatasetService(db_session, Settings())
+    user = await create_user(db_session)
+
+    with pytest.raises(AppError) as excinfo:
+        await service.export_xlsx(uuid.uuid4(), actor=authenticated(user))
+
+    assert excinfo.value.status_code == status.HTTP_404_NOT_FOUND
