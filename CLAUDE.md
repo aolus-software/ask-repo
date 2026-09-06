@@ -12,74 +12,37 @@ organization runs one instance on its own internal network.
 the security model. It outranks every other doc and outranks the code. When code and the PRD
 disagree, that is a contradiction to report — not a doc to quietly rewrite.
 
-**Status: M0, M1, M2, M3, M4 (backend), M4.5, and M5 shipped.** The backend serves an index route, health
-checks, the full auth/accounts surface (admin-provisioned users, login, forced first-login
-password change, session rotation, login rate limiting), the project CRUD routes, the
-conversation routes that answer questions about an indexed project, the eighteen QA
-Checklist routes that name modules over a repository, generate reviewed test plans for them,
-refine them by chat, record results, and export the grid to `.xlsx`, and the ten Mock Data
-Generator routes that generate, refine by chat, and export a grounded sample dataset per
-module. **All four datastores are read** — Postgres, Redis, Qdrant, and Kafka. The worker
-reads a chat model as well as an embedder: checklist and mock-data generation each run a
-model in that process, ingestion does not.
+**Milestone status is not recorded here.** `docs/PRD.md` §6 is the only place that says which
+milestones are built and which are not — check it before assuming a feature exists, and do not
+add a status line, roadmap, or "shipped" claim to this file. Everything below describes what is
+in the tree, which is a different question from how far along the project is.
 
-M1 is complete end to end. `app/ingestion/` holds the cloner, walker, chunker, embedder adapter,
-Qdrant vector store, and `IngestionPipeline`; `app/queue/` holds the message format, topics, both
-protocols, `KafkaIngestionQueue`, `IngestionConsumer`, and the delayed-retry `RetryConsumer`; and
-`app/worker.py` is the separate process that runs them, plus the reconcile sweep that recovers
-jobs the broker never received. `POST /projects` publishes a job and a worker picks it up.
+## Where the explanations live
 
-M2 is complete too. `app/rag/` holds the retriever, the chat-model adapter, the prompts, the
-`Answerer` adapter, and the grounding guardrails; `app/services/conversation.py` and
-`app/api/routes/conversations.py` put it behind five routes. `POST /conversations/{id}/messages`
-streams the answer over Server-Sent Events.
+`docs/` explains how the system works; this file states what must not be broken. Do not
+re-explain a mechanism here that has a page — link to it instead, or the two will drift and this
+file outranks the one that went stale.
 
-M3 is shipped too. `app/rag/graph/` holds the state graph — `nodes.py` for each node,
-`build.py` for the compiled graph, `state.py` for the shared `TurnState` — and `answerer.py` is
-now the adapter that runs it and turns its stream writes into SSE events. The sequencing is
-intent routing (codebase question / conversational / out of scope) followed, on the codebase
-path, by a corrective retrieval loop: a grader checks the retrieved excerpts and asks for a
-better search query when they fall short, bounded by `RAG_MAX_RETRIEVAL_ATTEMPTS`. The loop
-grades retrieval, not the finished answer — see `docs/PRD.md` §5's Orchestration row and §6's
-M3 line for why.
+| Question | Page |
+| --- | --- |
+| What runs where, and what happens on a request | [`docs/architecture.md`](docs/architecture.md) |
+| The layering, the source tree, where to add code | [`docs/codebase.md`](docs/codebase.md) |
+| Tables, leases, soft delete, what each store holds | [`docs/data.md`](docs/data.md) |
+| Chunking, embedding, retrieval, grounding | [`docs/rag.md`](docs/rag.md) |
+| Providers, structured output, retry classification | [`docs/llm.md`](docs/llm.md) |
+| The answer graph and the SSE contract | [`docs/langgraph.md`](docs/langgraph.md) |
+| Every setting | [`docs/configuration.md`](docs/configuration.md) |
 
-M4 is shipped too, and it replaced the QA List that shipped at this milestone earlier —
-`docs/superpowers/specs/2026-09-01-m4-qa-checklist-design.md` §0 records why. `app/checklist/`
-holds the generator, the model's output contracts, and the file rebuild; `app/queue/checklist.py`
-holds the job handler the worker runs; `app/services/checklist_module.py`,
-`checklist_item.py`, `checklist_change_set.py` and `checklist_export.py` hold the business rules;
-and `checklist_modules.py`, `checklist_items.py` and `checklist_change_sets.py` put them behind
-eighteen routes.
+**All four datastores are read** — Postgres, Redis, Qdrant and Kafka. The worker reads a chat
+model as well as an embedder: checklist and mock-data generation each run a model in that
+process, ingestion does not.
 
-M4.5 is shipped too, backend-only — no new routes and no frontend surface. `app/rag/chat.py`'s
-`build_chat_model` gained a native Anthropic branch alongside `ollama` and `openai`; a new
-`app/rag/errors.py` taxonomy (`TerminalChatError` / `RetryableChatError`, classified by exception
-name) is wired into checklist generation's retry path so a rejected key or an unknown model
-stops retrying instead of burning the retry ladder; a boot-time capability probe
-(`app/rag/capability.py`) runs in both `app/main.py`'s lifespan and `app/worker.py`'s startup and
-fails the process if the configured chat model cannot do structured output, rather than failing
-on the first generation; and `CHECKLIST_MAX_FILES_PER_JOB` caps how many files one checklist
-generation run maps, reporting the excess in `skipped_paths` — a coverage note alongside the
-pre-existing `partial_paths`, not the same field.
-
-Two facts about it outrank the rest. **The generator scrolls the index; it does not search it**
-— top-k retrieval cannot report what it left out, and a test plan that silently omits a file is
-worse than one that says which files it covered. And **nothing writes `checklist_items` except
-the apply path**: generation and the refinement chat both write a *pending change set*, and
-`POST /checklist-change-sets/{id}/apply` is the only code that turns a proposal into a row.
-
-M5 is shipped too: for a QA Checklist module, `app/mockdata/` generates a grounded sample
-dataset (its own `mock_data_datasets`/`mock_data_records`/`mock_data_change_sets`/
-`mock_data_messages` tables, independent of the checklist's own status and lease), refined
-by chat through a second `propose_target` on the same answer graph (`app/rag/graph/`)
-alongside the checklist's own, applied through the same generate/change-set/apply discipline
-as the checklist, and exported as JSON or `.xlsx`.
-
-The M0–M2, M4 and M5 frontend is shipped: auth screens, the app shell, projects, the streamed
-answer surface, admin user management, the QA Checklist (`/checklist`, `/checklist/[moduleId]`),
-and that module screen's Mock Data tab, with Next acting as a backend-for-frontend (see the
-Frontend section below). Later milestones are not built — do not assume a module exists because
-the PRD describes it; the PRD describes the destination.
+Two facts about generation outrank everything else written about it. **The generator scrolls the
+index; it does not search it** — top-k retrieval cannot report what it left out, and a test plan
+that silently omits a file is worse than one that says which files it covered. And **nothing
+writes `checklist_items` except the apply path**: generation and the refinement chat both write a
+*pending change set*, and `POST /checklist-change-sets/{id}/apply` is the only code that turns a
+proposal into a row.
 
 ## Commands
 
@@ -101,7 +64,7 @@ Single-service datastore control: `make docker-start-pg`, `docker-start-redis`,
 
 **Ollama is not a Compose service in the development stack.** It runs on the host, because a
 container gets no GPU on macOS and only the Docker VM's memory allowance — the same 22-minute
-CPU reduce call `docs/PRD.md` §6 cites for M4.5. `make dev` and `make worker` warn (never
+CPU reduce call `docs/PRD.md` §6 cites. `make dev` and `make worker` warn (never
 fail) when nothing answers on `:11434`, since a hosted-provider instance correctly has none.
 The container is still in `docker-compose.yml` behind its profile: `make infra
 OLLAMA_IN_DOCKER=1` re-enables it, and that also requires `EMBEDDING_BASE_URL` and
@@ -155,19 +118,13 @@ The parts below are the ones you cannot infer from any single file.
 
 ### All four datastores are read
 
-`Settings` declares `database_url`, `qdrant_url`, `redis_url`, and `kafka_bootstrap_servers`,
-and Compose points them at live services. Postgres is read through the repository layer
-(`app/repositories/`) for users, refresh tokens, and projects; Redis is read by the login rate
-limiter (`app/core/rate_limit.py`) and by nothing else — **it does not back the job queue**.
-`qdrant_url` is read by `app/ingestion/vector_store.py` and by `build_store_factory` in
-`app/api/routes/projects.py`.
+What each one holds is in [`docs/data.md`](docs/data.md). The invariant: **Redis does not back
+the job queue** — Kafka does, and Redis is read by the login rate limiter
+(`app/core/rate_limit.py`) and by nothing else.
 
-Kafka is read from both processes: the API lifespan calls `ensure_topics` and starts
-`KafkaIngestionQueue`, and the worker (`app/worker.py`) runs `IngestionConsumer` on the ingest
-topic plus one `RetryConsumer` per retry rung. `InMemoryIngestionQueue` remains the test double
-for both protocols, so route, service, consumer and retry tests all run with no broker — the
-only suite needing a real one is `tests/test_ingestion_integration.py`, behind the `integration`
-marker.
+`InMemoryIngestionQueue` is the test double for both queue protocols, so route, service, consumer
+and retry tests all run with no broker. The only suite needing a real one is
+`tests/test_ingestion_integration.py`, behind the `integration` marker.
 
 There is a second opt-in marker, `model`, for `tests/test_rag_model_integration.py`: it needs a
 served chat model rather than a broker, and it is what keeps the prompts honest. Everything else
@@ -237,7 +194,7 @@ hard-delete, in the same operation.**
 working copy is **deleted after indexing**, so `/data/repos` is scratch space, not a persistent
 volume — and reindex re-clones rather than `git pull`.
 
-**M1's job queue is Kafka, not Redis + ARQ.** Earlier PRD drafts argued against Kafka by name,
+**The job queue is Kafka, not Redis + ARQ.** Earlier PRD drafts argued against Kafka by name,
 and that technical argument was never disputed — it was **overridden for a non-technical
 reason**: `docs/PRD.md` §1 names learning as the project's primary goal, and §2's goal list now
 carries event streaming. This is settled, not a live contradiction: `docs/PRD.md` §5's job-queue note
@@ -245,6 +202,8 @@ now records the decision, the accepted costs, and their mitigations. Do not "fix
 toward ARQ, and do not reintroduce Redis as a queue — Redis backs login rate limiting only.
 
 ### The lease is the deduplication boundary
+
+Mechanism: [`docs/data.md`](docs/data.md).
 
 Kafka delivers at least once, so the same job can arrive twice — a rebalance, a redelivered
 uncommitted offset, a reconcile sweep racing a retry. **What stops two workers indexing the same
@@ -283,6 +242,8 @@ no setting for it. The same pattern serves the retry ladder: Kafka has no delay 
 
 ### The collection name carries the embedding model
 
+Mechanism: [`docs/rag.md`](docs/rag.md).
+
 Qdrant collections are named `code_chunks__provider__model__dimensions` (`collection_name` in
 `app/ingestion/vector_store.py`), and the width is **probed at worker startup**, never declared.
 A model change therefore lands in a different collection instead of silently mixing incompatible
@@ -290,6 +251,8 @@ vectors. Each project records the collection it wrote to, which is how `DELETE /
 knows where its points live. Never hardcode a collection name.
 
 ### The checklist is a diff, not a list
+
+Mechanism: [`docs/data.md`](docs/data.md).
 
 A generated checklist never lands as rows. Both producers — the background generator and the
 refinement chat — write a **pending change set**: a JSON list of `add` / `update` / `remove`
@@ -309,11 +272,26 @@ second request fail with a `409` after the user typed a paragraph.
 
 ### Reindex is a generation swap
 
+Mechanism: [`docs/rag.md`](docs/rag.md).
+
 A reindex does not empty the project's points and refill them — that would take a `ready` project
 offline for the length of a clone-and-embed. New vectors are written under an incremented
 `active_generation`, the project switches to reading it only on success, and the old generation is
 deleted afterwards. **A reindex that fails part-way leaves the previous index intact and still
 serving.**
+
+Because the project stays `ready` throughout, `reindex_in_progress` is the *only* signal that a
+run is live — so `ProjectService.reindex` raises it when the reindex is **requested**, before the
+publish, not when a worker claims it. That is one write outside the lease, and `release` and
+`abandon` are both gated on `lease_owner` and therefore cannot undo it, which is why
+`find_stranded` carries a third branch (flag raised, no lease, `updated_at` past the cutoff) for
+the produce that never reaches a worker.
+
+The same "`status` says `ready` during a reindex" fact is why **QA Checklist and mock-data
+generation refuse with `409` while the flag is up** (`_require_a_stable_index`). A generation
+records which project generation it read; one started mid-reindex records the generation that run
+is about to supersede and delete, so it reports itself `stale` the moment it finishes. Questions
+and refinement chats deliberately keep running — they read the live generation and record nothing.
 
 ### Nothing derived from clone output is stored or logged unscrubbed
 
@@ -394,7 +372,7 @@ enforced there — if you add a convention, wire it into the config in the same 
 ## Frontend
 
 App Router, React 19, Tailwind CSS 4 (CSS-first `@theme`, no `tailwind.config.js` for tokens).
-The M0–M2, M4 and M5 screens are shipped: `/login`, `/change-password`, `/` (dashboard),
+The routes that exist are `/login`, `/change-password`, `/` (dashboard),
 `/projects`, `/projects/[id]`, `/ask`, `/ask/[conversationId]`, `/settings/users`,
 `/checklist`, and `/checklist/[moduleId]` — the last of which now carries a Mock Data tab
 beside the checklist grid, no new route of its own.

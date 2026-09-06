@@ -258,7 +258,7 @@ The field is `password_hash`, not `password`. The plaintext exists only in the r
 - **Quotas:** instance-wide cap on concurrent ingestion jobs (default 2) so one large clone can't starve the box. The cap is **structural, not a setting**: 2 ingest partitions against 2 worker replicas, so a third worker would have no partition to own. Raising it means adding partitions *and* replicas. No per-user project cap — users are trusted colleagues.
 - Indexing runs walk → filter → code-aware chunk → embed, writing into a Qdrant collection with `project_id` on every point.
 - **What the walk actually filters.** A fresh `git clone` has already applied `.gitignore` — ignored files were never committed, so they are not on disk to begin with. `.gitignore` is still consulted, but only for the genuine edge case of a file committed before it was ignored. The filters that do the real work are the ones a clone does not apply: **binary detection** (a `.png` or a compiled artefact embeds to noise), a **per-file size cap** (default 1 MiB, so a checked-in minified bundle or fixture dump cannot dominate the index), and a **denylist** of committed-but-worthless paths (`.git`, `node_modules`, `vendor`, lockfiles, `*.min.js`, source maps).
-- **Reindex is a generation swap, not a rebuild in place.** The project stays `ready` and queryable for the whole run: new vectors are written under an incremented `active_generation`, the project only starts reading from it once the run completes, and the previous generation is deleted afterwards. Two consequences worth stating plainly — a reindex never takes a project offline, and **a reindex that fails part-way leaves the previous index intact and still serving**. `reindex_in_progress` marks that a run is live; a second reindex request while one is running is idempotent (§5.1), not an error.
+- **Reindex is a generation swap, not a rebuild in place.** The project stays `ready` and queryable for the whole run: new vectors are written under an incremented `active_generation`, the project only starts reading from it once the run completes, and the previous generation is deleted afterwards. Two consequences worth stating plainly — a reindex never takes a project offline, and **a reindex that fails part-way leaves the previous index intact and still serving**. `reindex_in_progress` marks that a run is live — raised when the reindex is *requested*, not when a worker picks it up, because the project stays `ready` throughout and the flag is otherwise the only thing that says a run is coming. A second reindex request while one is running is idempotent (§5.1), not an error. **Generating a QA Checklist or a mock dataset is refused with `409` while the flag is up** (§4.3): a generation records which project generation it read, and one started mid-reindex records the generation that run is about to supersede and delete — so it would report itself stale the moment it finished, built from an index that no longer exists. Asking a question is *not* refused, because a question reads the live generation and records nothing, and a reindex can run for twenty minutes.
 - **Disk lifecycle.** After indexing succeeds (or fails terminally), the cloned working copy is **deleted**. `/data/repos` is scratch space, not a persistent volume. Re-index therefore re-clones rather than `git pull` — slower per run, accepted in exchange for bounded disk use.
 - `DELETE /projects/{id}` soft-deletes the row and **hard-deletes** the project's Qdrant points (§5.1).
 - PATs are encrypted at rest with a key from the environment, never logged, and never returned in any API response — not even masked.
@@ -295,7 +295,7 @@ class Project(BaseModel):
 
 **Why the last seven columns exist.** The queue delivers at least once, so two workers can be handed the same job; `lease_owner` / `lease_expires_at` / `last_job_id` are what make one of them stand down, and they live in Postgres rather than in the broker because the database is the only thing both workers already agree on. `active_generation` and `embedding_collection` exist because a reindex must not take the project offline — see the next point. `embedding_model` records what the stored vectors actually are, so a model change is detectable rather than silently mixing incompatible vectors in one collection.
 
-**Planned, not yet built — the project detail page and the dashboard grow with each milestone.** Both currently show only what M1 produces: status, file and chunk counts, the indexed commit, the embedding model. As later milestones land, each one has a per-project story worth surfacing there — M4's checklist modules and their pass/fail/blocked/untested totals, M5's mock data record counts per module, and whatever M6 adds — so that a project's page answers "what do we know about this repository, and how well is it tested?" rather than only "is it indexed?". The dashboard aggregates the same figures across projects. This is deliberately additive: no milestone's screens are blocked on it, and each one contributes its own tile when it ships rather than the page being designed up front for data that does not exist yet.
+**Planned, not yet built — the project detail page and the dashboard grow with each milestone.** Both currently show only what M1 produces: status, file and chunk counts, the indexed commit, the embedding model. As later milestones land, each one has a per-project story worth surfacing there — M4's checklist modules and their pass/fail/blocked/untested totals and M5's mock data record counts per module — so that a project's page answers "what do we know about this repository, and how well is it tested?" rather than only "is it indexed?". The dashboard aggregates the same figures across projects. This is deliberately additive: no milestone's screens are blocked on it, and each one contributes its own tile when it ships rather than the page being designed up front for data that does not exist yet.
 
 **Planned, not yet built — nothing tells anyone the index finished.** `POST /projects` returns immediately and the clone-and-embed runs in a worker, which is the right shape and leaves a gap: the only report of the outcome is the status column on the screen above, so a user who navigates away learns that a twenty-minute index failed by coming back and looking. The same is true of a re-index and of M4's checklist generation. Notifications are a phase-2 item (§2.1); until then, the status column is the whole story and the screens should not imply otherwise.
 
@@ -619,7 +619,6 @@ Redis stays in the stack for login rate limiting only. It does not back the queu
 3. **M3 — LangGraph wrap (shipped):** turn the chain into a graph with intent routing (codebase question / conversational / out of scope) and a self-critique loop that **grades retrieval before generating** — when the excerpts do not answer the question, the grader supplies a better query and retrieval runs again. The critique deliberately sits before generation rather than after it: a critic that can reject a finished answer can only run on an answer that finished, which means either buffering the whole draft (reintroducing the silence §4.2 added streaming to remove) or visibly retracting a streamed one. See `docs/superpowers/specs/2026-08-30-m3-langgraph-design.md` §2.1.
 4. **M4 — QA Checklist (shipped):** modules over an indexed repository, background generation that scrolls the index and proposes a reviewed change set, a shared module chat that proposes further change sets, human-recorded pass/fail/blocked results, and `.xlsx` export. Replaces the QA List that shipped earlier at this milestone — see `docs/superpowers/specs/2026-09-01-m4-qa-checklist-design.md` §0.
 5. **M5 — Mock Data Generator:** for a QA Checklist module, generate grounded sample data records via the same generate → chat → change-set → apply flow as M4, exportable as `.json` or `.xlsx`.
-6. **M6 — Local vs hosted comparison:** benchmark qwen2.5-coder/qwen3 vs hosted model across nodes. Depends on M4.5 below, which is what makes a hosted model configurable in the first place; M6 measures what M4.5 makes possible.
 
 **M4.5 — Model provider abstraction (inserted between M4 and M5).** The answering model becomes a provider an operator chooses — OpenAI, Anthropic, DeepSeek, OpenRouter, Kimi, or any OpenAI-compatible endpoint — rather than a model that has to run on the box. The motivation is measured rather than theoretical: one reduce call against `qwen2.5-coder:7b` on CPU took **22 minutes**, and a development machine already running Postgres, Qdrant, Redis, Kafka and Ollama has nothing left for a 7-billion-parameter model. A tool nobody can wait for is a tool nobody uses.
 
@@ -634,7 +633,7 @@ Most of this seam already exists and is not part of the milestone. §5's chat ro
 
 **What this costs is the premise.** §1 describes a self-hosted, single-tenant tool on an organization's own network, and a hosted answerer sends retrieved source code to a third party on every question. That is a deliberate trade an operator makes per instance, not a default — see §9.
 
-**Phase 2 (after M6):** per-project RBAC — membership table, roles, and swapping the access resolver's body. Plus self-service password reset and notifications (in-app and email), which together bring a mail provider into the stack for the first time and with it the instance's first egress path; a per-user answer persona, applied to private answers only and never to the shared checklist; an append-only audit trail; and multi-language support — a translated interface and answers in the language the question was asked in, with the search query held to English so retrieval against English source code keeps working. See §2.1 for what each covers and what it costs.
+**Phase 2 (after M5):** per-project RBAC — membership table, roles, and swapping the access resolver's body. Plus self-service password reset and notifications (in-app and email), which together bring a mail provider into the stack for the first time and with it the instance's first egress path; a per-user answer persona, applied to private answers only and never to the shared checklist; an append-only audit trail; and multi-language support — a translated interface and answers in the language the question was asked in, with the search query held to English so retrieval against English source code keeps working. See §2.1 for what each covers and what it costs.
 
 **Phase 3 (after phase 2, not beside it):** a code knowledge graph in Neo4j Community Edition, making Neo4j the fourth database beside Postgres, Redis and Qdrant — Kafka remains the broker and §5's queue decision is unchanged. It answers the reachability questions vector similarity structurally cannot ("what breaks if I change this"), and it costs a language-aware parser, a fifth stateful service on a box already short of memory, and a backup that is not a hot operation. It follows phase 2 rather than running alongside it because a second query language must not arrive before per-project access has one enforcement point. See §2.1.
 
@@ -650,42 +649,35 @@ Most of this seam already exists and is not part of the milestone. §5's chat ro
 - A module of a real repository generates a checklist whose proposals a reviewer accepts, a tester records results against it, and the export is usable as the handoff artifact — verified by an automated test.
 - **No generated field claims an observation:** a generated test case always arrives `untested` with an empty `current_result`. Verified by an automated test.
 - Mock Data Generator can produce a grounded, usable batch of sample records for a real module in one run — every field name it proposes actually exists in that module's code, and generation fails rather than inventing fields when none is found.
-- Clear, documented comparison of local vs hosted model performance per node type.
 - **Switching the answering model is configuration, not a migration:** an instance moves from a local model to a hosted provider and back by changing `CHAT_*` settings, with no re-index and no change to stored citations. An instance configured with a model that cannot do structured output fails at startup with a message naming that as the cause, rather than on its first generation (M4.5).
 - No secret (password, token, PAT) appears in any log, traceback, or API response.
 - **Phase-2 readiness:** read scoping happens in exactly one function, confirmed by grep — no route filters projects on its own.
 
-**Known bugs — must be fixed before phase 1 is considered complete/published.** None of these
-is a missing feature; each is a regression against behaviour this document already promises
-elsewhere. The first two were found during M4.5 work and deliberately deferred rather than
-fixed inline; the third was reported directly against a live instance and its root cause is
-not yet confirmed.
+**Known bugs — all three fixed (2026-09-06).** Kept here as a record of what was wrong,
+because two of them turned out to be one defect and the shape is worth not repeating.
 
-- **Re-index does not update project status.** §4.1's `POST /projects/{id}/reindex` enqueues
-  the job but never sets `reindex_in_progress` on the project row before returning, so the
-  response — and therefore the frontend's poll-while-reindexing behaviour — never observes a
-  state change. A user who triggers a re-index sees no visible change on the project page
-  until the run finishes and `active_generation`/`last_indexed_commit` update, which reads as
-  "nothing happened." Fix belongs in `ProjectService.reindex`.
-- **A QA Checklist chat reply disappears after navigating away and back.** §4.3 promises the
-  module chat is a persisted, shared record every user can read — and the backend does persist
-  it correctly, including the shielded write on disconnect (`.claude/rules/rag.md`). The gap is
-  the frontend: the chat panel's messages query has no `refetchOnMount`/`refetchInterval`, so
-  React Query serves a stale cached list (empty, or missing the latest turn) when the component
-  remounts within its staleTime window. Fix belongs in the checklist chat panel's query
-  configuration, not the backend.
-- **A regenerated QA Checklist module still reports `stale: true` after a reindex.** §4.3's
-  module list flags a module as needing regeneration by comparing `indexed_generation` — set to
-  the project's `active_generation` at the end of a successful generation run, in
-  `ChecklistGenerator.generate` — against the project's *current* `active_generation`
-  (`ChecklistModuleService._summaries`). Reported directly against a live instance: reindex a
-  project, regenerate its checklist afterward, and the module still shows as stale — the flag
-  that is supposed to clear does not. Root cause unconfirmed; the two places to check first are
-  whether `_summaries` reads a freshly-queried `active_generation` or one resolved before the
-  reindex committed, and whether the regenerate run's `release` call (which is what writes the
-  new `indexed_generation`) is actually reached — a lost lease or an exception upstream of it
-  would leave `indexed_generation` unchanged even though the UI reports the run as finished.
-  Needs investigation before phase 1 is considered complete.
+- **~~Re-index does not update project status.~~ Fixed.** §4.1's `POST /projects/{id}/reindex`
+  enqueued the job but never raised `reindex_in_progress`, so the response — and the frontend's
+  poll-while-reindexing behaviour, which was already written against that field — never observed
+  a state change, and a user who triggered a re-index saw nothing happen. `ProjectService.reindex`
+  now raises it before publishing. Because that happens outside any lease, and both `release` and
+  `abandon` are gated on `lease_owner`, `ProjectRepository.find_stranded` grew a third branch —
+  flag raised, no lease, `updated_at` past the cutoff — so a produce that never reaches a worker
+  is re-published by the reconcile sweep instead of stranding the flag at `true` forever.
+- **~~A QA Checklist chat reply disappears after navigating away and back.~~ Fixed.** The backend
+  persisted the turn correctly all along, including the shielded write on disconnect
+  (`.claude/rules/rag.md`); the chat panel's messages query served a cached list inside the
+  30-second `staleTime` when the component remounted. Both refinement chats — the checklist's and
+  M5's mock-data panel, which shipped with the same query — now set `refetchOnMount: "always"`.
+- **~~A regenerated QA Checklist module still reports `stale: true` after a reindex.~~ Fixed, and
+  it was the first bug.** `_summaries` and `ChecklistGenerator.generate` were both correct; the
+  race was upstream of them. A reindex keeps `status` at `ready` (§4.1), so the readiness guard on
+  the generation routes passed throughout one — and because nothing showed that a reindex was
+  running, a user would re-index, see no change, and start a regeneration inside the window. That
+  run scrolled the current generation and recorded it, the reindex then flipped the pointer and
+  deleted those points, and the module reported `stale` immediately. `stale: true` was the correct
+  answer; the defect was allowing the run. Both generation paths now refuse with `409` while
+  `reindex_in_progress` is set. The chat paths deliberately do not — see §4.1.
 
 ---
 

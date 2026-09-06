@@ -110,7 +110,7 @@ Declare `422` in `responses` and never suppress it.
 
 ## `429` is declared where rate limiting is applied
 
-Rate limiting is applied per-route by an explicit dependency (arriving at M0 for login,
+Rate limiting is applied per-route by an explicit dependency (login is the case that has one,
 `docs/PRD.md` §4.0). A route declares `429` only when it carries a limiter dependency,
 not on every route — each endpoint must trace its own dependencies.
 

@@ -86,7 +86,7 @@ Read [`tests/test_rag_model_integration.py`](backend/tests/test_rag_model_integr
 before editing any prompt in `app/rag/prompts.py`. The rest of the suite drives a scripted
 fake, so it proves the graph's wiring and nothing whatsoever about the prompts: a classifier
 that sends every out-of-scope question down the wrong branch passes all 563 unit tests,
-because none of them asks a model anything. Two such failures shipped in M3 and were caught
+because none of them asks a model anything. Two such failures have reached `main` and were caught
 by hand. The thresholds there are floors a regression would break through, not the scores
 observed — a probabilistic system cannot be asserted exactly, but it can be bounded.
 

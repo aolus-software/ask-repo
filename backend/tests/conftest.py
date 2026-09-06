@@ -50,9 +50,16 @@ def _test_environment() -> Iterator[None]:
 
     Environment rather than a dependency override, because the auth middleware calls
     `get_settings()` directly rather than through `Depends` (see app/db/session.py).
+
+    `.env` is then switched off for the rest of the session. It is read once, above, to
+    locate the developer's Postgres and Redis; everything the suite needs from it is
+    promoted to real environment variables below. Leaving it on makes a test that asserts
+    a default assert the developer's configuration instead -- green in CI, where no `.env`
+    exists, and red on any box configured for a hosted provider.
     """
     dev = get_settings()
     with pytest.MonkeyPatch.context() as patch:
+        patch.setitem(Settings.model_config, "env_file", None)
         patch.setenv("APP_ENV", "test")
         patch.setenv("DATABASE_URL", _swap_database(dev.database_url, TEST_DB_NAME))
         patch.setenv("REDIS_URL", _swap_database(dev.redis_url, str(TEST_REDIS_DB)))

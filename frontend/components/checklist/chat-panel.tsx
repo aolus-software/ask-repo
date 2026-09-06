@@ -71,6 +71,14 @@ export function ChatPanel({
       apiFetch<ChecklistMessageResponse[]>(
         endpoints.checklistModules.messages(moduleId),
       ),
+    // Remounting must re-read the server, not the cache. The global `staleTime` is
+    // 30s (`lib/query/client.ts`), and the assistant row is committed server-side
+    // under the shield in `finally` (`.claude/rules/rag.md`) -- after the last SSE
+    // byte, so the turn-end refetch below can land just before it. That caches a
+    // list missing the reply and marks it fresh, and navigating away and back inside
+    // the window then serves it. `"always"` still renders the cache first, so this
+    // costs a background request, not a spinner.
+    refetchOnMount: "always",
   });
 
   const [turn, setTurn] = useState<TurnState | null>(null);

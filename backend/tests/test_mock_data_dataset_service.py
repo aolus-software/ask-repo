@@ -555,3 +555,31 @@ async def test_prepare_turn_404s_on_nonexistent_module(db_session: AsyncSession)
         )
 
     assert excinfo.value.status_code == status.HTTP_404_NOT_FOUND
+
+
+async def test_mock_data_generation_is_refused_while_a_reindex_is_in_flight(
+    db_session: AsyncSession,
+) -> None:
+    """Same guard the checklist takes, for the same reason: a mock-data run stamps its
+    own `indexed_generation`, and a reindex keeps `status` at `ready` throughout, so
+    `_require_indexed` alone lets the run start against points about to be deleted.
+    """
+    project = await create_project(db_session)
+    project.embedding_collection = "col"
+    project.reindex_in_progress = True
+    module = await create_checklist_module(db_session, project_id=project.id)
+    await db_session.commit()
+    service = MockDataDatasetService(db_session, Settings())
+    queue = InMemoryIngestionQueue()
+
+    with pytest.raises(AppError) as excinfo:
+        await service.request_generation(
+            module.id,
+            MockDataGenerationRequest(),
+            actor=authenticated(await create_user(db_session)),
+            queue=queue,
+        )
+
+    assert excinfo.value.status_code == status.HTTP_409_CONFLICT
+    assert excinfo.value.code is ErrorCode.PROJECT_NOT_READY
+    assert queue.messages == []

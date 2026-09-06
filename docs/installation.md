@@ -388,6 +388,8 @@ ships separately: `infra/backend.prod.Dockerfile`, `infra/frontend.prod.Dockerfi
 
 ## See also
 
+- [`README.md`](README.md) — **the documentation index**
+- [`architecture.md`](architecture.md) — how the system fits together
 - [`configuration.md`](configuration.md) — every setting and what it does
 - [`deployment.md`](deployment.md) — running it for real
 - [`../backend/README.md`](../backend/README.md) — routes, layout, the worker

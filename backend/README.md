@@ -3,20 +3,24 @@
 FastAPI service for AskRepo — the codebase-aware assistant described in
 [`docs/PRD.md`](../docs/PRD.md).
 
-M0 is shipped: the service identifies itself, reports health, and serves the full
-auth/accounts surface — admin-provisioned users, login, forced first-login password
-change, session rotation, and login rate limiting.
+**Milestone progress is recorded in [`docs/PRD.md`](../docs/PRD.md) §6 and nowhere else** —
+this file describes the service as it stands, and the route table below is its exhaustive
+contract.
 
-M1 is complete. The project routes and the entire ingestion pipeline are here — clone,
-walk, chunk, embed, and write to Qdrant — along with the Kafka producer, the consumer
-that turns a queued message into an indexing run, the delayed-retry consumers, and
-`app/worker.py`: the separate process that runs all of them and sweeps up jobs the
-broker never received. `POST /projects` enqueues and a worker indexes.
+The service identifies itself, reports health, and serves the full auth/accounts surface —
+admin-provisioned users, login, forced first-login password change, session rotation, and login
+rate limiting.
 
-M2 through M5 are shipped too: Dev Knowledge (streaming RAG Q&A over an indexed project),
-M3's LangGraph intent routing and corrective retrieval loop, the QA Checklist, and the Mock
-Data Generator — see the `### Conversations`, `### QA Checklist`, and `### Mock Data
-Generator` route sections below. Only the local-vs-hosted comparison (M6) remains.
+The project routes and the entire ingestion pipeline are here — clone, walk, chunk, embed, and
+write to Qdrant — along with the Kafka producer, the consumer that turns a queued message into an
+indexing run, the delayed-retry consumers, and `app/worker.py`: the separate process that runs
+all of them and sweeps up jobs the broker never received. `POST /projects` enqueues and a worker
+indexes.
+
+On top of that sit Dev Knowledge (streaming RAG Q&A over an indexed project), the LangGraph
+intent routing and corrective retrieval loop behind it, the QA Checklist, and the Mock Data
+Generator — see the `### Conversations`, `### QA Checklist`, and `### Mock Data Generator` route
+sections below.
 
 ## Requirements
 
@@ -129,7 +133,7 @@ a leak (`docs/PRD.md` §4.1). Only the project's `created_by` or an admin may re
 | `GET` | `/projects` | any user | List all projects, paginated |
 | `GET` | `/projects/{id}` | any user | One project |
 | `POST` | `/projects` | any user | Register a repository and enqueue its first index |
-| `POST` | `/projects/{id}/reindex` | creator or admin | Re-index; a run already in flight is a no-op |
+| `POST` | `/projects/{id}/reindex` | creator or admin | Re-index; raises `reindexInProgress` before publishing, and a run already in flight is a no-op |
 | `DELETE` | `/projects/{id}` | creator or admin | Soft-delete the row and hard-delete its vectors |
 
 `DELETE` is the one route that can return **`503 VECTOR_STORE_UNAVAILABLE`**: it must reach
@@ -170,7 +174,7 @@ Five event types, all `camelCase` payloads:
 Exactly one terminator per stream, and both carry `finishReason`: `stop`, `error`, `timeout`,
 or `disconnected`. A disconnect emits nothing — nobody is listening — but the tokens that
 arrived are still persisted. `groundingWarnings` is empty for a normal answer and carries
-`no_context`, `uncited_answer`, `unknown_paths`, or (M3) `weak_evidence` when the answer may not
+`no_context`, `uncited_answer`, `unknown_paths`, or `weak_evidence` when the answer may not
 be grounded.
 
 A `: keep-alive` comment goes out every 15 seconds during any gap, and the response sets
@@ -190,7 +194,7 @@ Modules over an indexed repository — a user names a module ("Authentication"),
 | `GET` | `/checklist-modules/{id}` | any user | One module with its test cases, grouped by feature |
 | `PATCH` | `/checklist-modules/{id}` | creator or admin | Rename or re-point the module |
 | `DELETE` | `/checklist-modules/{id}` | creator or admin | Soft-delete the module, its items, its change sets, and its chat |
-| `POST` | `/checklist-modules/{id}/generate` | any user | Publish a generation job; returns the module in `generating` status |
+| `POST` | `/checklist-modules/{id}/generate` | any user | Publish a generation job; returns the module in `generating` status. `409 PROJECT_NOT_READY` while the project is being re-indexed |
 | `GET` | `/checklist-modules/{id}/change-sets` | any user | List the module's proposed change sets, newest first |
 | `GET` | `/checklist-modules/{id}/messages` | any user | Read the module's refinement chat |
 | `POST` | `/checklist-modules/{id}/messages` | any user | Refine the checklist by chat; **streams the reply and proposes changes** |
@@ -230,7 +234,7 @@ Recording a result is open to every authenticated user while editing what a test
 | Method | Path | Auth | Description |
 | --- | --- | --- | --- |
 | `GET` | `/checklist-modules/{id}/mock-data` | any user | A module's mock dataset summary and its applied records; an empty summary before the first generation |
-| `POST` | `/checklist-modules/{id}/mock-data-generations` | any user | Publish a generation job; returns the dataset in `generating` status |
+| `POST` | `/checklist-modules/{id}/mock-data-generations` | any user | Publish a generation job; returns the dataset in `generating` status. `409 PROJECT_NOT_READY` while the project is being re-indexed |
 | `GET` | `/checklist-modules/{id}/mock-data-change-sets` | any user | List the dataset's proposed change sets, newest first |
 | `GET` | `/checklist-modules/{id}/mock-data-messages` | any user | Read the dataset's refinement chat |
 | `POST` | `/checklist-modules/{id}/mock-data-messages` | any user | Refine the dataset by chat; **streams the reply and proposes changes** |
@@ -314,7 +318,7 @@ backend/
 │   │   ├── prompts.py    # the classify/rewrite prompt, the grade prompt, the answer prompt
 │   │   ├── answerer.py   # runs the graph, turns its stream writes into SSE events
 │   │   ├── grounding.py  # the refusal, and the checks that make a bad answer visible
-│   │   └── graph/        # the LangGraph state graph (M3)
+│   │   └── graph/        # the LangGraph state graph
 │   │       ├── state.py  # TurnState — the shared dict every node reads and writes
 │   │       ├── nodes.py  # classify → retrieve → grade/loop → generate, each with a fallback
 │   │       └── build.py  # wires the nodes into the compiled graph, incl. routing edges
@@ -370,7 +374,7 @@ The four things worth knowing before you touch any of it:
 - **`RAG_MIN_SCORE` is the relevance floor below which no answer is generated at all** — the
   turn ends with a fixed refusal rather than a model call.
 - **`RAG_CLASSIFY_INTENT`, `RAG_GRADE_EVIDENCE` and `RAG_MAX_RETRIEVAL_ATTEMPTS` tune the graph
-  added in M3.** The first two default on and each short-circuits to its failure-path value when
+  for the graph's helper nodes.** The first two default on and each short-circuits to its failure-path value when
   off, so there is one code path rather than two; `RAG_MAX_RETRIEVAL_ATTEMPTS` (default `2`)
   bounds how many times the grader may ask for a re-search before the answer is generated anyway
   and flagged `weak_evidence`.
@@ -383,7 +387,7 @@ generator; FastAPI serializes by alias, so a field named `last_indexed_commit` i
 appears as `lastIndexedCommit` in JSON. Nothing converts casing by hand.
 
 A schema on plain `BaseModel` silently ships `snake_case` keys and breaks the API contract.
-`tests/test_api_model.py` guards the boundary — none of the routes shipped so far has a
+`tests/test_api_model.py` guards the boundary — none of the routes here has a
 multi-word field, so nothing else would catch a regression.
 
 Full conventions in [`CLAUDE.md`](../CLAUDE.md) and

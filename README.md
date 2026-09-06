@@ -15,33 +15,33 @@ network.
 Built as a learning project for RAG, LangChain/LangGraph, prompt engineering, and context
 management — against real repositories rather than tutorial data.
 
-> **Status: M0, M1, M2, M3, M4 and M5 shipped.** Auth & accounts are implemented —
-> admin-provisioned users, login, forced first-login password change, and login rate
-> limiting — as are the project routes and the whole ingestion pipeline: clone, walk,
-> chunk, embed, Qdrant, driven by a Kafka job queue and a separate worker process.
-> `POST /projects` enqueues a repository and a worker indexes it in the background.
-> M2 added Dev Knowledge: ask a question about a ready project and the answer streams
-> back token by token over Server-Sent Events, cited to real files and line ranges,
-> with conversations private to whoever had them. M3 turned the answer path into a
-> LangGraph state graph: questions are routed (codebase question / conversational /
-> out of scope) before anything is retrieved, and on the codebase path a grader
-> checks the retrieved excerpts and re-searches with a better query when they fall
-> short — the loop grades retrieval, not the finished answer, so streaming stays
-> unaffected. M4 added the QA Checklist: a user names a module, AskRepo generates
-> test cases with expected results grounded in the code, nothing enters the checklist
-> unreviewed, a shared conversation proposes further changes, and testers record
-> pass/fail/blocked results — all exported to `.xlsx`. M5 added the Mock Data Generator:
-> for a QA Checklist module, AskRepo proposes a grounded sample dataset from the module's
-> actual schema, refined the same way as the checklist — chat, a pending change set,
-> then apply — and exported as JSON or `.xlsx`. **The M0–M2, M4 and M5 frontend is
-> shipped too**: sign in, change the forced initial password, add and re-index
-> projects, ask questions with the answer streaming in, manage accounts, work the
-> checklist, and generate its mock data — all in a browser, with the session held in
-> httpOnly cookies by Next rather than in the page. See [Roadmap](#roadmap) for what
-> lands when, and
-> [`docs/PRD.md`](docs/PRD.md) for the full specification.
+AskRepo is admin-provisioned: an administrator creates accounts, and a new user is forced to
+change their initial password on first login. Submit a repository URL and it is cloned, walked,
+chunked, embedded into Qdrant and tracked as a project — driven by a Kafka job queue and a
+separate worker process, so the request returns immediately. Ask a question about an indexed
+project and the answer streams back token by token over Server-Sent Events, cited to real files
+and line ranges, with conversations private to whoever had them. Questions are routed (codebase
+question / conversational / out of scope) before anything is retrieved, and on the codebase path
+a grader checks the retrieved excerpts and re-searches with a better query when they fall short
+— it grades retrieval rather than the finished answer, so streaming is unaffected.
 
-## Features (planned)
+Point it at a module and it generates test cases with expected results grounded in the code.
+Nothing enters the checklist unreviewed: a shared conversation proposes further changes, a human
+accepts the ones they want, and testers record pass/fail/blocked results, all exported to
+`.xlsx`. For the same module it will propose a grounded sample dataset from that feature's actual
+schema, refined the same way — chat, a pending change set, then apply — and exported as JSON or
+`.xlsx`.
+
+All of it works in a browser, with the session held in httpOnly cookies by Next rather than in
+the page.
+
+> **For what is built and what is not, read [`docs/PRD.md`](docs/PRD.md) §6.** It is the only
+> place this repository records milestone progress; no other document tracks it, so nothing else
+> can go stale about it.
+
+## Features
+
+Numbered as in [`docs/PRD.md`](docs/PRD.md) §4, which is also where their status lives.
 
 | | Feature | What it does |
 | --- | --- | --- |
@@ -51,13 +51,66 @@ management — against real repositories rather than tutorial data.
 | **3** | QA Checklist | Generate test cases for a code module, review and refine them via chat, record pass/fail/blocked results, and export as a spreadsheet |
 | **4** | Mock Data Generator | Generate sample data records for a QA Checklist module, grounded in that feature's actual schema, reviewed via chat and exported as JSON/xlsx |
 
+## How it works
+
+Four steps, and the third is the one people usually want explained.
+
+**1 — Index.** `POST /projects` writes a row, publishes a Kafka job and returns. A separate
+worker clones the repo, walks it, splits each file into overlapping chunks on language
+boundaries, embeds them, and writes them to Qdrant. The working copy is then deleted, which is
+why the chunk's text rides along in the vector payload:
+
+```python
+{"project_id": "…", "generation": 3, "file_path": "app/auth/login.py",
+ "start_line": 1, "end_line": 40, "symbol": "login", "content": "def login(user): …"}
+```
+
+**2 — Retrieve.** A question is embedded with the same model, then searched — filtered to that
+project *and* the generation it is currently serving, cut at a relevance floor, and merged back
+into contiguous spans:
+
+```python
+vector = await self.embedder.embed_query(query)
+hits   = await self.store.search(project_id=..., generation=..., vector=vector, limit=top_k)
+kept   = [chunk_from_hit(h) for h in hits if h.score >= self.min_score]
+return apply_budget(merge_adjacent(kept), max_chars=self.max_chars)
+```
+
+If nothing clears the floor, **the model is never called** — a refusal is streamed instead.
+
+**3 — Answer.** Not one model call, a small state machine. LangGraph routes the question,
+retrieves, grades whether the excerpts actually answer it, searches again with a better query if
+not, then generates:
+
+```mermaid
+flowchart LR
+    C[classify] -->|codebase| R[retrieve] --> G[grade]
+    G -->|insufficient| R
+    G -->|sufficient| GEN[generate] --> E([stream])
+    C -->|conversational| H[answer from history] --> E
+    C -->|out of scope| F[refuse] --> E
+```
+
+It grades **retrieval, not the finished answer** — a critic that can reject a finished answer can
+only run on one that finished, which would mean buffering the whole draft or retracting a
+streamed one. Tokens go to the browser over SSE as they arrive, citations first.
+
+**4 — Ground.** The finished answer is checked against what was actually retrieved: a file it
+named that no excerpt contained, or an answer that cited nothing, is reported to the user. That
+does not make the model honest — it makes dishonesty visible.
+
+The same graph, with one extra node, powers the QA Checklist and Mock Data refinement chats.
+
+**→ [`docs/`](docs/README.md) explains all of it properly**, starting with
+[`docs/architecture.md`](docs/architecture.md).
+
 ## Stack
 
 **Backend** FastAPI · Python 3.13 · uv · SQLAlchemy + Alembic · LangGraph · LangChain
 **Frontend** Next.js 16 · React 19 · TypeScript · Tailwind CSS 4 · Bun
 **Data** Postgres 17 · Qdrant · Redis · Kafka
-**Models** Ollama (qwen2.5-coder, qwen3), run on the host rather than in Compose, with a
-hosted-API adapter for comparison
+**Models** Ollama (qwen2.5-coder, qwen3), run on the host rather than in Compose, or any
+OpenAI-compatible endpoint, or Anthropic — the answering model is a setting, not a rebuild
 **Infra** Docker Compose · Caddy · VPN/Tailscale only, not internet-facing
 
 ## Repository layout
@@ -271,32 +324,8 @@ fail silently when set wrong, and the four the app refuses to boot without when
 
 ## Roadmap
 
-Milestones from [`docs/PRD.md`](docs/PRD.md) §6, built in order:
-
-- [x] **M0** — Auth & accounts: admin-provisioned users, login, forced first-login password change, rate limiting
-- [x] **M1** — Project ingestion: clone + index, status tracking, re-index, Kafka job queue
-- [x] **M2** — Dev Knowledge: streaming RAG Q&A against a ready project, private conversations
-- [x] **M0–M2 frontend** — auth screens, app shell, projects, streamed answers, admin user management
-- [x] **M3** — LangGraph: intent routing + a self-critique loop that grades retrieval before generating
-- [x] **M4** — QA Checklist: generate test cases from code, shared chat for refinement, apply/discard proposals, result recording, export
-- [x] **M4 frontend** — the `/checklist` module list, the `/checklist/[moduleId]` grid with chat and review panel
-- [x] **M4.5** — Model provider abstraction: a native Anthropic adapter, a startup check that the
-      configured model can do structured output, hosted-provider retry classification, and a spend
-      bound. Any OpenAI-compatible endpoint (OpenRouter, DeepSeek, Kimi, Groq, vLLM) already works
-      by configuration today — see [PRD §6](docs/PRD.md)
-- [x] **M5** — Mock Data Generator: grounded sample records for a checklist module, generate/chat/apply, JSON + xlsx export
-- [ ] **M6** — Local vs hosted model comparison
-
-**Phase 2** (after M6): per-project RBAC — users assigned to projects, roles per project.
-Phase 1 is deliberately built so this is a change to one access-resolver function rather
-than a rewrite (PRD §2.1, §4.1). Also queued for that phase: notifications (in-app and
-email) for the background jobs that currently finish in silence, self-service password
-reset, a per-user answer persona, an append-only audit trail, multi-language support, and
-the synthetic Q&A eval harness M5 originally targeted — see PRD §2.1 for what each costs.
-
-**Phase 3** (after phase 2): a code knowledge graph in Neo4j Community Edition, for the
-"what breaks if I change this" questions vector similarity cannot answer. Neo4j becomes the
-fourth database beside Postgres, Redis and Qdrant; Kafka stays the broker (PRD §2.1).
+Not tracked here. [`docs/PRD.md`](docs/PRD.md) §6 lists the milestones and which are built;
+§2.1 covers what is deliberately deferred and what each deferred item would cost.
 
 ## Security
 
@@ -313,7 +342,15 @@ See [`CONTRIBUTING.md`](CONTRIBUTING.md). Bug reports and feature requests go th
 
 ## Documentation
 
-- [`docs/PRD.md`](docs/PRD.md) — product requirements, schemas, milestones, security model
+- [**`docs/README.md`**](docs/README.md) — **the documentation index; start here**
+- [`CHANGELOG.md`](CHANGELOG.md) — what changed in each release
+- [`docs/PRD.md`](docs/PRD.md) — product requirements, schemas, security model, and **the only record of milestone progress**
+- [`docs/architecture.md`](docs/architecture.md) — the processes, the datastores, and three request lifecycles
+- [`docs/codebase.md`](docs/codebase.md) — the layering, the source tree, and where to add code
+- [`docs/rag.md`](docs/rag.md) — clone → chunk → embed → retrieve → cite, end to end
+- [`docs/llm.md`](docs/llm.md) — providers, structured output, retries, and cost bounds
+- [`docs/langgraph.md`](docs/langgraph.md) — the answer graph and the streaming contract
+- [`docs/data.md`](docs/data.md) — the 13 tables, leases, soft delete, and what each store holds
 - [`docs/installation.md`](docs/installation.md) — step-by-step local setup, all three paths, and troubleshooting
 - [`docs/deployment.md`](docs/deployment.md) — running it for a team: production images, TLS, secrets, backups
 - [`docs/configuration.md`](docs/configuration.md) — every setting, what it does, and what to change before production

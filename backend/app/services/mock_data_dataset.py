@@ -121,6 +121,7 @@ class MockDataDatasetService:
         module = await self._require_readable_module(module_id, actor)
         project = await self._require_readable_project(module.project_id, actor)
         self._require_indexed(project)
+        self._require_a_stable_index(project)
 
         dataset = await self.datasets.get_or_create_for_module(module_id)
         if dataset.status == MockDataDatasetStatus.GENERATING.value:
@@ -380,6 +381,18 @@ class MockDataDatasetService:
                 status.HTTP_409_CONFLICT,
                 ErrorCode.PROJECT_NOT_READY,
                 "This project is not indexed yet. Wait for indexing to finish.",
+            )
+
+    @staticmethod
+    def _require_a_stable_index(project: Project) -> None:
+        """Same guard `ChecklistModuleService._require_a_stable_index` applies, and for
+        the same reason -- a mock-data run stamps its own `indexed_generation`.
+        """
+        if project.reindex_in_progress:
+            raise AppError(
+                status.HTTP_409_CONFLICT,
+                ErrorCode.PROJECT_NOT_READY,
+                "This project is being re-indexed. Wait for that to finish, then generate.",
             )
 
 

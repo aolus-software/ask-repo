@@ -3,9 +3,10 @@
 Next.js UI for AskRepo — the codebase-aware assistant described in
 [`docs/PRD.md`](../docs/PRD.md).
 
-The M0–M2, M4 and M5 screens are shipped: sign-in and the forced first-login password change, the
-dashboard, projects (list, detail, create, re-index, delete), Dev Knowledge with streamed
-answers, admin user management, and the QA Checklist — the `/checklist` module list and the
+**Milestone progress is recorded in [`docs/PRD.md`](../docs/PRD.md) §6 and nowhere else.** The
+screens that exist are sign-in and the forced first-login password change, the dashboard,
+projects (list, detail, create, re-index, delete), Dev Knowledge with streamed answers, admin
+user management, and the QA Checklist — the `/checklist` module list and the
 `/checklist/[moduleId]` grid with chat and review panel, which also carries a Mock Data tab
 (generate, refine by chat, review the pending change set, export JSON/`.xlsx`) beside the
 checklist grid, no route of its own.

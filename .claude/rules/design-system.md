@@ -15,7 +15,7 @@ Add it with the CLI: `npx shadcn@latest add <name>`. Search first —
 `components/ui/` by hand; that directory is CLI-managed, and keeping it untouched is what makes
 an upstream diff readable.
 
-`docs/design.md` → "Component inventory" lists the intended set per milestone. Install the row
+`docs/design.md` → "Component inventory" lists the intended set per surface. Install the row
 you need when you need it; do not install the whole table up front.
 
 ## 2. No raw colour, radius, or font value in a component

@@ -17,6 +17,7 @@ from app.models.checklist import (
 )
 from app.models.project import ProjectStatus
 from app.queue.protocol import InMemoryIngestionQueue
+from app.repositories.project import ProjectRepository
 from app.schemas.checklist import (
     ChecklistModuleCreateRequest,
     ChecklistModuleListQuery,
@@ -399,3 +400,53 @@ async def test_summaries_carry_the_project_name(db_session: AsyncSession) -> Non
 
     assert page.items[0].project_name == "checkout-service"
     assert detail.project_name == "checkout-service"
+
+
+async def test_generation_is_refused_while_a_reindex_is_in_flight(
+    db_session: AsyncSession,
+) -> None:
+    """`docs/PRD.md` §7's third known bug. A reindex keeps `status` at `ready`, so
+    `_require_indexed` passes throughout one. A generation that slips through scrolls
+    the current generation, stamps `indexed_generation` with it, and then the reindex
+    flips the pointer and deletes those points -- the module reports `stale` the
+    moment it finishes, built from an index that no longer exists.
+    """
+    module = await create_checklist_module(db_session)
+    project = await ProjectRepository(db_session).get(module.project_id)
+    assert project is not None
+    project.status = ProjectStatus.READY.value
+    project.embedding_collection = "code_chunks__x"
+    project.reindex_in_progress = True
+    await db_session.commit()
+    service = ChecklistModuleService(db_session, Settings())
+    queue = InMemoryIngestionQueue()
+
+    with pytest.raises(AppError) as raised:
+        await service.request_generation(
+            module.id, actor=authenticated(await create_user(db_session)), queue=queue
+        )
+
+    assert raised.value.status_code == 409
+    assert raised.value.code is ErrorCode.PROJECT_NOT_READY
+    assert queue.messages == []
+    await db_session.refresh(module)
+    assert module.status != ChecklistModuleStatus.GENERATING.value
+
+
+async def test_the_refinement_chat_is_not_refused_during_a_reindex(
+    db_session: AsyncSession,
+) -> None:
+    """The asymmetry is deliberate. A chat turn reads the live generation and stamps
+    nothing, and a reindex can run for twenty minutes -- silencing it for that long
+    would cost far more than the guard saves. Only the generation paths take it.
+    """
+    module = await create_checklist_module(db_session)
+    project = await ProjectRepository(db_session).get(module.project_id)
+    assert project is not None
+    project.status = ProjectStatus.READY.value
+    project.embedding_collection = "code_chunks__x"
+    project.embedding_model = Settings().embedding_model
+    project.reindex_in_progress = True
+    await db_session.commit()
+
+    ChecklistModuleService(db_session, Settings())._require_answerable(project)
