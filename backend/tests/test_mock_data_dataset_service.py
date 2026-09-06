@@ -11,7 +11,7 @@ from app.config import Settings
 from app.core.errors import AppError, ErrorCode
 from app.models.checklist import ChangeSetOrigin, ChangeSetStatus
 from app.models.conversation import MessageRole
-from app.models.mock_data import MockDataChangeSet, MockDataDatasetStatus
+from app.models.mock_data import MockDataChangeSet, MockDataDatasetStatus, MockDataMessage
 from app.models.project import ProjectStatus
 from app.queue.protocol import InMemoryIngestionQueue
 from app.repositories.mock_data_change_set import MockDataChangeSetRepository
@@ -212,7 +212,8 @@ async def test_change_sets_for_returns_newest_first(db_session: AsyncSession) ->
 async def test_messages_are_readable_by_any_authenticated_user(
     db_session: AsyncSession,
 ) -> None:
-    """Messages are shared; any authenticated user can read them."""
+    """Messages are shared; any authenticated user can read them. Ordering is
+    deterministic (newest first) with explicit timestamps."""
     project = await create_project(db_session)
     project.embedding_collection = "col"
     module = await create_checklist_module(db_session, project_id=project.id)
@@ -220,18 +221,35 @@ async def test_messages_are_readable_by_any_authenticated_user(
     creator = await create_user(db_session)
     stranger = await create_user(db_session)
 
-    # Create messages
-    await create_mock_data_message(
-        db_session, module_id=module.id, created_by=creator.id, content="First message"
+    # Create messages with explicit timestamps to control ordering
+    started = datetime.now(UTC)
+    msg1 = MockDataMessage(
+        id=uuid.uuid4(),
+        checklist_module_id=module.id,
+        role=MessageRole.USER.value,
+        content="First message",
+        created_by=creator.id,
+        created_at=started,
     )
-    await create_mock_data_message(
-        db_session, module_id=module.id, created_by=creator.id, content="Second message"
+    msg2 = MockDataMessage(
+        id=uuid.uuid4(),
+        checklist_module_id=module.id,
+        role=MessageRole.ASSISTANT.value,
+        content="Second message",
+        created_by=creator.id,
+        created_at=started + timedelta(seconds=1),
     )
+    db_session.add_all([msg1, msg2])
+    await db_session.commit()
 
     messages = await service.messages(module.id, actor=authenticated(stranger))
 
     assert len(messages) == 2
-    assert messages[0].content in ["First message", "Second message"]
+    # Messages are returned oldest-first (see MockDataMessageRepository._latest)
+    assert messages[0].id == msg1.id
+    assert messages[0].content == "First message"
+    assert messages[1].id == msg2.id
+    assert messages[1].content == "Second message"
 
 
 async def test_prepare_turn_creates_dataset_lazily(db_session: AsyncSession) -> None:
@@ -384,3 +402,108 @@ async def test_request_generation_refuses_when_project_not_ready(
             queue=InMemoryIngestionQueue(),
         )
     assert excinfo.value.code == ErrorCode.PROJECT_NOT_READY
+
+
+async def test_prepare_turn_maps_history_from_prior_messages(
+    db_session: AsyncSession,
+) -> None:
+    """prepare_turn builds history from recent prior messages with role and content."""
+    project = await create_project(db_session)
+    project.embedding_collection = "col"
+    project.embedding_model = Settings().embedding_model
+    module = await create_checklist_module(db_session, project_id=project.id)
+    service = MockDataDatasetService(db_session, Settings())
+    user = await create_user(db_session)
+
+    # Create prior messages
+    await create_mock_data_message(
+        db_session,
+        module_id=module.id,
+        created_by=user.id,
+        role=MessageRole.USER,
+        content="Previous question",
+    )
+    await create_mock_data_message(
+        db_session,
+        module_id=module.id,
+        created_by=user.id,
+        role=MessageRole.ASSISTANT,
+        content="Previous answer",
+    )
+
+    context = await service.prepare_turn(
+        module.id,
+        MockDataMessageCreateRequest(question="New question"),
+        actor=authenticated(user),
+    )
+
+    # History should include the prior messages
+    assert len(context.history) >= 2
+    # Find the prior messages in history
+    history_contents = [turn.content for turn in context.history]
+    assert "Previous question" in history_contents
+    assert "Previous answer" in history_contents
+
+
+async def test_get_404s_on_nonexistent_module(db_session: AsyncSession) -> None:
+    """get raises 404 for a nonexistent module id."""
+    service = MockDataDatasetService(db_session, Settings())
+    user = await create_user(db_session)
+
+    with pytest.raises(AppError) as excinfo:
+        await service.get(uuid.uuid4(), actor=authenticated(user))
+
+    assert excinfo.value.status_code == status.HTTP_404_NOT_FOUND
+
+
+async def test_request_generation_404s_on_nonexistent_module(db_session: AsyncSession) -> None:
+    """request_generation raises 404 for a nonexistent module id."""
+    service = MockDataDatasetService(db_session, Settings())
+    user = await create_user(db_session)
+
+    with pytest.raises(AppError) as excinfo:
+        await service.request_generation(
+            uuid.uuid4(),
+            MockDataGenerationRequest(),
+            actor=authenticated(user),
+            queue=InMemoryIngestionQueue(),
+        )
+
+    assert excinfo.value.status_code == status.HTTP_404_NOT_FOUND
+
+
+async def test_messages_404s_on_nonexistent_module(db_session: AsyncSession) -> None:
+    """messages raises 404 for a nonexistent module id."""
+    service = MockDataDatasetService(db_session, Settings())
+    user = await create_user(db_session)
+
+    with pytest.raises(AppError) as excinfo:
+        await service.messages(uuid.uuid4(), actor=authenticated(user))
+
+    assert excinfo.value.status_code == status.HTTP_404_NOT_FOUND
+
+
+async def test_change_sets_for_404s_on_nonexistent_module(db_session: AsyncSession) -> None:
+    """change_sets_for raises 404 for a nonexistent module id."""
+    service = MockDataDatasetService(db_session, Settings())
+    user = await create_user(db_session)
+
+    with pytest.raises(AppError) as excinfo:
+        await service.change_sets_for(uuid.uuid4(), actor=authenticated(user))
+
+    assert excinfo.value.status_code == status.HTTP_404_NOT_FOUND
+
+
+async def test_prepare_turn_404s_on_nonexistent_module(db_session: AsyncSession) -> None:
+    """prepare_turn raises 404 for a nonexistent module id."""
+    service = MockDataDatasetService(db_session, Settings())
+    user = await create_user(db_session)
+
+    with pytest.raises(AppError) as excinfo:
+        await service.prepare_turn(
+            uuid.uuid4(),
+            MockDataMessageCreateRequest(question="Test"),
+            actor=authenticated(user),
+        )
+
+    assert excinfo.value.status_code == status.HTTP_404_NOT_FOUND
