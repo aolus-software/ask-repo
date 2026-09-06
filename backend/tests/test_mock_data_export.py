@@ -58,6 +58,7 @@ def test_build_mock_data_workbook_unions_field_keys_across_records() -> None:
     ]
     book = load_workbook(BytesIO(build_mock_data_workbook(records)))
     sheet = book.active
+    assert sheet is not None
     header = [cell.value for cell in sheet[1]]
     assert header == ["name", "start"]
     assert [cell.value for cell in sheet[2]] == ["Acme", None]
@@ -132,6 +133,7 @@ async def test_export_xlsx_succeeds_under_cap(db_session: AsyncSession) -> None:
     result = await service.export_xlsx(module.id, actor=actor)
     book = load_workbook(BytesIO(result))
     sheet = book.active
+    assert sheet is not None
     header = [cell.value for cell in sheet[1]]
     assert header == ["name", "start"]
     assert [cell.value for cell in sheet[2]] == ["Acme", None]
