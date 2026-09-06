@@ -84,10 +84,13 @@ class StubQueue:
 
     instances: ClassVar[list["StubQueue"]] = []
 
-    def __init__(self, *, bootstrap_servers: str, topic: str, checklist_topic: str) -> None:
+    def __init__(
+        self, *, bootstrap_servers: str, topic: str, checklist_topic: str, mock_data_topic: str
+    ) -> None:
         self.bootstrap_servers = bootstrap_servers
         self.topic = topic
         self.checklist_topic = checklist_topic
+        self.mock_data_topic = mock_data_topic
         self.started = False
         self.stopped = False
         StubQueue.instances.append(self)
@@ -155,7 +158,10 @@ async def test_enqueue_publishes_to_the_ingest_topic(monkeypatch: pytest.MonkeyP
     stub = install_stub_producer(monkeypatch)
 
     queue = KafkaIngestionQueue(
-        bootstrap_servers="localhost:9092", topic=INGEST_TOPIC, checklist_topic=CHECKLIST_TOPIC
+        bootstrap_servers="localhost:9092",
+        topic=INGEST_TOPIC,
+        checklist_topic=CHECKLIST_TOPIC,
+        mock_data_topic="askrepo.mock-data.generate",
     )
     await queue.start()
     sent = message()
@@ -173,7 +179,10 @@ async def test_the_producer_is_idempotent(monkeypatch: pytest.MonkeyPatch) -> No
     stub = install_stub_producer(monkeypatch)
 
     await KafkaIngestionQueue(
-        bootstrap_servers="localhost:9092", topic=INGEST_TOPIC, checklist_topic=CHECKLIST_TOPIC
+        bootstrap_servers="localhost:9092",
+        topic=INGEST_TOPIC,
+        checklist_topic=CHECKLIST_TOPIC,
+        mock_data_topic="askrepo.mock-data.generate",
     ).start()
 
     assert stub.kwargs["enable_idempotence"] is True
@@ -185,7 +194,10 @@ async def test_produce_to_targets_the_topic_it_is_given(monkeypatch: pytest.Monk
     stub = install_stub_producer(monkeypatch)
 
     queue = KafkaIngestionQueue(
-        bootstrap_servers="localhost:9092", topic=INGEST_TOPIC, checklist_topic=CHECKLIST_TOPIC
+        bootstrap_servers="localhost:9092",
+        topic=INGEST_TOPIC,
+        checklist_topic=CHECKLIST_TOPIC,
+        mock_data_topic="askrepo.mock-data.generate",
     )
     await queue.start()
     await queue.produce_to(DLQ_TOPIC, message(attempt=3))
@@ -195,7 +207,10 @@ async def test_produce_to_targets_the_topic_it_is_given(monkeypatch: pytest.Monk
 
 async def test_enqueue_before_start_is_a_programming_error() -> None:
     queue = KafkaIngestionQueue(
-        bootstrap_servers="localhost:9092", topic=INGEST_TOPIC, checklist_topic=CHECKLIST_TOPIC
+        bootstrap_servers="localhost:9092",
+        topic=INGEST_TOPIC,
+        checklist_topic=CHECKLIST_TOPIC,
+        mock_data_topic="askrepo.mock-data.generate",
     )
     with pytest.raises(RuntimeError, match="not started"):
         await queue.enqueue(message())
@@ -208,7 +223,10 @@ async def test_enqueue_after_stop_is_a_programming_error(
     stub = install_stub_producer(monkeypatch)
 
     queue = KafkaIngestionQueue(
-        bootstrap_servers="localhost:9092", topic=INGEST_TOPIC, checklist_topic=CHECKLIST_TOPIC
+        bootstrap_servers="localhost:9092",
+        topic=INGEST_TOPIC,
+        checklist_topic=CHECKLIST_TOPIC,
+        mock_data_topic="askrepo.mock-data.generate",
     )
     await queue.start()
     await queue.stop()
@@ -221,7 +239,10 @@ async def test_enqueue_after_stop_is_a_programming_error(
 async def test_stopping_a_queue_that_never_started_is_a_no_op() -> None:
     """The lifespan's `finally` runs even when start failed."""
     await KafkaIngestionQueue(
-        bootstrap_servers="localhost:9092", topic=INGEST_TOPIC, checklist_topic=CHECKLIST_TOPIC
+        bootstrap_servers="localhost:9092",
+        topic=INGEST_TOPIC,
+        checklist_topic=CHECKLIST_TOPIC,
+        mock_data_topic="askrepo.mock-data.generate",
     ).stop()
 
 
@@ -386,8 +407,12 @@ async def test_the_lifespan_owns_the_producer_outside_the_test_environment(
         assert queue.bootstrap_servers == "broker:9092"
         assert queue.topic == INGEST_TOPIC
 
-    # The ingest call, then the checklist family (spec 4.1 / `app/queue/checklist.py`).
-    assert ensured == [("broker:9092", 2), ("broker:9092", settings.kafka_checklist_partitions)]
+    # The ingest call, then the checklist family, then the mock-data family.
+    assert ensured == [
+        ("broker:9092", 2),
+        ("broker:9092", settings.kafka_checklist_partitions),
+        ("broker:9092", settings.kafka_mock_data_partitions),
+    ]
     assert StubQueue.instances[0].stopped is True
 
 

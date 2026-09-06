@@ -24,7 +24,7 @@ from app.core.errors import register_exception_handlers
 from app.core.middleware import AuthContextMiddleware
 from app.ingestion.embedder import build_embedder
 from app.queue.producer import KafkaIngestionQueue, ensure_topics
-from app.queue.topics import ALL_CHECKLIST_TOPICS
+from app.queue.topics import ALL_CHECKLIST_TOPICS, ALL_MOCK_DATA_TOPICS
 from app.rag.capability import probe_structured_output
 from app.rag.chat import build_chat_model
 
@@ -76,6 +76,11 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         partitions=settings.kafka_checklist_partitions,
         topics=ALL_CHECKLIST_TOPICS,
     )
+    await ensure_topics(
+        bootstrap_servers=settings.kafka_bootstrap_servers,
+        partitions=settings.kafka_mock_data_partitions,
+        topics=ALL_MOCK_DATA_TOPICS,
+    )
     # A live call, deliberately after the test guard above: an instance should fail
     # to boot on a model it cannot use, not fail on the first generation
     # (`docs/PRD.md` §6).
@@ -84,6 +89,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         bootstrap_servers=settings.kafka_bootstrap_servers,
         topic=settings.kafka_ingest_topic,
         checklist_topic=settings.kafka_checklist_topic,
+        mock_data_topic=settings.kafka_mock_data_topic,
     )
     await queue.start()
     app.state.ingestion_queue = queue
