@@ -77,12 +77,20 @@ def test_every_mounted_route_is_open_by_declaration_or_requires_identity(
 
 
 def _checklist_routes(app: FastAPI) -> list[APIRoute]:
-    """Every mounted route belonging to the three checklist routers."""
+    """Every mounted route belonging to the three checklist routers.
+
+    Excludes `/checklist-modules/{module_id}/mock-data*`: those paths share the
+    `/checklist-modules` prefix (the mock-data dataset is reached through its
+    module) but are mounted by the three mock-data routers M5 added, not by the
+    checklist's own three -- a blanket `/checklist-` prefix match would otherwise
+    sweep them into this test's route count.
+    """
     return [
         route_context.original_route
         for route_context in routing.iter_route_contexts(app.routes)
         if isinstance(route_context.original_route, APIRoute)
         and route_context.original_route.path.startswith("/checklist-")
+        and "mock-data" not in route_context.original_route.path
     ]
 
 
