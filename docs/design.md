@@ -34,7 +34,7 @@ variable and never a hex value.
 | `input` | `#cad5e2` | `#45556c` | form control borders (darker than `border`) |
 | `ring` | `#615fff` | `#7c86ff` | focus ring |
 | `sidebar*` | `#ffffff` | `#0f172a` | eight sidebar-specific roles |
-| `chart-1…5` | see file | see file | retrieval scores, eval results (M5) |
+| `chart-1…5` | see file | see file | retrieval scores, eval results |
 
 Each colour role has a paired `-foreground` giving the text colour that sits on it. `bg-primary`
 always takes `text-primary-foreground`, never `text-white` — white is wrong the moment a token
@@ -105,19 +105,19 @@ Components come from **shadcn on the Base UI base**, installed via CLI into
 is the intended set, and each row is added by `npx shadcn@latest add <name>` when the screen
 needing it lands.
 
-| Milestone | Components |
+| Surface | Components |
 | --- | --- |
-| M0 (auth) | `button`, `input`, `label`, `field`, `card`, `alert`, `dialog`, `sonner` |
-| M0 (shell) | `sidebar`, `breadcrumb`, `dropdown-menu`, `avatar`, `separator`, `skeleton` |
-| M1 (projects) | `table`, `badge`, `select`, `tooltip`, `progress` |
-| M2 (Dev Knowledge) | `textarea`, `scroll-area`, `collapsible` |
-| M4 (QA Checklist) | `table`, `textarea`, `tooltip`, `select`, `checkbox`, `alert`, `dropdown-menu` |
-| M5 (Mock Data tab) | `tabs` |
+| Auth screens | `button`, `input`, `label`, `field`, `card`, `alert`, `dialog`, `sonner` |
+| App shell | `sidebar`, `breadcrumb`, `dropdown-menu`, `avatar`, `separator`, `skeleton` |
+| Projects | `table`, `badge`, `select`, `tooltip`, `progress` |
+| Dev Knowledge | `textarea`, `scroll-area`, `collapsible` |
+| QA Checklist | `table`, `textarea`, `tooltip`, `select`, `checkbox`, `alert`, `dropdown-menu` |
+| Mock Data tab | `tabs` |
 
 `form` is deliberately absent: shadcn's `form` component wraps **react-hook-form**, which
 `.claude/rules/forms.md` §4 bans by name — validation is owned by the backend's `422` field map,
 and a client-side copy of a rule like the password policy cannot be kept honest. `field` is the
-composition primitive instead. `dialog` sits in the M0 row because every M0 form is a dialog by
+composition primitive instead. `dialog` sits in the auth row because every auth form is a dialog by
 `forms.md` §1's count (create user, reset password, change own password).
 
 Hand-writing a component shadcn provides is a rule violation, not a shortcut — see
@@ -175,3 +175,12 @@ meaning a colour or label doesn't also carry.
 
 Ingestion and generation are slow by nature. Their feedback is always non-blocking and always
 resumable on reload, because the operator will navigate away.
+
+---
+
+## See also
+
+- [`README.md`](README.md) — the documentation index
+- [`codebase.md`](codebase.md) — the frontend layout and the BFF split
+- [`../.claude/rules/design-system.md`](../.claude/rules/design-system.md) — the enforceable rules behind this page
+- [`../.claude/rules/forms.md`](../.claude/rules/forms.md) — dialog vs page, validation ownership

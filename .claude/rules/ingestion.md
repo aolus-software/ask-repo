@@ -7,7 +7,7 @@ paths:
 
 # Ingestion & Queue Rules
 
-M1 established a handful of patterns that look like over-engineering until the thing they
+Ingestion runs on a handful of patterns that look like over-engineering until the thing they
 prevent happens in production. Each rule below states what the pattern is, what breaks without
 it, and what the tempting-but-wrong simplification looks like — because the risk here is not
 someone writing these badly, it is someone removing them on purpose.

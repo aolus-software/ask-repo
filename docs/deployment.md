@@ -356,6 +356,8 @@ There is no metrics endpoint. What exists:
 
 ## See also
 
+- [`README.md`](README.md) — **the documentation index**
+- [`architecture.md`](architecture.md) — how the system fits together
 - [`../SECURITY.md`](../SECURITY.md) — threat model and the full operator checklist
 - [`configuration.md`](configuration.md) — every setting; [before production](configuration.md#before-production)
 - [`installation.md`](installation.md) — local setup, and why it is not this

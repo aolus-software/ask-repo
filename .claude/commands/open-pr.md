@@ -39,7 +39,7 @@ gives extra guidance — e.g. a target base branch, a draft flag, or PR title wo
    - `# Summary` — one or two sentences, why not just what. Fill in `Closes #` if an issue number
      is known, otherwise delete that line rather than leaving a dangling `#`.
    - `## Type of change` — check the box(es) that actually apply.
-   - `## Milestone` — name the PRD milestone (M0–M5) this serves, or `none`, per `docs/PRD.md`
+   - `## Milestone` — name the PRD milestone this serves, or `none`, per `docs/PRD.md` §6
      §6. Don't guess if it isn't clear from the diff — ask.
    - `## What changed` — walk a reviewer through it; call out any non-obvious decision or
      tradeoff.

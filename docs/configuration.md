@@ -263,7 +263,7 @@ endpoint is unreachable, fails to start here rather than on the first generation
 | `RAG_HISTORY_TURNS` | `6` | Prior turns replayed into the prompt. `0` disables multi-turn memory |
 | `RAG_MIN_SCORE` | `0.25` | Cosine similarity a chunk must reach to be shown to the model at all. `0.0` disables the floor |
 | `RAG_MAX_RETRIEVAL_ATTEMPTS` | `2` | How many times retrieval may run for one question — the first attempt plus any the evidence grader asks for. Raise it if answers often miss code you know is indexed; each extra attempt costs one model call before the answer starts. Must be at least 1. |
-| `RAG_GRADE_EVIDENCE` | `true` | Whether a model call judges the retrieved excerpts before answering, and re-searches on a better query when they fall short. Turning it off removes one model call per question and makes the answer path identical to M2's. |
+| `RAG_GRADE_EVIDENCE` | `true` | Whether a model call judges the retrieved excerpts before answering, and re-searches on a better query when they fall short. Turning it off removes one model call per question and reduces the answer path to a straight retrieve-then-answer chain. |
 | `RAG_CLASSIFY_INTENT` | `true` | Whether a model call routes the question — code question, conversational follow-up, or out of scope — before retrieving. Turning it off sends every question down the retrieval path, including "thanks". |
 | `RAG_PROPOSE_CHANGES` | `true` | Whether the QA Checklist's refinement chat runs the extra model call that turns a reply into a proposed change set. Turning it off leaves the chat answering questions about the checklist and proposing nothing — the Ask screen is unaffected either way, because its call site cannot reach this node. |
 
@@ -482,6 +482,8 @@ swapping.
 
 ## See also
 
+- [`README.md`](README.md) — **the documentation index**
+- [`architecture.md`](architecture.md) — how the system fits together
 - [`installation.md`](installation.md) — step-by-step local setup
 - [`deployment.md`](deployment.md) — production images, TLS, secrets, backups
 - [`docs/PRD.md`](PRD.md) — §5 the stack, §9 the security model these settings implement

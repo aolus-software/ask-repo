@@ -11,7 +11,9 @@ spare time — expect best-effort timelines, not an SLA.
 
 ## Supported versions
 
-Pre-1.0; M0 and M1 shipped. Only `main` is supported; there are no maintained release branches yet.
+Only the latest release and `main` are supported; there are no maintained release branches for
+older versions. Report against a version or commit — see `CHANGELOG.md` for what is in each
+release, and `docs/PRD.md` §6 for what is built.
 
 ## Threat model
 
@@ -51,8 +53,8 @@ does and doesn't cover.
   locked out for the rest of the hour, even with the correct password, at a cost of roughly ten
   requests an hour and no valid credential of their own. There is no workaround via an admin
   password reset — resetting a password does not clear the counter; it only expires on its own
-  after the hour. Also keying this limit by IP is a larger design change than this milestone
-  makes; it has been raised separately and is not part of M0.
+  after the hour. Also keying this limit by IP is a larger design change than the login
+  rate limiter took on; it has been raised separately.
 
 See [`docs/PRD.md`](docs/PRD.md) §9 for the full reasoning.
 
