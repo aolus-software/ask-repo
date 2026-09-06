@@ -440,7 +440,20 @@ async def test_request_generation_refuses_when_project_not_ready(
 async def test_prepare_turn_maps_history_from_prior_messages(
     db_session: AsyncSession,
 ) -> None:
-    """prepare_turn builds history from recent prior messages with role and content."""
+    """prepare_turn builds history from recent prior messages, in order, role intact.
+
+    A hardcoded `role="user"`, or a reversal that inverts the conversation, would pass
+    a looser `>=`/`in` assertion -- that ordering is load-bearing, since a reversed
+    history makes the model read its own answers as the user's questions. This asserts
+    an exact `(role, content)` list instead.
+
+    Each prior message is committed in its own transaction, matching how real turns
+    land (the question in `prepare_turn`, the assistant row in a shielded finalise) --
+    `ChecklistMessageRepository._latest`'s docstring is explicit that ordering rests on
+    `created_at` being distinct per message, which requires Postgres `now()` to have
+    advanced between commits. A single shared transaction would make this assertion as
+    flaky as the bug it is meant to catch.
+    """
     project = await create_project(db_session)
     project.embedding_collection = "col"
     project.embedding_model = Settings().embedding_model
@@ -448,7 +461,6 @@ async def test_prepare_turn_maps_history_from_prior_messages(
     service = MockDataDatasetService(db_session, Settings())
     user = await create_user(db_session)
 
-    # Create prior messages
     await create_mock_data_message(
         db_session,
         module_id=module.id,
@@ -456,6 +468,7 @@ async def test_prepare_turn_maps_history_from_prior_messages(
         role=MessageRole.USER,
         content="Previous question",
     )
+    await db_session.commit()
     await create_mock_data_message(
         db_session,
         module_id=module.id,
@@ -463,6 +476,7 @@ async def test_prepare_turn_maps_history_from_prior_messages(
         role=MessageRole.ASSISTANT,
         content="Previous answer",
     )
+    await db_session.commit()
 
     context = await service.prepare_turn(
         module.id,
@@ -470,12 +484,13 @@ async def test_prepare_turn_maps_history_from_prior_messages(
         actor=authenticated(user),
     )
 
-    # History should include the prior messages
-    assert len(context.history) >= 2
-    # Find the prior messages in history
-    history_contents = [turn.content for turn in context.history]
-    assert "Previous question" in history_contents
-    assert "Previous answer" in history_contents
+    # `prepare_turn` commits the new user message before building history, so it is
+    # the last of the three -- history is the full committed record at that point.
+    assert [(turn.role, turn.content) for turn in context.history] == [
+        (MessageRole.USER.value, "Previous question"),
+        (MessageRole.ASSISTANT.value, "Previous answer"),
+        (MessageRole.USER.value, "New question"),
+    ]
 
 
 async def test_get_404s_on_nonexistent_module(db_session: AsyncSession) -> None:

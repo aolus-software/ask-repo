@@ -291,3 +291,38 @@ async def test_reconcile_mock_data_once_republishes_stranded_datasets(
     # The default count a re-enqueued sweep uses when the original request's count is
     # no longer known -- see the implementation note in reconcile_mock_data_once.
     assert message.count == 10
+
+
+async def test_a_swept_dataset_is_not_swept_again_on_the_next_tick(
+    db_session: AsyncSession,
+) -> None:
+    """The mock-data sweep republishes with a deliberately fresh `job_id`, which the
+    claim *cannot* refuse -- so `claim_stranded` stamping `updated_at` on the rows it
+    returns is the only thing that stops the next 60-second tick from re-publishing
+    the same dataset forever, running a full model generation every minute.
+
+    Verbatim copy of the checklist's
+    `test_a_swept_module_is_not_swept_again_on_the_next_tick`: deleting the
+    `.values(updated_at=now)` from `MockDataDatasetRepository.claim_stranded` would
+    leave every assertion in `test_reconcile_mock_data_once_republishes_stranded_datasets`
+    passing while this one catches it.
+    """
+    module = await create_checklist_module(db_session)
+    repo = MockDataDatasetRepository(db_session)
+    dataset = await repo.get_or_create_for_module(module.id)
+    dataset.status = MockDataDatasetStatus.GENERATING.value
+    dataset.lease_expires_at = datetime.now(UTC) - timedelta(seconds=1)
+    dataset.updated_at = datetime.now(UTC) - timedelta(seconds=600)
+    await db_session.flush()
+
+    producer = InMemoryIngestionQueue()
+
+    first = await reconcile_mock_data_once(
+        repository=repo, producer=producer, topic=MOCK_DATA_TOPIC
+    )
+    second = await reconcile_mock_data_once(
+        repository=repo, producer=producer, topic=MOCK_DATA_TOPIC
+    )
+
+    assert (first, second) == (1, 0)
+    assert len(producer.produced) == 1
