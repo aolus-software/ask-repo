@@ -324,6 +324,7 @@ export function ModuleScreen({ moduleId }: { moduleId: string }) {
 
           {pendingMockDataChangeSet ? (
             <MockDataChangeSetPanel
+              key={pendingMockDataChangeSet.id}
               changeSet={pendingMockDataChangeSet}
               moduleId={moduleId}
               records={mockData.data?.records ?? []}
