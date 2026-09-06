@@ -6,6 +6,7 @@ field-map case, plus the JSON export and the row-cap refusal.
 
 import json
 import uuid
+from datetime import UTC, datetime, timedelta
 from io import BytesIO
 
 import pytest
@@ -104,15 +105,23 @@ async def test_export_xlsx_succeeds_under_cap(db_session: AsyncSession) -> None:
     user = await create_user(db_session)
     actor = authenticated(user)
 
-    await create_mock_data_record(
-        db_session, module_id=module.id, fields={"name": "Acme"}, created_by=user.id
+    # Create records with explicit timestamps to control ordering
+    started = datetime.now(UTC)
+    acme = MockDataRecord(
+        id=uuid.uuid4(),
+        checklist_module_id=module.id,
+        fields={"name": "Acme"},
+        created_by=user.id,
+        created_at=started,
     )
-    await create_mock_data_record(
-        db_session,
-        module_id=module.id,
+    globex = MockDataRecord(
+        id=uuid.uuid4(),
+        checklist_module_id=module.id,
         fields={"name": "Globex", "start": "2026-01-01"},
         created_by=user.id,
+        created_at=started + timedelta(seconds=1),
     )
+    db_session.add_all([acme, globex])
     await db_session.commit()
 
     # Create service with max_rows=10
@@ -136,14 +145,23 @@ async def test_export_refuses_over_the_row_cap(db_session: AsyncSession) -> None
     project.embedding_collection = "col"
     project.embedding_model = "test-model"
 
-    # Create module and records
+    # Create module and records with explicit timestamps
     module = await create_checklist_module(db_session, project_id=project.id)
     user = await create_user(db_session)
     actor = authenticated(user)
 
-    # Create records
-    for _ in range(2):
-        await create_mock_data_record(db_session, module_id=module.id, created_by=user.id)
+    started = datetime.now(UTC)
+    records = []
+    for i in range(2):
+        record = MockDataRecord(
+            id=uuid.uuid4(),
+            checklist_module_id=module.id,
+            fields={"id": f"r{i + 1}", "name": "Test"},
+            created_by=user.id,
+            created_at=started + timedelta(seconds=i),
+        )
+        records.append(record)
+    db_session.add_all(records)
     await db_session.commit()
 
     # Create service with max_rows=1
