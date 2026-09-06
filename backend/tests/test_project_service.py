@@ -13,6 +13,8 @@ from app.core.middleware import AuthenticatedUser
 from app.ingestion.chunker import Chunk
 from app.ingestion.errors import RetryableIngestionError
 from app.ingestion.vector_store import InMemoryVectorStore, VectorStore, VectorStoreFactory
+from app.models.checklist import ChangeSetOrigin, ChangeSetStatus
+from app.models.mock_data import MockDataChangeSet
 from app.models.project import ProjectStatus
 from app.queue.protocol import InMemoryIngestionQueue
 from app.queue.topics import IngestionMessage
@@ -21,6 +23,10 @@ from app.repositories.checklist_item import ChecklistItemRepository
 from app.repositories.checklist_message import ChecklistMessageRepository
 from app.repositories.checklist_module import ChecklistModuleRepository
 from app.repositories.conversation import ConversationRepository
+from app.repositories.mock_data_change_set import MockDataChangeSetRepository
+from app.repositories.mock_data_dataset import MockDataDatasetRepository
+from app.repositories.mock_data_message import MockDataMessageRepository
+from app.repositories.mock_data_record import MockDataRecordRepository
 from app.repositories.project import ProjectRepository
 from app.schemas.project import ProjectCreateRequest
 from app.services.project import ProjectService
@@ -30,6 +36,8 @@ from tests.factories import (
     create_checklist_message,
     create_checklist_module,
     create_conversation,
+    create_mock_data_message,
+    create_mock_data_record,
     create_project,
     create_user,
 )
@@ -364,3 +372,39 @@ async def test_deleting_a_project_cascades_to_the_whole_checklist(
     assert await ChecklistItemRepository(db_session).list_for_module(module.id) == []
     assert await ChecklistChangeSetRepository(db_session).pending_for_module(module.id) is None
     assert await ChecklistMessageRepository(db_session).list_for_module(module.id, limit=10) == []
+
+
+async def test_deleting_a_project_cascades_to_its_mock_data(
+    db_session: AsyncSession,
+) -> None:
+    """A project's mock-data records, change sets, messages, and dataset rows must
+    not survive the project they describe -- the same containment the checklist
+    cascade already enforces, for a second capability with an independent lifecycle.
+    """
+    project = await create_project(db_session)
+    module = await create_checklist_module(db_session, project_id=project.id)
+    await create_mock_data_record(db_session, module_id=module.id, created_by=module.created_by)
+    await create_mock_data_message(db_session, module_id=module.id, created_by=module.created_by)
+    db_session.add(
+        MockDataChangeSet(
+            id=uuid.uuid4(),
+            checklist_module_id=module.id,
+            origin=ChangeSetOrigin.GENERATION.value,
+            summary="1 added",
+            operations=[],
+            status=ChangeSetStatus.PENDING.value,
+            created_by=module.created_by,
+        )
+    )
+    await MockDataDatasetRepository(db_session).get_or_create_for_module(module.id)
+    admin = await create_user(db_session, is_admin=True)
+    await db_session.commit()
+
+    await service_for(db_session, InMemoryIngestionQueue()).delete(
+        project.id, actor=actor_for(admin.id, is_admin=True)
+    )
+
+    assert await MockDataRecordRepository(db_session).list_for_module(module.id) == []
+    assert await MockDataChangeSetRepository(db_session).pending_for_module(module.id) is None
+    assert await MockDataMessageRepository(db_session).list_for_module(module.id, limit=10) == []
+    assert await MockDataDatasetRepository(db_session).get_by_module(module.id) is None
