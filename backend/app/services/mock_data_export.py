@@ -10,7 +10,7 @@ import json
 from io import BytesIO
 
 from openpyxl import Workbook
-from openpyxl.styles import Font
+from openpyxl.styles import Alignment, Font
 from openpyxl.utils import get_column_letter
 
 from app.models.mock_data import MockDataRecord
@@ -48,6 +48,11 @@ def build_mock_data_workbook(records: list[MockDataRecord]) -> bytes:
 
     for record in records:
         sheet.append([record.fields.get(column) for column in columns])
+
+    # Apply text wrapping to data rows for readability of long field values
+    for row in sheet.iter_rows(min_row=2):
+        for cell in row:
+            cell.alignment = Alignment(wrap_text=True, vertical="top")
 
     buffer = BytesIO()
     book.save(buffer)
