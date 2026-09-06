@@ -48,9 +48,11 @@ function initialTurnState(): TurnState {
 export function MockDataChatPanel({
   moduleId,
   hasPendingChangeSet,
+  isGenerating,
 }: {
   moduleId: string;
   hasPendingChangeSet: boolean;
+  isGenerating: boolean;
 }) {
   const queryClient = useQueryClient();
 
@@ -156,12 +158,19 @@ export function MockDataChatPanel({
   );
 
   const isStreaming = turn?.isStreaming ?? false;
-  const composerDisabled = isStreaming || hasPendingChangeSet;
-  const composerPlaceholder = hasPendingChangeSet
-    ? "Apply or discard the pending changes first."
-    : isStreaming
-      ? "Answering…"
-      : "Ask for a specific shape, or say what you'd like changed";
+  const composerDisabled = isStreaming || hasPendingChangeSet || isGenerating;
+  // A generation holds this dataset's lease; refining it by chat while that run is
+  // in flight is refused server-side with a 409 (`MockDataDatasetService.prepare_turn`)
+  // because writing `review` over a `generating` row would blind the reconcile sweep
+  // to a worker that later dies. The composer must not let a user type a paragraph
+  // only to have it rejected.
+  const composerPlaceholder = isGenerating
+    ? "A generation is running for this dataset. Wait for it to finish."
+    : hasPendingChangeSet
+      ? "Apply or discard the pending changes first."
+      : isStreaming
+        ? "Answering…"
+        : "Ask for a specific shape, or say what you'd like changed";
 
   return (
     <div className="space-y-6">

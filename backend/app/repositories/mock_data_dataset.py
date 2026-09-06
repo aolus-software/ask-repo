@@ -126,10 +126,23 @@ class MockDataDatasetRepository(BaseRepository[MockDataDataset]):
         return cast(CursorResult[Any], result).rowcount == 1
 
     async def mark_in_review(self, dataset_id: uuid.UUID) -> None:
-        """Move a dataset to `review` because a proposal is now pending."""
+        """Move a dataset to `review` because a proposal is now pending.
+
+        Guarded on the current status not being `generating`: a live worker holds
+        that dataset's lease, and `MockDataDatasetService.prepare_turn` is supposed to
+        refuse the chat turn before this is ever called for such a row. This predicate
+        makes the clobber structurally impossible rather than merely unreachable --
+        writing `review` over a `generating` row would blind the reconcile sweep (which
+        has no other signal that a worker still holds the lease) and, if the worker
+        finished normally instead, would leave a second pending change set behind it.
+        """
         await self.session.execute(
             update(MockDataDataset)
-            .where(MockDataDataset.id == dataset_id, MockDataDataset.deleted_at.is_(None))
+            .where(
+                MockDataDataset.id == dataset_id,
+                MockDataDataset.deleted_at.is_(None),
+                MockDataDataset.status != MockDataDatasetStatus.GENERATING.value,
+            )
             .values(status=MockDataDatasetStatus.REVIEW.value, updated_at=func.now())
         )
 

@@ -187,6 +187,34 @@ async def test_mark_in_review_moves_status_to_review(db_session: AsyncSession) -
     assert dataset.status == MockDataDatasetStatus.REVIEW.value
 
 
+async def test_mark_in_review_does_not_clobber_a_generating_dataset(
+    db_session: AsyncSession,
+) -> None:
+    """Defence in depth for the service-level guard in `prepare_turn`.
+
+    A `generating` dataset is one a worker's lease still (or again) holds. Writing
+    `review` over it would blind the reconcile sweep -- `status == "generating"` is the
+    only thing that tells it a run is still alive -- and would leave a second pending
+    change set behind if the worker finishes normally instead. The predicate makes the
+    clobber impossible even if the service-level check is ever bypassed or removed.
+    """
+    module = await create_checklist_module(db_session)
+    repo = MockDataDatasetRepository(db_session)
+    dataset = await repo.get_or_create_for_module(module.id)
+    await db_session.commit()
+    claimed = await repo.claim(
+        dataset_id=dataset.id, job_id=uuid.uuid4(), worker_id="worker-1", lease_seconds=300
+    )
+    await db_session.commit()
+    assert claimed
+
+    await repo.mark_in_review(dataset.id)
+    await db_session.commit()
+
+    await db_session.refresh(dataset)
+    assert dataset.status == MockDataDatasetStatus.GENERATING.value
+
+
 async def test_defer_drops_the_lease_and_stays_generating(db_session: AsyncSession) -> None:
     """A run that ended but is coming back releases its lease.
 

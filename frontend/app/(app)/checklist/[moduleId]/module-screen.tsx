@@ -335,6 +335,7 @@ export function ModuleScreen({ moduleId }: { moduleId: string }) {
           <MockDataChatPanel
             moduleId={moduleId}
             hasPendingChangeSet={mockDataPendingChangeSetId !== null}
+            isGenerating={mockData.data?.status === "generating"}
           />
         </TabsContent>
       </Tabs>

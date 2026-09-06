@@ -385,6 +385,39 @@ async def test_prepare_turn_refuses_when_embedding_model_changed(
     assert excinfo.value.code == ErrorCode.EMBEDDING_MODEL_CHANGED
 
 
+async def test_prepare_turn_refuses_while_generating(db_session: AsyncSession) -> None:
+    """A refinement turn is refused while a generation holds the dataset's lease.
+
+    `status == "generating"` is the only signal the reconcile sweep has that a worker
+    still holds this dataset's lease (it is set before the claim and never changes
+    during the run). Writing `review` over it here -- what a chat turn that proposes
+    something would otherwise do -- would blind that sweep, and would leave a second
+    pending change set behind if the worker finished normally instead.
+    """
+    project = await create_project(db_session)
+    project.embedding_collection = "col"
+    project.embedding_model = Settings().embedding_model
+    module = await create_checklist_module(db_session, project_id=project.id)
+    service = MockDataDatasetService(db_session, Settings())
+    user = await create_user(db_session)
+
+    await service.request_generation(
+        module.id,
+        MockDataGenerationRequest(),
+        actor=authenticated(user),
+        queue=InMemoryIngestionQueue(),
+    )
+
+    with pytest.raises(AppError) as excinfo:
+        await service.prepare_turn(
+            module.id,
+            MockDataMessageCreateRequest(question="Refine while generating"),
+            actor=authenticated(user),
+        )
+    assert excinfo.value.status_code == status.HTTP_409_CONFLICT
+    assert excinfo.value.code == ErrorCode.MOCK_DATA_GENERATION_IN_PROGRESS
+
+
 async def test_request_generation_refuses_when_project_not_ready(
     db_session: AsyncSession,
 ) -> None:

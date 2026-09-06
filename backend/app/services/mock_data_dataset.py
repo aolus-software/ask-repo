@@ -247,6 +247,20 @@ class MockDataDatasetService:
         # A dataset row must exist before the chat can propose against it or mark
         # itself `review` -- lazily created here, matching `request_generation`.
         dataset = await self.datasets.get_or_create_for_module(module_id)
+        if dataset.status == MockDataDatasetStatus.GENERATING.value:
+            # A worker holds this dataset's lease right now, and `generating` is the
+            # only signal the reconcile sweep has that a run is still alive (it stays
+            # `generating` throughout, so status alone cannot say whose lease it is).
+            # Writing `review` over it here -- what `_finalise_mock_data_turn` would do
+            # if this turn proposed anything -- would blind that sweep to a worker
+            # that later dies, and would leave two pending change sets if the worker
+            # finishes normally instead.
+            raise AppError(
+                status.HTTP_409_CONFLICT,
+                ErrorCode.MOCK_DATA_GENERATION_IN_PROGRESS,
+                "A generation is already running for this module's mock dataset. "
+                "Wait for it to finish before refining by chat.",
+            )
 
         user_message = MockDataMessage(
             id=uuid.uuid4(),
