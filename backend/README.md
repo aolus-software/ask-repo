@@ -13,10 +13,10 @@ that turns a queued message into an indexing run, the delayed-retry consumers, a
 `app/worker.py`: the separate process that runs all of them and sweeps up jobs the
 broker never received. `POST /projects` enqueues and a worker indexes.
 
-M2 through M4 are shipped too: Dev Knowledge (streaming RAG Q&A over an indexed project),
-M3's LangGraph intent routing and corrective retrieval loop, and the QA Checklist — see the
-`### Conversations` and `### QA Checklist` route sections below. Only the Mock Data Generator
-(M5) and the local-vs-hosted comparison (M6) remain.
+M2 through M5 are shipped too: Dev Knowledge (streaming RAG Q&A over an indexed project),
+M3's LangGraph intent routing and corrective retrieval loop, the QA Checklist, and the Mock
+Data Generator — see the `### Conversations`, `### QA Checklist`, and `### Mock Data
+Generator` route sections below. Only the local-vs-hosted comparison (M6) remains.
 
 ## Requirements
 
@@ -223,6 +223,40 @@ Nothing generated enters the checklist unreviewed: generation writes a *pending 
 
 Recording a result is open to every authenticated user while editing what a test expects is not: a tester must be able to record what they saw without being able to rewrite what was expected.
 
+### Mock Data Generator
+
+**Mock Data Datasets**
+
+| Method | Path | Auth | Description |
+| --- | --- | --- | --- |
+| `GET` | `/checklist-modules/{id}/mock-data` | any user | A module's mock dataset summary and its applied records; an empty summary before the first generation |
+| `POST` | `/checklist-modules/{id}/mock-data-generations` | any user | Publish a generation job; returns the dataset in `generating` status |
+| `GET` | `/checklist-modules/{id}/mock-data-change-sets` | any user | List the dataset's proposed change sets, newest first |
+| `GET` | `/checklist-modules/{id}/mock-data-messages` | any user | Read the dataset's refinement chat |
+| `POST` | `/checklist-modules/{id}/mock-data-messages` | any user | Refine the dataset by chat; **streams the reply and proposes changes** |
+| `GET` | `/checklist-modules/{id}/mock-data/export.json` | any user | Export the dataset's records as a JSON array of field maps |
+| `GET` | `/checklist-modules/{id}/mock-data/export.xlsx` | any user | Export the dataset's records as a spreadsheet |
+
+**Mock Data Records**
+
+| Method | Path | Auth | Description |
+| --- | --- | --- | --- |
+| `DELETE` | `/mock-data-records/{id}` | creator or admin | Soft-delete one record |
+
+**Mock Data Change Sets**
+
+| Method | Path | Auth | Description |
+| --- | --- | --- | --- |
+| `POST` | `/mock-data-change-sets/{id}/apply` | any user | Apply the named operations, or all of them; nothing is written to the dataset until this is called |
+| `POST` | `/mock-data-change-sets/{id}/discard` | any user | Throw the proposal away; nothing is written to the dataset |
+
+A module's mock dataset generates, reviews, and fails independently of its checklist —
+one module can carry a test plan, a mock dataset, both, or neither. Generation is grounded:
+it fails rather than inventing fields when no schema-shaped code exists under the module's
+`source_path`. Export is capped at `mock_data_export_max_rows` (default 5000) records and
+returns `409 EXPORT_TOO_LARGE` over that limit, the same reasoning
+`checklist_export_max_rows` already documents above.
+
 ## Layout
 
 ```
@@ -246,7 +280,10 @@ backend/
 │   │       ├── conversations.py # /conversations CRUD + the SSE answer endpoint
 │   │       ├── checklist_modules.py # /checklist-modules CRUD + generate + chat
 │   │       ├── checklist_items.py   # /checklist-items CRUD + export
-│   │       └── checklist_change_sets.py # apply + discard change sets
+│   │       ├── checklist_change_sets.py # apply + discard change sets
+│   │       ├── mock_data_datasets.py    # module-scoped mock data reads, generate, chat, export
+│   │       ├── mock_data_records.py     # DELETE /mock-data-records/{id}
+│   │       └── mock_data_change_sets.py # apply + discard mock-data change sets
 │   ├── core/
 │   │   ├── access.py     # the phase-2 access-resolver seam
 │   │   ├── crypto.py     # SecretBox (PAT encryption at rest) + scrub
@@ -282,6 +319,7 @@ backend/
 │   │       ├── nodes.py  # classify → retrieve → grade/loop → generate, each with a fallback
 │   │       └── build.py  # wires the nodes into the compiled graph, incl. routing edges
 │   ├── checklist/        # QA Checklist: modules, generation, chat, change sets
+│   ├── mockdata/          # Mock Data Generator: generation, model output contracts, change-set ops
 │   ├── worker.py          # the worker entrypoint: consumers + the reconcile sweep
 │   ├── models/            # SQLAlchemy models: User, RefreshToken, Project, Conversation, Message
 │   ├── repositories/      # the only layer that issues `select`

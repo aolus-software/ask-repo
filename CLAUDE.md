@@ -12,14 +12,16 @@ organization runs one instance on its own internal network.
 the security model. It outranks every other doc and outranks the code. When code and the PRD
 disagree, that is a contradiction to report — not a doc to quietly rewrite.
 
-**Status: M0, M1, M2, M3, M4 (backend), and M4.5 shipped.** The backend serves an index route, health
+**Status: M0, M1, M2, M3, M4 (backend), M4.5, and M5 shipped.** The backend serves an index route, health
 checks, the full auth/accounts surface (admin-provisioned users, login, forced first-login
 password change, session rotation, login rate limiting), the project CRUD routes, the
-conversation routes that answer questions about an indexed project, and the eighteen QA
+conversation routes that answer questions about an indexed project, the eighteen QA
 Checklist routes that name modules over a repository, generate reviewed test plans for them,
-refine them by chat, record results, and export the grid to `.xlsx`. **All four
-datastores are read** — Postgres, Redis, Qdrant, and Kafka. The worker reads a chat model as
-well as an embedder: checklist generation runs a model in that process, ingestion does not.
+refine them by chat, record results, and export the grid to `.xlsx`, and the ten Mock Data
+Generator routes that generate, refine by chat, and export a grounded sample dataset per
+module. **All four datastores are read** — Postgres, Redis, Qdrant, and Kafka. The worker
+reads a chat model as well as an embedder: checklist and mock-data generation each run a
+model in that process, ingestion does not.
 
 M1 is complete end to end. `app/ingestion/` holds the cloner, walker, chunker, embedder adapter,
 Qdrant vector store, and `IngestionPipeline`; `app/queue/` holds the message format, topics, both
@@ -66,10 +68,18 @@ worse than one that says which files it covered. And **nothing writes `checklist
 the apply path**: generation and the refinement chat both write a *pending change set*, and
 `POST /checklist-change-sets/{id}/apply` is the only code that turns a proposal into a row.
 
-The M0–M2 and M4 frontend is shipped: auth screens, the app shell, projects, the streamed answer
-surface, admin user management, and the QA Checklist (`/checklist`, `/checklist/[moduleId]`),
-with Next acting as a backend-for-frontend (see the Frontend section below). Later milestones are not built — do not
-assume a module exists because the PRD describes it; the PRD describes the destination.
+M5 is shipped too: for a QA Checklist module, `app/mockdata/` generates a grounded sample
+dataset (its own `mock_data_datasets`/`mock_data_records`/`mock_data_change_sets`/
+`mock_data_messages` tables, independent of the checklist's own status and lease), refined
+by chat through a second `propose_target` on the same answer graph (`app/rag/graph/`)
+alongside the checklist's own, applied through the same generate/change-set/apply discipline
+as the checklist, and exported as JSON or `.xlsx`.
+
+The M0–M2, M4 and M5 frontend is shipped: auth screens, the app shell, projects, the streamed
+answer surface, admin user management, the QA Checklist (`/checklist`, `/checklist/[moduleId]`),
+and that module screen's Mock Data tab, with Next acting as a backend-for-frontend (see the
+Frontend section below). Later milestones are not built — do not assume a module exists because
+the PRD describes it; the PRD describes the destination.
 
 ## Commands
 
@@ -384,9 +394,10 @@ enforced there — if you add a convention, wire it into the config in the same 
 ## Frontend
 
 App Router, React 19, Tailwind CSS 4 (CSS-first `@theme`, no `tailwind.config.js` for tokens).
-The M0–M2 and M4 screens are shipped: `/login`, `/change-password`, `/` (dashboard), `/projects`,
-`/projects/[id]`, `/ask`, `/ask/[conversationId]`, `/settings/users`, `/checklist`, and
-`/checklist/[moduleId]`.
+The M0–M2, M4 and M5 screens are shipped: `/login`, `/change-password`, `/` (dashboard),
+`/projects`, `/projects/[id]`, `/ask`, `/ask/[conversationId]`, `/settings/users`,
+`/checklist`, and `/checklist/[moduleId]` — the last of which now carries a Mock Data tab
+beside the checklist grid, no new route of its own.
 
 ### Next is a backend-for-frontend, not a thin client
 

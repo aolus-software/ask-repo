@@ -15,7 +15,7 @@ network.
 Built as a learning project for RAG, LangChain/LangGraph, prompt engineering, and context
 management — against real repositories rather than tutorial data.
 
-> **Status: M0, M1, M2, M3 and M4 shipped.** Auth & accounts are implemented —
+> **Status: M0, M1, M2, M3, M4 and M5 shipped.** Auth & accounts are implemented —
 > admin-provisioned users, login, forced first-login password change, and login rate
 > limiting — as are the project routes and the whole ingestion pipeline: clone, walk,
 > chunk, embed, Qdrant, driven by a Kafka job queue and a separate worker process.
@@ -30,11 +30,15 @@ management — against real repositories rather than tutorial data.
 > unaffected. M4 added the QA Checklist: a user names a module, AskRepo generates
 > test cases with expected results grounded in the code, nothing enters the checklist
 > unreviewed, a shared conversation proposes further changes, and testers record
-> pass/fail/blocked results — all exported to `.xlsx`. **The M0–M2 and M4 frontend is
+> pass/fail/blocked results — all exported to `.xlsx`. M5 added the Mock Data Generator:
+> for a QA Checklist module, AskRepo proposes a grounded sample dataset from the module's
+> actual schema, refined the same way as the checklist — chat, a pending change set,
+> then apply — and exported as JSON or `.xlsx`. **The M0–M2, M4 and M5 frontend is
 > shipped too**: sign in, change the forced initial password, add and re-index
-> projects, ask questions with the answer streaming in, manage accounts, and work the
-> checklist — all in a browser, with the session held in httpOnly cookies by Next rather
-> than in the page. See [Roadmap](#roadmap) for what lands when, and
+> projects, ask questions with the answer streaming in, manage accounts, work the
+> checklist, and generate its mock data — all in a browser, with the session held in
+> httpOnly cookies by Next rather than in the page. See [Roadmap](#roadmap) for what
+> lands when, and
 > [`docs/PRD.md`](docs/PRD.md) for the full specification.
 
 ## Features (planned)
@@ -280,7 +284,7 @@ Milestones from [`docs/PRD.md`](docs/PRD.md) §6, built in order:
       configured model can do structured output, hosted-provider retry classification, and a spend
       bound. Any OpenAI-compatible endpoint (OpenRouter, DeepSeek, Kimi, Groq, vLLM) already works
       by configuration today — see [PRD §6](docs/PRD.md)
-- [ ] **M5** — Mock Data Generator: grounded sample records for a checklist module, generate/chat/apply, JSON + xlsx export
+- [x] **M5** — Mock Data Generator: grounded sample records for a checklist module, generate/chat/apply, JSON + xlsx export
 - [ ] **M6** — Local vs hosted model comparison
 
 **Phase 2** (after M6): per-project RBAC — users assigned to projects, roles per project.
