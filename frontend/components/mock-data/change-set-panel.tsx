@@ -73,7 +73,9 @@ export function MockDataChangeSetPanel({
 
   function invalidate() {
     queryClient.invalidateQueries({ queryKey: keys.mockData.detail(moduleId) });
-    queryClient.invalidateQueries({ queryKey: keys.mockDataChangeSets.forModule(moduleId) });
+    queryClient.invalidateQueries({
+      queryKey: keys.mockDataChangeSets.forModule(moduleId),
+    });
   }
 
   const applyMutation = useMutation({
@@ -94,9 +96,12 @@ export function MockDataChangeSetPanel({
 
   const discardMutation = useMutation({
     mutationFn: () =>
-      apiFetch<MockDataChangeSetResponse>(endpoints.mockDataChangeSets.discard(changeSet.id), {
-        method: "POST",
-      }),
+      apiFetch<MockDataChangeSetResponse>(
+        endpoints.mockDataChangeSets.discard(changeSet.id),
+        {
+          method: "POST",
+        },
+      ),
     onSuccess: () => {
       invalidate();
       toast.success("Proposals discarded");

@@ -53,7 +53,8 @@ export const endpoints = {
   },
   mockData: {
     detail: (moduleId: string) => `/checklist-modules/${moduleId}/mock-data`,
-    generate: (moduleId: string) => `/checklist-modules/${moduleId}/mock-data-generations`,
+    generate: (moduleId: string) =>
+      `/checklist-modules/${moduleId}/mock-data-generations`,
     changeSets: (moduleId: string) =>
       `/checklist-modules/${moduleId}/mock-data-change-sets`,
     messages: (moduleId: string) => `/checklist-modules/${moduleId}/mock-data-messages`,

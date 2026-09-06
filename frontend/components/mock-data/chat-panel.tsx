@@ -105,12 +105,18 @@ export function MockDataChatPanel({
             scheduleFlush();
           },
           onChangeSet: () => {
-            void queryClient.invalidateQueries({ queryKey: keys.mockData.detail(moduleId) });
+            void queryClient.invalidateQueries({
+              queryKey: keys.mockData.detail(moduleId),
+            });
           },
         });
 
         if (result.error) {
-          current = { ...current, isStreaming: false, errorMessage: result.error.message };
+          current = {
+            ...current,
+            isStreaming: false,
+            errorMessage: result.error.message,
+          };
         } else if (result.done) {
           current = {
             ...current,
@@ -183,7 +189,8 @@ export function MockDataChatPanel({
         <MessageList messages={messages.data} />
       ) : (
         <p className="text-muted-foreground text-sm">
-          No messages yet. Ask for the dataset to be refined, or explain what should change.
+          No messages yet. Ask for the dataset to be refined, or explain what should
+          change.
         </p>
       )}
 
@@ -208,7 +215,9 @@ export function MockDataChatPanel({
         <Alert variant="destructive">
           <AlertTitle>Could not send that</AlertTitle>
           <AlertDescription>
-            {isApiError(preflightError) ? preflightError.message : "Something went wrong."}
+            {isApiError(preflightError)
+              ? preflightError.message
+              : "Something went wrong."}
           </AlertDescription>
         </Alert>
       ) : null}

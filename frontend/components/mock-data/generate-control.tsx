@@ -36,7 +36,9 @@ export function GenerateMockDataControl({
           onSuccess: () =>
             toast.success("Generating. The proposals appear here when it finishes."),
           onError: (error) =>
-            toast.error(isApiError(error) ? error.message : "That did not start. Try again."),
+            toast.error(
+              isApiError(error) ? error.message : "That did not start. Try again.",
+            ),
         })
       }
     >

@@ -262,7 +262,9 @@ export function ModuleScreen({ moduleId }: { moduleId: string }) {
                 },
                 onError: (error) =>
                   toast.error(
-                    isApiError(error) ? error.message : "That did not clear. Try again.",
+                    isApiError(error)
+                      ? error.message
+                      : "That did not clear. Try again.",
                   ),
               })
             }

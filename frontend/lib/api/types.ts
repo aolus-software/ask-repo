@@ -301,7 +301,8 @@ export interface ChangeSetEventPayload {
   operations: ChangeOperation[];
 }
 
-export type MockDataDatasetStatus = "empty" | "generating" | "review" | "ready" | "failed";
+export type MockDataDatasetStatus =
+  "empty" | "generating" | "review" | "ready" | "failed";
 
 export interface MockDataRecordResponse {
   id: string;
