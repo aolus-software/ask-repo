@@ -18,6 +18,7 @@ from app.models.checklist import (
     ChecklistModuleStatus,
 )
 from app.models.conversation import Conversation, MessageRole
+from app.models.mock_data import MockDataMessage, MockDataRecord
 from app.models.project import Project, ProjectStatus
 from app.models.user import User
 
@@ -209,6 +210,48 @@ async def create_checklist_message(
     message = ChecklistMessage(
         id=uuid.uuid4(),
         module_id=module_id,
+        role=role.value,
+        content=content,
+        created_by=created_by,
+    )
+    session.add(message)
+    await session.flush()
+    return message
+
+
+async def create_mock_data_record(
+    session: AsyncSession,
+    *,
+    module_id: uuid.UUID,
+    fields: dict[str, object] | None = None,
+    created_by: uuid.UUID | None = None,
+) -> MockDataRecord:
+    """One mock data record for a module."""
+    if created_by is None:
+        created_by = (await create_user(session)).id
+    record = MockDataRecord(
+        id=uuid.uuid4(),
+        checklist_module_id=module_id,
+        fields=fields or {"id": "r1", "name": "Test"},
+        created_by=created_by,
+    )
+    session.add(record)
+    await session.flush()
+    return record
+
+
+async def create_mock_data_message(
+    session: AsyncSession,
+    *,
+    module_id: uuid.UUID,
+    created_by: uuid.UUID,
+    role: MessageRole = MessageRole.USER,
+    content: str = "Test message",
+) -> MockDataMessage:
+    """One mock data chat message."""
+    message = MockDataMessage(
+        id=uuid.uuid4(),
+        checklist_module_id=module_id,
         role=role.value,
         content=content,
         created_by=created_by,

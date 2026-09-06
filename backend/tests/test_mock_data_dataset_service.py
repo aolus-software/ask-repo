@@ -1,6 +1,7 @@
 """Dataset reads, generation trigger, and the refinement chat."""
 
 import uuid
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from fastapi import status
@@ -9,12 +10,20 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import Settings
 from app.core.errors import AppError, ErrorCode
 from app.models.checklist import ChangeSetOrigin, ChangeSetStatus
+from app.models.conversation import MessageRole
 from app.models.mock_data import MockDataChangeSet, MockDataDatasetStatus
+from app.models.project import ProjectStatus
 from app.queue.protocol import InMemoryIngestionQueue
 from app.repositories.mock_data_change_set import MockDataChangeSetRepository
-from app.schemas.mock_data import MockDataGenerationRequest
+from app.schemas.mock_data import MockDataGenerationRequest, MockDataMessageCreateRequest
 from app.services.mock_data_dataset import MockDataDatasetService
-from tests.factories import create_checklist_module, create_project, create_user
+from tests.factories import (
+    create_checklist_module,
+    create_mock_data_message,
+    create_mock_data_record,
+    create_project,
+    create_user,
+)
 from tests.helpers import authenticated
 
 
@@ -88,3 +97,290 @@ async def test_request_generation_refuses_a_pending_change_set(
             queue=InMemoryIngestionQueue(),
         )
     assert excinfo.value.code == ErrorCode.MOCK_DATA_CHANGE_SET_PENDING
+
+
+async def test_get_accessible_by_any_authenticated_user(db_session: AsyncSession) -> None:
+    """Phase 1: all projects are shared, so any authenticated user can read any module.
+    The structure correctly goes through the access resolver (resolved_project_scope)."""
+    project = await create_project(db_session)
+    project.embedding_collection = "col"
+    module = await create_checklist_module(db_session, project_id=project.id)
+    service = MockDataDatasetService(db_session, Settings())
+    stranger = await create_user(db_session)
+
+    # A stranger can read any module in phase 1
+    detail = await service.get(module.id, actor=authenticated(stranger))
+
+    assert detail.status == MockDataDatasetStatus.EMPTY
+
+
+async def test_get_with_records_and_pending_change_set(db_session: AsyncSession) -> None:
+    """When dataset has records and pending change set, get returns populated summary."""
+    project = await create_project(db_session)
+    project.embedding_collection = "col"
+    module = await create_checklist_module(db_session, project_id=project.id)
+    service = MockDataDatasetService(db_session, Settings())
+    user = await create_user(db_session)
+
+    # Create a dataset
+    await service.datasets.get_or_create_for_module(module.id)
+    await db_session.commit()
+
+    # Add records
+    await create_mock_data_record(db_session, module_id=module.id, fields={"name": "Record1"})
+    await create_mock_data_record(db_session, module_id=module.id, fields={"name": "Record2"})
+    await db_session.commit()
+
+    # Add a pending change set
+    change_set = MockDataChangeSet(
+        id=uuid.uuid4(),
+        checklist_module_id=module.id,
+        origin=ChangeSetOrigin.GENERATION.value,
+        summary="Proposed changes",
+        operations=[],
+        status=ChangeSetStatus.PENDING.value,
+        created_by=user.id,
+    )
+    await MockDataChangeSetRepository(db_session).add(change_set)
+    await db_session.commit()
+
+    detail = await service.get(module.id, actor=authenticated(user))
+
+    assert detail.status == MockDataDatasetStatus.EMPTY  # default status on creation
+    assert detail.record_count == 2
+    assert detail.pending_change_set_id == change_set.id
+    assert len(detail.records) == 2
+
+
+async def test_get_stale_when_project_reindexed(db_session: AsyncSession) -> None:
+    """When dataset.indexed_generation < project.active_generation, stale=True."""
+    project = await create_project(db_session)
+    project.embedding_collection = "col"
+    project.active_generation = 3
+    module = await create_checklist_module(db_session, project_id=project.id)
+    service = MockDataDatasetService(db_session, Settings())
+
+    dataset = await service.datasets.get_or_create_for_module(module.id)
+    dataset.indexed_generation = 2
+    await db_session.commit()
+
+    detail = await service.get(module.id, actor=authenticated(await create_user(db_session)))
+
+    assert detail.stale is True
+
+
+async def test_change_sets_for_returns_newest_first(db_session: AsyncSession) -> None:
+    """Change sets ordered by created_at descending, newest first."""
+    project = await create_project(db_session)
+    project.embedding_collection = "col"
+    module = await create_checklist_module(db_session, project_id=project.id)
+    service = MockDataDatasetService(db_session, Settings())
+    user = await create_user(db_session)
+
+    # Create change sets with explicit timestamps to control ordering
+    started = datetime.now(UTC)
+    older = MockDataChangeSet(
+        id=uuid.uuid4(),
+        checklist_module_id=module.id,
+        origin=ChangeSetOrigin.GENERATION.value,
+        summary="older",
+        operations=[],
+        status=ChangeSetStatus.APPLIED.value,
+        created_by=user.id,
+        created_at=started,
+    )
+    newer = MockDataChangeSet(
+        id=uuid.uuid4(),
+        checklist_module_id=module.id,
+        origin=ChangeSetOrigin.CHAT.value,
+        summary="newer",
+        operations=[],
+        status=ChangeSetStatus.PENDING.value,
+        created_by=user.id,
+        created_at=started + timedelta(seconds=1),
+    )
+    db_session.add_all([older, newer])
+    await db_session.commit()
+
+    change_sets = await service.change_sets_for(module.id, actor=authenticated(user))
+
+    assert len(change_sets) == 2
+    assert change_sets[0].id == newer.id
+    assert change_sets[1].id == older.id
+
+
+async def test_messages_are_readable_by_any_authenticated_user(
+    db_session: AsyncSession,
+) -> None:
+    """Messages are shared; any authenticated user can read them."""
+    project = await create_project(db_session)
+    project.embedding_collection = "col"
+    module = await create_checklist_module(db_session, project_id=project.id)
+    service = MockDataDatasetService(db_session, Settings())
+    creator = await create_user(db_session)
+    stranger = await create_user(db_session)
+
+    # Create messages
+    await create_mock_data_message(
+        db_session, module_id=module.id, created_by=creator.id, content="First message"
+    )
+    await create_mock_data_message(
+        db_session, module_id=module.id, created_by=creator.id, content="Second message"
+    )
+
+    messages = await service.messages(module.id, actor=authenticated(stranger))
+
+    assert len(messages) == 2
+    assert messages[0].content in ["First message", "Second message"]
+
+
+async def test_prepare_turn_creates_dataset_lazily(db_session: AsyncSession) -> None:
+    """Dataset row is created on first turn if it doesn't exist."""
+    project = await create_project(db_session)
+    project.embedding_collection = "col"
+    project.embedding_model = Settings().embedding_model
+    module = await create_checklist_module(db_session, project_id=project.id)
+    service = MockDataDatasetService(db_session, Settings())
+    user = await create_user(db_session)
+
+    # Verify no dataset exists yet
+    assert await service.datasets.get_by_module(module.id) is None
+
+    context = await service.prepare_turn(
+        module.id,
+        MockDataMessageCreateRequest(question="What should we test?"),
+        actor=authenticated(user),
+    )
+
+    # Dataset now exists
+    dataset = await service.datasets.get_by_module(module.id)
+    assert dataset is not None
+    assert context.dataset_id == dataset.id
+
+
+async def test_prepare_turn_creates_user_message(db_session: AsyncSession) -> None:
+    """prepare_turn writes the user message to the database."""
+    project = await create_project(db_session)
+    project.embedding_collection = "col"
+    project.embedding_model = Settings().embedding_model
+    module = await create_checklist_module(db_session, project_id=project.id)
+    service = MockDataDatasetService(db_session, Settings())
+    user = await create_user(db_session)
+
+    context = await service.prepare_turn(
+        module.id,
+        MockDataMessageCreateRequest(question="What are the edge cases?"),
+        actor=authenticated(user),
+    )
+
+    messages = await service.messages_repository.list_for_module(module.id, limit=50)
+    assert len(messages) == 1
+    assert messages[0].id == context.user_message_id
+    assert messages[0].role == MessageRole.USER.value
+    assert messages[0].content == "What are the edge cases?"
+    assert messages[0].created_by == user.id
+
+
+async def test_prepare_turn_mints_ids(db_session: AsyncSession) -> None:
+    """prepare_turn mints change_set_id and assistant_message_id before any byte is sent."""
+    project = await create_project(db_session)
+    project.embedding_collection = "col"
+    project.embedding_model = Settings().embedding_model
+    module = await create_checklist_module(db_session, project_id=project.id)
+    service = MockDataDatasetService(db_session, Settings())
+    user = await create_user(db_session)
+
+    context = await service.prepare_turn(
+        module.id,
+        MockDataMessageCreateRequest(question="Test question"),
+        actor=authenticated(user),
+    )
+
+    assert isinstance(context.assistant_message_id, uuid.UUID)
+    assert isinstance(context.change_set_id, uuid.UUID)
+    # IDs should be different
+    assert context.assistant_message_id != context.change_set_id
+
+
+async def test_prepare_turn_includes_existing_records(db_session: AsyncSession) -> None:
+    """prepare_turn maps existing records from the database into the context."""
+    project = await create_project(db_session)
+    project.embedding_collection = "col"
+    project.embedding_model = Settings().embedding_model
+    module = await create_checklist_module(db_session, project_id=project.id)
+    service = MockDataDatasetService(db_session, Settings())
+    user = await create_user(db_session)
+
+    # Create existing records
+    record1 = await create_mock_data_record(
+        db_session, module_id=module.id, fields={"id": "r1", "name": "Test1"}
+    )
+    record2 = await create_mock_data_record(
+        db_session, module_id=module.id, fields={"id": "r2", "name": "Test2"}
+    )
+
+    context = await service.prepare_turn(
+        module.id,
+        MockDataMessageCreateRequest(question="Test"),
+        actor=authenticated(user),
+    )
+
+    assert len(context.existing_records) == 2
+    record_ids = [rec.id for rec in context.existing_records]
+    assert str(record1.id) in record_ids
+    assert str(record2.id) in record_ids
+
+
+async def test_prepare_turn_refuses_when_project_not_ready(db_session: AsyncSession) -> None:
+    """prepare_turn requires project to be indexed and ready."""
+    project = await create_project(db_session, status=ProjectStatus.CLONING)
+    module = await create_checklist_module(db_session, project_id=project.id)
+    service = MockDataDatasetService(db_session, Settings())
+    user = await create_user(db_session)
+
+    with pytest.raises(AppError) as excinfo:
+        await service.prepare_turn(
+            module.id,
+            MockDataMessageCreateRequest(question="Test"),
+            actor=authenticated(user),
+        )
+    assert excinfo.value.code == ErrorCode.PROJECT_NOT_READY
+
+
+async def test_prepare_turn_refuses_when_embedding_model_changed(
+    db_session: AsyncSession,
+) -> None:
+    """prepare_turn refuses when project was indexed with a different embedding model."""
+    project = await create_project(db_session)
+    project.embedding_collection = "col"
+    project.embedding_model = "some-other-model"
+    module = await create_checklist_module(db_session, project_id=project.id)
+    service = MockDataDatasetService(db_session, Settings())
+    user = await create_user(db_session)
+
+    with pytest.raises(AppError) as excinfo:
+        await service.prepare_turn(
+            module.id,
+            MockDataMessageCreateRequest(question="Test"),
+            actor=authenticated(user),
+        )
+    assert excinfo.value.code == ErrorCode.EMBEDDING_MODEL_CHANGED
+
+
+async def test_request_generation_refuses_when_project_not_ready(
+    db_session: AsyncSession,
+) -> None:
+    """request_generation requires project to be indexed."""
+    project = await create_project(db_session, status=ProjectStatus.CLONING)
+    module = await create_checklist_module(db_session, project_id=project.id)
+    service = MockDataDatasetService(db_session, Settings())
+    user = await create_user(db_session)
+
+    with pytest.raises(AppError) as excinfo:
+        await service.request_generation(
+            module.id,
+            MockDataGenerationRequest(),
+            actor=authenticated(user),
+            queue=InMemoryIngestionQueue(),
+        )
+    assert excinfo.value.code == ErrorCode.PROJECT_NOT_READY
