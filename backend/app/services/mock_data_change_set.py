@@ -167,6 +167,9 @@ class MockDataChangeSetService:
 
         if operation.op == "remove":
             await self.records.soft_delete(record)
+            # Explicitly set updated_at since soft_delete uses SQL func.now().
+            # This ensures the record can be validated in the response.
+            record.updated_at = datetime.now(UTC)
             return record
 
         # `update`: a brand-new dict assigned to the one content column, never a
