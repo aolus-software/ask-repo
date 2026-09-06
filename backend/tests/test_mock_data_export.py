@@ -1,0 +1,91 @@
+"""Export tests for mock data records.
+
+Mirrors test_checklist_export.py's workbook-shape assertions, for the dynamic
+field-map case, plus the JSON export and the row-cap refusal.
+"""
+
+import json
+import uuid
+from io import BytesIO
+
+import pytest
+from fastapi import status
+from openpyxl import load_workbook
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.core.errors import AppError
+from app.models.mock_data import MockDataRecord
+from app.services.mock_data_dataset import MockDataDatasetService
+from app.services.mock_data_export import build_mock_data_json, build_mock_data_workbook
+from tests.factories import (
+    create_checklist_module,
+    create_mock_data_record,
+    create_project,
+    create_user,
+)
+from tests.helpers import authenticated
+
+
+def test_build_mock_data_json_is_an_array_of_field_maps() -> None:
+    """Pure function: JSON array of field maps, one per record."""
+    record = MockDataRecord(
+        id=uuid.uuid4(),
+        checklist_module_id=uuid.uuid4(),
+        fields={"name": "Acme"},
+        created_by=uuid.uuid4(),
+    )
+    payload = json.loads(build_mock_data_json([record]))
+    assert payload == [{"name": "Acme"}]
+
+
+def test_build_mock_data_workbook_unions_field_keys_across_records() -> None:
+    """Pure function: workbook with union of all field keys."""
+    records = [
+        MockDataRecord(
+            id=uuid.uuid4(),
+            checklist_module_id=uuid.uuid4(),
+            fields={"name": "Acme"},
+            created_by=uuid.uuid4(),
+        ),
+        MockDataRecord(
+            id=uuid.uuid4(),
+            checklist_module_id=uuid.uuid4(),
+            fields={"name": "Globex", "start": "2026-01-01"},
+            created_by=uuid.uuid4(),
+        ),
+    ]
+    book = load_workbook(BytesIO(build_mock_data_workbook(records)))
+    sheet = book.active
+    header = [cell.value for cell in sheet[1]]
+    assert header == ["name", "start"]
+    assert [cell.value for cell in sheet[2]] == ["Acme", None]
+    assert [cell.value for cell in sheet[3]] == ["Globex", "2026-01-01"]
+
+
+async def test_export_refuses_over_the_row_cap(db_session: AsyncSession) -> None:
+    """Async test: service rejects export when record count exceeds cap."""
+    from app.config import Settings
+
+    # Create project with embedding_collection
+    project = await create_project(db_session)
+    project.embedding_collection = "col"
+    project.embedding_model = "test-model"
+
+    # Create module and records
+    module = await create_checklist_module(db_session, project_id=project.id)
+    user = await create_user(db_session)
+    actor = authenticated(user)
+
+    # Create records
+    for _ in range(2):
+        await create_mock_data_record(db_session, module_id=module.id, created_by=user.id)
+    await db_session.commit()
+
+    # Create service with max_rows=1
+    settings = Settings(mock_data_export_max_rows=1)
+    service = MockDataDatasetService(db_session, settings)
+
+    # Should raise 409 when export exceeds cap
+    with pytest.raises(AppError) as excinfo:
+        await service.export_json(module.id, actor=actor)
+    assert excinfo.value.status_code == status.HTTP_409_CONFLICT

@@ -30,6 +30,7 @@ from app.models.mock_data import (
     MockDataDataset,
     MockDataDatasetStatus,
     MockDataMessage,
+    MockDataRecord,
 )
 from app.models.project import Project, ProjectStatus
 from app.queue.protocol import MockDataQueue
@@ -62,6 +63,7 @@ from app.schemas.mock_data import (
     MockDataMessageResponse,
     MockDataRecordResponse,
 )
+from app.services.mock_data_export import build_mock_data_json, build_mock_data_workbook
 
 logger = logging.getLogger(__name__)
 
@@ -182,6 +184,30 @@ class MockDataDatasetService:
         await self._require_readable_module(module_id, actor)
         rows = await self.messages_repository.list_for_module(module_id, limit=MAX_CHAT_MESSAGES)
         return [MockDataMessageResponse.model_validate(row) for row in rows]
+
+    async def export_json(self, module_id: uuid.UUID, *, actor: AuthenticatedUser) -> bytes:
+        """Every applied record of one module, as a JSON array of field maps."""
+        await self._require_readable_module(module_id, actor)
+        records = await self._records_within_cap(module_id)
+        return build_mock_data_json(records)
+
+    async def export_xlsx(self, module_id: uuid.UUID, *, actor: AuthenticatedUser) -> bytes:
+        """Every applied record of one module, as a spreadsheet."""
+        await self._require_readable_module(module_id, actor)
+        records = await self._records_within_cap(module_id)
+        return build_mock_data_workbook(records)
+
+    async def _records_within_cap(self, module_id: uuid.UUID) -> builtins.list[MockDataRecord]:
+        """This module's records, or a `409` if there are more than the export cap allows."""
+        cap = self.settings.mock_data_export_max_rows
+        records = await self.records.list_for_module(module_id)
+        if len(records) > cap:
+            raise AppError(
+                status.HTTP_409_CONFLICT,
+                ErrorCode.EXPORT_TOO_LARGE,
+                f"This module has more than {cap} mock data records. Delete some and try again.",
+            )
+        return records
 
     async def prepare_turn(
         self,
