@@ -20,7 +20,14 @@ export function AppNavbar() {
             reading of "AskRepo" would only repeat itself to a screen reader.
             The mark is a transparent gradient that reads on either theme, so it
             needs no `dark:` treatment. */}
-        <Image src="/logo.png" alt="" width={32} height={32} className="size-8" priority />
+        <Image
+          src="/logo.png"
+          alt=""
+          width={32}
+          height={32}
+          className="size-8"
+          priority
+        />
         AskRepo
       </Link>
       <div className="ml-auto flex items-center gap-2">
