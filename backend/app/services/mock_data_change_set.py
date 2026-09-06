@@ -167,8 +167,10 @@ class MockDataChangeSetService:
 
         if operation.op == "remove":
             await self.records.soft_delete(record)
-            # Explicitly set updated_at since soft_delete uses SQL func.now().
-            # This ensures the record can be validated in the response.
+            # TimestampMixin.updated_at has onupdate=func.now(), so SQLAlchemy updates
+            # it on the row. But the Python object doesn't populate the attribute until
+            # refresh. Explicitly set it so response validation can read it without
+            # triggering a greenlet error on lazy-load.
             record.updated_at = datetime.now(UTC)
             return record
 
