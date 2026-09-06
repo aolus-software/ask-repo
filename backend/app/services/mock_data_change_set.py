@@ -95,7 +95,7 @@ class MockDataChangeSetService:
 
         touched: list[MockDataRecord] = []
         skipped: list[uuid.UUID] = []
-        for raw in change_set.operations:
+        for position, raw in enumerate(change_set.operations):
             try:
                 operation = MockDataChangeOperationPayload.model_validate(raw)
             except ValidationError:
@@ -103,7 +103,9 @@ class MockDataChangeSetService:
                 continue
             if wanted is not None and operation.id not in wanted:
                 continue
-            applied = await self._apply_one(operation, module_id=module_id, actor=actor)
+            applied = await self._apply_one(
+                operation, module_id=module_id, actor=actor, position=position
+            )
             if applied is None:
                 skipped.append(operation.id)
             else:
@@ -147,14 +149,21 @@ class MockDataChangeSetService:
         *,
         module_id: uuid.UUID,
         actor: AuthenticatedUser,
+        position: int,
     ) -> MockDataRecord | None:
-        """One operation. `None` means it was skipped because its target is gone."""
+        """One operation. `None` means it was skipped because its target is gone.
+
+        `position` is the operation's index within the change set's full operation
+        list -- not a counter over only the accepted ones -- so ticking a subset of
+        the proposed `add`s keeps their relative order.
+        """
         if operation.op == "add":
             return await self.records.add(
                 MockDataRecord(
                     id=uuid.uuid4(),
                     checklist_module_id=module_id,
                     fields=operation.fields or {},
+                    position=position,
                     created_by=actor.id,
                 )
             )

@@ -20,11 +20,21 @@ class MockDataRecordRepository(BaseRepository[MockDataRecord]):
     model = MockDataRecord
 
     async def list_for_module(self, module_id: uuid.UUID) -> list[MockDataRecord]:
-        """Every live record of one module, oldest first — generation order."""
+        """Every live record of one module, in the order the model proposed them.
+
+        `position` is the primary key -- assigned from an operation's index within
+        its change set at apply time. `created_at, id` remain as the tiebreak for rows
+        that predate the column (all `position == 0`), so nothing about their order
+        changes.
+        """
         result = await self.session.execute(
             self.active_select()
             .where(MockDataRecord.checklist_module_id == module_id)
-            .order_by(MockDataRecord.created_at.asc(), MockDataRecord.id.asc())
+            .order_by(
+                MockDataRecord.position.asc(),
+                MockDataRecord.created_at.asc(),
+                MockDataRecord.id.asc(),
+            )
         )
         return list(result.scalars().all())
 

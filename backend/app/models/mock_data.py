@@ -75,7 +75,7 @@ class MockDataRecord(Base, TimestampMixin, SoftDeleteMixin):
 
     __tablename__ = "mock_data_records"
     __table_args__ = (
-        Index("ix_mock_data_records_module_id_created_at", "checklist_module_id", "created_at"),
+        Index("ix_mock_data_records_module_id_position", "checklist_module_id", "position"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(
@@ -87,6 +87,12 @@ class MockDataRecord(Base, TimestampMixin, SoftDeleteMixin):
     # Every record in one generation batch shares the same key set -- validated at the
     # point operations are stored (`app/mockdata/operations.py`), not here.
     fields: Mapped[dict[str, str]] = mapped_column(JSONB, nullable=False)
+    # The proposed order survives apply: assigned from the operation's index within
+    # its change set (`MockDataChangeSetService._apply_one`), not a counter over only
+    # the accepted operations, so ticking a subset keeps their relative order. Existing
+    # rows default to 0, which falls through to the `created_at, id` tiebreak that
+    # `list_for_module` already used before this column existed.
+    position: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     created_by: Mapped[uuid.UUID] = mapped_column(
         PgUUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True
     )

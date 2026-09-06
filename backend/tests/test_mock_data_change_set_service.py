@@ -405,3 +405,112 @@ async def test_change_set_not_found_returns_404(db_session: AsyncSession) -> Non
             uuid.uuid4(), MockDataChangeSetApplyRequest(), actor=authenticated(actor)
         )
     assert excinfo.value.code == ErrorCode.MOCK_DATA_CHANGE_SET_NOT_FOUND
+
+
+async def test_apply_preserves_the_order_the_model_proposed(db_session: AsyncSession) -> None:
+    """Applying several `add` operations in one transaction keeps their proposed order.
+
+    `created_at` is `server_default=func.now()`, and Postgres's `now()` is constant for
+    an entire transaction -- every record this apply writes shares one timestamp, so a
+    sort that fell back to `created_at, id` would collapse onto the random uuid
+    tiebreak. Five records make a coincidental match on that random order roughly
+    1-in-120, which is why this reproduces the bug reliably rather than flakily.
+    """
+    project = await create_project(db_session, status=ProjectStatus.READY)
+    project.embedding_collection = "col"
+    module = await create_checklist_module(db_session, project_id=project.id)
+    creator = await create_user(db_session)
+
+    dataset = MockDataDataset(
+        id=uuid.uuid4(),
+        checklist_module_id=module.id,
+        status="review",
+    )
+    db_session.add(dataset)
+
+    proposed_names = ["alpha", "bravo", "charlie", "delta", "echo"]
+    change_set = await MockDataChangeSetRepository(db_session).add(
+        MockDataChangeSet(
+            id=uuid.uuid4(),
+            checklist_module_id=module.id,
+            origin=ChangeSetOrigin.GENERATION.value,
+            summary=f"{len(proposed_names)} records",
+            operations=[
+                {
+                    "op": "add",
+                    "id": str(uuid.uuid4()),
+                    "recordId": None,
+                    "fields": {"name": name},
+                    "changes": None,
+                    "rationale": "r",
+                }
+                for name in proposed_names
+            ],
+            status=ChangeSetStatus.PENDING.value,
+            created_by=creator.id,
+        )
+    )
+    await db_session.commit()
+
+    actor = await create_user(db_session)
+    service = MockDataChangeSetService(db_session, Settings())
+    await service.apply(change_set.id, MockDataChangeSetApplyRequest(), actor=authenticated(actor))
+
+    records = await MockDataRecordRepository(db_session).list_for_module(module.id)
+    assert [record.fields["name"] for record in records] == proposed_names
+
+
+async def test_apply_keeps_relative_order_of_a_ticked_subset(db_session: AsyncSession) -> None:
+    """Ticking only some proposed operations keeps those in their relative order.
+
+    Position must come from the operation's index within the full `operations` list,
+    not a counter over only the accepted ones -- ticking the 1st and 3rd of five
+    proposals should not collapse them onto positions 0 and 1.
+    """
+    project = await create_project(db_session, status=ProjectStatus.READY)
+    project.embedding_collection = "col"
+    module = await create_checklist_module(db_session, project_id=project.id)
+    creator = await create_user(db_session)
+
+    dataset = MockDataDataset(
+        id=uuid.uuid4(),
+        checklist_module_id=module.id,
+        status="review",
+    )
+    db_session.add(dataset)
+
+    op_ids = [uuid.uuid4() for _ in range(3)]
+    proposed_names = ["first", "second", "third"]
+    change_set = await MockDataChangeSetRepository(db_session).add(
+        MockDataChangeSet(
+            id=uuid.uuid4(),
+            checklist_module_id=module.id,
+            origin=ChangeSetOrigin.GENERATION.value,
+            summary="3 records",
+            operations=[
+                {
+                    "op": "add",
+                    "id": str(op_id),
+                    "recordId": None,
+                    "fields": {"name": name},
+                    "changes": None,
+                    "rationale": "r",
+                }
+                for op_id, name in zip(op_ids, proposed_names, strict=True)
+            ],
+            status=ChangeSetStatus.PENDING.value,
+            created_by=creator.id,
+        )
+    )
+    await db_session.commit()
+
+    actor = await create_user(db_session)
+    service = MockDataChangeSetService(db_session, Settings())
+    await service.apply(
+        change_set.id,
+        MockDataChangeSetApplyRequest(operation_ids=[op_ids[0], op_ids[2]]),
+        actor=authenticated(actor),
+    )
+
+    records = await MockDataRecordRepository(db_session).list_for_module(module.id)
+    assert [record.fields["name"] for record in records] == ["first", "third"]
