@@ -16,6 +16,9 @@ from app.api.routes import (
     conversations,
     health,
     index,
+    mock_data_change_sets,
+    mock_data_datasets,
+    mock_data_records,
     projects,
     users,
 )
@@ -149,6 +152,9 @@ def create_app() -> FastAPI:
     app.include_router(checklist_modules.router)
     app.include_router(checklist_items.router)
     app.include_router(checklist_change_sets.router)
+    app.include_router(mock_data_datasets.router)
+    app.include_router(mock_data_records.router)
+    app.include_router(mock_data_change_sets.router)
 
     return app
 

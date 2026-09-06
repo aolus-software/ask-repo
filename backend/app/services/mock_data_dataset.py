@@ -209,6 +209,28 @@ class MockDataDatasetService:
             )
         return records
 
+    async def delete_record(self, record_id: uuid.UUID, *, actor: AuthenticatedUser) -> None:
+        """Delete one record. Gated on `created_by`/`is_admin`, `403` because module
+        (and therefore dataset) existence is deliberately public."""
+        record = await self.records.get(record_id)
+        if record is None:
+            raise AppError(
+                status.HTTP_404_NOT_FOUND,
+                ErrorCode.MOCK_DATA_RECORD_NOT_FOUND,
+                "Mock data record not found.",
+            )
+        # Module-scope readability first: a record in a project the caller cannot see
+        # must 404, not 403 -- the same order `ChecklistItemService.delete` follows.
+        await self._require_readable_module(record.checklist_module_id, actor)
+        if record.created_by != actor.id and not actor.is_admin:
+            raise AppError(
+                status.HTTP_403_FORBIDDEN,
+                ErrorCode.NOT_MOCK_DATA_RECORD_OWNER,
+                "Only the person who created this record, or an admin, can delete it.",
+            )
+        await self.records.soft_delete(record)
+        await self.session.commit()
+
     async def prepare_turn(
         self,
         module_id: uuid.UUID,
