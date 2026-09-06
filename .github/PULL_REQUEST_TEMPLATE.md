@@ -14,7 +14,7 @@ Closes #
 
 ## Milestone
 
-<!-- Which PRD milestone does this serve? M0–M6, or "none". See docs/PRD.md §6. -->
+<!-- Which PRD milestone does this serve? M0–M5, or "none". See docs/PRD.md §6. -->
 
 ## What changed
 

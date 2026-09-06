@@ -353,11 +353,14 @@ async def test_a_worker_that_lost_its_lease_records_no_outcome(
 async def test_an_unexpected_error_does_not_strand_the_reindex_flag(
     db_session: AsyncSession, tmp_path: Path
 ) -> None:
-    """R17: `claim` sets `reindex_in_progress` and only `release` clears it.
+    """R17: `ProjectService.reindex` and `claim` set `reindex_in_progress`; `release`,
+    `abandon` and the reconcile sweep's re-publish are what resolve it.
 
-    A run that ends through neither leaves the flag True forever, and
+    A run that ends through none of them leaves the flag True forever, and
     `ProjectService.reindex` then answers `enqueued: false` with no route, flag, or
-    admin action able to clear it — the project is stuck on its old index.
+    admin action able to clear it — the project is stuck on its old index. The sweep
+    covers only the never-claimed case (`find_stranded`'s third branch); a run that
+    reached a worker and then died unclassified still depends on this path.
     """
     project = await create_project(db_session, status=ProjectStatus.READY)
     await db_session.commit()

@@ -6,6 +6,7 @@ and `delete` cannot drift apart (`.claude/rules/router.md`).
 
 import logging
 import uuid
+from datetime import UTC, datetime
 from urllib.parse import urlsplit
 
 from fastapi import status
@@ -149,12 +150,30 @@ class ProjectService:
         simultaneous callers both pass it and both enqueue. The worker's lease claim
         settles that (`ProjectRepository.claim`). Do not delete the lease on the
         grounds that this check exists.
+
+        `reindex_in_progress` is raised **here**, before the publish, rather than left
+        to the worker's `claim`. A reindex keeps `status` at `ready` (see `claim`), so
+        the flag is the only thing that says a run is coming: without it the response
+        and every later poll describe a project that looks idle, the user reads it as
+        "nothing happened", and a generation started in that window stamps the
+        generation the reindex is about to supersede -- leaving the module permanently
+        `stale` against an index whose points have since been deleted.
+
+        Raising it outside a lease is what `find_stranded` grew a third branch for.
+        Nothing owns this flag yet, so neither `release` nor `abandon` -- both gated on
+        `lease_owner` -- can lower it, and a produce that never reaches a worker would
+        otherwise strand it at True forever. `updated_at` is stamped with it because
+        that branch measures the wait from there.
         """
         project = await self._require_readable(project_id, actor)
         self._require_destructive_rights(project, actor)
 
         if project.status in BUSY_STATUSES or project.reindex_in_progress:
             return ReindexResponse(enqueued=False, project=ProjectResponse.model_validate(project))
+
+        project.reindex_in_progress = True
+        project.updated_at = datetime.now(UTC)
+        await self.session.commit()
 
         await self._enqueue(project.id)
         return ReindexResponse(enqueued=True, project=ProjectResponse.model_validate(project))

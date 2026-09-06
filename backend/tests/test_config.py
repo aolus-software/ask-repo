@@ -154,7 +154,8 @@ def test_retrieval_attempts_cannot_be_zero() -> None:
 
 
 def test_the_graph_nodes_are_on_by_default() -> None:
-    """The toggles exist for M6's per-node benchmark, not as a soft launch."""
+    """The toggles exist so an operator can price each node against its cost
+    (`docs/configuration.md`), not as a soft launch."""
     settings = Settings()
 
     assert settings.rag_max_retrieval_attempts == 2

@@ -16,7 +16,7 @@ broker never received. `POST /projects` enqueues and a worker indexes.
 M2 through M5 are shipped too: Dev Knowledge (streaming RAG Q&A over an indexed project),
 M3's LangGraph intent routing and corrective retrieval loop, the QA Checklist, and the Mock
 Data Generator — see the `### Conversations`, `### QA Checklist`, and `### Mock Data
-Generator` route sections below. Only the local-vs-hosted comparison (M6) remains.
+Generator` route sections below — M5 is the last of phase 1's milestones.
 
 ## Requirements
 
@@ -129,7 +129,7 @@ a leak (`docs/PRD.md` §4.1). Only the project's `created_by` or an admin may re
 | `GET` | `/projects` | any user | List all projects, paginated |
 | `GET` | `/projects/{id}` | any user | One project |
 | `POST` | `/projects` | any user | Register a repository and enqueue its first index |
-| `POST` | `/projects/{id}/reindex` | creator or admin | Re-index; a run already in flight is a no-op |
+| `POST` | `/projects/{id}/reindex` | creator or admin | Re-index; raises `reindexInProgress` before publishing, and a run already in flight is a no-op |
 | `DELETE` | `/projects/{id}` | creator or admin | Soft-delete the row and hard-delete its vectors |
 
 `DELETE` is the one route that can return **`503 VECTOR_STORE_UNAVAILABLE`**: it must reach
@@ -190,7 +190,7 @@ Modules over an indexed repository — a user names a module ("Authentication"),
 | `GET` | `/checklist-modules/{id}` | any user | One module with its test cases, grouped by feature |
 | `PATCH` | `/checklist-modules/{id}` | creator or admin | Rename or re-point the module |
 | `DELETE` | `/checklist-modules/{id}` | creator or admin | Soft-delete the module, its items, its change sets, and its chat |
-| `POST` | `/checklist-modules/{id}/generate` | any user | Publish a generation job; returns the module in `generating` status |
+| `POST` | `/checklist-modules/{id}/generate` | any user | Publish a generation job; returns the module in `generating` status. `409 PROJECT_NOT_READY` while the project is being re-indexed |
 | `GET` | `/checklist-modules/{id}/change-sets` | any user | List the module's proposed change sets, newest first |
 | `GET` | `/checklist-modules/{id}/messages` | any user | Read the module's refinement chat |
 | `POST` | `/checklist-modules/{id}/messages` | any user | Refine the checklist by chat; **streams the reply and proposes changes** |
@@ -230,7 +230,7 @@ Recording a result is open to every authenticated user while editing what a test
 | Method | Path | Auth | Description |
 | --- | --- | --- | --- |
 | `GET` | `/checklist-modules/{id}/mock-data` | any user | A module's mock dataset summary and its applied records; an empty summary before the first generation |
-| `POST` | `/checklist-modules/{id}/mock-data-generations` | any user | Publish a generation job; returns the dataset in `generating` status |
+| `POST` | `/checklist-modules/{id}/mock-data-generations` | any user | Publish a generation job; returns the dataset in `generating` status. `409 PROJECT_NOT_READY` while the project is being re-indexed |
 | `GET` | `/checklist-modules/{id}/mock-data-change-sets` | any user | List the dataset's proposed change sets, newest first |
 | `GET` | `/checklist-modules/{id}/mock-data-messages` | any user | Read the dataset's refinement chat |
 | `POST` | `/checklist-modules/{id}/mock-data-messages` | any user | Refine the dataset by chat; **streams the reply and proposes changes** |

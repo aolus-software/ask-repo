@@ -214,11 +214,12 @@ class ProjectRepository(BaseRepository[Project]):
         consumer (spec §4.4), and writing `failed` here would lie about a job that is
         coming back.
 
-        Clearing the flag is the point. `claim` is the only thing that sets it and
-        `release` the only thing that clears it, so a run ending through neither —
-        an unclassified exception — strands it at True, and `ProjectService.reindex`
-        then answers `enqueued: false` forever with no route, flag, or admin action
-        able to clear it.
+        Clearing the flag is the point. `ProjectService.reindex` and `claim` are the
+        only things that set it, and `release`, `abandon` and the reconcile sweep's
+        re-publish the only things that resolve it, so a run ending through none of
+        them — an unclassified exception — strands it at True, and
+        `ProjectService.reindex` then answers `enqueued: false` forever with no route,
+        flag, or admin action able to clear it.
 
         The lease is expired rather than cleared, so `lease_owner` still names us.
         `claim` gates on expiry alone, so the project is immediately reclaimable
@@ -243,8 +244,22 @@ class ProjectRepository(BaseRepository[Project]):
     async def find_stranded(self, *, pending_older_than_seconds: int) -> Sequence[Project]:
         """Projects whose job was lost: never picked up, or held by a dead worker.
 
-        Covers the window where `POST /projects` wrote the row but the produce failed,
-        and the case where a worker died mid-run.
+        Three branches, one per way a job goes missing. The first covers the window
+        where `POST /projects` wrote the row but the produce failed; the second covers
+        a worker that died mid-run.
+
+        The third is the reindex equivalent of the first, and it exists because
+        `ProjectService.reindex` raises `reindex_in_progress` before publishing. A
+        reindex leaves `status` at `ready`, so a lost produce matches neither of the
+        others -- and because no worker ever claimed it, `lease_owner` is null and
+        neither `release` nor `abandon` can lower the flag. Without this branch the
+        project answers `enqueued: false` forever with nothing able to clear it.
+
+        It is deliberately gated on a null lease: a run that *was* claimed carries an
+        expiry and belongs to the second branch, which already re-publishes it.
+        `updated_at` is the clock rather than `created_at`, because the row was created
+        long before this reindex was asked for -- and `reindex` stamps it for that
+        reason.
         """
         now = datetime.now(UTC)
         cutoff = now - timedelta(seconds=pending_older_than_seconds)
@@ -254,6 +269,9 @@ class ProjectRepository(BaseRepository[Project]):
                 & (Project.lease_expires_at.is_(None))
                 & (Project.created_at < cutoff),
                 Project.lease_expires_at < now,
+                Project.reindex_in_progress.is_(True)
+                & (Project.lease_expires_at.is_(None))
+                & (Project.updated_at < cutoff),
             )
         )
         rows = await self.session.execute(statement)

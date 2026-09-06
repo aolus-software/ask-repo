@@ -285,9 +285,8 @@ Milestones from [`docs/PRD.md`](docs/PRD.md) §6, built in order:
       bound. Any OpenAI-compatible endpoint (OpenRouter, DeepSeek, Kimi, Groq, vLLM) already works
       by configuration today — see [PRD §6](docs/PRD.md)
 - [x] **M5** — Mock Data Generator: grounded sample records for a checklist module, generate/chat/apply, JSON + xlsx export
-- [ ] **M6** — Local vs hosted model comparison
 
-**Phase 2** (after M6): per-project RBAC — users assigned to projects, roles per project.
+**Phase 2** (after M5): per-project RBAC — users assigned to projects, roles per project.
 Phase 1 is deliberately built so this is a change to one access-resolver function rather
 than a rewrite (PRD §2.1, §4.1). Also queued for that phase: notifications (in-app and
 email) for the background jobs that currently finish in silence, self-service password

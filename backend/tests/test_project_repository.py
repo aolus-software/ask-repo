@@ -2,6 +2,7 @@
 
 import asyncio
 import uuid
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -292,3 +293,61 @@ async def test_names_and_generations_resolves_both_in_one_statement(
 
 async def test_names_and_generations_is_empty_for_no_ids(db_session: AsyncSession) -> None:
     assert await ProjectRepository(db_session).names_and_generations([]) == {}
+
+
+async def test_the_sweep_recovers_a_reindex_whose_produce_was_lost(
+    db_session: AsyncSession,
+) -> None:
+    """`ProjectService.reindex` raises `reindex_in_progress` outside any lease, so no
+    worker owns it -- and `release`/`abandon` both gate on `lease_owner`. If the
+    publish never reaches a worker, this branch is the only thing that can resolve the
+    flag; without it the project answers `enqueued: false` forever.
+    """
+    project = await create_project(db_session, status=ProjectStatus.READY)
+    project.reindex_in_progress = True
+    # Five minutes ago, which is what the sweep actually sees: `pending_older_than_seconds`
+    # is a wait, and a zero-second window would race Postgres' `now()` (transaction start)
+    # against the client clock rather than testing the branch.
+    project.updated_at = datetime.now(UTC) - timedelta(minutes=5)
+    await db_session.commit()
+
+    stranded = await ProjectRepository(db_session).find_stranded(pending_older_than_seconds=60)
+
+    assert project.id in {row.id for row in stranded}
+
+
+async def test_the_sweep_leaves_a_just_requested_reindex_alone(
+    db_session: AsyncSession,
+) -> None:
+    """The cutoff is what stops the 60-second tick re-publishing a reindex the broker
+    has simply not delivered yet. `updated_at` is the clock, not `created_at`: the row
+    was created long before this reindex was asked for.
+    """
+    project = await create_project(db_session, status=ProjectStatus.READY)
+    project.reindex_in_progress = True
+    project.updated_at = datetime.now(UTC)
+    await db_session.commit()
+
+    stranded = await ProjectRepository(db_session).find_stranded(pending_older_than_seconds=300)
+
+    assert project.id not in {row.id for row in stranded}
+
+
+async def test_the_sweep_leaves_a_claimed_reindex_to_the_lease_branch(
+    db_session: AsyncSession,
+) -> None:
+    """A claimed run carries an expiry and is already covered by the dead-worker
+    branch. Matching it here too would re-publish it while a live worker holds it.
+    """
+    project = await create_project(db_session, status=ProjectStatus.READY)
+    await db_session.commit()
+    await ProjectRepository(db_session).claim(
+        project_id=project.id, job_id=uuid.uuid4(), worker_id="w1", lease_seconds=300
+    )
+    await db_session.commit()
+    await db_session.refresh(project)
+    assert project.reindex_in_progress is True
+
+    stranded = await ProjectRepository(db_session).find_stranded(pending_older_than_seconds=0)
+
+    assert project.id not in {row.id for row in stranded}

@@ -216,6 +216,45 @@ async def test_reindex_enqueues_when_the_project_is_idle(db_session: AsyncSessio
     assert len(queue.messages) == 1
 
 
+async def test_reindex_raises_the_flag_before_it_publishes(db_session: AsyncSession) -> None:
+    """A reindex keeps `status` at `ready` (`ProjectRepository.claim`), so the flag is
+    the only thing that says a run is coming. Without it the response and every later
+    poll describe an idle project, the user reads it as "nothing happened", and a
+    generation started in that window stamps the generation about to be superseded.
+    """
+    owner = await create_user(db_session)
+    project = await create_project(db_session, created_by=owner.id, status=ProjectStatus.READY)
+    await db_session.commit()
+
+    result = await service_for(db_session, InMemoryIngestionQueue()).reindex(
+        project.id, actor=actor_for(owner.id)
+    )
+
+    assert result.enqueued is True
+    # The response itself carries it -- the frontend polls on what it was handed.
+    assert result.project.reindex_in_progress is True
+    await db_session.refresh(project)
+    assert project.reindex_in_progress is True
+
+
+async def test_a_second_reindex_is_refused_by_the_flag_the_first_one_raised(
+    db_session: AsyncSession,
+) -> None:
+    """The fast path now closes on the first call rather than on the worker's claim."""
+    owner = await create_user(db_session)
+    project = await create_project(db_session, created_by=owner.id, status=ProjectStatus.READY)
+    await db_session.commit()
+    queue = InMemoryIngestionQueue()
+    service = service_for(db_session, queue)
+
+    first = await service.reindex(project.id, actor=actor_for(owner.id))
+    second = await service.reindex(project.id, actor=actor_for(owner.id))
+
+    assert first.enqueued is True
+    assert second.enqueued is False
+    assert len(queue.messages) == 1
+
+
 async def test_reindex_is_a_no_op_while_a_run_is_in_flight(db_session: AsyncSession) -> None:
     """202 either way; the body says which happened (spec §2.2)."""
     owner = await create_user(db_session)

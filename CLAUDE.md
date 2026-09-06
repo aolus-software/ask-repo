@@ -78,8 +78,9 @@ as the checklist, and exported as JSON or `.xlsx`.
 The M0–M2, M4 and M5 frontend is shipped: auth screens, the app shell, projects, the streamed
 answer surface, admin user management, the QA Checklist (`/checklist`, `/checklist/[moduleId]`),
 and that module screen's Mock Data tab, with Next acting as a backend-for-frontend (see the
-Frontend section below). Later milestones are not built — do not assume a module exists because
-the PRD describes it; the PRD describes the destination.
+Frontend section below). M5 is the last of phase 1's milestones; everything the PRD describes
+beyond it is phase 2 or phase 3 and is not built — do not assume a module exists because the
+PRD describes it; the PRD describes the destination.
 
 ## Commands
 
@@ -314,6 +315,19 @@ offline for the length of a clone-and-embed. New vectors are written under an in
 `active_generation`, the project switches to reading it only on success, and the old generation is
 deleted afterwards. **A reindex that fails part-way leaves the previous index intact and still
 serving.**
+
+Because the project stays `ready` throughout, `reindex_in_progress` is the *only* signal that a
+run is live — so `ProjectService.reindex` raises it when the reindex is **requested**, before the
+publish, not when a worker claims it. That is one write outside the lease, and `release` and
+`abandon` are both gated on `lease_owner` and therefore cannot undo it, which is why
+`find_stranded` carries a third branch (flag raised, no lease, `updated_at` past the cutoff) for
+the produce that never reaches a worker.
+
+The same "`status` says `ready` during a reindex" fact is why **QA Checklist and mock-data
+generation refuse with `409` while the flag is up** (`_require_a_stable_index`). A generation
+records which project generation it read; one started mid-reindex records the generation that run
+is about to supersede and delete, so it reports itself `stale` the moment it finishes. Questions
+and refinement chats deliberately keep running — they read the live generation and record nothing.
 
 ### Nothing derived from clone output is stored or logged unscrubbed
 

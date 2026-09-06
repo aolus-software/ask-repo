@@ -207,6 +207,7 @@ class ChecklistModuleService:
         module = await self._require_readable(module_id, actor)
         project = await self._require_readable_project(module.project_id, actor)
         self._require_indexed(project)
+        self._require_a_stable_index(project)
 
         if module.status == ChecklistModuleStatus.GENERATING.value:
             raise AppError(
@@ -447,6 +448,30 @@ class ChecklistModuleService:
                 status.HTTP_409_CONFLICT,
                 ErrorCode.PROJECT_NOT_READY,
                 "This project is not indexed yet. Wait for indexing to finish.",
+            )
+
+    @staticmethod
+    def _require_a_stable_index(project: Project) -> None:
+        """Refuse to generate while a reindex is in flight.
+
+        A reindex keeps `status` at `ready` and raises `reindex_in_progress` instead
+        (`ProjectRepository.claim`), so `_require_indexed` passes throughout one. A
+        generation started in that window scrolls the *current* generation, stamps
+        `indexed_generation` with it, and then the reindex flips the pointer and
+        deletes the points underneath it -- leaving a module that reports `stale`
+        immediately after being regenerated, built from an index that no longer
+        exists. `_summaries` is right to call it stale; the defect is having let the
+        run start.
+
+        Only the generation paths take this. Asking a question and refining by chat
+        read the live generation and stamp nothing, and a reindex can run for twenty
+        minutes -- silencing Q&A for that long would cost far more than it saves.
+        """
+        if project.reindex_in_progress:
+            raise AppError(
+                status.HTTP_409_CONFLICT,
+                ErrorCode.PROJECT_NOT_READY,
+                "This project is being re-indexed. Wait for that to finish, then generate.",
             )
 
 

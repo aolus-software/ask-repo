@@ -35,6 +35,41 @@ the partition key, not the service's busy check.
 - A duplicate delivery must stay **cheap** — one refused claim. That is what licenses the
   consumer to absorb an error and leave the offset uncommitted.
 
+## `reindex_in_progress` is raised before the lease, so the sweep has to be able to lower it
+
+`ProjectService.reindex` raises the flag when the reindex is *requested*, not when a worker claims
+it. It has to: a reindex keeps `status` at `ready` for the whole run (that is the point of a
+generation swap), so the flag is the only thing that says a run is coming, and a project that
+looks idle is one a user re-triggers and generates against.
+
+That puts one write outside the lease, and everything gated on `lease_owner` therefore cannot
+undo it. `release` and `abandon` both are. So `ProjectRepository.find_stranded` carries a third
+branch — **flag raised, no lease, `updated_at` past the cutoff** — and it is not optional: without
+it a produce that never reaches a worker strands the flag at `true`, `reindex` answers
+`enqueued: false` forever, and no route, flag, or admin action can clear it. The branch requires a
+null lease deliberately; a claimed run has an expiry and belongs to the dead-worker branch, which
+already re-publishes it.
+
+`reindex` stamps `updated_at` for this reason alone. The row was created long before this reindex
+was asked for, so `created_at` — what the pending branch measures — would mark every reindex
+stranded on the first tick.
+
+## A generation may not start while a reindex is in flight
+
+`ChecklistModuleService` and `MockDataDatasetService` both call `_require_a_stable_index` on their
+generation path, refusing with `409 PROJECT_NOT_READY` while `reindex_in_progress` is set.
+
+Checking `status` is not enough and never was: a reindex holds `ready` throughout. A generation
+that starts in that window scrolls the current generation, records it in `indexed_generation`, and
+is then overtaken — the reindex flips the pointer and **deletes the points it read**. The module
+reports `stale` the moment it finishes, describing an index that no longer exists. The staleness
+flag is right; allowing the run is the defect.
+
+**The chat and question paths deliberately do not take this guard.** They read the live generation
+and record nothing, and a reindex can run for twenty minutes — refusing questions for that long
+costs far more than it saves. `_require_answerable` and `_require_indexed` stay separate for this
+reason; do not merge them.
+
 ## The checklist sweep buys its own cheapness, because the claim cannot
 
 Everything above holds for projects because a project leaves `pending` the instant anyone claims
