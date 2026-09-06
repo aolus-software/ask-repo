@@ -46,4 +46,13 @@ export const keys = {
   checklistMessages: {
     forModule: (moduleId: string) => ["checklist-messages", moduleId] as const,
   },
+  mockData: {
+    detail: (moduleId: string) => ["mock-data", "detail", moduleId] as const,
+  },
+  mockDataChangeSets: {
+    forModule: (moduleId: string) => ["mock-data-change-sets", moduleId] as const,
+  },
+  mockDataMessages: {
+    forModule: (moduleId: string) => ["mock-data-messages", moduleId] as const,
+  },
 };
