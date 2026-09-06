@@ -16,7 +16,7 @@ from typing import Literal, TypedDict
 from pydantic import BaseModel, Field
 
 from app.models.conversation import FinishReason, Intent
-from app.rag.prompts import ExistingItem, Turn
+from app.rag.prompts import ExistingItem, ExistingRecord, Turn
 from app.rag.retriever import RetrievedChunk
 
 __all__ = [
@@ -87,3 +87,13 @@ class TurnState(TypedDict):
     change_set_id: uuid.UUID | None
     operations: list[dict[str, object]]
     change_summary: str
+    # --- The mock-data refinement path (M5) ---
+    #
+    # Additive, mirroring the block above for the same reason it exists: LangGraph
+    # binds one schema per compiled graph, so a second TurnState would mean a second
+    # graph and a second adapter. Present on every turn, empty everywhere except the
+    # mock-data chat's own call site. `change_set_id` above is shared between the two
+    # paths -- only one proposer ever runs per turn, so one id is enough.
+    existing_records: list[ExistingRecord]
+    record_operations: list[dict[str, object]]
+    record_change_summary: str

@@ -194,3 +194,12 @@ def test_checklist_max_files_per_job_rejects_zero() -> None:
     step and produce an empty checklist against a perfectly healthy module."""
     with pytest.raises(ValidationError, match="checklist_max_files_per_job"):
         Settings(checklist_max_files_per_job=0)
+
+
+def test_mock_data_settings_have_checklist_matching_defaults() -> None:
+    settings = Settings()
+    assert settings.kafka_mock_data_topic == "askrepo.mock-data.generate"
+    assert settings.kafka_mock_data_partitions == 1
+    assert settings.mock_data_scroll_page_size == 256
+    assert settings.mock_data_max_files_per_job == 200
+    assert settings.mock_data_export_max_rows == 5000

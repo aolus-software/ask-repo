@@ -1,11 +1,12 @@
 # RAG Rules
 
 Everything under `app/rag/`, plus `app/services/conversation.py`,
-`app/api/routes/conversations.py`, and the refinement-chat half of
-`app/services/checklist_module.py` and `app/api/routes/checklist_modules.py` — it streams
-through the same `Answerer`. Read `router.md` and
-`response-api.md` alongside this — they own status codes and the wire contract; this file owns
-what is specific to retrieval, generation, and streaming.
+`app/api/routes/conversations.py`, the refinement-chat half of
+`app/services/checklist_module.py` and `app/api/routes/checklist_modules.py`, and the
+refinement-chat half of `app/services/mock_data_dataset.py` and
+`app/api/routes/mock_data_datasets.py` — all three stream through the same `Answerer`. Read
+`router.md` and `response-api.md` alongside this — they own status codes and the wire contract;
+this file owns what is specific to retrieval, generation, and streaming.
 
 Every invariant here is one lint cannot catch, and most of them fail **silently** when broken:
 no exception, no failing request, just worse answers that still look like answers. That is
@@ -224,31 +225,41 @@ graph. A node tested outside the runtime would be tested in a state it never run
 No node can emit one, which is what makes "exactly one terminator per stream"
 structural rather than a rule six nodes each have to remember.
 
-## The ordering contract holds on the checklist chat too
+## The ordering contract holds on both refinement chats too
 
-`POST /checklist-modules/{id}/messages` is a second caller of the same graph, not a
-second stream implementation. `citations` is emitted exactly once, before the first
+`POST /checklist-modules/{id}/messages` and `POST /checklist-modules/{id}/mock-data-messages`
+(`app/api/routes/mock_data_datasets.py`) are the second and third callers of the same graph,
+not separate stream implementations. `citations` is emitted exactly once, before the first
 `token`, and exactly one terminator carries a `finishReason` — the same contract as
-`/conversations/{id}/messages`, because both routes are served by the same `Answerer`.
+`/conversations/{id}/messages`, because all three routes are served by the same `Answerer`.
 
-That route adds one event and no others. `changeSet` is emitted **at most once, after the
-last token**, and is absent when the turn proposed nothing — "why does this test expect
-410?" is a legitimate turn that changes the checklist not at all. It is **not** a
-terminator: `Answerer._terminate` remains the only place a `DoneEvent` or `ErrorEvent` is
-built. Like every other payload on the wire it inherits `ApiModel` and is listed in
-`SSE_EVENT_MODELS`, which is the only enforcement an SSE payload gets — nothing on this
-path passes through a `response_model`.
+Which content a refinement chat proposes against is chosen once, at graph-build time, by
+`Answerer`'s `propose_target: Literal["checklist", "mock_data"] | None`
+(`app/rag/answerer.py`, `app/rag/graph/build.py`). `None` is the Ask screen's call site, so it
+cannot accidentally propose; `"checklist"` and `"mock_data"` each add one trailing node to the
+same graph shape rather than compiling a second graph — a second graph would mean a second
+adapter, and the adapter is where the single terminator is built.
 
-The proposal the stream carries is never the checklist's content of record. It is written
-into a **pending change set**, server-side, under the shield in `finally`, and stays there
-until `POST /checklist-change-sets/{id}/apply` promotes the operations a human ticked. This
-is not a caching detail: a checklist is published to every user on the instance, so its rows
-must come from a model through the server, never from a client request body. If the browser
-posted the streamed proposal back on Apply, that route would be accepting
+Each refinement route adds exactly one event to the stream and no others: `changeSet` for the
+checklist chat, `mockDataChangeSet` for the mock-data chat. Both are emitted **at most once,
+after the last token**, and absent when the turn proposed nothing — "why does this test expect
+410?" is a legitimate turn that changes nothing at all. Neither is a terminator:
+`Answerer._terminate` remains the only place a `DoneEvent` or `ErrorEvent` is built. Like every
+other payload on the wire, both inherit `ApiModel` and are listed in `SSE_EVENT_MODELS`, which
+is the only enforcement an SSE payload gets — nothing on either path passes through a
+`response_model`.
+
+The proposal either stream carries is never the checklist's or the dataset's content of
+record. It is written into a **pending change set**, server-side, under the shield in
+`finally`, and stays there until `POST /checklist-change-sets/{id}/apply` or
+`POST /mock-data-change-sets/{id}/apply` promotes the operations a human ticked. This is not a
+caching detail: both a checklist and a mock dataset are published to every user on the
+instance, so their rows must come from a model through the server, never from a client request
+body. If the browser posted the streamed proposal back on Apply, that route would be accepting
 assistant-authored content from whoever's tab happened to be open. The pending change set is
 what lets the client send only an instruction — a list of operation ids, or `discard` — and
 never content.
 
-The change set's id is minted in `prepare_turn`, before a byte is sent, precisely because
-the row is written in `finally`: the `changeSet` event has to name a row that does not exist
-yet.
+Each change set's id is minted in its own service's `prepare_turn` (`ChecklistModuleService`
+or `MockDataDatasetService`), before a byte is sent, precisely because the row is written in
+`finally`: the `changeSet`/`mockDataChangeSet` event has to name a row that does not exist yet.

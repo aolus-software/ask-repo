@@ -92,7 +92,7 @@ def get_proposing_answerer_factory(
             model_id=settings.chat_model,
             semaphore=semaphore,
             settings=settings,
-            propose=True,
+            propose_target="checklist",
         )
 
     return answerer_for

@@ -29,7 +29,7 @@ Applied to the screens the PRD describes:
 | Create project | repoUrl, branch, pat | dialog |
 | Confirm project delete | none | `ConfirmDialog` |
 | Confirm project reindex | none | `ConfirmDialog` |
-| Generate mock QA data (M5) | project, count, question-type mix | page — the type mix is a picker |
+| Generate mock data (M5) | count | inline control beside the module's Generate button — one field, no dialog or page |
 | Edit QA pair (M4) | module, question, tags | dialog |
 
 ## 2. Both shells take the same props

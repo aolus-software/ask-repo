@@ -42,6 +42,10 @@ from app.repositories.checklist_change_set import ChecklistChangeSetRepository
 from app.repositories.checklist_item import ChecklistItemRepository
 from app.repositories.checklist_message import ChecklistMessageRepository
 from app.repositories.checklist_module import ChecklistModuleRepository
+from app.repositories.mock_data_change_set import MockDataChangeSetRepository
+from app.repositories.mock_data_dataset import MockDataDatasetRepository
+from app.repositories.mock_data_message import MockDataMessageRepository
+from app.repositories.mock_data_record import MockDataRecordRepository
 from app.repositories.project import ProjectRepository
 from app.schemas.checklist import (
     ChangeSetEvent,
@@ -86,6 +90,12 @@ class ChecklistModuleService:
         self.change_sets = ChecklistChangeSetRepository(session)
         self.messages_repository = ChecklistMessageRepository(session)
         self.projects = ProjectRepository(session)
+        # Deleting a module deletes its mock dataset too -- the two capabilities
+        # share a lifecycle even though they generate independently.
+        self.mock_data_records = MockDataRecordRepository(session)
+        self.mock_data_change_sets = MockDataChangeSetRepository(session)
+        self.mock_data_messages = MockDataMessageRepository(session)
+        self.mock_data_datasets = MockDataDatasetRepository(session)
 
     async def list(
         self, query: ChecklistModuleListQuery, *, actor: AuthenticatedUser
@@ -167,16 +177,19 @@ class ChecklistModuleService:
         return (await self._summaries([module]))[0]
 
     async def delete(self, module_id: uuid.UUID, *, actor: AuthenticatedUser) -> None:
-        """Soft-delete a module and everything hanging off it (spec 3.7).
-
-        Nothing reaches Qdrant: the checklist owns no vector points -- it *reads* the
-        project's, and the project's own delete path hard-deletes those.
+        """Soft-delete a module and everything hanging off it -- its checklist and its
+        mock dataset alike. Nothing reaches Qdrant: neither capability owns vector
+        points, both read the project's.
         """
         module = await self._require_readable(module_id, actor)
         self._require_destructive_rights(module, actor)
         await self.items.soft_delete_for_module(module_id)
         await self.change_sets.soft_delete_for_module(module_id)
         await self.messages_repository.soft_delete_for_module(module_id)
+        await self.mock_data_records.soft_delete_for_module(module_id)
+        await self.mock_data_change_sets.soft_delete_for_module(module_id)
+        await self.mock_data_messages.soft_delete_for_module(module_id)
+        await self.mock_data_datasets.soft_delete_for_module(module_id)
         await self.modules.soft_delete(module)
         await self.session.commit()
 

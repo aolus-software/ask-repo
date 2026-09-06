@@ -27,6 +27,10 @@ from app.repositories.checklist_item import ChecklistItemRepository
 from app.repositories.checklist_message import ChecklistMessageRepository
 from app.repositories.checklist_module import ChecklistModuleRepository
 from app.repositories.conversation import ConversationRepository
+from app.repositories.mock_data_change_set import MockDataChangeSetRepository
+from app.repositories.mock_data_dataset import MockDataDatasetRepository
+from app.repositories.mock_data_message import MockDataMessageRepository
+from app.repositories.mock_data_record import MockDataRecordRepository
 from app.repositories.project import ProjectRepository
 from app.schemas.pagination import ListQuery, PaginatedResponse
 from app.schemas.project import ProjectCreateRequest, ProjectResponse, ReindexResponse
@@ -62,6 +66,10 @@ class ProjectService:
         self._checklist_items = ChecklistItemRepository(session)
         self._checklist_change_sets = ChecklistChangeSetRepository(session)
         self._checklist_messages = ChecklistMessageRepository(session)
+        self._mock_data_records = MockDataRecordRepository(session)
+        self._mock_data_change_sets = MockDataChangeSetRepository(session)
+        self._mock_data_messages = MockDataMessageRepository(session)
+        self._mock_data_datasets = MockDataDatasetRepository(session)
 
     async def create(
         self, payload: ProjectCreateRequest, *, actor: AuthenticatedUser
@@ -192,6 +200,20 @@ class ProjectService:
         modules = await self._checklist_modules.soft_delete_for_project(project.id)
         if modules:
             logger.info("Soft-deleted %d checklist module(s) with project %s", modules, project.id)
+
+        # Same containment for the mock-data generator: it shares the checklist
+        # module's lifecycle but generates independently, so it gets its own sweep
+        # rather than being folded into the checklist's four calls above.
+        await self._mock_data_records.soft_delete_for_project(project.id)
+        await self._mock_data_change_sets.soft_delete_for_project(project.id)
+        await self._mock_data_messages.soft_delete_for_project(project.id)
+        mock_data_datasets = await self._mock_data_datasets.soft_delete_for_project(project.id)
+        if mock_data_datasets:
+            logger.info(
+                "Soft-deleted %d mock data dataset(s) with project %s",
+                mock_data_datasets,
+                project.id,
+            )
 
         if project.embedding_collection:
             store = self.store_factory(project.embedding_collection)

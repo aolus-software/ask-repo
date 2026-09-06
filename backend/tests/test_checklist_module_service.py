@@ -151,6 +151,46 @@ async def test_deleting_a_module_cascades_to_items_change_sets_and_messages(
     assert await ChecklistMessageRepository(db_session).list_for_module(module.id, limit=50) == []
 
 
+async def test_deleting_a_module_cascades_to_its_mock_dataset(
+    db_session: AsyncSession,
+) -> None:
+    """A module's mock dataset shares its lifecycle even though it generates
+    independently -- deleting the module must not orphan mock-data rows."""
+    from app.models.mock_data import MockDataChangeSet
+    from app.repositories.mock_data_change_set import MockDataChangeSetRepository
+    from app.repositories.mock_data_dataset import MockDataDatasetRepository
+    from app.repositories.mock_data_message import MockDataMessageRepository
+    from app.repositories.mock_data_record import MockDataRecordRepository
+    from tests.factories import create_mock_data_message, create_mock_data_record
+
+    module = await create_checklist_module(db_session)
+    await create_mock_data_record(db_session, module_id=module.id, created_by=module.created_by)
+    await create_mock_data_message(db_session, module_id=module.id, created_by=module.created_by)
+    db_session.add(
+        MockDataChangeSet(
+            id=uuid.uuid4(),
+            checklist_module_id=module.id,
+            origin=ChangeSetOrigin.GENERATION.value,
+            summary="1 added",
+            operations=[],
+            status=ChangeSetStatus.PENDING.value,
+            created_by=module.created_by,
+        )
+    )
+    await MockDataDatasetRepository(db_session).get_or_create_for_module(module.id)
+    await db_session.flush()
+    service = ChecklistModuleService(db_session, Settings())
+
+    await service.delete(
+        module.id, actor=authenticated(await create_user(db_session, is_admin=True))
+    )
+
+    assert await MockDataRecordRepository(db_session).list_for_module(module.id) == []
+    assert await MockDataChangeSetRepository(db_session).pending_for_module(module.id) is None
+    assert await MockDataMessageRepository(db_session).list_for_module(module.id, limit=50) == []
+    assert await MockDataDatasetRepository(db_session).get_by_module(module.id) is None
+
+
 async def test_create_refuses_a_project_that_is_not_ready(db_session: AsyncSession) -> None:
     project = await create_project(db_session, status=ProjectStatus.CLONING)
     service = ChecklistModuleService(db_session, Settings())

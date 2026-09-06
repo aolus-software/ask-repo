@@ -13,15 +13,21 @@ import { ItemGrid } from "@/components/checklist/item-grid";
 import { ChecklistModuleStatusBadge } from "@/components/checklist/module-status-badge";
 import { StalenessBadge } from "@/components/checklist/staleness-badge";
 import { NotFound } from "@/components/feedback/not-found";
+import { GenerateMockDataControl } from "@/components/mock-data/generate-control";
+import { MockDataChangeSetPanel } from "@/components/mock-data/change-set-panel";
+import { MockDataChatPanel } from "@/components/mock-data/chat-panel";
+import { RecordsTable } from "@/components/mock-data/records-table";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useGenerateChecklistModule } from "@/hooks/use-checklist-mutations";
 import { useSession } from "@/hooks/use-session";
 import { useChecklistModule, useModuleChangeSets } from "@/hooks/use-checklist";
 import { useClearChecklistResults } from "@/hooks/use-checklist-mutations";
-import { checklistItemListQueryString } from "@/lib/api/endpoints";
+import { useMockDataChangeSets, useMockDataDataset } from "@/hooks/use-mock-data";
+import { checklistItemListQueryString, endpoints } from "@/lib/api/endpoints";
 import { isApiError } from "@/lib/api/errors";
 import type { ChecklistItemListParams } from "@/lib/api/types";
 
@@ -63,6 +69,26 @@ export function ModuleScreen({ moduleId }: { moduleId: string }) {
   // entirely at zero -- an enabled control that would do nothing is worse than none.
   const recordedCount = items.filter((item) => item.status !== "untested").length;
 
+  const mockData = useMockDataDataset(moduleId);
+  const mockDataPendingChangeSetId = mockData.data?.pendingChangeSetId ?? null;
+  const mockDataChangeSets = useMockDataChangeSets(
+    moduleId,
+    mockDataPendingChangeSetId !== null,
+  );
+  const pendingMockDataChangeSet = useMemo(
+    () =>
+      mockDataChangeSets.data?.find(
+        (candidate) => candidate.id === mockDataPendingChangeSetId,
+      ) ?? null,
+    [mockDataChangeSets.data, mockDataPendingChangeSetId],
+  );
+  const mockDataGenerateBlockedBecause =
+    mockData.data?.status === "generating"
+      ? "A generation is already running for this dataset."
+      : mockDataPendingChangeSetId
+        ? "Apply or discard the pending changes before generating again."
+        : null;
+
   if (query.isLoading) {
     return (
       <div className="mx-auto w-full max-w-7xl space-y-4">
@@ -93,164 +119,227 @@ export function ModuleScreen({ moduleId }: { moduleId: string }) {
 
   return (
     <div className="mx-auto w-full max-w-7xl space-y-6">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <div className="flex flex-wrap items-center gap-3">
-            <h1 className="text-3xl font-semibold tracking-tight">
-              {checklistModule.name}
-            </h1>
-            <ChecklistModuleStatusBadge status={checklistModule.status} />
-            {checklistModule.stale ? <StalenessBadge /> : null}
-          </div>
-          {/*
-            The scope of the checklist, stated rather than implied. A test plan built
-            from one path is not coverage of the application, and a reader who cannot
-            see which path was enumerated has no way to notice what was never in scope
-            (spec 4.6). This is also why nothing on this screen shows a percentage or a
-            "complete" badge -- there is no such claim to make.
-          */}
-          <p className="text-muted-foreground mt-1 text-base">
-            Enumerated from{" "}
-            <span className="font-mono">{checklistModule.sourcePath}</span>. Only files
-            AskRepo indexed are covered.
-          </p>
-        </div>
+      <Tabs defaultValue="checklist">
+        <TabsList>
+          <TabsTrigger value="checklist">Test Plan</TabsTrigger>
+          <TabsTrigger value="mock-data">Mock Data</TabsTrigger>
+        </TabsList>
 
-        <div className="flex items-center gap-2">
-          {generateBlockedBecause ? (
-            <Tooltip>
-              <TooltipTrigger
+        <TabsContent value="checklist" className="space-y-6">
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div>
+              <div className="flex flex-wrap items-center gap-3">
+                <h1 className="text-3xl font-semibold tracking-tight">
+                  {checklistModule.name}
+                </h1>
+                <ChecklistModuleStatusBadge status={checklistModule.status} />
+                {checklistModule.stale ? <StalenessBadge /> : null}
+              </div>
+              {/*
+                The scope of the checklist, stated rather than implied. A test plan built
+                from one path is not coverage of the application, and a reader who cannot
+                see which path was enumerated has no way to notice what was never in scope
+                (spec 4.6). This is also why nothing on this screen shows a percentage or a
+                "complete" badge -- there is no such claim to make.
+              */}
+              <p className="text-muted-foreground mt-1 text-base">
+                Enumerated from{" "}
+                <span className="font-mono">{checklistModule.sourcePath}</span>. Only
+                files AskRepo indexed are covered.
+              </p>
+            </div>
+
+            <div className="flex items-center gap-2">
+              {generateBlockedBecause ? (
+                <Tooltip>
+                  <TooltipTrigger
+                    render={
+                      <span>
+                        <Button disabled>
+                          <Sparkles className="size-4" />
+                          Generate
+                        </Button>
+                      </span>
+                    }
+                  />
+                  <TooltipContent>{generateBlockedBecause}</TooltipContent>
+                </Tooltip>
+              ) : (
+                <Button
+                  disabled={generate.isPending}
+                  onClick={() =>
+                    generate.mutate(undefined, {
+                      onSuccess: () =>
+                        toast.success(
+                          "Generating. The proposals appear here when it finishes.",
+                        ),
+                      onError: (error) =>
+                        toast.error(
+                          isApiError(error)
+                            ? error.message
+                            : "That did not start. Try again.",
+                        ),
+                    })
+                  }
+                >
+                  <Sparkles className="size-4" />
+                  Generate
+                </Button>
+              )}
+
+              <Button variant="outline" onClick={() => setAddingItem(true)}>
+                <Plus className="size-4" />
+                Add test case
+              </Button>
+
+              <Button
+                variant="outline"
+                nativeButton={false}
                 render={
-                  <span>
-                    <Button disabled>
-                      <Sparkles className="size-4" />
-                      Generate
-                    </Button>
-                  </span>
+                  <a
+                    href={`/api/checklist-items/export${checklistItemListQueryString({
+                      ...filters,
+                      moduleId,
+                    })}`}
+                  />
                 }
-              />
-              <TooltipContent>{generateBlockedBecause}</TooltipContent>
-            </Tooltip>
-          ) : (
-            <Button
-              disabled={generate.isPending}
-              onClick={() =>
-                generate.mutate(undefined, {
-                  onSuccess: () =>
-                    toast.success(
-                      "Generating. The proposals appear here when it finishes.",
-                    ),
-                  onError: (error) =>
-                    toast.error(
-                      isApiError(error)
-                        ? error.message
-                        : "That did not start. Try again.",
-                    ),
-                })
-              }
-            >
-              <Sparkles className="size-4" />
-              Generate
-            </Button>
-          )}
+              >
+                <Download className="size-4" />
+                Export
+              </Button>
+            </div>
+          </div>
 
-          {/*
-            A plain link to the proxy route, never a script-driven download: the
-            response is a binary body the browser should save itself, and the filters
-            are the ones on screen so the sheet matches the grid.
-          */}
-          <Button variant="outline" onClick={() => setAddingItem(true)}>
-            <Plus className="size-4" />
-            Add test case
-          </Button>
+          {checklistModule.status === "failed" && checklistModule.error ? (
+            <Alert variant="destructive">
+              <AlertTitle>The last generation failed</AlertTitle>
+              <AlertDescription>{checklistModule.error}</AlertDescription>
+            </Alert>
+          ) : null}
 
-          <Button
-            variant="outline"
-            nativeButton={false}
-            render={
-              <a
-                href={`/api/checklist-items/export${checklistItemListQueryString({
-                  ...filters,
-                  moduleId,
-                })}`}
-              />
+          {pendingChangeSet ? (
+            <ChangeSetPanel
+              changeSet={pendingChangeSet}
+              moduleId={moduleId}
+              items={checklistModule.items}
+            />
+          ) : null}
+
+          <ItemFilters currentFilters={filters} onFiltersChange={setFilters} />
+
+          {recordedCount > 0 ? (
+            <div className="flex justify-end">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setConfirmingClear(true)}
+                disabled={clearResults.isPending}
+              >
+                <Eraser className="size-4" />
+                Clear {recordedCount} recorded{" "}
+                {recordedCount === 1 ? "result" : "results"}
+              </Button>
+            </div>
+          ) : null}
+
+          <ItemGrid items={items} moduleId={moduleId} user={user} />
+
+          <ConfirmDialog
+            open={confirmingClear}
+            onOpenChange={setConfirmingClear}
+            title="Clear these recorded results?"
+            description={`This resets ${recordedCount} ${recordedCount === 1 ? "result" : "results"} to untested and discards what was observed. Only the rows the current filter selects are affected. The test cases stay.`}
+            confirmLabel="Clear results"
+            isPending={clearResults.isPending}
+            error={clearResults.error}
+            onConfirm={() =>
+              clearResults.mutate(filters, {
+                onSuccess: (data) => {
+                  toast.success(
+                    `Cleared ${data.clearedCount} recorded ${data.clearedCount === 1 ? "result" : "results"}`,
+                  );
+                  setConfirmingClear(false);
+                },
+                onError: (error) =>
+                  toast.error(
+                    isApiError(error)
+                      ? error.message
+                      : "That did not clear. Try again.",
+                  ),
+              })
             }
-          >
-            <Download className="size-4" />
-            Export
-          </Button>
-        </div>
-      </div>
+          />
 
-      {checklistModule.status === "failed" && checklistModule.error ? (
-        <Alert variant="destructive">
-          <AlertTitle>The last generation failed</AlertTitle>
-          <AlertDescription>{checklistModule.error}</AlertDescription>
-        </Alert>
-      ) : null}
+          <CreateItemDialog
+            moduleId={moduleId}
+            open={addingItem}
+            onOpenChange={setAddingItem}
+          />
 
-      {pendingChangeSet ? (
-        <ChangeSetPanel
-          changeSet={pendingChangeSet}
-          moduleId={moduleId}
-          items={checklistModule.items}
-        />
-      ) : null}
+          <ChatPanel
+            moduleId={moduleId}
+            hasPendingChangeSet={pendingChangeSetId !== null}
+          />
+        </TabsContent>
 
-      <ItemFilters currentFilters={filters} onFiltersChange={setFilters} />
+        <TabsContent value="mock-data" className="space-y-6">
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <div>
+              <h2 className="text-xl font-semibold tracking-tight">Mock data</h2>
+              <p className="text-muted-foreground text-sm">
+                Sample records for {checklistModule.sourcePath}, grounded in its actual
+                schema.
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <GenerateMockDataControl
+                moduleId={moduleId}
+                blockedBecause={mockDataGenerateBlockedBecause}
+              />
+              <Button
+                variant="outline"
+                nativeButton={false}
+                render={<a href={`/api${endpoints.mockData.exportJson(moduleId)}`} />}
+              >
+                <Download className="size-4" />
+                JSON
+              </Button>
+              <Button
+                variant="outline"
+                nativeButton={false}
+                render={<a href={`/api${endpoints.mockData.exportXlsx(moduleId)}`} />}
+              >
+                <Download className="size-4" />
+                xlsx
+              </Button>
+            </div>
+          </div>
 
-      {/* Beside the filters, not in the header: what it clears is whatever they
-          select, so it belongs where the user can see the selection. */}
-      {recordedCount > 0 ? (
-        <div className="flex justify-end">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setConfirmingClear(true)}
-            disabled={clearResults.isPending}
-          >
-            <Eraser className="size-4" />
-            Clear {recordedCount} recorded {recordedCount === 1 ? "result" : "results"}
-          </Button>
-        </div>
-      ) : null}
+          {mockData.data?.status === "failed" && mockData.data.error ? (
+            <Alert variant="destructive">
+              <AlertTitle>The last generation failed</AlertTitle>
+              <AlertDescription>{mockData.data.error}</AlertDescription>
+            </Alert>
+          ) : null}
 
-      <ItemGrid items={items} moduleId={moduleId} user={user} />
+          {pendingMockDataChangeSet ? (
+            <MockDataChangeSetPanel
+              key={pendingMockDataChangeSet.id}
+              changeSet={pendingMockDataChangeSet}
+              moduleId={moduleId}
+              records={mockData.data?.records ?? []}
+            />
+          ) : null}
 
-      <ConfirmDialog
-        open={confirmingClear}
-        onOpenChange={setConfirmingClear}
-        title="Clear these recorded results?"
-        description={`This resets ${recordedCount} ${recordedCount === 1 ? "result" : "results"} to untested and discards what was observed. Only the rows the current filter selects are affected. The test cases stay.`}
-        confirmLabel="Clear results"
-        isPending={clearResults.isPending}
-        error={clearResults.error}
-        onConfirm={() =>
-          clearResults.mutate(filters, {
-            onSuccess: (data) => {
-              toast.success(
-                `Cleared ${data.clearedCount} recorded ${data.clearedCount === 1 ? "result" : "results"}`,
-              );
-              setConfirmingClear(false);
-            },
-            onError: (error) =>
-              toast.error(
-                isApiError(error) ? error.message : "That did not clear. Try again.",
-              ),
-          })
-        }
-      />
+          <RecordsTable moduleId={moduleId} records={mockData.data?.records ?? []} />
 
-      <CreateItemDialog
-        moduleId={moduleId}
-        open={addingItem}
-        onOpenChange={setAddingItem}
-      />
-
-      <ChatPanel
-        moduleId={moduleId}
-        hasPendingChangeSet={pendingChangeSetId !== null}
-      />
+          <MockDataChatPanel
+            moduleId={moduleId}
+            hasPendingChangeSet={mockDataPendingChangeSetId !== null}
+            isGenerating={mockData.data?.status === "generating"}
+          />
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }

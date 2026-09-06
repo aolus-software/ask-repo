@@ -51,6 +51,25 @@ export const endpoints = {
     apply: (id: string) => `/checklist-change-sets/${id}/apply`,
     discard: (id: string) => `/checklist-change-sets/${id}/discard`,
   },
+  mockData: {
+    detail: (moduleId: string) => `/checklist-modules/${moduleId}/mock-data`,
+    generate: (moduleId: string) =>
+      `/checklist-modules/${moduleId}/mock-data-generations`,
+    changeSets: (moduleId: string) =>
+      `/checklist-modules/${moduleId}/mock-data-change-sets`,
+    messages: (moduleId: string) => `/checklist-modules/${moduleId}/mock-data-messages`,
+    exportJson: (moduleId: string) =>
+      `/checklist-modules/${moduleId}/mock-data/export.json`,
+    exportXlsx: (moduleId: string) =>
+      `/checklist-modules/${moduleId}/mock-data/export.xlsx`,
+  },
+  mockDataRecords: {
+    detail: (id: string) => `/mock-data-records/${id}`,
+  },
+  mockDataChangeSets: {
+    apply: (id: string) => `/mock-data-change-sets/${id}/apply`,
+    discard: (id: string) => `/mock-data-change-sets/${id}/discard`,
+  },
 } as const;
 
 /**

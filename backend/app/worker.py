@@ -22,21 +22,27 @@ from app.ingestion.chunker import LanguageAwareChunker
 from app.ingestion.embedder import build_embedder, probe_dimensions
 from app.ingestion.pipeline import IngestionPipeline
 from app.ingestion.vector_store import QdrantVectorStore, build_store_factory, collection_name
+from app.mockdata.generator import MockDataGenerator
 from app.queue.checklist import ChecklistConsumer
 from app.queue.consumer import IngestionConsumer
+from app.queue.mock_data import MockDataConsumer
 from app.queue.producer import KafkaIngestionQueue, ensure_topics
 from app.queue.protocol import TopicProducer
 from app.queue.retry import RetryConsumer
 from app.queue.topics import (
     ALL_CHECKLIST_TOPICS,
+    ALL_MOCK_DATA_TOPICS,
     CHECKLIST_RETRY_TOPICS,
+    MOCK_DATA_RETRY_TOPICS,
     RETRY_TOPICS,
     ChecklistJobMessage,
     IngestionMessage,
+    MockDataJobMessage,
 )
 from app.rag.capability import probe_structured_output
 from app.rag.chat import build_chat_model
 from app.repositories.checklist_module import ChecklistModuleRepository
+from app.repositories.mock_data_dataset import MockDataDatasetRepository
 from app.repositories.project import ProjectRepository
 from app.repositories.refresh_token import RefreshTokenRepository
 
@@ -108,8 +114,46 @@ async def reconcile_modules_once(
     return len(stranded)
 
 
-async def reconcile_loop(*, producer: TopicProducer, topic: str, checklist_topic: str) -> None:
-    """The 60-second tick: recover lost jobs of both kinds and prune dead refresh
+async def reconcile_mock_data_once(
+    *, repository: MockDataDatasetRepository, producer: TopicProducer, topic: str
+) -> int:
+    """Re-enqueue every mock-data generation that was lost. Returns how many.
+
+    Same reasoning as `reconcile_modules_once`: `claim_stranded` takes the rows rather
+    than finding them, which is what makes a deliberately fresh `job_id` on a
+    re-published message safe to send unconditionally.
+
+    The original request's `count` is not recoverable here -- only the dataset id
+    survives past the failed run, not the HTTP body that asked for it -- so a swept
+    generation re-runs at the schema's own default
+    (`app.schemas.mock_data.DEFAULT_GENERATION_COUNT`) rather than whatever the
+    original caller chose. That is an accepted, narrow gap: it only affects a
+    generation that failed *and* whose worker died before finishing, not the ordinary
+    path.
+    """
+    from app.schemas.mock_data import DEFAULT_GENERATION_COUNT
+
+    stranded = await repository.claim_stranded(generating_older_than_seconds=STRANDED_AFTER_SECONDS)
+    for dataset_id in stranded:
+        logger.info("re-enqueueing stranded mock data dataset %s", dataset_id)
+        await producer.produce_to(
+            topic,
+            MockDataJobMessage(
+                dataset_id=dataset_id,
+                job_id=uuid.uuid4(),
+                attempt=0,
+                not_before_ms=0,
+                original_topic=topic,
+                count=DEFAULT_GENERATION_COUNT,
+            ),
+        )
+    return len(stranded)
+
+
+async def reconcile_loop(
+    *, producer: TopicProducer, topic: str, checklist_topic: str, mock_data_topic: str
+) -> None:
+    """The 60-second tick: recover lost jobs of all kinds and prune dead refresh
     tokens.
 
     `docs/PRD.md` §5.1 schedules the `refresh_tokens` cleanup for "M1, with the job
@@ -127,6 +171,11 @@ async def reconcile_loop(*, producer: TopicProducer, topic: str, checklist_topic
                     repository=ChecklistModuleRepository(session),
                     producer=producer,
                     topic=checklist_topic,
+                )
+                await reconcile_mock_data_once(
+                    repository=MockDataDatasetRepository(session),
+                    producer=producer,
+                    topic=mock_data_topic,
                 )
                 pruned = await RefreshTokenRepository(session).delete_expired_and_revoked()
                 await session.commit()
@@ -162,11 +211,17 @@ async def main() -> None:
         partitions=settings.kafka_checklist_partitions,
         topics=ALL_CHECKLIST_TOPICS,
     )
+    await ensure_topics(
+        bootstrap_servers=settings.kafka_bootstrap_servers,
+        partitions=settings.kafka_mock_data_partitions,
+        topics=ALL_MOCK_DATA_TOPICS,
+    )
 
     producer = KafkaIngestionQueue(
         bootstrap_servers=settings.kafka_bootstrap_servers,
         topic=settings.kafka_ingest_topic,
         checklist_topic=settings.kafka_checklist_topic,
+        mock_data_topic=settings.kafka_mock_data_topic,
     )
     await producer.start()
 
@@ -222,14 +277,30 @@ async def main() -> None:
         worker_id=worker_id,
     )
 
+    def build_mock_data_generator(session: AsyncSession) -> MockDataGenerator:
+        """A generator bound to one job's session."""
+        return MockDataGenerator(
+            session, settings, store_factory=store_factory, chat_model=chat_model
+        )
+
+    mock_data_consumer = MockDataConsumer(
+        settings=settings,
+        sessionmaker=get_sessionmaker(),
+        producer=producer,
+        build_generator=build_mock_data_generator,
+        worker_id=worker_id,
+    )
+
     tasks = [
         asyncio.create_task(consumer.run()),
         asyncio.create_task(checklist_consumer.run()),
+        asyncio.create_task(mock_data_consumer.run()),
         asyncio.create_task(
             reconcile_loop(
                 producer=producer,
                 topic=settings.kafka_ingest_topic,
                 checklist_topic=settings.kafka_checklist_topic,
+                mock_data_topic=settings.kafka_mock_data_topic,
             )
         ),
         *[
@@ -255,6 +326,18 @@ async def main() -> None:
                 ).run()
             )
             for topic, _ in CHECKLIST_RETRY_TOPICS
+        ],
+        *[
+            asyncio.create_task(
+                RetryConsumer(
+                    settings=settings,
+                    producer=producer,
+                    topic=topic,
+                    decode=MockDataJobMessage.from_bytes,
+                    destination_topic=settings.kafka_mock_data_topic,
+                ).run()
+            )
+            for topic, _ in MOCK_DATA_RETRY_TOPICS
         ],
     ]
 

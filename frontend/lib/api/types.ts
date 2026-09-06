@@ -301,6 +301,84 @@ export interface ChangeSetEventPayload {
   operations: ChangeOperation[];
 }
 
+export type MockDataDatasetStatus =
+  "empty" | "generating" | "review" | "ready" | "failed";
+
+export interface MockDataRecordResponse {
+  id: string;
+  checklistModuleId: string;
+  fields: Record<string, string>;
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface MockDataDatasetResponse {
+  id: string;
+  checklistModuleId: string;
+  status: MockDataDatasetStatus;
+  error: string | null;
+  indexedGeneration: number | null;
+  lastGeneratedAt: string | null;
+  stale: boolean;
+  recordCount: number;
+  pendingChangeSetId: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface MockDataDatasetDetailResponse extends MockDataDatasetResponse {
+  records: MockDataRecordResponse[];
+}
+
+/** One proposed operation. `fields` (full map) on `add`; `changes` (partial map) on `update`. */
+export interface MockDataChangeOperation {
+  op: "add" | "update" | "remove";
+  id: string;
+  rationale: string;
+  recordId?: string | null;
+  fields?: Record<string, string> | null;
+  changes?: Record<string, string> | null;
+}
+
+export interface MockDataChangeSetResponse {
+  id: string;
+  checklistModuleId: string;
+  origin: ChangeSetOrigin;
+  messageId: string | null;
+  summary: string;
+  operations: MockDataChangeOperation[];
+  status: ChangeSetStatus;
+  resolvedBy: string | null;
+  resolvedAt: string | null;
+  createdBy: string;
+  createdAt: string;
+}
+
+export interface MockDataChangeSetApplyResponse {
+  changeSet: MockDataChangeSetResponse;
+  records: MockDataRecordResponse[];
+  skippedOperationIds: string[];
+}
+
+export interface MockDataMessageResponse {
+  id: string;
+  checklistModuleId: string;
+  role: MessageRole;
+  content: string;
+  citations: CitationPayload[] | null;
+  model: string | null;
+  finishReason: FinishReason | null;
+  createdBy: string;
+  createdAt: string;
+}
+
+export interface MockDataChangeSetEventPayload {
+  changeSetId: string;
+  summary: string;
+  operations: MockDataChangeOperation[];
+}
+
 export interface ChecklistModuleListParams extends ListParams {
   projectId?: string;
   status?: ChecklistModuleStatus;

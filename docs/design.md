@@ -110,8 +110,9 @@ needing it lands.
 | M0 (auth) | `button`, `input`, `label`, `field`, `card`, `alert`, `dialog`, `sonner` |
 | M0 (shell) | `sidebar`, `breadcrumb`, `dropdown-menu`, `avatar`, `separator`, `skeleton` |
 | M1 (projects) | `table`, `badge`, `select`, `tooltip`, `progress` |
-| M2 (Dev Knowledge) | `textarea`, `scroll-area`, `collapsible`, `tabs` |
+| M2 (Dev Knowledge) | `textarea`, `scroll-area`, `collapsible` |
 | M4 (QA Checklist) | `table`, `textarea`, `tooltip`, `select`, `checkbox`, `alert`, `dropdown-menu` |
+| M5 (Mock Data tab) | `tabs` |
 
 `form` is deliberately absent: shadcn's `form` component wraps **react-hook-form**, which
 `.claude/rules/forms.md` §4 bans by name — validation is owned by the backend's `422` field map,

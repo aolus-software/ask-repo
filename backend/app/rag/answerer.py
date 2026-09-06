@@ -16,7 +16,7 @@ import logging
 import re
 import uuid
 from collections.abc import AsyncGenerator
-from typing import cast
+from typing import Literal, cast
 
 from langchain_core.language_models import BaseChatModel
 
@@ -26,7 +26,7 @@ from app.models.conversation import FinishReason
 from app.rag.graph import build_answer_graph
 from app.rag.graph.state import Intent, TurnState
 from app.rag.grounding import NO_CONTEXT_ANSWER, WEAK_EVIDENCE, grounding_warnings
-from app.rag.prompts import ExistingItem, Turn
+from app.rag.prompts import ExistingItem, ExistingRecord, Turn
 from app.rag.retriever import Retriever
 from app.schemas.conversation import (
     DoneEvent,
@@ -63,13 +63,16 @@ class Answerer:
         model_id: str,
         semaphore: asyncio.Semaphore,
         settings: Settings,
-        propose: bool = False,
+        propose_target: Literal["checklist", "mock_data"] | None = None,
     ) -> None:
         self.model_id = model_id
         self.semaphore = semaphore
         self.settings = settings
         self.graph = build_answer_graph(
-            retriever=retriever, chat_model=chat_model, settings=settings, propose=propose
+            retriever=retriever,
+            chat_model=chat_model,
+            settings=settings,
+            propose_target=propose_target,
         )
 
     async def answer(
@@ -81,6 +84,7 @@ class Answerer:
         generation: int,
         message_id: uuid.UUID | None,
         existing_items: list[ExistingItem] | None = None,
+        existing_records: list[ExistingRecord] | None = None,
         change_set_id: uuid.UUID | None = None,
         module_name: str = "",
     ) -> AsyncGenerator[StreamEvent]:
@@ -91,9 +95,12 @@ class Answerer:
         `None` on the re-run route, which writes a pending slot on a QA pair rather
         than a message (spec §8.1).
 
-        The last three parameters are the checklist refinement path's, and default to
-        the values that make the proposer a no-op -- so the Ask screen's call site is
-        unchanged and cannot accidentally propose.
+        The last four parameters are the two refinement paths', and default to the
+        values that make either proposer a no-op -- so the Ask screen's call site is
+        unchanged and cannot accidentally propose. `existing_items` is the checklist
+        chat's, `existing_records` the mock-data chat's; `change_set_id` and
+        `module_name` are shared, because only one proposer is ever wired into a
+        given graph.
         """
         if self.semaphore.locked():
             # Silence for the length of someone else's answer is indistinguishable
@@ -119,6 +126,9 @@ class Answerer:
                 "change_set_id": change_set_id,
                 "operations": [],
                 "change_summary": "",
+                "existing_records": existing_records or [],
+                "record_operations": [],
+                "record_change_summary": "",
             }
 
             final: TurnState | None = None

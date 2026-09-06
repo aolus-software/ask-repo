@@ -235,6 +235,10 @@ def app_with_queue(
         get_proposing_answerer_factory,
     )
     from app.api.routes.conversations import get_answerer_factory
+    from app.api.routes.mock_data_datasets import (
+        get_mock_data_queue,
+        get_proposing_mock_data_answerer_factory,
+    )
     from app.api.routes.projects import get_ingestion_queue, get_store_factory
     from app.main import create_app
 
@@ -251,6 +255,12 @@ def app_with_queue(
     # overriding the conversation ones does not cover them.
     application.dependency_overrides[get_checklist_queue] = lambda: ingestion_queue
     application.dependency_overrides[get_proposing_answerer_factory] = lambda: (
+        _fake_answerer_factory(vector_store, chat_model)
+    )
+    # Same reasoning for the mock-data routes: their own queue and answerer
+    # dependencies, distinct from both the ingestion and checklist ones.
+    application.dependency_overrides[get_mock_data_queue] = lambda: ingestion_queue
+    application.dependency_overrides[get_proposing_mock_data_answerer_factory] = lambda: (
         _fake_answerer_factory(vector_store, chat_model)
     )
     return application

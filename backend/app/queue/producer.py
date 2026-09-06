@@ -12,6 +12,7 @@ from app.queue.topics import (
     ChecklistJobMessage,
     IngestionMessage,
     JobMessage,
+    MockDataJobMessage,
 )
 
 logger = logging.getLogger(__name__)
@@ -30,9 +31,11 @@ class KafkaIngestionQueue:
         bootstrap_servers: str,
         topic: str = INGEST_TOPIC,
         checklist_topic: str,
+        mock_data_topic: str,
     ) -> None:
         self.topic = topic
         self.checklist_topic = checklist_topic
+        self.mock_data_topic = mock_data_topic
         self._bootstrap_servers = bootstrap_servers
         self._producer: AIOKafkaProducer | None = None
 
@@ -60,6 +63,10 @@ class KafkaIngestionQueue:
     async def enqueue_checklist(self, message: ChecklistJobMessage) -> None:
         """Publish a generation job to the checklist topic."""
         await self.produce_to(self.checklist_topic, message)
+
+    async def enqueue_mock_data(self, message: MockDataJobMessage) -> None:
+        """Publish a generation job to the mock-data topic."""
+        await self.produce_to(self.mock_data_topic, message)
 
     async def produce_to(self, topic: str, message: JobMessage) -> None:
         """Publish to a specific topic — used by the retry and DLQ paths."""

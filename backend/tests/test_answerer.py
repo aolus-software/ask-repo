@@ -2,6 +2,7 @@
 
 import asyncio
 import uuid
+from typing import Literal
 
 import pytest
 from langchain_core.language_models import BaseChatModel
@@ -49,7 +50,7 @@ def build(
     *,
     concurrency: int = 2,
     settings: Settings | None = None,
-    propose: bool = False,
+    propose_target: Literal["checklist", "mock_data"] | None = None,
 ) -> Answerer:
     """An answerer over fakes. Explicit parameters rather than `**kwargs`, so a
     misspelled option is a type error here instead of a silently ignored default."""
@@ -59,7 +60,7 @@ def build(
         model_id="test-model",
         semaphore=asyncio.Semaphore(concurrency),
         settings=settings if settings is not None else Settings(),
-        propose=propose,
+        propose_target=propose_target,
     )
 
 
@@ -418,7 +419,7 @@ async def test_a_proposing_answerer_emits_citations_then_tokens_then_change_set_
             ),
         ],
     )
-    answerer = build(model, propose=True)
+    answerer = build(model, propose_target="checklist")
     change_set_id = uuid.uuid4()
     message_id = uuid.uuid4()
     events = [
@@ -450,7 +451,7 @@ async def test_a_proposing_answerer_emits_citations_then_tokens_then_change_set_
 @pytest.mark.asyncio
 async def test_a_non_proposing_answerer_emits_no_change_set() -> None:
     model = ScriptedChatModel(tokens=["x"], structured_results=_codebase_question_script())
-    answerer = build(model, propose=False)
+    answerer = build(model)
     events = [
         event
         async for event in answerer.answer(
