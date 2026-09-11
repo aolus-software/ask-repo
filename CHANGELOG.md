@@ -11,7 +11,30 @@ incompatibly. Configuration defaults and internal module layout may change in a 
 
 ## [Unreleased]
 
-Nothing yet.
+### Added
+
+- **A path picker for QA Checklist modules** (`docs/PRD.md` §2.1, phase 1.1). `GET
+  /projects/{id}/indexed-paths` browses the project's indexed file tree one directory at a time
+  (`?path=`) or searches all of it (`?search=`), so a `source_path` is picked rather than typed
+  from memory. The create-module and edit-module dialogs now render it instead of a bare text
+  field, and the field is still typeable for anyone who knows the path already. The read
+  enumerates the `file_path` payloads in the project's active generation — no vector search and
+  no model call — cached per `(project, activeGeneration)`, so a reindex cannot serve a stale
+  tree. It answers `409 PROJECT_NOT_READY` when the project has no index, and `503
+  VECTOR_STORE_UNAVAILABLE` when Qdrant is unreachable.
+- Four settings bounding that read: `INDEXED_PATH_SCROLL_PAGE_SIZE` (1024),
+  `INDEXED_PATH_CACHE_TTL_SECONDS` (300), `INDEXED_PATH_CACHE_MAX_PROJECTS` (32) and
+  `INDEXED_PATH_SEARCH_LIMIT` (200).
+
+### Changed
+
+- **`POST /checklist-modules` now refuses a `source_path` that matches nothing in the project's
+  index, with `400 MODULE_PATH_NOT_INDEXED`** — as does `PATCH /checklist-modules/{id}` when it
+  changes the path. Previously a typo'd path was accepted with `201` and failed later and
+  silently, when the background generation could not match anything under it. Renaming a module
+  is unaffected and still needs no index. No new `ErrorCode`: the generate-time check reports
+  the same condition under the same name, and it stays, because a reindex can drop the files a
+  module was pointed at after it was created.
 
 ---
 

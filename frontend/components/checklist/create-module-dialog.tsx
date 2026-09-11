@@ -4,6 +4,7 @@ import { useState } from "react";
 import { toast } from "sonner";
 
 import { FormDialog } from "@/components/form/form-dialog";
+import { PathPicker } from "@/components/checklist/path-picker";
 import {
   Combobox,
   ComboboxContent,
@@ -153,16 +154,16 @@ export function CreateModuleDialog({
         <FieldLabel htmlFor="sourcePath">
           Source path <span className="text-danger">*</span>
         </FieldLabel>
-        <Input
-          id="sourcePath"
-          className="font-mono"
-          placeholder="backend/app/auth"
+        <PathPicker
+          projectId={values.projectId}
           value={values.sourcePath}
-          onChange={(event) => setValues({ ...values, sourcePath: event.target.value })}
-          aria-invalid={Boolean(fieldError(mutation.error, "sourcePath"))}
+          onValueChange={(sourcePath) => setValues({ ...values, sourcePath })}
+          inputId="sourcePath"
+          invalid={Boolean(fieldError(mutation.error, "sourcePath"))}
         />
         <FieldDescription>
-          Repository-relative path, e.g. backend/app/auth
+          Browse or search the indexed repository, or type a repository-relative path. A
+          path that matches nothing in the index is refused (phase 1.1).
         </FieldDescription>
         {fieldError(mutation.error, "sourcePath") ? (
           <FieldError>{fieldError(mutation.error, "sourcePath")}</FieldError>

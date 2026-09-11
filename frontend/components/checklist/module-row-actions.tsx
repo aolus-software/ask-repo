@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useState } from "react";
 import { toast } from "sonner";
 
+import { PathPicker } from "@/components/checklist/path-picker";
 import { ConfirmDialog } from "@/components/form/confirm-dialog";
 import { FormDialog } from "@/components/form/form-dialog";
 import { Button } from "@/components/ui/button";
@@ -149,15 +150,16 @@ export function ModuleRowActions({ module }: { module: ChecklistModuleResponse }
 
         <Field>
           <FieldLabel htmlFor="edit-path">Source path</FieldLabel>
-          <Input
-            id="edit-path"
-            className="font-mono"
+          <PathPicker
+            projectId={module.projectId}
             value={editingPath}
-            onChange={(e) => setEditingPath(e.target.value)}
-            aria-invalid={Boolean(fieldError(update.error, "sourcePath"))}
+            onValueChange={setEditingPath}
+            inputId="edit-path"
+            invalid={Boolean(fieldError(update.error, "sourcePath"))}
           />
           <FieldDescription>
-            Repository-relative path, e.g. backend/app/auth
+            Browse or search the indexed repository, or type a repository-relative path.
+            Re-pointing at a path that matches nothing is refused.
           </FieldDescription>
           {fieldError(update.error, "sourcePath") ? (
             <FieldError>{fieldError(update.error, "sourcePath")}</FieldError>

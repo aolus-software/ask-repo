@@ -16,6 +16,8 @@ export const keys = {
     all: ["projects"] as const,
     list: (params: ListParams) => ["projects", "list", params] as const,
     detail: (id: string) => ["projects", "detail", id] as const,
+    indexedPaths: (id: string, params: { path?: string; search?: string }) =>
+      ["projects", "indexed-paths", id, params] as const,
   },
   conversations: {
     all: ["conversations"] as const,

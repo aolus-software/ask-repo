@@ -7,6 +7,7 @@ Every model inherits `ApiModel`, so `repo_url` arrives and leaves as `repoUrl`.
 
 import uuid
 from datetime import datetime
+from typing import Literal
 
 from pydantic import Field
 
@@ -40,6 +41,37 @@ class ProjectResponse(ApiModel):
     reindex_in_progress: bool
     created_at: datetime
     updated_at: datetime
+
+
+class IndexedPathEntry(ApiModel):
+    """One row of the repository tree the checklist path picker browses.
+
+    `file_count` is the number of indexed files in a directory's whole subtree, and is
+    `null` on a file, where the number would mean nothing.
+    """
+
+    name: str
+    path: str
+    kind: Literal["dir", "file"]
+    file_count: int | None
+
+
+class IndexedPathsResponse(ApiModel):
+    """One level of a project's indexed tree, or the matches for a search.
+
+    `path` echoes the directory that was listed, and is empty on a search because the
+    results span the tree (phase 1.1 design §2). `generation` names the index generation
+    the entries came from, so a client can tell a tree that has been re-indexed under it
+    from one that has not.
+    """
+
+    path: str
+    generation: int
+    entries: list[IndexedPathEntry]
+    # Whether the search cap cut anything off. Reported rather than hidden: a picker
+    # that silently shows the first N of many matches teaches the user that what they
+    # are looking for is not indexed.
+    truncated: bool
 
 
 class ReindexResponse(ApiModel):

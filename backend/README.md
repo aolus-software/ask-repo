@@ -132,14 +132,23 @@ a leak (`docs/PRD.md` §4.1). Only the project's `created_by` or an admin may re
 | --- | --- | --- | --- |
 | `GET` | `/projects` | any user | List all projects, paginated |
 | `GET` | `/projects/{id}` | any user | One project |
+| `GET` | `/projects/{id}/indexed-paths` | any user | Browse (`?path=`) or search (`?search=`) the project's indexed file tree, for the checklist path picker |
 | `POST` | `/projects` | any user | Register a repository and enqueue its first index |
 | `POST` | `/projects/{id}/reindex` | creator or admin | Re-index; raises `reindexInProgress` before publishing, and a run already in flight is a no-op |
 | `DELETE` | `/projects/{id}` | creator or admin | Soft-delete the row and hard-delete its vectors |
 
-`DELETE` is the one route that can return **`503 VECTOR_STORE_UNAVAILABLE`**: it must reach
-Qdrant to satisfy `docs/PRD.md` §5.1's same-operation hard delete, and if Qdrant is down nothing
-is committed, so the project stays visible and the call can be retried. It also soft-deletes
-every conversation against the project, for every owner (`docs/PRD.md` §4.2).
+`DELETE` and `indexed-paths` are the two routes here that can return
+**`503 VECTOR_STORE_UNAVAILABLE`**, because they are the two that reach Qdrant. `DELETE` must,
+to satisfy `docs/PRD.md` §5.1's same-operation hard delete; if Qdrant is down nothing is
+committed, so the project stays visible and the call can be retried. It also soft-deletes every
+conversation against the project, for every owner (`docs/PRD.md` §4.2).
+
+`indexed-paths` enumerates the project's indexed `file_path` values — a scroll asking for that
+one payload field, no vector search and no model call — cached per `(project, activeGeneration)`
+so a reindex cannot serve a stale tree. It answers one directory at a time, or every match for
+`?search=`, and refuses with `409 PROJECT_NOT_READY` when there is no index to enumerate. A
+reindex in flight does **not** block it: the live generation is still serving and this read
+records nothing.
 
 ### Conversations
 
@@ -190,7 +199,7 @@ Modules over an indexed repository — a user names a module ("Authentication"),
 | Method | Path | Auth | Description |
 | --- | --- | --- | --- |
 | `GET` | `/checklist-modules` | any user | List modules for readable projects, paginated |
-| `POST` | `/checklist-modules` | any user | Name a module and point it at a path in the indexed repository |
+| `POST` | `/checklist-modules` | any user | Name a module and point it at a path in the indexed repository. `400 MODULE_PATH_NOT_INDEXED` if the path matches nothing |
 | `GET` | `/checklist-modules/{id}` | any user | One module with its test cases, grouped by feature |
 | `PATCH` | `/checklist-modules/{id}` | creator or admin | Rename or re-point the module |
 | `DELETE` | `/checklist-modules/{id}` | creator or admin | Soft-delete the module, its items, its change sets, and its chat |
@@ -280,7 +289,7 @@ backend/
 │   │       ├── health.py   # GET /health, /health/live, /health/ready
 │   │       ├── auth.py     # POST /auth/login, /refresh, /change-password, ...
 │   │       ├── users.py    # /users CRUD + reset-password
-│   │       ├── projects.py # /projects CRUD + reindex
+│   │       ├── projects.py # /projects CRUD + reindex + indexed-paths
 │   │       ├── conversations.py # /conversations CRUD + the SSE answer endpoint
 │   │       ├── checklist_modules.py # /checklist-modules CRUD + generate + chat
 │   │       ├── checklist_items.py   # /checklist-items CRUD + export

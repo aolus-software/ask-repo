@@ -176,6 +176,23 @@ class VectorStore(Protocol):
         """
         ...
 
+    async def list_file_paths(
+        self, *, project_id: uuid.UUID, generation: int, page_size: int
+    ) -> list[str]:
+        """Every distinct indexed file path in one generation, sorted.
+
+        The enumeration `scroll` cannot serve, and the third read this store offers.
+        `scroll` returns whole payloads under one path prefix; this returns *only* the
+        `file_path` field, across the whole project, which is what the phase-1.1 path
+        picker browses (`docs/PRD.md` §2.1).
+
+        Reusing `scroll` for it would be wrong twice: the payload carries the chunk
+        text, so enumerating a repository would ship every indexed byte of source to
+        derive a list of strings, and there is no empty-prefix form of its `MatchText`
+        condition to start from the repository root with.
+        """
+        ...
+
     async def upsert(
         self,
         *,
@@ -365,6 +382,50 @@ class QdrantVectorStore:
             if offset is None:
                 return
 
+    async def list_file_paths(
+        self, *, project_id: uuid.UUID, generation: int, page_size: int
+    ) -> list[str]:
+        """Page through one generation's points collecting distinct file paths.
+
+        `with_payload=["file_path"]` is the whole reason this is not a `scroll` call.
+        The payload holds the chunk text, so asking for all of it here would transfer
+        every indexed byte of a repository to build a list of a few thousand strings.
+
+        No `file_path` condition: the picker browses from the repository root, and the
+        `project_id` and `generation` indexes already narrow this to one project's
+        current index.
+        """
+        paths: set[str] = set()
+        offset: Any = None
+        while True:
+            try:
+                points, offset = await self._client.scroll(
+                    collection_name=self.collection,
+                    scroll_filter=models.Filter(
+                        must=[
+                            models.FieldCondition(
+                                key="project_id", match=models.MatchValue(value=str(project_id))
+                            ),
+                            models.FieldCondition(
+                                key="generation", match=models.MatchValue(value=generation)
+                            ),
+                        ]
+                    ),
+                    limit=page_size,
+                    offset=offset,
+                    with_payload=["file_path"],
+                    with_vectors=False,
+                )
+            except Exception as error:
+                raise _as_ingestion_error(error, "Qdrant path enumeration failed") from error
+
+            for point in points:
+                file_path = (point.payload or {}).get("file_path")
+                if isinstance(file_path, str) and file_path:
+                    paths.add(file_path)
+            if offset is None:
+                return sorted(paths)
+
     async def _verify_width(self, dimensions: int) -> None:
         """Refuse to write into a collection created at a different vector width.
 
@@ -516,6 +577,24 @@ class InMemoryVectorStore:
         )
         for start in range(0, len(matches), page_size):
             yield matches[start : start + page_size]
+
+    async def list_file_paths(
+        self, *, project_id: uuid.UUID, generation: int, page_size: int
+    ) -> list[str]:
+        """Distinct file paths under the same filters as the real store.
+
+        `page_size` is accepted and unused: the fake holds everything in a list, and
+        paging it would only assert our own slicing back at us. It stays in the
+        signature so a caller cannot pass arguments the real store rejects.
+        """
+        return sorted(
+            {
+                str(point["payload"]["file_path"])
+                for point in self.points
+                if point["payload"]["project_id"] == str(project_id)
+                and point["payload"]["generation"] == generation
+            }
+        )
 
     async def upsert(
         self,

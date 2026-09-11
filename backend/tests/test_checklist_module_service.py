@@ -23,7 +23,6 @@ from app.schemas.checklist import (
     ChecklistModuleListQuery,
     ChecklistModuleUpdateRequest,
 )
-from app.services.checklist_module import ChecklistModuleService
 from tests.factories import (
     create_checklist_change_set,
     create_checklist_item,
@@ -32,7 +31,10 @@ from tests.factories import (
     create_project,
     create_user,
 )
-from tests.helpers import authenticated  # `AuthenticatedUser` from a `User` row
+from tests.helpers import (  # `authenticated`: `AuthenticatedUser` from a `User` row
+    authenticated,
+    checklist_module_service,
+)
 
 
 async def test_list_shows_modules_other_people_created(db_session: AsyncSession) -> None:
@@ -40,7 +42,7 @@ async def test_list_shows_modules_other_people_created(db_session: AsyncSession)
     mine = await create_checklist_module(db_session)
     other = await create_user(db_session)
     await create_checklist_module(db_session, created_by=other.id)
-    service = ChecklistModuleService(db_session, Settings())
+    service = checklist_module_service(db_session)
 
     page = await service.list(
         ChecklistModuleListQuery(), actor=authenticated(await create_user(db_session))
@@ -63,7 +65,7 @@ async def test_list_carries_status_counts_and_the_pending_badge(
     change_set = await create_checklist_change_set(
         db_session, module_id=module.id, status=ChangeSetStatus.PENDING
     )
-    service = ChecklistModuleService(db_session, Settings())
+    service = checklist_module_service(db_session)
 
     page = await service.list(
         ChecklistModuleListQuery(), actor=authenticated(await create_user(db_session))
@@ -82,7 +84,7 @@ async def test_stale_is_true_when_the_project_was_reindexed(
     project = await create_project(db_session)
     project.active_generation = 3
     module = await create_checklist_module(db_session, project_id=project.id, indexed_generation=2)
-    service = ChecklistModuleService(db_session, Settings())
+    service = checklist_module_service(db_session)
 
     detail = await service.get(module.id, actor=authenticated(await create_user(db_session)))
 
@@ -96,7 +98,7 @@ async def test_editing_someone_elses_module_is_403_not_404(
     (.claude/rules/response-api.md)."""
     module = await create_checklist_module(db_session)
     stranger = await create_user(db_session)
-    service = ChecklistModuleService(db_session, Settings())
+    service = checklist_module_service(db_session)
 
     with pytest.raises(AppError) as caught:
         await service.update(
@@ -112,7 +114,7 @@ async def test_an_admin_may_edit_and_delete_a_module_they_did_not_create(
 ) -> None:
     module = await create_checklist_module(db_session)
     admin = await create_user(db_session, is_admin=True)
-    service = ChecklistModuleService(db_session, Settings())
+    service = checklist_module_service(db_session)
 
     await service.update(
         module.id, ChecklistModuleUpdateRequest(name="Renamed"), actor=authenticated(admin)
@@ -141,7 +143,7 @@ async def test_deleting_a_module_cascades_to_items_change_sets_and_messages(
     )
     await create_checklist_change_set(db_session, module_id=module.id)
     await create_checklist_message(db_session, module_id=module.id, created_by=module.created_by)
-    service = ChecklistModuleService(db_session, Settings())
+    service = checklist_module_service(db_session)
 
     await service.delete(
         module.id, actor=authenticated(await create_user(db_session, is_admin=True))
@@ -180,7 +182,7 @@ async def test_deleting_a_module_cascades_to_its_mock_dataset(
     )
     await MockDataDatasetRepository(db_session).get_or_create_for_module(module.id)
     await db_session.flush()
-    service = ChecklistModuleService(db_session, Settings())
+    service = checklist_module_service(db_session)
 
     await service.delete(
         module.id, actor=authenticated(await create_user(db_session, is_admin=True))
@@ -194,7 +196,7 @@ async def test_deleting_a_module_cascades_to_its_mock_dataset(
 
 async def test_create_refuses_a_project_that_is_not_ready(db_session: AsyncSession) -> None:
     project = await create_project(db_session, status=ProjectStatus.CLONING)
-    service = ChecklistModuleService(db_session, Settings())
+    service = checklist_module_service(db_session)
 
     with pytest.raises(AppError) as caught:
         await service.create(
@@ -213,7 +215,7 @@ async def test_create_normalises_the_path_and_starts_empty(db_session: AsyncSess
     a scroll prefix directly."""
     project = await create_project(db_session)
     project.embedding_collection = "c"
-    service = ChecklistModuleService(db_session, Settings())
+    service = checklist_module_service(db_session)
 
     created = await service.create(
         ChecklistModuleCreateRequest(
@@ -230,6 +232,65 @@ async def test_create_normalises_the_path_and_starts_empty(db_session: AsyncSess
     assert created.stale is False
 
 
+async def test_create_refuses_a_path_that_matches_nothing_in_the_index(
+    db_session: AsyncSession,
+) -> None:
+    """Phase 1.1 (docs/PRD.md 2.1). Without this the module is created, returns `201`,
+    and the mistake only surfaces later and silently when generation cannot match
+    anything under it."""
+    project = await create_project(db_session)
+    project.embedding_collection = "c"
+    service = checklist_module_service(db_session, "backend/app/config.py")
+
+    with pytest.raises(AppError) as caught:
+        await service.create(
+            ChecklistModuleCreateRequest(
+                project_id=project.id, name="Auth", source_path="backend/app/authz"
+            ),
+            actor=authenticated(await create_user(db_session)),
+        )
+
+    # 400, not 422: the string is well-formed and passed schema validation, so this is
+    # semantically invalid input (`.claude/rules/response-api.md`).
+    assert caught.value.status_code == status.HTTP_400_BAD_REQUEST
+    assert caught.value.code is ErrorCode.MODULE_PATH_NOT_INDEXED
+
+
+async def test_repointing_a_module_at_an_unindexed_path_is_refused(
+    db_session: AsyncSession,
+) -> None:
+    """The same check on `update`, so the picker cannot be bypassed by editing."""
+    project = await create_project(db_session)
+    project.embedding_collection = "c"
+    module = await create_checklist_module(db_session, project_id=project.id)
+    service = checklist_module_service(db_session, "backend/app/api/routes/auth.py")
+
+    with pytest.raises(AppError) as caught:
+        await service.update(
+            module.id,
+            ChecklistModuleUpdateRequest(source_path="nowhere/at/all"),
+            actor=authenticated(await create_user(db_session, is_admin=True)),
+        )
+
+    assert caught.value.code is ErrorCode.MODULE_PATH_NOT_INDEXED
+
+
+async def test_renaming_a_module_needs_no_index_at_all(db_session: AsyncSession) -> None:
+    """Only a re-point is validated. A rename has to keep working whatever state the
+    project is in, and there is nothing to validate a name against."""
+    project = await create_project(db_session, status=ProjectStatus.CLONING)
+    module = await create_checklist_module(db_session, project_id=project.id)
+    service = checklist_module_service(db_session)
+
+    renamed = await service.update(
+        module.id,
+        ChecklistModuleUpdateRequest(name="Renamed"),
+        actor=authenticated(await create_user(db_session, is_admin=True)),
+    )
+
+    assert renamed.name == "Renamed"
+
+
 async def test_generation_publishes_a_job_and_returns_generating(
     db_session: AsyncSession,
 ) -> None:
@@ -239,7 +300,7 @@ async def test_generation_publishes_a_job_and_returns_generating(
     project.embedding_model = Settings().embedding_model
     module = await create_checklist_module(db_session, project_id=project.id)
     queue = InMemoryIngestionQueue()
-    service = ChecklistModuleService(db_session, Settings())
+    service = checklist_module_service(db_session)
 
     result = await service.request_generation(
         module.id, actor=authenticated(await create_user(db_session)), queue=queue
@@ -260,7 +321,7 @@ async def test_generation_is_refused_while_one_is_running(
     module = await create_checklist_module(
         db_session, project_id=project.id, status=ChecklistModuleStatus.GENERATING
     )
-    service = ChecklistModuleService(db_session, Settings())
+    service = checklist_module_service(db_session)
 
     with pytest.raises(AppError) as caught:
         await service.request_generation(
@@ -285,7 +346,7 @@ async def test_generation_is_refused_while_a_change_set_is_pending(
     await create_checklist_change_set(
         db_session, module_id=module.id, status=ChangeSetStatus.PENDING
     )
-    service = ChecklistModuleService(db_session, Settings())
+    service = checklist_module_service(db_session)
 
     with pytest.raises(AppError) as caught:
         await service.request_generation(
@@ -308,7 +369,7 @@ async def test_generation_does_not_apply_the_embedding_model_guard(
     project.embedding_model = "some-other-model"
     module = await create_checklist_module(db_session, project_id=project.id)
     queue = InMemoryIngestionQueue()
-    service = ChecklistModuleService(db_session, Settings())
+    service = checklist_module_service(db_session)
 
     result = await service.request_generation(
         module.id, actor=authenticated(await create_user(db_session)), queue=queue
@@ -352,7 +413,7 @@ async def test_change_sets_for_returns_newest_first(db_session: AsyncSession) ->
     )
     db_session.add_all([older, newer])
     await db_session.commit()
-    service = ChecklistModuleService(db_session, Settings())
+    service = checklist_module_service(db_session)
 
     change_sets = await service.change_sets_for(
         module.id, actor=authenticated(await create_user(db_session))
@@ -376,7 +437,7 @@ async def test_messages_are_readable_by_any_authenticated_user(
         content="Why does this test expect 401?",
     )
     stranger = await create_user(db_session)
-    service = ChecklistModuleService(db_session, Settings())
+    service = checklist_module_service(db_session)
 
     messages = await service.messages(module.id, actor=authenticated(stranger))
 
@@ -392,7 +453,7 @@ async def test_summaries_carry_the_project_name(db_session: AsyncSession) -> Non
     """
     project = await create_project(db_session, name="checkout-service")
     module = await create_checklist_module(db_session, project_id=project.id)
-    service = ChecklistModuleService(db_session, Settings())
+    service = checklist_module_service(db_session)
     actor = authenticated(await create_user(db_session))
 
     page = await service.list(ChecklistModuleListQuery(), actor=actor)
@@ -418,7 +479,7 @@ async def test_generation_is_refused_while_a_reindex_is_in_flight(
     project.embedding_collection = "code_chunks__x"
     project.reindex_in_progress = True
     await db_session.commit()
-    service = ChecklistModuleService(db_session, Settings())
+    service = checklist_module_service(db_session)
     queue = InMemoryIngestionQueue()
 
     with pytest.raises(AppError) as raised:
@@ -449,4 +510,4 @@ async def test_the_refinement_chat_is_not_refused_during_a_reindex(
     project.reindex_in_progress = True
     await db_session.commit()
 
-    ChecklistModuleService(db_session, Settings())._require_answerable(project)
+    checklist_module_service(db_session)._require_answerable(project)

@@ -16,10 +16,10 @@ from app.rag.answerer import Answerer
 from app.repositories.checklist_change_set import ChecklistChangeSetRepository
 from app.repositories.checklist_message import ChecklistMessageRepository
 from app.schemas.checklist import ChecklistMessageCreateRequest
-from app.services.checklist_module import ChecklistModuleService, stream_checklist_turn
+from app.services.checklist_module import stream_checklist_turn
 from tests.factories import create_checklist_module, create_project, create_user
 from tests.fakes import FakeAnswerer  # yields a scripted event sequence
-from tests.helpers import authenticated
+from tests.helpers import authenticated, checklist_module_service
 
 
 async def _ready_module(session: AsyncSession) -> tuple[Project, ChecklistModule]:
@@ -39,7 +39,7 @@ async def test_prepare_turn_refuses_a_project_that_is_not_ready(
     status code may be deferred into the stream (spec 5.1)."""
     project = await create_project(db_session, status=ProjectStatus.CLONING)
     module = await create_checklist_module(db_session, project_id=project.id)
-    service = ChecklistModuleService(db_session, Settings())
+    service = checklist_module_service(db_session)
 
     with pytest.raises(AppError) as caught:
         await service.prepare_turn(
@@ -58,7 +58,7 @@ async def test_prepare_turn_applies_the_embedding_guard(db_session: AsyncSession
     a different model lands in a vector space the collection was never built in."""
     project, module = await _ready_module(db_session)
     project.embedding_model = "some-other-model"
-    service = ChecklistModuleService(db_session, Settings())
+    service = checklist_module_service(db_session)
 
     with pytest.raises(AppError) as caught:
         await service.prepare_turn(
@@ -77,7 +77,7 @@ async def test_prepare_turn_persists_the_question_and_mints_ids(
     """The change-set id is minted here because the row is written under the shield in
     `finally`, and the `changeSet` event has to carry it (spec 5.2)."""
     _, module = await _ready_module(db_session)
-    service = ChecklistModuleService(db_session, Settings())
+    service = checklist_module_service(db_session)
 
     context = await service.prepare_turn(
         module.id,
@@ -99,7 +99,7 @@ async def test_any_user_may_speak_in_the_shared_chat(db_session: AsyncSession) -
     record for a shared document (spec 2.4)."""
     _, module = await _ready_module(db_session)
     stranger = await create_user(db_session)
-    service = ChecklistModuleService(db_session, Settings())
+    service = checklist_module_service(db_session)
 
     context = await service.prepare_turn(
         module.id,
@@ -115,7 +115,7 @@ async def test_the_stream_writes_the_message_and_the_change_set(
     db_session: AsyncSession, sessionmaker: async_sessionmaker[AsyncSession]
 ) -> None:
     _, module = await _ready_module(db_session)
-    service = ChecklistModuleService(db_session, Settings())
+    service = checklist_module_service(db_session)
     context = await service.prepare_turn(
         module.id,
         ChecklistMessageCreateRequest(question="Add a test."),
@@ -165,7 +165,7 @@ async def test_a_disconnect_still_persists_what_arrived(
     raises it again immediately -- so an unshielded cleanup runs none of itself and
     loses the partial answer this design exists to keep (spec 5.3)."""
     _, module = await _ready_module(db_session)
-    service = ChecklistModuleService(db_session, Settings())
+    service = checklist_module_service(db_session)
     context = await service.prepare_turn(
         module.id,
         ChecklistMessageCreateRequest(question="Add a test."),

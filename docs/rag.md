@@ -165,6 +165,33 @@ async def retrieve(self, query, *, project_id, generation):
 5. **Apply a character budget**, so a large file cannot crowd out everything else.
 6. Return spans, each carrying its file path and line range for citation.
 
+### Three reads, not one
+
+`search` is the only read that uses a query vector, and it is not the only read of the
+collection. Confusing them is how a path-shaped question gets answered with top-k similarity, or
+how a whole repository's chunk text gets shipped over the wire to build a list of filenames.
+
+| Read | Filters | Payload | Who calls it |
+| --- | --- | --- | --- |
+| `search` | `project_id`, `generation`, query vector | whole | `CodeRetriever` — the six steps above |
+| `scroll` | `project_id`, `generation`, `file_path` prefix | whole | checklist and mock-data generation, which enumerate rather than search (`PRD.md` §4.3) |
+| `list_file_paths` | `project_id`, `generation` | `file_path` **only** | the checklist module path picker (`PRD.md` §2.1, phase 1.1) |
+
+`list_file_paths` backs `GET /projects/{id}/indexed-paths`, which is how a user browses or
+searches the repository tree instead of typing a `source_path` from memory. Three things about
+it are worth internalising:
+
+- **`with_payload=["file_path"]` is not an optimisation.** The payload holds the chunk text
+  (there is no working copy on disk to re-read), so asking for all of it would transfer every
+  indexed byte of a repository to derive a few thousand strings.
+- **It is cached per `(project, active_generation)`, in process.** A reindex increments the
+  generation, so a swapped index cannot be served a stale tree — the key it would need does not
+  exist yet. Redis is deliberately not involved; it stays the login rate limiter's alone.
+- **The wire shape is lazy and the cache is not.** The endpoint answers one directory at a time,
+  while one scroll builds the whole path list behind it. Qdrant has no notion of a directory, so
+  a per-directory read costs a prefix filter over the same collection — one scroll sliced in
+  memory is strictly less work than one per expand.
+
 ### Four rules that fail silently when broken
 
 **Both filters are mandatory.** A reindex writes generation N+1 while N is still serving, so
@@ -240,6 +267,8 @@ tool-calling to this path without revisiting [`PRD.md`](PRD.md) §9.
 | `RAG_TOP_K` | 12 | Hits fetched before filtering and merging |
 | `RAG_MIN_SCORE` | 0.25 | The relevance floor. **Raising it makes refusals more common; lowering it lets weak matches into the prompt** |
 | `RAG_MAX_RETRIEVAL_ATTEMPTS` | 2 | How many times the graph may re-search |
+| `INDEXED_PATH_CACHE_TTL_SECONDS` | 300 | How long the path picker reuses an enumerated tree. The generation is in the cache key, so a reindex invalidates it regardless |
+| `INDEXED_PATH_SEARCH_LIMIT` | 200 | Matches the picker's search returns before it reports `truncated` |
 
 Every setting is documented in [`configuration.md`](configuration.md), which also has a
 "Values that fail silently" section for exactly the ones above.
