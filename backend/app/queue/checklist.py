@@ -30,6 +30,7 @@ from app.queue.topics import (
     ALL_CHECKLIST_TOPICS,
     ChecklistJobMessage,
     checklist_next_destination,
+    checklist_retries_exhausted,
 )
 from app.rag.errors import RetryableChatError, TerminalChatError
 from app.repositories.checklist_module import LEASE_SECONDS, ChecklistModuleRepository
@@ -109,9 +110,41 @@ async def handle_checklist_message(
         await _route_failure(message, producer=producer, max_attempts=0)
         return JobOutcome.DEAD_LETTERED
     except (RetryableIngestionError, RetryableChatError) as error:
+        if checklist_retries_exhausted(attempt=message.attempt, max_attempts=max_attempts):
+            # The ladder is spent, so this job is *not* coming back and `_defer` would
+            # be a lie. It leaves the module `generating` with no lease, which is
+            # exactly the shape `ChecklistModuleRepository.claim_stranded` reads as an
+            # abandoned run -- so the 60-second sweep re-publishes it with a fresh
+            # `job_id` the claim is designed not to refuse, and a job that has already
+            # exhausted its retries costs a whole generation again on every tick,
+            # forever. `app/queue/consumer.py` records the ingestion outcome at the
+            # same point, for the same reason.
+            logger.warning(
+                "checklist generation for module %s exhausted its retries: %s",
+                message.module_id,
+                type(error).__name__,
+            )
+            await _fail(
+                message,
+                repository=repository,
+                worker_id=worker_id,
+                reason=scrub(
+                    f"generation failed after {message.attempt + 1} attempts: "
+                    f"{type(error).__name__}."
+                ),
+                session=session,
+            )
+            await _route_failure(message, producer=producer, max_attempts=max_attempts)
+            return JobOutcome.DEAD_LETTERED
         # No status write: the job is coming back, and `failed` would lie about it.
         # The lease still goes, though -- see `_defer`.
-        await _defer(message, repository=repository, worker_id=worker_id, session=session)
+        await _defer(
+            message,
+            repository=repository,
+            worker_id=worker_id,
+            session=session,
+            max_attempts=max_attempts,
+        )
         logger.warning(
             "checklist generation for module %s failed retryably: %s",
             message.module_id,
@@ -134,7 +167,13 @@ async def handle_checklist_message(
             )
             await _route_failure(message, producer=producer, max_attempts=0)
             return JobOutcome.DEAD_LETTERED
-        await _defer(message, repository=repository, worker_id=worker_id, session=session)
+        await _defer(
+            message,
+            repository=repository,
+            worker_id=worker_id,
+            session=session,
+            max_attempts=max_attempts,
+        )
         await _route_failure(message, producer=producer, max_attempts=max_attempts)
         return JobOutcome.RETRY_SCHEDULED
 
@@ -147,20 +186,29 @@ async def _defer(
     repository: ChecklistModuleRepository,
     worker_id: str,
     session: AsyncSession,
+    max_attempts: int,
 ) -> None:
-    """Drop the lease of a run that ended but is coming back.
+    """Hand back a run that ended but is coming back, until its retry is due.
 
-    `claim` commits before generation starts, so rolling back a failed run leaves a
-    five-minute lease owned by a run that is over. The retry scheduled a minute later
-    is then refused by its own dead predecessor, and the module sits untouchable until
-    the lease lapses -- by which point the stranded sweep has decided it was abandoned
-    and re-published it as well.
+    The lease is shortened to the delay of the rung this failure routes to, rather than
+    dropped: a `generating` module with no lease is what the stranded sweep reads as
+    abandoned, and it waits two minutes while the second rung waits ten. See
+    `ChecklistModuleRepository.defer`.
+
+    The delay is read from `checklist_next_destination` -- the same function that picks
+    the topic in `_route_failure` -- so the lease cannot expire at a different moment
+    from the one the retry actually arrives at.
 
     The rollback still happens first: whatever the failed run left in this session is
-    not wanted, and only the lease release should survive.
+    not wanted, and only the lease write should survive.
     """
+    _, delay_seconds = checklist_next_destination(
+        attempt=message.attempt, max_attempts=max_attempts
+    )
     await session.rollback()
-    if await repository.defer(module_id=message.module_id, worker_id=worker_id):
+    if await repository.defer(
+        module_id=message.module_id, worker_id=worker_id, hold_seconds=delay_seconds
+    ):
         await session.commit()
     else:
         await session.rollback()

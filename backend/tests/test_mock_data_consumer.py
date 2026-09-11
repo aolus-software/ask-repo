@@ -7,6 +7,7 @@ fixture in this suite.
 """
 
 import uuid
+from datetime import UTC, datetime
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -124,12 +125,55 @@ async def test_handle_message_retries_a_retryable_failure(db_session: AsyncSessi
     assert producer.produced[0][0] == "askrepo.mock-data.retry.1m"
 
 
+async def test_handle_message_records_failed_when_the_retry_ladder_is_spent(
+    db_session: AsyncSession,
+) -> None:
+    """The mock-data twin of the checklist regression.
+
+    A retryable failure on the last attempt goes to the dead-letter topic, so deferring
+    would leave the dataset `generating` with no lease -- the shape the reconcile sweep
+    reads as abandoned, which it would then re-publish forever.
+    """
+    module = await create_checklist_module(db_session)
+    repo = MockDataDatasetRepository(db_session)
+    dataset = await repo.get_or_create_for_module(module.id)
+    await db_session.commit()
+
+    producer = InMemoryIngestionQueue()
+    outcome = await handle_mock_data_message(
+        MockDataJobMessage(
+            dataset_id=dataset.id,
+            job_id=uuid.uuid4(),
+            # attempt 2 of max_attempts=3: the ladder is spent.
+            attempt=2,
+            not_before_ms=0,
+            original_topic="askrepo.mock-data.generate",
+            count=10,
+        ),
+        generator=_StubGenerator(raises=RetryableChatError("provider timed out")),
+        repository=repo,
+        producer=producer,
+        worker_id="me",
+        max_attempts=3,
+        session=db_session,
+    )
+
+    assert outcome is JobOutcome.DEAD_LETTERED
+    assert producer.produced[0][0] == "askrepo.mock-data.dlq"
+    await db_session.refresh(dataset)
+    assert dataset.status == MockDataDatasetStatus.FAILED.value
+    assert dataset.error is not None
+    assert "RetryableChatError" in dataset.error
+    assert "provider timed out" not in dataset.error
+
+
 async def test_handle_message_defers_an_unclassified_failure_on_first_attempt(
     db_session: AsyncSession,
 ) -> None:
     """Same reasoning as the checklist consumer's
     `test_an_unclassified_first_failure_releases_the_lease_too`: attempt 0 is coming
-    back, so it defers rather than failing, and a deferred run keeps no lease."""
+    back, so it defers rather than failing, and a deferred run holds its lease only
+    until the retry is due."""
     module = await create_checklist_module(db_session)
     repo = MockDataDatasetRepository(db_session)
     dataset = await repo.get_or_create_for_module(module.id)
@@ -156,8 +200,11 @@ async def test_handle_message_defers_an_unclassified_failure_on_first_attempt(
     assert outcome is JobOutcome.RETRY_SCHEDULED
     assert producer.produced[0][0] == "askrepo.mock-data.retry.1m"
     await db_session.refresh(dataset)
-    assert dataset.lease_owner is None
     assert dataset.status == MockDataDatasetStatus.GENERATING.value
+    # Held to the rung's delay, not dropped: a lease-less `generating` row is what the
+    # reconcile sweep would publish a second job for.
+    assert dataset.lease_expires_at is not None
+    assert (dataset.lease_expires_at - datetime.now(UTC)).total_seconds() <= 60
 
 
 async def test_handle_message_dead_letters_an_unclassified_failure_after_first_retry(

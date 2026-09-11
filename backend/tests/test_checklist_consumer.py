@@ -2,6 +2,7 @@
 
 import logging
 import uuid
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -108,6 +109,76 @@ async def test_a_retryable_failure_goes_to_the_ladder_and_leaves_status_alone(
     assert module.status == ChecklistModuleStatus.GENERATING.value
 
 
+async def test_a_retryable_failure_on_the_last_attempt_records_the_module_failed(
+    db_session: AsyncSession,
+) -> None:
+    """The regression that made a stuck generation look merely slow.
+
+    The test above covers a retryable failure with rungs left, where leaving `status`
+    at `generating` is correct. On the *last* attempt the job goes to the dead-letter
+    topic instead, and deferring there leaves the module `generating` with no lease --
+    exactly what `claim_stranded` reads as an abandoned run. The 60-second sweep then
+    re-publishes it with a fresh `job_id` the claim cannot refuse, so a job that has
+    already spent its retries costs a whole generation again every tick, forever.
+
+    Asserting `FAILED` *and* the dead-letter topic together: recording the status while
+    still routing to a retry rung would retry a module already marked failed, and
+    routing to the DLQ without recording it is the original bug.
+    """
+    module = await create_checklist_module(db_session)
+    queue = InMemoryIngestionQueue()
+
+    outcome = await handle_checklist_message(
+        # attempt 2 of max_attempts=3 is the last one: the ladder is spent.
+        _message(module.id, attempt=2),
+        generator=_Generator(RetryableChatError("provider timed out")),
+        repository=ChecklistModuleRepository(db_session),
+        producer=queue,
+        worker_id="w1",
+        max_attempts=3,
+        session=db_session,
+    )
+
+    assert outcome is JobOutcome.DEAD_LETTERED
+    assert queue.produced[0][0] == CHECKLIST_DLQ_TOPIC
+    await db_session.refresh(module)
+    assert module.status == ChecklistModuleStatus.FAILED.value
+    # The reason names the class and the attempt count, and no exception text: the
+    # column is read back by every user on the instance.
+    assert module.error is not None
+    assert "RetryableChatError" in module.error
+    assert "provider timed out" not in module.error
+    # No lease left behind, or the module is untouchable until it lapses.
+    assert module.lease_expires_at is None
+
+
+async def test_a_module_that_dead_letters_stops_matching_the_stranded_sweep(
+    db_session: AsyncSession,
+) -> None:
+    """The property the fix actually buys, asserted through the sweep's own query.
+
+    `claim_stranded` is what the 60-second reconcile tick calls. A module left
+    `generating` with no lease matches it and gets re-published; one recorded `failed`
+    does not. Testing through the repository rather than the status column proves the
+    loop is closed rather than that a string changed.
+    """
+    module = await create_checklist_module(db_session)
+    repository = ChecklistModuleRepository(db_session)
+
+    await handle_checklist_message(
+        _message(module.id, attempt=2),
+        generator=_Generator(RetryableChatError("provider timed out")),
+        repository=repository,
+        producer=InMemoryIngestionQueue(),
+        worker_id="w1",
+        max_attempts=3,
+        session=db_session,
+    )
+
+    stranded = await repository.claim_stranded(generating_older_than_seconds=0)
+    assert module.id not in stranded
+
+
 async def test_a_terminal_failure_records_only_the_exception_class(
     db_session: AsyncSession, caplog: pytest.LogCaptureFixture
 ) -> None:
@@ -178,13 +249,15 @@ async def test_a_failed_generation_leaves_existing_items_untouched(
 async def test_a_retryable_failure_releases_the_lease_for_its_own_retry(
     db_session: AsyncSession,
 ) -> None:
-    """The retry must be able to claim the module the failed run was holding.
+    """The lease is shortened to the retry's due moment -- not held, and not dropped.
 
-    `claim` commits before generation starts, so a failure that only rolls back leaves
-    a five-minute lease owned by a run that is over. The retry lands a minute later and
-    is refused by its own dead predecessor, and the module then sits in `generating`
-    with nobody on it -- long enough for the stranded sweep to re-publish it as well,
-    which is how one failure became a generation every tick.
+    Both neighbouring answers are wrong, and each caused a real defect.
+
+    Holding the full five minutes means the retry that lands a minute later is refused
+    by its own dead predecessor. Dropping the lease to `NULL` means the module sits
+    `generating` with nobody on it, which is precisely what `claim_stranded` reads as
+    abandoned -- so across the ten-minute rung the two-minute sweep publishes a second
+    job for one already scheduled, and the same module generates twice at once.
     """
     module = await create_checklist_module(db_session)
     repository = ChecklistModuleRepository(db_session)
@@ -200,8 +273,17 @@ async def test_a_retryable_failure_releases_the_lease_for_its_own_retry(
     )
 
     await db_session.refresh(module)
-    assert module.lease_owner is None
     assert module.status == ChecklistModuleStatus.GENERATING.value
+    # Held to the first rung's 60 seconds, so well short of the 5-minute claim lease.
+    assert module.lease_expires_at is not None
+    held_for = (module.lease_expires_at - datetime.now(UTC)).total_seconds()
+    assert 0 < held_for <= 60
+    # And therefore invisible to the sweep, which is the failure that was biting.
+    assert module.id not in await repository.claim_stranded(generating_older_than_seconds=0)
+
+    # Once the retry is actually due, nothing blocks it from claiming.
+    module.lease_expires_at = datetime.now(UTC) - timedelta(seconds=1)
+    await db_session.flush()
     assert await repository.claim(
         module_id=module.id, job_id=uuid.uuid4(), worker_id="w1", lease_seconds=300
     )
@@ -211,7 +293,8 @@ async def test_an_unclassified_first_failure_releases_the_lease_too(
     db_session: AsyncSession,
 ) -> None:
     """Same reasoning as the retryable path: attempt 0 is coming back, so it defers
-    rather than failing, and a deferred run keeps no lease."""
+    rather than failing, and a deferred run holds its lease only until the retry is
+    due -- long enough that the stranded sweep leaves it alone in the meantime."""
     module = await create_checklist_module(db_session)
     repository = ChecklistModuleRepository(db_session)
 
@@ -227,8 +310,10 @@ async def test_an_unclassified_first_failure_releases_the_lease_too(
 
     assert outcome is JobOutcome.RETRY_SCHEDULED
     await db_session.refresh(module)
-    assert module.lease_owner is None
     assert module.status == ChecklistModuleStatus.GENERATING.value
+    assert module.lease_expires_at is not None
+    assert (module.lease_expires_at - datetime.now(UTC)).total_seconds() <= 60
+    assert module.id not in await repository.claim_stranded(generating_older_than_seconds=0)
 
 
 async def test_a_retryable_chat_failure_goes_to_the_ladder_too(

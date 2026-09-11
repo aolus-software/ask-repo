@@ -186,6 +186,18 @@ def checklist_next_destination(*, attempt: int, max_attempts: int) -> tuple[str,
     return CHECKLIST_RETRY_TOPICS[attempt]
 
 
+def checklist_retries_exhausted(*, attempt: int, max_attempts: int) -> bool:
+    """Whether failing at `attempt` dead-letters rather than buying another rung.
+
+    Derived from `checklist_next_destination` rather than re-deriving the arithmetic,
+    so the consumer's "is this the end?" question cannot answer differently from the
+    router's "where does it go?". Two copies of that comparison drifting apart is how a
+    job gets recorded failed and retried anyway, or retried and never recorded.
+    """
+    topic, _ = checklist_next_destination(attempt=attempt, max_attempts=max_attempts)
+    return topic == CHECKLIST_DLQ_TOPIC
+
+
 MOCK_DATA_TOPIC = "askrepo.mock-data.generate"
 MOCK_DATA_DLQ_TOPIC = "askrepo.mock-data.dlq"
 
@@ -252,3 +264,13 @@ def mock_data_next_destination(*, attempt: int, max_attempts: int) -> tuple[str,
     if attempt >= max_attempts - 1 or attempt >= len(MOCK_DATA_RETRY_TOPICS):
         return MOCK_DATA_DLQ_TOPIC, 0
     return MOCK_DATA_RETRY_TOPICS[attempt]
+
+
+def mock_data_retries_exhausted(*, attempt: int, max_attempts: int) -> bool:
+    """Whether failing at `attempt` dead-letters rather than buying another rung.
+
+    The mock-data twin of `checklist_retries_exhausted`, and derived from its router
+    for the same reason.
+    """
+    topic, _ = mock_data_next_destination(attempt=attempt, max_attempts=max_attempts)
+    return topic == MOCK_DATA_DLQ_TOPIC

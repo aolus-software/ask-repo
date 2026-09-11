@@ -20,13 +20,38 @@ class RetryableChatError(ChatError):
 
 
 _RETRYABLE_EXCEPTION_NAMES = frozenset(
-    {"RateLimitError", "APIConnectionError", "APITimeoutError", "InternalServerError"}
+    {
+        # Raised by the `openai` and `anthropic` SDKs themselves.
+        "RateLimitError",
+        "APIConnectionError",
+        "APITimeoutError",
+        "InternalServerError",
+        "OverloadedError",
+        # LangChain's provider-agnostic bases. Listed as well as the SDK names above
+        # so this keeps classifying if a wrapper ever stops subclassing the SDK error
+        # it wraps -- the MRO walk below would then have only these to match on.
+        "ModelRateLimitError",
+        "ModelConnectionError",
+        "ModelTimeoutError",
+        "ModelAPIError",
+    }
 )
-_TERMINAL_EXCEPTION_NAMES = frozenset({"AuthenticationError", "NotFoundError", "BadRequestError"})
+_TERMINAL_EXCEPTION_NAMES = frozenset(
+    {
+        "AuthenticationError",
+        "NotFoundError",
+        "BadRequestError",
+        "PermissionDeniedError",
+        "ModelAuthenticationError",
+        "ModelNotFoundError",
+        "ModelInvalidRequestError",
+        "ContextOverflowError",
+    }
+)
 
 
 def classify_chat_error(error: Exception) -> ChatError | None:
-    """What `error` means for retrying, judged by its class name alone.
+    """What `error` means for retrying, judged by the class names in its MRO.
 
     By name rather than `isinstance`: `openai` and `anthropic`'s SDKs were generated
     by the same tooling and raise identically-named exceptions from different
@@ -34,10 +59,21 @@ def classify_chat_error(error: Exception) -> ChatError | None:
     package. Deliberately not exhaustive: an unmapped name returns `None` and the
     caller falls through to its own unclassified-failure safety net
     (`.claude/rules/ingestion.md`) rather than this function guessing.
+
+    **The whole MRO, not just `type(error).__name__`**, and that is the part with a
+    scar on it. LangChain wraps every provider failure in a subclass of its own before
+    it reaches us -- `openai.APITimeoutError` arrives as `OpenAITimeoutError`, and its
+    Anthropic twin as `AnthropicTimeoutError`. Matching the leaf name alone therefore
+    classified **nothing** from either provider: every chat failure fell through to the
+    unclassified path, which retries once and then dead-letters. A rate limit got one
+    attempt instead of three, and a rejected key got a pointless retry, with nothing
+    reporting that the classifier had stopped matching.
     """
-    name = type(error).__name__
-    if name in _RETRYABLE_EXCEPTION_NAMES:
+    names = {klass.__name__ for klass in type(error).__mro__}
+    # Retryable wins a tie deliberately: spending one more attempt on something
+    # terminal costs a retry, while refusing to retry something transient loses work.
+    if names & _RETRYABLE_EXCEPTION_NAMES:
         return RetryableChatError(str(error))
-    if name in _TERMINAL_EXCEPTION_NAMES:
+    if names & _TERMINAL_EXCEPTION_NAMES:
         return TerminalChatError(str(error))
     return None

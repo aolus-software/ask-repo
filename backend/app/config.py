@@ -160,6 +160,12 @@ class Settings(BaseSettings):
     # Low but not zero: code answers should be reproducible, not creative.
     chat_temperature: float = Field(default=0.1, ge=0.0, le=2.0)
     chat_timeout_seconds: int = Field(default=180, ge=1)
+    # The same bound for the worker, where nothing is streaming and nobody is
+    # waiting: a checklist reduce folds every file's findings into one structured
+    # call, so it is legitimately minutes long where an interactive answer is not.
+    # Sharing one number forced a choice between cutting generation off mid-reduce
+    # and letting a question hang for as long as a generation may take.
+    generation_timeout_seconds: int = Field(default=600, ge=1)
     # Ollama serialises inference internally, so uncapped concurrency does not make
     # answers arrive faster — it makes every answer slower and can exhaust a box
     # already running Postgres, Qdrant, Redis and Kafka (docs/PRD.md §9).

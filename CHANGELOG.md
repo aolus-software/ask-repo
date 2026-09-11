@@ -22,9 +22,49 @@ incompatibly. Configuration defaults and internal module layout may change in a 
   no model call — cached per `(project, activeGeneration)`, so a reindex cannot serve a stale
   tree. It answers `409 PROJECT_NOT_READY` when the project has no index, and `503
   VECTOR_STORE_UNAVAILABLE` when Qdrant is unreachable.
+- **`GENERATION_TIMEOUT_SECONDS`** (600), the per-request timeout on the worker's chat
+  client. Generation is not interactive and needs a different bound from a question:
+  a checklist reduce folds every file's findings into a single structured call and
+  legitimately runs for minutes, so the 180-second `CHAT_TIMEOUT_SECONDS` cut it off
+  mid-call. That surfaced as `RetryableChatError` with **no HTTP response logged** — the
+  request never completed — and the retry ladder then spent its whole budget re-running a
+  call that was always going to need longer than it was given, ending at `failed`.
+  `CHAT_TIMEOUT_SECONDS` keeps its meaning for the API process, so questions are
+  unaffected.
 - Four settings bounding that read: `INDEXED_PATH_SCROLL_PAGE_SIZE` (1024),
   `INDEXED_PATH_CACHE_TTL_SECONDS` (300), `INDEXED_PATH_CACHE_MAX_PROJECTS` (32) and
   `INDEXED_PATH_SEARCH_LIMIT` (200).
+
+### Fixed
+
+- **`CHAT_TIMEOUT_SECONDS` now bounds every model call, not just the answer stream.** It was
+  applied only to the graph's answer nodes, so checklist generation, mock-data generation, and
+  the classify and grade nodes fell through to the provider client's own default — ten minutes
+  per request for the OpenAI client, times its three built-in attempts. A checklist generation
+  whose reduce step stalled therefore sat there for up to half an hour per attempt and looked
+  slow rather than broken. The provider client's own retries are now disabled as well
+  (`PROVIDER_RETRIES = 0`): the Kafka ladder already owns retrying, and stacking the two
+  multiplied the wait and bypassed the failure classifier.
+- **A generation that exhausts its retry ladder is now recorded `failed` instead of looping
+  forever.** A retryable failure on the *last* attempt went to the dead-letter topic but left the
+  module or dataset `generating` with no lease — which is precisely what the reconcile sweep
+  reads as an abandoned run. It then re-published the job with a fresh `job_id` the claim cannot
+  refuse, so a dead-lettered generation cost a full generation again on every 60-second tick,
+  indefinitely. Affected `checklist-modules` and mock-data datasets; project ingestion already
+  handled this correctly.
+- **A pending retry no longer gets a duplicate job published alongside it.** While a generation
+  waited on a retry rung, `defer` dropped its lease entirely — and a `generating` row with no
+  lease is exactly what the reconcile sweep reads as abandoned. The sweep waits two minutes and
+  the second rung waits ten, so it published a second job, with a fresh `job_id` the claim is
+  designed not to refuse: the same module generated twice at once. `defer` now shortens the lease
+  to the moment the retry is due instead, which both keeps the sweep away and still lets the retry
+  claim the row the instant it arrives. Project ingestion already did this via `renew_lease`.
+- **Chat failures are classified again.** `classify_chat_error` matched on the exception's own
+  class name, but LangChain wraps every provider failure in a subclass of its own
+  (`openai.APITimeoutError` arrives as `OpenAITimeoutError`), so it matched **nothing** from
+  either provider and every chat failure fell through to the unclassified path — one retry
+  instead of three for a rate limit, and a pointless retry for a rejected key. It now matches any
+  name in the exception's MRO, and knows LangChain's provider-agnostic `Model*Error` bases.
 
 ### Changed
 

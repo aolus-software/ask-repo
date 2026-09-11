@@ -191,7 +191,9 @@ async def _build_chat_model(settings: Settings) -> BaseChatModel:
     a bad model blocks before the ingestion pipeline is ever constructed -- is a
     single testable unit rather than an assertion about `main`'s statement order.
     """
-    chat_model = build_chat_model(settings)
+    # Generation, not conversation: bounded by `generation_timeout_seconds`, which
+    # is the longer of the two on purpose (`app/rag/chat.py`).
+    chat_model = build_chat_model(settings, timeout_seconds=settings.generation_timeout_seconds)
     await probe_structured_output(chat_model)
     return chat_model
 

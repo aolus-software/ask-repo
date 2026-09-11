@@ -195,13 +195,18 @@ async def test_claim_stranded_stamps_the_rows_it_returns(db_session: AsyncSessio
     assert second == []
 
 
-async def test_defer_drops_the_lease_and_stays_generating(db_session: AsyncSession) -> None:
-    """A run that ended but is coming back releases its lease.
+async def test_defer_shortens_the_lease_to_the_retry_and_stays_generating(
+    db_session: AsyncSession,
+) -> None:
+    """A run that ended but is coming back hands the module back *until its retry*.
 
-    The claim commits before generation starts, so a failure that only rolls back
-    leaves a 300-second lease held by a run that is over -- and the retry scheduled
-    one minute later is refused by its own dead predecessor. Status stays
-    `generating` because the job really is coming back; `failed` would lie.
+    Both neighbouring answers are wrong. Keeping the full 300-second lease means the
+    retry a minute later is refused by its own dead predecessor. Dropping the lease
+    entirely leaves a `generating` row with nobody on it, which is what
+    `claim_stranded` reads as abandoned -- so the sweep publishes a second job for one
+    already scheduled. Expiring exactly when the retry is due serves both.
+
+    Status stays `generating` because the job really is coming back; `failed` would lie.
     """
     module = await create_checklist_module(db_session, status=ChecklistModuleStatus.GENERATING)
     repository = ChecklistModuleRepository(db_session)
@@ -210,13 +215,19 @@ async def test_defer_drops_the_lease_and_stays_generating(db_session: AsyncSessi
         module_id=module.id, job_id=job_id, worker_id="worker-a", lease_seconds=LEASE_SECONDS
     )
 
-    assert await repository.defer(module_id=module.id, worker_id="worker-a") is True
+    assert await repository.defer(module_id=module.id, worker_id="worker-a", hold_seconds=60)
 
     await db_session.refresh(module)
-    assert module.lease_owner is None
-    assert module.lease_expires_at is None
     assert module.status == ChecklistModuleStatus.GENERATING.value
-    # The successor can now take it, which is the whole point.
+    assert module.lease_expires_at is not None
+    held_for = (module.lease_expires_at - datetime.now(UTC)).total_seconds()
+    assert 0 < held_for <= 60, "shortened to the rung, not left at the full claim lease"
+    # Still invisible to the sweep while the retry is pending.
+    assert module.id not in await repository.claim_stranded(generating_older_than_seconds=0)
+
+    # And once the retry is due, the successor takes it -- the original point of defer.
+    module.lease_expires_at = datetime.now(UTC) - timedelta(seconds=1)
+    await db_session.flush()
     assert await repository.claim(
         module_id=module.id,
         job_id=uuid.uuid4(),
@@ -238,4 +249,6 @@ async def test_defer_refuses_when_another_worker_owns_the_lease(
         lease_seconds=LEASE_SECONDS,
     )
 
-    assert await repository.defer(module_id=module.id, worker_id="worker-b") is False
+    assert (
+        await repository.defer(module_id=module.id, worker_id="worker-b", hold_seconds=60) is False
+    )

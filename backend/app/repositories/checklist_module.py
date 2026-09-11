@@ -240,21 +240,32 @@ class ChecklistModuleRepository(BaseRepository[ChecklistModule]):
         )
         return list(result.scalars().all())
 
-    async def defer(self, *, module_id: uuid.UUID, worker_id: str) -> bool:
-        """Drop our lease but leave the module `generating`. True if we still held it.
+    async def defer(self, *, module_id: uuid.UUID, worker_id: str, hold_seconds: int) -> bool:
+        """Hand the module back for a retry already scheduled `hold_seconds` from now.
 
         For a run that has ended and is coming back -- a retryable failure, or the one
-        retry an unclassified failure is allowed. `claim` commits before generation
-        starts, so a failure that merely rolls back leaves a five-minute lease owned by
-        a run that is over, and the retry scheduled one minute later is refused by its
-        own dead predecessor. The module then waits out the full lease before anything
-        can touch it, which is long enough for the stranded sweep to decide it was
-        abandoned.
+        retry an unclassified failure is allowed. The module stays `generating`, because
+        the job really is coming back and `failed` would lie about it.
 
-        `status` stays `generating` for the reason the retry path already gives:
-        the job really is coming back, and `failed` would lie about it. `updated_at`
-        moves so the sweep measures its window from this moment rather than from the
-        claim.
+        **The lease is shortened to the moment the retry is due, not dropped**, and the
+        two wrong answers sit on either side of that.
+
+        Holding the *full* five minutes is what this method originally existed to avoid:
+        `claim` commits before generation starts, so merely rolling back leaves a lease
+        owned by a run that is over, and the retry scheduled a minute later is refused
+        by its own dead predecessor.
+
+        Dropping it to `NULL` swaps that for the opposite failure, which is the one that
+        actually bit. A module with no lease and `generating` status is exactly what
+        `claim_stranded` reads as abandoned, so across a ten-minute rung the sweep --
+        which waits only two -- publishes a *second* job for one already scheduled, with
+        a fresh `job_id` the claim cannot refuse. Two concurrent generations of the same
+        module, and neither is wrong to run.
+
+        Expiring precisely when the retry is due serves both readers with the one
+        `lease_expires_at < now` test, exactly as `app/queue/consumer.py` does for
+        ingestion: `claim` lets the retry in the instant it arrives, and the sweep sees
+        an abandoned module only when a retry is genuinely overdue.
 
         Guarded on `lease_owner` like `release`: a run that lost its lease has no right
         to write to the row.
@@ -267,7 +278,7 @@ class ChecklistModuleRepository(BaseRepository[ChecklistModule]):
                 ChecklistModule.deleted_at.is_(None),
                 ChecklistModule.lease_owner == worker_id,
             )
-            .values(lease_owner=None, lease_expires_at=None, updated_at=now)
+            .values(lease_expires_at=now + timedelta(seconds=hold_seconds), updated_at=now)
         )
         return cast(CursorResult[Any], result).rowcount == 1
 
