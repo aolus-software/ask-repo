@@ -2,7 +2,7 @@
 
 from functools import lru_cache
 from pathlib import Path
-from typing import Literal, Self
+from typing import Any, Literal, Self
 
 from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -170,6 +170,19 @@ class Settings(BaseSettings):
     # answers arrive faster — it makes every answer slower and can exhaust a box
     # already running Postgres, Qdrant, Redis and Kafka (docs/PRD.md §9).
     chat_max_concurrency: int = Field(default=2, ge=1)
+    # Off ("default") is the safe direction: an instance that sets nothing answers
+    # exactly as it does today. Reasoning models spend most of their output on hidden
+    # chain-of-thought nobody reads (issue #26) -- "off" tells build_chat_model to
+    # explicitly disable it on all three providers, in whatever vocabulary each one uses.
+    chat_reasoning: Literal["default", "off"] = "default"
+    # Forwarded verbatim as `extra_body` on the `openai` branch only. That branch is a
+    # catch-all for any OpenAI-*compatible* endpoint (docs/llm.md), and self-hosted
+    # servers behind it often need a provider-specific key `reasoning_effort` does not
+    # cover -- e.g. `{"chat_template_kwargs": {"enable_thinking": false}}`. Ollama and
+    # Anthropic already have unambiguous typed reasoning knobs, so there is nothing for a
+    # generic pass-through to paper over there. Unvalidated on purpose: a bad key is a
+    # provider error like any other, not a new failure mode.
+    chat_extra_model_kwargs: dict[str, Any] = Field(default_factory=dict)
 
     # Retrieval. Every bound is `ge=`-guarded for the same reason
     # `embedding_batch_size` is: a zero does not fail, it silently sends an empty

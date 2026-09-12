@@ -52,8 +52,17 @@ def build_chat_model(settings: Settings, *, timeout_seconds: int | None = None) 
     response logged, since the request never completed -- and the retry ladder then
     spends the whole budget re-running a call that was always going to take longer than
     it was given.
+
+    `chat_reasoning` gets the same complete treatment (issue #26): "default" passes `None`,
+    which every provider already treats as unset, leaving its own default behavior untouched; "off"
+    explicitly disables reasoning on all three, in whatever vocabulary each one uses.
+    `chat_extra_model_kwargs` is a separate, narrower escape hatch -- forwarded as
+    `extra_body` on the `openai` branch only, for self-hosted OpenAI-compatible servers
+    whose thinking toggle isn't `reasoning_effort`.
     """
     timeout = timeout_seconds if timeout_seconds is not None else settings.chat_timeout_seconds
+    reasoning_off = settings.chat_reasoning == "off"
+
     if settings.chat_provider == "ollama":
         from langchain_ollama import ChatOllama
 
@@ -64,6 +73,7 @@ def build_chat_model(settings: Settings, *, timeout_seconds: int | None = None) 
             # No first-class timeout field on this class; the underlying Ollama client
             # takes one and passes it to httpx.
             client_kwargs={"timeout": timeout},
+            reasoning=False if reasoning_off else None,
         )
 
     if settings.chat_provider == "anthropic":
@@ -80,6 +90,7 @@ def build_chat_model(settings: Settings, *, timeout_seconds: int | None = None) 
             timeout=timeout,
             max_retries=PROVIDER_RETRIES,
             stop=None,
+            thinking={"type": "disabled"} if reasoning_off else None,
         )
 
     from langchain_openai import ChatOpenAI
@@ -91,4 +102,6 @@ def build_chat_model(settings: Settings, *, timeout_seconds: int | None = None) 
         temperature=settings.chat_temperature,
         timeout=timeout,
         max_retries=PROVIDER_RETRIES,
+        reasoning_effort="none" if reasoning_off else None,
+        extra_body=dict(settings.chat_extra_model_kwargs) or None,
     )

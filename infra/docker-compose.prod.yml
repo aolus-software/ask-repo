@@ -190,6 +190,8 @@ services:
       CHAT_MODEL: ${CHAT_MODEL:-qwen2.5-coder:14b}
       CHAT_BASE_URL: ${CHAT_BASE_URL:-http://ollama:11434}
       CHAT_API_KEY: ${CHAT_API_KEY:-}
+      CHAT_REASONING: ${CHAT_REASONING:-default}
+      CHAT_EXTRA_MODEL_KWARGS: ${CHAT_EXTRA_MODEL_KWARGS:-{}}
     depends_on:
       postgres:
         condition: service_healthy

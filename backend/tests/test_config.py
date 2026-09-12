@@ -204,3 +204,16 @@ def test_mock_data_settings_have_checklist_matching_defaults() -> None:
     assert settings.mock_data_scroll_page_size == 256
     assert settings.mock_data_max_files_per_job == 200
     assert settings.mock_data_export_max_rows == 5000
+
+
+def test_chat_reasoning_defaults_to_unconfigured() -> None:
+    """Off by default in the sense of "unset" -- an instance that configures
+    nothing must answer exactly as it did before this setting existed (#26)."""
+    settings = Settings()
+    assert settings.chat_reasoning == "default"
+    assert settings.chat_extra_model_kwargs == {}
+
+
+def test_chat_reasoning_rejects_an_unknown_value() -> None:
+    with pytest.raises(ValidationError, match="chat_reasoning"):
+        Settings(chat_reasoning="thinking-hard")  # type: ignore[arg-type]  # test builder

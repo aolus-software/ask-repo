@@ -64,6 +64,40 @@ citations.
 
 ---
 
+## Reasoning control
+
+Some chat models spend most of their output on hidden chain-of-thought before the answer they
+return — reasoning models, including plenty served through the `openai` catch-all branch above.
+Left unconfigured, none of that is visible: the answer looks normal, while the bill and the
+latency do not (issue #26). `CHAT_REASONING=off` tells `build_chat_model` to explicitly disable
+it, in whatever vocabulary each provider actually uses:
+
+| Provider | `CHAT_REASONING=off` sets | `CHAT_REASONING=default` (unset) |
+| --- | --- | --- |
+| Ollama | `reasoning=False` | nothing — the model's own default stands |
+| Anthropic | `thinking={"type": "disabled"}` | nothing |
+| OpenAI-compatible | `reasoning_effort="none"` | nothing |
+
+`CHAT_EXTRA_MODEL_KWARGS` is the escape hatch for the `openai` branch specifically, because that
+branch is a catch-all for *any* OpenAI-compatible endpoint (see above), and self-hosted servers
+behind it — vLLM, SGLang, and similar — often expect a server-specific key instead of
+`reasoning_effort`:
+
+```bash
+CHAT_EXTRA_MODEL_KWARGS={"chat_template_kwargs": {"enable_thinking": false}}
+```
+
+It is forwarded verbatim as `extra_body` and deliberately unvalidated: a key the endpoint does
+not recognize is a provider error like any other, not a new failure mode. Ollama and Anthropic
+have no equivalent field — their reasoning knobs above are already unambiguous, so there is
+nothing for a generic pass-through to paper over.
+
+Neither setting changes what the graph asks a model to produce — the content contract is
+unaffected either way. Whether disabled reasoning costs answer or checklist quality is
+unmeasured; `uv run pytest -m model` is the suite that would have an opinion.
+
+---
+
 ## How LangChain is actually used
 
 Two features, and that is nearly all of it.

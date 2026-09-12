@@ -169,6 +169,8 @@ services:
       CHAT_MODEL: ${CHAT_MODEL:-qwen2.5-coder:14b}
       CHAT_BASE_URL: ${CHAT_BASE_URL:-http://host.docker.internal:11434}
       CHAT_API_KEY: ${CHAT_API_KEY:-}
+      CHAT_REASONING: ${CHAT_REASONING:-default}
+      CHAT_EXTRA_MODEL_KWARGS: ${CHAT_EXTRA_MODEL_KWARGS:-{}}
     # Docker Desktop resolves host.docker.internal on its own; the Linux daemon does
     # not, and `host-gateway` is what gives it the same name there. Both app services
     # need it because both talk to the model server on the host.

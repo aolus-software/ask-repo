@@ -244,8 +244,11 @@ answers with a hosted model, or the reverse.
 | `CHAT_TIMEOUT_SECONDS` | `180` | Two bounds, one number, both **interactive**. As a **whole-answer budget** on the graph's answer nodes, expiry ends the turn with `finishReason=timeout`. As a **per-request timeout** on the API process's provider client, it also bounds classify and grade. The second half was missing until 2026-09-08, so those calls fell through to the provider client's own default (ten minutes per request for the OpenAI client) |
 | `GENERATION_TIMEOUT_SECONDS` | `600` | The per-request timeout on the **worker's** provider client — checklist map and reduce, and mock-data generation. Separate from `CHAT_TIMEOUT_SECONDS` because one number cannot serve both: a reduce folds every file's findings into a single structured call and legitimately runs for minutes, while a question that has not started answering in that long has failed. Set too low it surfaces as `RetryableChatError` with **no HTTP response logged** — the request never completed — and the retry ladder then re-runs a call that was always going to need longer than it was given |
 | `CHAT_MAX_CONCURRENCY` | `2` | Answers generated at once, instance-wide |
+| `CHAT_REASONING` | `default` | `default` leaves each provider's own reasoning behavior untouched; `off` explicitly disables it -- `reasoning=False` on Ollama, `thinking={"type": "disabled"}` on Anthropic, `reasoning_effort="none"` on the `openai` branch. Reaches all three providers the same way `CHAT_TIMEOUT_SECONDS` does after 2026-09-12, so it cannot silently miss one (issue #26) |
+| `CHAT_EXTRA_MODEL_KWARGS` | `{}` | A JSON object forwarded verbatim as `extra_body`, on the `openai` branch only. The escape hatch for a self-hosted OpenAI-compatible server (vLLM, SGLang, ...) whose thinking toggle isn't `reasoning_effort` -- e.g. `{"chat_template_kwargs": {"enable_thinking": false}}`. Unvalidated: a key the endpoint rejects is a provider error like any other |
 
-These are read by the **API only** — the worker indexes, it never answers a question.
+Read by the API and the worker — the worker answers no questions, but checklist and mock-data
+generation each run a chat model in that process (`CLAUDE.md`).
 
 Raising `CHAT_MAX_CONCURRENCY` against Ollama does not shorten the queue. Ollama serialises
 inference internally, so more concurrent answers means every answer is slower, on a box
