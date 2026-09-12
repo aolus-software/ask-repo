@@ -27,6 +27,7 @@ export const endpoints = {
     list: "/projects",
     detail: (id: string) => `/projects/${id}`,
     reindex: (id: string) => `/projects/${id}/reindex`,
+    indexedPaths: (id: string) => `/projects/${id}/indexed-paths`,
   },
   conversations: {
     list: "/conversations",
@@ -117,6 +118,21 @@ export function listQueryString(params: ListParams): string {
   if (params.search) search.set("search", params.search);
   if (params.sort) search.set("sort", params.sort);
   if (params.sortDirection) search.set("sortDirection", params.sortDirection);
+  const qs = search.toString();
+  return qs ? `?${qs}` : "";
+}
+
+/**
+ * The path picker's two params. `search` wins when both are set — the server ignores
+ * `path` on a search, and sending both would suggest otherwise.
+ */
+export function indexedPathsQueryString(params: {
+  path?: string;
+  search?: string;
+}): string {
+  const search = new URLSearchParams();
+  if (params.search) search.set("search", params.search);
+  else if (params.path) search.set("path", params.path);
   const qs = search.toString();
   return qs ? `?${qs}` : "";
 }

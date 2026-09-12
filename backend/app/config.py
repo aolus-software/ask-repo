@@ -105,6 +105,26 @@ class Settings(BaseSettings):
     mock_data_max_files_per_job: int = Field(default=200, ge=1)
     mock_data_export_max_rows: int = 5000
 
+    # The checklist module path picker (docs/PRD.md §2.1, phase 1.1). Enumerates the
+    # `file_path` payloads of a project's active generation so a user browses the real
+    # tree instead of typing a path from memory.
+    #
+    # Larger pages than the generation scrolls above, deliberately: those carry whole
+    # payloads including the chunk text, this one carries a single string per point.
+    indexed_path_scroll_page_size: int = Field(default=1024, ge=1)
+    # The enumeration is cached per (project, active_generation), so a reindex cannot
+    # be served a stale list -- the key it would need does not exist yet. The TTL is
+    # for what the key cannot see: points rewritten *within* one generation by a
+    # retried batch, and a bounded cache not pinning memory for a project nobody has
+    # opened in an hour. `ge=1` because zero would disable the cache without saying so.
+    indexed_path_cache_ttl_seconds: int = Field(default=300, ge=1)
+    # Worst case is this many path lists resident at once.
+    indexed_path_cache_max_projects: int = Field(default=32, ge=1)
+    # Matches returned by the picker's search box. Whether the cap cut anything off is
+    # reported on the response: a picker that silently shows the first N of many
+    # teaches the user that what they are looking for is not indexed.
+    indexed_path_search_limit: int = Field(default=200, ge=1)
+
     # Embedding — provider selected at runtime, dimensions probed rather than declared.
     embedding_provider: Literal["ollama", "openai", "voyage"] = "ollama"
     embedding_model: str = "nomic-embed-text"

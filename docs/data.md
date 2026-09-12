@@ -193,9 +193,14 @@ One collection per embedding provider/model/width, named
 }
 ```
 
-`project_id` and `generation` both have payload indexes — without them, filtering degrades to a
-scan as the collection grows. The point id embeds the generation, so a reindex writes *new*
-points rather than overwriting the ones still serving queries.
+`project_id`, `generation` and `file_path` all have payload indexes — without them, filtering
+degrades to a scan as the collection grows. The point id embeds the generation, so a reindex
+writes *new* points rather than overwriting the ones still serving queries.
+
+**`content` is why the reads differ.** Three of them exist — similarity search, the generation
+scroll, and the path picker's enumeration — and only the first two want the whole payload. The
+picker asks for `file_path` alone, because fetching all of it would ship every indexed byte of
+a repository to build a list of filenames.
 
 Full detail in [`rag.md`](rag.md).
 

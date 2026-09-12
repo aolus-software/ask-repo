@@ -100,6 +100,27 @@ export interface ProjectResponse {
   updatedAt: string;
 }
 
+/** One row of the repository tree the checklist path picker browses. */
+export interface IndexedPathEntry {
+  name: string;
+  path: string;
+  kind: "dir" | "file";
+  /** Indexed files in a directory's whole subtree; `null` on a file. */
+  fileCount: number | null;
+}
+
+/**
+ * GET /projects/{id}/indexed-paths — one level of the tree, or a search's matches.
+ * `path` is empty on a search, because the results span the tree.
+ */
+export interface IndexedPathsResponse {
+  path: string;
+  generation: number;
+  entries: IndexedPathEntry[];
+  /** The search cap cut matches off. Say so rather than implying there were no more. */
+  truncated: boolean;
+}
+
 /** POST /projects/{id}/reindex answers 202 with an outcome flag, never 409. */
 export interface ReindexResponse {
   enqueued: boolean;

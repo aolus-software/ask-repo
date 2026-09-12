@@ -305,6 +305,19 @@ your `.env` rather than assuming it carried over.
 | `MOCK_DATA_SCROLL_PAGE_SIZE` | `256` | Points fetched per Qdrant scroll page while enumerating a module's files for schema detection. |
 | `MOCK_DATA_MAX_FILES_PER_JOB` | `200` | Files read per generation run before the rest are reported skipped. Unlike the checklist generator this is a single model call over the concatenated (capped) source, not a map-reduce — schema-shaped code is typically small relative to a whole module. |
 
+### Checklist module path picker
+
+Phase 1.1 (`docs/PRD.md` §2.1). These bound `GET /projects/{id}/indexed-paths`, the read that
+enumerates a project's indexed `file_path` values so a module's `source_path` can be picked
+rather than typed.
+
+| Variable | Default | What it does |
+| --- | --- | --- |
+| `INDEXED_PATH_SCROLL_PAGE_SIZE` | `1024` | Points fetched per Qdrant scroll page while enumerating file paths. Larger than the generation scrolls above on purpose: those carry whole payloads including the chunk text, this one asks for a single string per point. |
+| `INDEXED_PATH_CACHE_TTL_SECONDS` | `300` | How long an enumerated path list is reused. The cache key already carries the project's `active_generation`, so a reindex cannot be served a stale tree whatever this is set to — the TTL covers what the key cannot see (points rewritten *within* one generation by a retried indexing batch) and keeps a rebuildable list from pinning memory for a project nobody has opened in an hour. |
+| `INDEXED_PATH_CACHE_MAX_PROJECTS` | `32` | Path lists held at once, least-recently-used evicted past it. The cache is in-process, not in Redis: `CLAUDE.md` keeps Redis to the login rate limiter, and one scroll rebuilds this. |
+| `INDEXED_PATH_SEARCH_LIMIT` | `200` | Matches the picker's search box returns. Past it the response sets `truncated: true` and the UI says so, because a picker silently showing the first N of many teaches the user that what they are looking for is not indexed. |
+
 ---
 
 ## Values that fail silently

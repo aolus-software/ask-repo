@@ -70,6 +70,8 @@ from app.schemas.conversation import (
     encode_event,
 )
 from app.schemas.pagination import PaginatedResponse
+from app.services import path_tree
+from app.services.indexed_path import IndexedPathReader
 
 logger = logging.getLogger(__name__)
 
@@ -82,9 +84,15 @@ KEEP_ALIVE_SECONDS = 15.0
 class ChecklistModuleService:
     """Module CRUD, plus the pre-flight that decides whether a generation may start."""
 
-    def __init__(self, session: AsyncSession, settings: Settings) -> None:
+    def __init__(
+        self, session: AsyncSession, settings: Settings, *, indexed_paths: IndexedPathReader
+    ) -> None:
         self.session = session
         self.settings = settings
+        # Refusing an unindexed `source_path` at creation needs the project's real path
+        # list, and it is the same reader (and therefore the same cache) the path
+        # picker browses -- two would disagree about the same repository.
+        self.indexed_paths = indexed_paths
         self.modules = ChecklistModuleRepository(session)
         self.items = ChecklistItemRepository(session)
         self.change_sets = ChecklistChangeSetRepository(session)
@@ -140,13 +148,15 @@ class ChecklistModuleService:
         """Name a module against a project the caller may read."""
         project = await self._require_readable_project(payload.project_id, actor)
         self._require_indexed(project)
+        source_path = payload.source_path.strip().strip("/")
+        await self._require_path_indexed(project, source_path)
         module = await self.modules.add(
             ChecklistModule(
                 id=uuid.uuid4(),
                 project_id=project.id,
                 created_by=actor.id,
                 name=payload.name.strip(),
-                source_path=payload.source_path.strip().strip("/"),
+                source_path=source_path,
                 status=ChecklistModuleStatus.EMPTY.value,
             )
         )
@@ -166,7 +176,13 @@ class ChecklistModuleService:
         if payload.name is not None:
             module.name = payload.name.strip()
         if payload.source_path is not None:
-            module.source_path = payload.source_path.strip().strip("/")
+            source_path = payload.source_path.strip().strip("/")
+            # Only a re-point needs an index. A rename has to keep working whatever
+            # state the project is in, and there is nothing to validate a name against.
+            project = await self._require_readable_project(module.project_id, actor)
+            self._require_indexed(project)
+            await self._require_path_indexed(project, source_path)
+            module.source_path = source_path
         # `updated_at`'s `onupdate=func.now()` is a server-side expression: an ORM
         # UPDATE does not fetch it back via RETURNING the way an INSERT does, so it is
         # left expired on the Python object after commit. Setting it here, matching
@@ -448,6 +464,37 @@ class ChecklistModuleService:
                 status.HTTP_409_CONFLICT,
                 ErrorCode.PROJECT_NOT_READY,
                 "This project is not indexed yet. Wait for indexing to finish.",
+            )
+
+    async def _require_path_indexed(self, project: Project, source_path: str) -> None:
+        """Refuse a `source_path` that matches nothing in the project's index.
+
+        This is the point of phase 1.1 (`docs/PRD.md` §2.1). Without it a typo'd path
+        returns `201` and the mistake surfaces later and silently, when the background
+        generation cannot match anything under it -- tolerable for someone who already
+        knows the tree, a wall for someone whose first contact with the repository is
+        AskRepo itself.
+
+        `400`, not `422`: the string is well-formed and passed schema validation, so
+        this is "semantically invalid input" as `.claude/rules/response-api.md` defines
+        it. `MODULE_PATH_NOT_INDEXED` rather than a new code, because generation
+        already reports this exact condition under this exact name and a second code
+        would make the frontend branch on two.
+
+        **The generate-time check stays.** A reindex can drop the files a module was
+        pointed at, so a path valid at creation can stop being indexed while the module
+        lives on; removing the later check would turn that into a run that scrolls
+        nothing and proposes an empty checklist.
+        """
+        paths = await self.indexed_paths.paths_for(project)
+        if not path_tree.covers(paths, source_path):
+            raise AppError(
+                status.HTTP_400_BAD_REQUEST,
+                ErrorCode.MODULE_PATH_NOT_INDEXED,
+                (
+                    f"Nothing under {source_path!r} is indexed for this project. "
+                    "Pick a path from the repository tree."
+                ),
             )
 
     @staticmethod

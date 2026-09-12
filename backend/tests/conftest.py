@@ -31,6 +31,7 @@ from app.queue.protocol import InMemoryIngestionQueue
 from app.rag.answerer import Answerer
 from app.rag.graph.state import Classification, EvidenceVerdict
 from app.rag.retriever import CodeRetriever
+from app.services.indexed_path import reset_shared_cache
 from tests.fakes import ScriptedChatModel
 
 BACKEND_ROOT = Path(__file__).resolve().parent.parent
@@ -254,10 +255,16 @@ def app_with_queue(
     application.dependency_overrides[get_answerer_factory] = lambda: _fake_answerer_factory(
         vector_store, chat_model
     )
-    # The delete path is the only route that reaches the vector store. Without this
-    # override, deleting an indexed project opens a real Qdrant connection and fails
-    # with 503 against a collection the fake never created.
+    # Delete and the path picker are the two routes that reach the vector store.
+    # Without this override, deleting an indexed project — or browsing its tree —
+    # opens a real Qdrant connection and fails with 503 against a collection the fake
+    # never created.
     application.dependency_overrides[get_store_factory] = lambda: lambda collection: vector_store
+    # The path list is cached per (project, generation) in a process-wide cache. Left
+    # alone, one test's tree outlives its project and answers the next test that reuses
+    # the id — which would hide exactly the staleness the generation key exists to
+    # prevent.
+    reset_shared_cache()
     # The checklist routes have their own queue and answerer dependencies, so
     # overriding the conversation ones does not cover them.
     application.dependency_overrides[get_checklist_queue] = lambda: ingestion_queue

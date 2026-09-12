@@ -7,6 +7,7 @@ from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import Settings
+from app.ingestion.vector_store import InMemoryVectorStore
 from app.models.checklist import ChangeSetStatus
 from app.models.project import Project, ProjectStatus
 from tests.factories import (
@@ -15,6 +16,7 @@ from tests.factories import (
     create_checklist_module,
     create_project,
 )
+from tests.helpers import seed_indexed_paths
 
 
 async def _ready_project(session: AsyncSession) -> Project:
@@ -57,6 +59,25 @@ async def test_module_response_is_camel_case(
 
 
 @pytest.mark.asyncio
+async def test_creating_a_module_on_an_unindexed_path_is_400(
+    authed_client: AsyncClient, db_session: AsyncSession, vector_store: InMemoryVectorStore
+) -> None:
+    """Phase 1.1: rejected at creation, on the field the user just filled in, rather
+    than accepted with a `201` that fails in a background job an hour later."""
+    project = await _ready_project(db_session)
+    seed_indexed_paths(vector_store, project.id, "backend/app/config.py")
+    await db_session.commit()
+
+    response = await authed_client.post(
+        "/checklist-modules",
+        json={"projectId": str(project.id), "name": "Auth", "sourcePath": "backend/app/authz"},
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"]["code"] == "MODULE_PATH_NOT_INDEXED"
+
+
+@pytest.mark.asyncio
 async def test_an_unknown_module_is_404(authed_client: AsyncClient) -> None:
     response = await authed_client.get(f"/checklist-modules/{uuid.uuid4()}")
 
@@ -66,10 +87,16 @@ async def test_an_unknown_module_is_404(authed_client: AsyncClient) -> None:
 
 @pytest.mark.asyncio
 async def test_editing_another_users_item_is_403(
-    client_for_user_a: AsyncClient, client_for_user_b: AsyncClient, db_session: AsyncSession
+    client_for_user_a: AsyncClient,
+    client_for_user_b: AsyncClient,
+    db_session: AsyncSession,
+    vector_store: InMemoryVectorStore,
 ) -> None:
     """403, not 404: module and item existence is deliberately public."""
     project = await _ready_project(db_session)
+    # `POST /checklist-modules` refuses a path that matches nothing in the index
+    # (phase 1.1), so the tree has to exist before a module can be created against it.
+    seed_indexed_paths(vector_store, project.id, "app/auth/routes.py")
     await db_session.commit()
     created = (
         await client_for_user_a.post(

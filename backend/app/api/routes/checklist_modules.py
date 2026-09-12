@@ -21,6 +21,7 @@ from app.api.routes.conversations import (
     get_chat_model,
     get_embedder,
 )
+from app.api.routes.projects import get_indexed_path_reader
 from app.config import Settings, get_settings
 from app.db.session import get_sessionmaker
 from app.ingestion.embedder import Embedder
@@ -41,15 +42,22 @@ from app.schemas.checklist import (
 from app.schemas.errors import ERROR_RESPONSES
 from app.schemas.pagination import PaginatedResponse
 from app.services.checklist_module import ChecklistModuleService, stream_checklist_turn
+from app.services.indexed_path import IndexedPathReader
 
 router = APIRouter(prefix="/checklist-modules", tags=["Checklist Modules"])
 
 
 def get_checklist_module_service(
-    session: SessionDep, settings: Annotated[Settings, Depends(get_settings)]
+    session: SessionDep,
+    settings: Annotated[Settings, Depends(get_settings)],
+    indexed_paths: Annotated[IndexedPathReader, Depends(get_indexed_path_reader)],
 ) -> ChecklistModuleService:
-    """Provide the service with a request-scoped session."""
-    return ChecklistModuleService(session, settings)
+    """Provide the service with a request-scoped session.
+
+    The reader comes from the projects router so that refusing an unindexed
+    `source_path` here and browsing the tree there share one cache.
+    """
+    return ChecklistModuleService(session, settings, indexed_paths=indexed_paths)
 
 
 def get_checklist_queue(request: Request) -> ChecklistQueue:
