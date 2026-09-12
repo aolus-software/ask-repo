@@ -53,8 +53,8 @@ def build_chat_model(settings: Settings, *, timeout_seconds: int | None = None) 
     spends the whole budget re-running a call that was always going to take longer than
     it was given.
 
-    `chat_reasoning` gets the same complete treatment (issue #26): "default" omits the
-    parameter on every provider, leaving its own default behavior untouched; "off"
+    `chat_reasoning` gets the same complete treatment (issue #26): "default" passes `None`,
+    which every provider already treats as unset, leaving its own default behavior untouched; "off"
     explicitly disables reasoning on all three, in whatever vocabulary each one uses.
     `chat_extra_model_kwargs` is a separate, narrower escape hatch -- forwarded as
     `extra_body` on the `openai` branch only, for self-hosted OpenAI-compatible servers

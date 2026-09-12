@@ -247,7 +247,8 @@ answers with a hosted model, or the reverse.
 | `CHAT_REASONING` | `default` | `default` leaves each provider's own reasoning behavior untouched; `off` explicitly disables it -- `reasoning=False` on Ollama, `thinking={"type": "disabled"}` on Anthropic, `reasoning_effort="none"` on the `openai` branch. Reaches all three providers the same way `CHAT_TIMEOUT_SECONDS` does after 2026-09-12, so it cannot silently miss one (issue #26) |
 | `CHAT_EXTRA_MODEL_KWARGS` | `{}` | A JSON object forwarded verbatim as `extra_body`, on the `openai` branch only. The escape hatch for a self-hosted OpenAI-compatible server (vLLM, SGLang, ...) whose thinking toggle isn't `reasoning_effort` -- e.g. `{"chat_template_kwargs": {"enable_thinking": false}}`. Unvalidated: a key the endpoint rejects is a provider error like any other |
 
-These are read by the **API only** — the worker indexes, it never answers a question.
+Read by the API and the worker — the worker answers no questions, but checklist and mock-data
+generation each run a chat model in that process (`CLAUDE.md`).
 
 Raising `CHAT_MAX_CONCURRENCY` against Ollama does not shorten the queue. Ollama serialises
 inference internally, so more concurrent answers means every answer is slower, on a box

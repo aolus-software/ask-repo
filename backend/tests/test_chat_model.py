@@ -162,6 +162,20 @@ def test_extra_model_kwargs_reach_only_the_openai_client() -> None:
     assert isinstance(model, ChatOpenAI)
     assert model.extra_body == {"chat_template_kwargs": {"enable_thinking": False}}
 
+    ollama_settings = settings_for("ollama").model_copy(
+        update={"chat_extra_model_kwargs": {"chat_template_kwargs": {"enable_thinking": False}}}
+    )
+    ollama_model = build_chat_model(ollama_settings)
+    assert isinstance(ollama_model, ChatOllama)
+    assert ollama_model.client_kwargs == {"timeout": 180}
+
+    anthropic_settings = settings_for("anthropic").model_copy(
+        update={"chat_extra_model_kwargs": {"chat_template_kwargs": {"enable_thinking": False}}}
+    )
+    anthropic_model = build_chat_model(anthropic_settings)
+    assert isinstance(anthropic_model, ChatAnthropic)
+    assert anthropic_model.model_kwargs == {}
+
 
 def test_extra_model_kwargs_default_to_no_extra_body() -> None:
     model = build_chat_model(settings_for("openai"))
