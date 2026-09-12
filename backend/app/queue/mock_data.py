@@ -26,6 +26,7 @@ from app.queue.topics import (
     ALL_MOCK_DATA_TOPICS,
     MockDataJobMessage,
     mock_data_next_destination,
+    mock_data_retries_exhausted,
 )
 from app.rag.errors import RetryableChatError, TerminalChatError
 from app.repositories.mock_data_dataset import LEASE_SECONDS, MockDataDatasetRepository
@@ -91,7 +92,34 @@ async def handle_mock_data_message(
         await _route_failure(message, producer=producer, max_attempts=0)
         return JobOutcome.DEAD_LETTERED
     except (RetryableIngestionError, RetryableChatError) as error:
-        await _defer(message, repository=repository, worker_id=worker_id, session=session)
+        if mock_data_retries_exhausted(attempt=message.attempt, max_attempts=max_attempts):
+            # Spent ladder: deferring here would leave the dataset `generating` with no
+            # lease, and the reconcile sweep would re-publish it forever. Same defect
+            # and same fix as the checklist consumer beside this one.
+            logger.warning(
+                "mock-data generation for dataset %s exhausted its retries: %s",
+                message.dataset_id,
+                type(error).__name__,
+            )
+            await _fail(
+                message,
+                repository=repository,
+                worker_id=worker_id,
+                reason=scrub(
+                    f"generation failed after {message.attempt + 1} attempts: "
+                    f"{type(error).__name__}."
+                ),
+                session=session,
+            )
+            await _route_failure(message, producer=producer, max_attempts=max_attempts)
+            return JobOutcome.DEAD_LETTERED
+        await _defer(
+            message,
+            repository=repository,
+            worker_id=worker_id,
+            session=session,
+            max_attempts=max_attempts,
+        )
         logger.warning(
             "mock-data generation for dataset %s failed retryably: %s",
             message.dataset_id,
@@ -111,7 +139,13 @@ async def handle_mock_data_message(
             )
             await _route_failure(message, producer=producer, max_attempts=0)
             return JobOutcome.DEAD_LETTERED
-        await _defer(message, repository=repository, worker_id=worker_id, session=session)
+        await _defer(
+            message,
+            repository=repository,
+            worker_id=worker_id,
+            session=session,
+            max_attempts=max_attempts,
+        )
         await _route_failure(message, producer=producer, max_attempts=max_attempts)
         return JobOutcome.RETRY_SCHEDULED
 
@@ -124,10 +158,22 @@ async def _defer(
     repository: MockDataDatasetRepository,
     worker_id: str,
     session: AsyncSession,
+    max_attempts: int,
 ) -> None:
-    """Drop the lease of a run that ended but is coming back."""
+    """Hand back a run that ended but is coming back, until its retry is due.
+
+    The lease is shortened to the rung's delay rather than dropped, read from the same
+    `mock_data_next_destination` that `_route_failure` routes on. See
+    `ChecklistModuleRepository.defer` for why a lease-less `generating` row is the
+    dangerous state.
+    """
+    _, delay_seconds = mock_data_next_destination(
+        attempt=message.attempt, max_attempts=max_attempts
+    )
     await session.rollback()
-    if await repository.defer(dataset_id=message.dataset_id, worker_id=worker_id):
+    if await repository.defer(
+        dataset_id=message.dataset_id, worker_id=worker_id, hold_seconds=delay_seconds
+    ):
         await session.commit()
     else:
         await session.rollback()

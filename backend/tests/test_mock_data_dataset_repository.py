@@ -215,13 +215,14 @@ async def test_mark_in_review_does_not_clobber_a_generating_dataset(
     assert dataset.status == MockDataDatasetStatus.GENERATING.value
 
 
-async def test_defer_drops_the_lease_and_stays_generating(db_session: AsyncSession) -> None:
-    """A run that ended but is coming back releases its lease.
+async def test_defer_shortens_the_lease_to_the_retry_and_stays_generating(
+    db_session: AsyncSession,
+) -> None:
+    """A run that ended but is coming back hands the dataset back until its retry.
 
-    The claim commits before generation starts, so a failure that only rolls back
-    leaves a 300-second lease held by a run that is over -- and the retry scheduled
-    one minute later is refused by its own dead predecessor. Status stays
-    `generating` because the job really is coming back; `failed` would lie.
+    Keeping the full 300-second lease refuses the retry a minute later; dropping it
+    entirely leaves a `generating` row the reconcile sweep reads as abandoned and
+    publishes a second job for. Expiring at the retry's due moment serves both.
     """
     module = await create_checklist_module(db_session)
     repo = MockDataDatasetRepository(db_session)
@@ -229,13 +230,17 @@ async def test_defer_drops_the_lease_and_stays_generating(db_session: AsyncSessi
     job_id = uuid.uuid4()
     assert await repo.claim(dataset_id=dataset.id, job_id=job_id, worker_id="w1", lease_seconds=300)
 
-    assert await repo.defer(dataset_id=dataset.id, worker_id="w1") is True
+    assert await repo.defer(dataset_id=dataset.id, worker_id="w1", hold_seconds=60) is True
 
     await db_session.refresh(dataset)
-    assert dataset.lease_owner is None
-    assert dataset.lease_expires_at is None
     assert dataset.status == MockDataDatasetStatus.GENERATING.value
-    # The successor can now take it, which is the whole point.
+    assert dataset.lease_expires_at is not None
+    held_for = (dataset.lease_expires_at - datetime.now(UTC)).total_seconds()
+    assert 0 < held_for <= 60, "shortened to the rung, not left at the full claim lease"
+
+    # And once the retry is due, the successor takes it -- the original point of defer.
+    dataset.lease_expires_at = datetime.now(UTC) - timedelta(seconds=1)
+    await db_session.flush()
     assert await repo.claim(
         dataset_id=dataset.id,
         job_id=uuid.uuid4(),
@@ -258,7 +263,7 @@ async def test_defer_refuses_when_another_worker_owns_the_lease(
         lease_seconds=300,
     )
 
-    assert await repo.defer(dataset_id=dataset.id, worker_id="w2") is False
+    assert await repo.defer(dataset_id=dataset.id, worker_id="w2", hold_seconds=60) is False
 
 
 async def test_soft_delete_for_module_soft_deletes_dataset(

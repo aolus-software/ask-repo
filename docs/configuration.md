@@ -241,7 +241,8 @@ answers with a hosted model, or the reverse.
 | `CHAT_BASE_URL` | `http://localhost:11434` | Endpoint. Inside Compose, `http://host.docker.internal:11434`. For `anthropic`, `https://api.anthropic.com` — there is no default that guesses it, the same as `openai` |
 | `CHAT_API_KEY` | *empty* | Required for `openai` and `anthropic`; ignored by `ollama` |
 | `CHAT_TEMPERATURE` | `0.1` | Low but not zero: answers about code should be reproducible, not creative. `0.0`–`2.0` |
-| `CHAT_TIMEOUT_SECONDS` | `180` | Whole-answer budget. Expiry ends the turn with `finishReason=timeout` |
+| `CHAT_TIMEOUT_SECONDS` | `180` | Two bounds, one number, both **interactive**. As a **whole-answer budget** on the graph's answer nodes, expiry ends the turn with `finishReason=timeout`. As a **per-request timeout** on the API process's provider client, it also bounds classify and grade. The second half was missing until 2026-09-08, so those calls fell through to the provider client's own default (ten minutes per request for the OpenAI client) |
+| `GENERATION_TIMEOUT_SECONDS` | `600` | The per-request timeout on the **worker's** provider client — checklist map and reduce, and mock-data generation. Separate from `CHAT_TIMEOUT_SECONDS` because one number cannot serve both: a reduce folds every file's findings into a single structured call and legitimately runs for minutes, while a question that has not started answering in that long has failed. Set too low it surfaces as `RetryableChatError` with **no HTTP response logged** — the request never completed — and the retry ladder then re-runs a call that was always going to need longer than it was given |
 | `CHAT_MAX_CONCURRENCY` | `2` | Answers generated at once, instance-wide |
 
 These are read by the **API only** — the worker indexes, it never answers a question.

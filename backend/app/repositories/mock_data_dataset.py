@@ -172,8 +172,15 @@ class MockDataDatasetRepository(BaseRepository[MockDataDataset]):
         )
         return list(result.scalars().all())
 
-    async def defer(self, *, dataset_id: uuid.UUID, worker_id: str) -> bool:
-        """Drop our lease but leave the dataset `generating`. True if we still held it."""
+    async def defer(self, *, dataset_id: uuid.UUID, worker_id: str, hold_seconds: int) -> bool:
+        """Hand the dataset back for a retry due `hold_seconds` from now, still
+        `generating`. True if we still held the lease.
+
+        The lease is shortened to the retry's due moment rather than dropped, for the
+        reason `ChecklistModuleRepository.defer` sets out at length: a `generating` row
+        with no lease is what the reconcile sweep reads as abandoned, so a long rung
+        would have it published a second time while the first retry is still pending.
+        """
         now = datetime.now(UTC)
         result = await self.session.execute(
             update(MockDataDataset)
@@ -182,7 +189,7 @@ class MockDataDatasetRepository(BaseRepository[MockDataDataset]):
                 MockDataDataset.deleted_at.is_(None),
                 MockDataDataset.lease_owner == worker_id,
             )
-            .values(lease_owner=None, lease_expires_at=None, updated_at=now)
+            .values(lease_expires_at=now + timedelta(seconds=hold_seconds), updated_at=now)
         )
         return cast(CursorResult[Any], result).rowcount == 1
 

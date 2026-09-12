@@ -86,11 +86,16 @@ costs a **whole generation**, not a refused claim. Two writes buy back what the 
   the window and the next tick passes over it. Selecting without stamping publishes the same
   module on every tick, forever, for as long as it sits in `generating` with nobody on it — one
   full generation per minute. It also makes concurrent sweeps safe: the UPDATE matches once.
-- **A run that fails but is coming back calls `defer`**, which drops the lease and leaves the
-  status alone. `claim` commits *before* generation starts, so rolling back a failed run leaves a
-  five-minute lease owned by a run that is over, and the retry scheduled a minute later is refused
-  by its own dead predecessor. The module is then untouchable until the lease lapses — by which
-  point the sweep has decided it was abandoned and published a second job for it as well.
+- **A run that fails but is coming back calls `defer`**, which shortens the lease to the moment
+  its retry is due and leaves the status alone. Both neighbouring answers are wrong, and each has
+  been shipped. Keeping the full five minutes: `claim` commits *before* generation starts, so
+  rolling back a failed run leaves a lease owned by a run that is over, and the retry scheduled a
+  minute later is refused by its own dead predecessor. Dropping the lease to `NULL` instead: a
+  `generating` module with nobody on it is exactly what `claim_stranded` reads as abandoned, so
+  across the ten-minute rung the two-minute sweep publishes a *second* job for one already
+  scheduled — with a fresh `job_id` the claim cannot refuse, so both run. Expiring at the due
+  moment serves both readers with the one `lease_expires_at < now` test, which is what
+  `app/queue/consumer.py` has always done for ingestion via `renew_lease`.
 
 ## Long jobs pause their partitions and keep polling
 
@@ -141,6 +146,17 @@ the net.
 
 A terminal failure is recorded on the project before the outcome is decided; a retryable one is
 not, because the job is coming back and a `failed` status would lie about it.
+
+**Except on the last attempt, where a retryable failure is not coming back.** When the ladder is
+spent the job goes to the dead-letter topic, and deferring there records nothing — which leaves a
+checklist module or mock-data dataset `generating` with no lease, exactly the shape
+`claim_stranded` reads as abandoned. The 60-second sweep then re-publishes it with a fresh
+`job_id` the claim is designed not to refuse, so a job that has already exhausted its retries
+costs a whole generation *again, every tick, forever*. Ask the router whether this attempt
+dead-letters (`checklist_retries_exhausted` / `mock_data_retries_exhausted`, both derived from
+`*_next_destination` so the two cannot disagree) and record `failed` when it does. The ingestion
+consumer has always done this at `_route_failure`; the two generation consumers did not until
+2026-09-08.
 
 ## Chunk line ranges are load-bearing
 
