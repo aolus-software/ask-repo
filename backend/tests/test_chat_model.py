@@ -106,3 +106,66 @@ def test_an_explicit_timeout_overrides_the_interactive_one() -> None:
     default = build_chat_model(settings)
     assert isinstance(default, ChatOpenAI)
     assert default.request_timeout == 180
+
+
+def test_reasoning_off_reaches_every_provider() -> None:
+    """#26: a reasoning model spends most of its output on hidden chain-of-thought
+    nobody reads. `chat_reasoning="off"` has to reach every provider the same
+    complete way `chat_timeout_seconds` does after #28, or the gap that fixed
+    reopens here for reasoning instead of timeouts."""
+
+    def built(provider: str) -> BaseChatModel:
+        settings = settings_for(provider).model_copy(update={"chat_reasoning": "off"})
+        return build_chat_model(settings)
+
+    ollama_model = built("ollama")
+    assert isinstance(ollama_model, ChatOllama)
+    assert ollama_model.reasoning is False
+
+    anthropic_model = built("anthropic")
+    assert isinstance(anthropic_model, ChatAnthropic)
+    assert anthropic_model.thinking == {"type": "disabled"}
+
+    openai_model = built("openai")
+    assert isinstance(openai_model, ChatOpenAI)
+    assert openai_model.reasoning_effort == "none"
+
+
+def test_reasoning_default_leaves_every_provider_unset() -> None:
+    """The regression guard: an instance that sets nothing must answer exactly as
+    it did before this setting existed."""
+    ollama_model = build_chat_model(settings_for("ollama"))
+    assert isinstance(ollama_model, ChatOllama)
+    assert ollama_model.reasoning is None
+
+    anthropic_model = build_chat_model(settings_for("anthropic"))
+    assert isinstance(anthropic_model, ChatAnthropic)
+    assert anthropic_model.thinking is None
+
+    openai_model = build_chat_model(settings_for("openai"))
+    assert isinstance(openai_model, ChatOpenAI)
+    assert openai_model.reasoning_effort is None
+
+
+def test_extra_model_kwargs_reach_only_the_openai_client() -> None:
+    """The escape hatch for self-hosted OpenAI-compatible servers whose thinking
+    toggle is not `reasoning_effort` -- e.g. a vLLM endpoint expecting
+    `chat_template_kwargs`. Scoped to the `openai` branch: Ollama and Anthropic
+    already have unambiguous typed knobs, so there is nothing for a generic
+    escape hatch to paper over there."""
+    settings = settings_for("openai").model_copy(
+        update={
+            "chat_extra_model_kwargs": {"chat_template_kwargs": {"enable_thinking": False}}
+        }
+    )
+
+    model = build_chat_model(settings)
+
+    assert isinstance(model, ChatOpenAI)
+    assert model.extra_body == {"chat_template_kwargs": {"enable_thinking": False}}
+
+
+def test_extra_model_kwargs_default_to_no_extra_body() -> None:
+    model = build_chat_model(settings_for("openai"))
+    assert isinstance(model, ChatOpenAI)
+    assert model.extra_body is None
