@@ -154,9 +154,7 @@ def test_extra_model_kwargs_reach_only_the_openai_client() -> None:
     already have unambiguous typed knobs, so there is nothing for a generic
     escape hatch to paper over there."""
     settings = settings_for("openai").model_copy(
-        update={
-            "chat_extra_model_kwargs": {"chat_template_kwargs": {"enable_thinking": False}}
-        }
+        update={"chat_extra_model_kwargs": {"chat_template_kwargs": {"enable_thinking": False}}}
     )
 
     model = build_chat_model(settings)
