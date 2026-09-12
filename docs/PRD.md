@@ -184,8 +184,8 @@ The field is `password_hash`, not `password`. The plaintext exists only in the r
   JWT) and `askrepo_session` (the backend's refresh cookie, stored as a verbatim `name=value`
   pair so an operator's `REFRESH_COOKIE_NAME` override cannot silently break it) on the frontend
   origin at `Path=/`, both `httpOnly`, `SameSite=Lax`, and `Secure` in production. The path
-  differs from this cookie's `/auth` scope because Next's middleware runs at paths like
-  `/projects` and is only sent cookies whose path matches. **The access token is never returned
+  differs from this cookie's `/auth` scope because Next's request proxy (`frontend/proxy.ts`)
+  runs at paths like `/projects` and is only sent cookies whose path matches. **The access token is never returned
   to the browser in a response body** — the login route hands back the user and nothing else.
 - When `must_change_password` is set, login succeeds but **every route outside `/auth`** returns `403` with the machine-readable code `PASSWORD_CHANGE_REQUIRED`, so the frontend can force the change. The whole `/auth` surface stays reachable: the user needs `GET /auth/me` to see who they are, `POST /auth/refresh` because the access token expires in 15 minutes while they are typing, and `POST /auth/logout` / `logout-all` to abandon the flow or kill other sessions first.
 - `POST /auth/change-password` accepts `{current_password, new_password}`, clears

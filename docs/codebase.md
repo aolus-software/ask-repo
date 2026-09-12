@@ -155,7 +155,7 @@ frontend/
 │   ├── form/ feedback/ layout/                       shared shells
 ├── hooks/               React Query hooks
 ├── lib/                 api client, query keys, SSE parser, auth/session
-└── middleware.ts        route protection + refresh on navigation
+└── proxy.ts             route protection + refresh on navigation
 ```
 
 Each screen is a thin `page.tsx` (a Server Component) plus a `*-screen.tsx` client component.
@@ -166,12 +166,12 @@ No token is ever readable by a script on the page.
 
 - **Two cookies, both httpOnly, both `Path=/`**: `askrepo_access` (the JWT) and `askrepo_session`
   (the backend's refresh cookie, stored verbatim). `Path=/` differs from the backend's `/auth`
-  scope on purpose — middleware runs at `/projects` and is only sent cookies whose path matches.
+  scope on purpose — `proxy.ts` runs at `/projects` and is only sent cookies whose path matches.
 - **`app/api/[...path]/route.ts` is the only route the browser calls.** It attaches the bearer,
   strips `set-cookie` from every backend response, and relays the body untouched.
 - **Refresh happens in two places, and that split is structural.** A Server Component cannot set
   a cookie, so a token refreshed during render could never be persisted. Navigations refresh in
-  `middleware.ts`; browser fetches and the answer stream refresh inside the proxy, on the `401`
+  `proxy.ts`; browser fetches and the answer stream refresh inside the API proxy, on the `401`
   status line, *before any body is read* — which is what keeps it safe on the SSE route.
 - **`API_URL` is server-only.** There are no `NEXT_PUBLIC_*` variables; re-adding the prefix
   would inline the value into the client bundle.

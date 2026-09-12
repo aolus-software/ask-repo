@@ -2,7 +2,7 @@
  * The session cookies Next sets on its OWN origin. Nothing else constructs cookie
  * options — a second copy is how `secure` ends up set in one place and not the other.
  *
- * Path is "/" rather than the backend's "/auth" (docs/PRD.md §4.0) because middleware
+ * Path is "/" rather than the backend's "/auth" (docs/PRD.md §4.0) because `proxy.ts`
  * runs at paths like /projects and is only sent cookies whose path matches. httpOnly,
  * SameSite and Secure are all preserved. See the design spec §2.2.
  */

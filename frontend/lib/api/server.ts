@@ -8,7 +8,7 @@ import { apiUrl } from "@/lib/auth/session";
  * Server Components only: reads the access cookie and calls the backend directly,
  * so an SSR page never makes an HTTP round trip to itself.
  *
- * It never refreshes and never sets a cookie — middleware guarantees a fresh token
+ * It never refreshes and never sets a cookie — `proxy.ts` guarantees a fresh token
  * before the render begins, and a Server Component cannot persist one anyway
  * (design spec §2.3). A 401 here means the token expired between the two, which the
  * caller handles with redirect("/login").

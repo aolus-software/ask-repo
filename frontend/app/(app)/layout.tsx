@@ -19,7 +19,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     redirect("/login");
   }
 
-  // Enforced here rather than in middleware: `must_change_password` is deliberately
+  // Enforced here rather than in `proxy.ts`: `must_change_password` is deliberately
   // not a token claim (docs/PRD.md §4.0), and this layout already has the user.
   if (user.mustChangePassword) redirect("/change-password");
 

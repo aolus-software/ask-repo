@@ -78,7 +78,7 @@ silently. `components/ui/` is CLI-managed and never hand-edited; see the compone
 
 ```
 frontend/
-├── middleware.ts          # session gate + the refresh point for navigations
+├── proxy.ts               # session gate + the refresh point for navigations
 ├── app/
 │   ├── layout.tsx         # fonts, theme, query provider, toaster
 │   ├── globals.css        # Tailwind entry + theme tokens (only file with raw hex)
@@ -114,7 +114,7 @@ Only one variable — see [`.env.example`](.env.example), and
 [`../docs/configuration.md`](../docs/configuration.md#frontend) for the reasoning:
 
 - `API_URL` — base URL of the AskRepo API, read on the **server** only: by the API forwarding
-  route, the middleware, and `serverFetch`. The browser never calls the API directly, so this
+  route, `proxy.ts`, and `serverFetch`. The browser never calls the API directly, so this
   does not need to be reachable from a browser. Under Docker Compose it is the service name
   `http://backend:8000`, **not** the published host port. (This inverts the old
   `NEXT_PUBLIC_API_URL` rule, which was correct while the browser did the fetching.)

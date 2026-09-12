@@ -1,6 +1,6 @@
 ---
 paths:
-  - "frontend/middleware.ts"
+  - "frontend/proxy.ts"
   - "frontend/app/api/**/*.ts"
   - "frontend/lib/auth/**/*.ts"
   - "frontend/lib/api/server.ts"
@@ -23,9 +23,9 @@ somewhere it shouldn't, or a session that drops without an error anyone sees.
 verbatim `name=value` pair because `REFRESH_COOKIE_NAME` is operator-configurable). Neither is
 readable from client-side JavaScript.
 
-The `Path=/` is deliberate and differs from the backend's own `/auth` cookie scope: `middleware.ts`
+The `Path=/` is deliberate and differs from the backend's own `/auth` cookie scope: `proxy.ts`
 runs at `/projects` and every other app route, and is only sent cookies whose path matches. Scoping
-either cookie to `/auth` here would make the middleware unable to read it on any other route —
+either cookie to `/auth` here would make `proxy.ts` unable to read it on any other route —
 not an error, just a silent, permanent "not authenticated."
 
 ## `app/api/[...path]/route.ts` is the one route the browser talks to
@@ -42,8 +42,14 @@ capability needs to reach the backend, it goes through this one route, not a new
 A Server Component cannot set a cookie, so a token refreshed during render could never be
 persisted — refreshing there would silently discard the new token every time.
 
-- **Navigations** refresh in `middleware.ts`.
-- **Browser fetches and the answer stream** refresh inside the proxy (`app/api/[...path]/route.ts`),
+Two different files are now both called "proxy", and the distinction matters here: `proxy.ts` at
+the repository root is Next's request gate (the file convention that used to be `middleware.ts`,
+renamed in Next 16), while **the API proxy** is the forwarding route at
+`app/api/[...path]/route.ts`. They refresh on different triggers and neither substitutes for the
+other. Where the two could be confused, name the path.
+
+- **Navigations** refresh in `proxy.ts`.
+- **Browser fetches and the answer stream** refresh inside the API proxy (`app/api/[...path]/route.ts`),
   on the `401` status line, **before any body is read**. Reading the body first is what would break
   this on the SSE route: an SSE body is a stream, not a value, and inspecting it before deciding to
   refresh would consume or block on data that never arrives.
@@ -62,7 +68,7 @@ failing test outside the ones listed below.
 
 ## `API_URL` is server-only
 
-It replaces `NEXT_PUBLIC_API_URL` and is read only by the proxy, `middleware.ts`, and
+It replaces `NEXT_PUBLIC_API_URL` and is read only by the API proxy, `proxy.ts`, and
 `serverFetch` — never by browser code. Under Compose it is the service name `http://backend:8000`,
 the inverse of the old `NEXT_PUBLIC_*` rule, because the fetch now happens server-side. Reading it
 from a Client Component, or re-adding a `NEXT_PUBLIC_*` variable that mirrors it, inlines it into

@@ -14,15 +14,19 @@ import { refreshSession } from "@/lib/auth/session";
  *
  * Two checks it deliberately does NOT make:
  *  - `must_change_password`, which is not a token claim (docs/PRD.md §4.0), so
- *    middleware could only learn it with an extra API call on every navigation.
+ *    the proxy could only learn it with an extra API call on every navigation.
  *    `app/(app)/layout.tsx` handles it, having already fetched the user.
- *  - `is_admin`, because middleware sees a path and not a resource. Route
+ *  - `is_admin`, because the proxy sees a path and not a resource. Route
  *    authorization lives in the page body, and the backend is the authority.
  *
  * This is also the refresh point for navigations: a Server Component cannot set a
  * cookie, so a token refreshed during render could never be persisted (spec §2.3).
+ *
+ * Named `proxy` in `proxy.ts` because Next 16 renamed the file convention; this is
+ * the same request gate that was `middleware.ts`, with no behavioural change. Next
+ * errors out if both files exist, so this is a move rather than an addition.
  */
-export async function middleware(request: NextRequest): Promise<NextResponse> {
+export async function proxy(request: NextRequest): Promise<NextResponse> {
   const { pathname } = request.nextUrl;
   const isLoginRoute = pathname === "/login";
 
