@@ -34,6 +34,12 @@ incompatibly. Configuration defaults and internal module layout may change in a 
 - Four settings bounding that read: `INDEXED_PATH_SCROLL_PAGE_SIZE` (1024),
   `INDEXED_PATH_CACHE_TTL_SECONDS` (300), `INDEXED_PATH_CACHE_MAX_PROJECTS` (32) and
   `INDEXED_PATH_SEARCH_LIMIT` (200).
+- **`CHAT_REASONING` and `CHAT_EXTRA_MODEL_KWARGS`**, so an operator can turn off a reasoning
+  model's hidden chain-of-thought (issue #26). `CHAT_REASONING=off` reaches all three providers
+  `build_chat_model` supports, in each one's own vocabulary; `CHAT_EXTRA_MODEL_KWARGS` is a
+  narrower escape hatch, forwarded as `extra_body` on the `openai` branch only, for self-hosted
+  OpenAI-compatible servers whose thinking toggle isn't `reasoning_effort`. Both default to
+  today's behavior — this is a pure opt-in.
 
 ### Fixed
 
