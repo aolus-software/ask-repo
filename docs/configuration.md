@@ -350,7 +350,7 @@ and the relevance floor respectively, and both are accepted.
 | `API_URL` | `http://localhost:8000` | Base URL of the AskRepo API |
 
 One variable, and the important thing about it is where it is read: **on the server only** —
-by the API forwarding route (`app/api/[...path]/route.ts`), by `middleware.ts`, and by
+by the API forwarding route (`app/api/[...path]/route.ts`), by `proxy.ts`, and by
 `serverFetch`.
 
 Next acts as a backend-for-frontend. It holds the session in two httpOnly cookies and calls

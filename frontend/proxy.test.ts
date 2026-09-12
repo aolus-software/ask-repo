@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { middleware } from "@/middleware";
+import { proxy } from "@/proxy";
 import { __resetRefreshFlight } from "@/lib/auth/session";
 
 const ORIGINAL_API_URL = process.env.API_URL;
@@ -21,9 +21,9 @@ const request = (path: string, cookie = "") =>
 const SESSION = "askrepo_session=askrepo_refresh%3Dopaque";
 const ACCESS = "askrepo_access=jwt";
 
-describe("the middleware gate", () => {
+describe("the proxy gate", () => {
   it("sends an anonymous visitor to login, remembering where they were going", async () => {
-    const response = await middleware(request("/projects"));
+    const response = await proxy(request("/projects"));
     const location = new URL(
       response.headers.get("location") ?? "",
       "http://localhost:3000",
@@ -35,17 +35,17 @@ describe("the middleware gate", () => {
   });
 
   it("lets an anonymous visitor reach login", async () => {
-    const response = await middleware(request("/login"));
+    const response = await proxy(request("/login"));
     expect(response.headers.get("location")).toBeNull();
   });
 
   it("passes a fully authenticated request straight through", async () => {
-    const response = await middleware(request("/projects", `${SESSION}; ${ACCESS}`));
+    const response = await proxy(request("/projects", `${SESSION}; ${ACCESS}`));
     expect(response.headers.get("location")).toBeNull();
   });
 
   it("sends an authenticated visitor away from login", async () => {
-    const response = await middleware(request("/login", `${SESSION}; ${ACCESS}`));
+    const response = await proxy(request("/login", `${SESSION}; ${ACCESS}`));
     const location = new URL(
       response.headers.get("location") ?? "",
       "http://localhost:3000",
@@ -76,7 +76,7 @@ describe("the middleware gate", () => {
       ),
     );
 
-    const response = await middleware(request("/projects", SESSION));
+    const response = await proxy(request("/projects", SESSION));
 
     expect(response.headers.get("location")).toBeNull();
     expect(response.headers.getSetCookie().join("\n")).toContain(
@@ -90,7 +90,7 @@ describe("the middleware gate", () => {
       vi.fn(async () => new Response(null, { status: 401 })),
     );
 
-    const response = await middleware(request("/projects", SESSION));
+    const response = await proxy(request("/projects", SESSION));
     const location = new URL(
       response.headers.get("location") ?? "",
       "http://localhost:3000",
@@ -101,7 +101,7 @@ describe("the middleware gate", () => {
   });
 
   it("does not include a next param when the target is the dashboard", async () => {
-    const response = await middleware(request("/"));
+    const response = await proxy(request("/"));
     const location = new URL(
       response.headers.get("location") ?? "",
       "http://localhost:3000",

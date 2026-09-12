@@ -10,9 +10,10 @@ import {
 import { refreshSession } from "@/lib/auth/session";
 
 /**
- * Rotate the session on demand. In normal operation refresh is triggered by
- * middleware (navigations) or the proxy (fetches); this exists for completeness
- * and for a client that wants to renew explicitly.
+ * Rotate the session on demand. In normal operation refresh is triggered by the
+ * request proxy in `proxy.ts` (navigations) or by the API proxy at
+ * `app/api/[...path]` (fetches); this exists for completeness and for a client
+ * that wants to renew explicitly.
  */
 export async function POST(request: Request): Promise<Response> {
   const sessionCookie = readCookie(request, SESSION_COOKIE);

@@ -348,7 +348,7 @@ Thirteen rule files in `.claude/rules/`. Read the ones your change touches.
 | `design-system.md` | Any `.tsx` or `.css` — tokens, shadcn, dark mode, spacing |
 | `forms.md` | Any form — dialog vs page, validation ownership, field composition |
 | `navigation.md` | Sidebar, breadcrumbs, or adding a route |
-| `frontend-bff.md` | Any `middleware.ts`, the `app/api/[...path]` proxy, `/api/auth/*`, or session/refresh code — cookies, the refresh split, SSE piping |
+| `frontend-bff.md` | Any `proxy.ts`, the `app/api/[...path]` API proxy, `/api/auth/*`, or session/refresh code — cookies, the refresh split, SSE piping |
 | `audit-findings.md` | Writing an audit report |
 
 Five commands in `.claude/commands/`: `audit-flow.md` (read-only sweep, writes
@@ -387,16 +387,18 @@ the page.
 - **Two cookies, both set by Next, both httpOnly and `Path=/`**: `askrepo_access` (the JWT) and
   `askrepo_session` (the backend's own refresh cookie, stored as a verbatim `name=value` pair
   because `REFRESH_COOKIE_NAME` is operator-configurable). The `Path=/` differs from the
-  backend's `/auth` scope on purpose: middleware runs at `/projects` and is only sent cookies
+  backend's `/auth` scope on purpose: `proxy.ts` runs at `/projects` and is only sent cookies
   whose path matches.
 - **`app/api/[...path]/route.ts` is the one route the browser talks to.** It attaches the bearer,
   strips `set-cookie` from every backend response, and relays the body untouched. Only the three
   `/api/auth/*` handlers write cookies.
 - **Refresh happens in two places, and that split is structural.** A Server Component cannot set
   a cookie, so a token refreshed during render could never be persisted. Navigations refresh in
-  `middleware.ts`; browser fetches and the answer stream refresh inside the proxy, on the `401`
-  status line, before any body is read — which is what keeps it safe on the SSE route.
-- **The answer stream is piped through the proxy unbuffered**, preserving `text/event-stream`,
+  `proxy.ts` — Next's request gate, called `middleware.ts` before Next 16 renamed the convention,
+  and not to be confused with the API proxy below; browser fetches and the answer stream refresh
+  inside the API proxy, on the `401` status line, before any body is read — which is what keeps
+  it safe on the SSE route.
+- **The answer stream is piped through the API proxy unbuffered**, preserving `text/event-stream`,
   `Cache-Control: no-cache` and `X-Accel-Buffering: no`.
 - **`API_URL` is server-only** and replaces `NEXT_PUBLIC_API_URL`. Under Compose it is the
   service name `http://backend:8000` — the inverse of the old rule, because the fetch now happens
@@ -421,7 +423,7 @@ Composition uses **`render={<Component />}`, never `asChild`** — `asChild` doe
 and fails silently. `docs/design.md` lists the intended component set per milestone; install a
 row when the screen needing it lands.
 
-`API_URL` is read on the **server** only — by the proxy, the middleware, and `serverFetch`. It
+`API_URL` is read on the **server** only — by the API proxy, `proxy.ts`, and `serverFetch`. It
 does not need to be reachable from the browser, so under Compose it is the service name
 `http://backend:8000`, not the published host port.
 

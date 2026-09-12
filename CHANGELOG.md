@@ -74,6 +74,13 @@ incompatibly. Configuration defaults and internal module layout may change in a 
 
 ### Changed
 
+- **The frontend's `middleware.ts` is now `proxy.ts`**, following Next 16's rename of the file
+  convention — the exported function is `proxy` rather than `middleware`. No behavioural change:
+  the same session gate runs on the same `matcher`, and navigations still refresh there while
+  browser fetches refresh in the API proxy at `app/api/[...path]`. Operators are unaffected; this
+  is noted only because "the proxy" now names two different files, and the docs distinguish them
+  as `proxy.ts` (Next's request gate) and the API proxy (the forwarding route).
+
 - **`POST /checklist-modules` now refuses a `source_path` that matches nothing in the project's
   index, with `400 MODULE_PATH_NOT_INDEXED`** — as does `PATCH /checklist-modules/{id}` when it
   changes the path. Previously a typo'd path was accepted with `201` and failed later and
