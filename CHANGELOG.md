@@ -74,6 +74,17 @@ incompatibly. Configuration defaults and internal module layout may change in a 
 
 ### Changed
 
+- **The QA Checklist module screen keeps its refinement chat and its pending proposal in side
+  drawers**, opened from `Refine` and `Review N changes` in the action row, on both the Test Plan
+  and Mock Data tabs. They used to render on the page, the proposal above the grid and the chat
+  that produced it below — so accepting a proposal meant scrolling back past the whole checklist,
+  and the composer disabled itself for a reason (one pending change set per module) that was off
+  screen and therefore read as the UI being broken. The grid now keeps the full width. Each
+  drawer's left edge drags to resize, by pointer or with the arrow keys when the handle is
+  focused, and the width is remembered per drawer in `localStorage` — closing a drawer while an
+  answer is streaming still stops that answer, and the partial reply is persisted and labelled
+  as interrupted, unchanged from before.
+
 - **The frontend's `middleware.ts` is now `proxy.ts`**, following Next 16's rename of the file
   convention — the exported function is `proxy` rather than `middleware`. No behavioural change:
   the same session gate runs on the same `matcher`, and navigations still refresh there while
