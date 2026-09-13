@@ -24,6 +24,7 @@ from app.api.routes import (
 )
 from app.config import get_settings
 from app.core.errors import register_exception_handlers
+from app.core.logging import configure_logging
 from app.core.middleware import AuthContextMiddleware
 from app.ingestion.embedder import build_embedder
 from app.queue.producer import KafkaIngestionQueue, ensure_topics
@@ -109,15 +110,10 @@ def create_app() -> FastAPI:
     # without this every `logger.info` in the API process is discarded -- including
     # the routing and grading lines that are the *only* record of how a turn was
     # answered, since the graph deliberately stores no trace
-    # (`docs/superpowers/specs/2026-08-30-m3-langgraph-design.md` §2.4). Matches
-    # `app/worker.py` and `app/cli.py`, which each do the same for their process.
-    #
-    # The level is set separately because `basicConfig` returns silently when the
-    # root logger already has a handler, which is the case whenever something
-    # configured logging before this ran -- it would leave the level untouched and
-    # the INFO records dropped exactly as before.
-    logging.basicConfig(level=logging.INFO)
-    logging.getLogger().setLevel(logging.INFO)
+    # (`docs/superpowers/specs/2026-08-30-m3-langgraph-design.md` §2.4). It also
+    # reclaims uvicorn's own handlers, which are otherwise the only lines in the
+    # process with no timestamp -- see `app/core/logging.py`.
+    configure_logging("api")
 
     app = FastAPI(
         title=settings.app_name,

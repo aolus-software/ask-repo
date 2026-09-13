@@ -76,7 +76,7 @@ The underlying commands, if you need them directly:
 ```bash
 # Backend — from backend/
 uv sync                                   # create .venv, install deps
-uv run uvicorn app.main:app --reload      # dev server on :8000, docs at /docs
+uv run uvicorn app.main:app --reload --log-config logging.json   # dev server on :8000
 uv run pytest                             # all tests
 uv run pytest tests/test_api_model.py     # one file
 uv run pytest -k camel_case               # one test by name substring

@@ -12,11 +12,17 @@ from sqlalchemy.ext.asyncio import create_async_engine
 
 from alembic import context
 from app.config import get_settings
+from app.core.logging import configure_logging
 from app.models import Base
 
 config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
+
+# `alembic.ini` owns which loggers are noisy, so the levels it just set are left
+# alone; only the format is replaced, so a migration line carries the same UTC
+# timestamp as the API and worker lines it will be read beside.
+configure_logging("alembic", level=None)
 
 target_metadata = Base.metadata
 

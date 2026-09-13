@@ -17,6 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.checklist.generator import ChecklistGenerator
 from app.config import Settings, get_settings
+from app.core.logging import configure_logging
 from app.db.session import get_sessionmaker
 from app.ingestion.chunker import LanguageAwareChunker
 from app.ingestion.embedder import build_embedder, probe_dimensions
@@ -200,7 +201,7 @@ async def _build_chat_model(settings: Settings) -> BaseChatModel:
 
 async def main() -> None:
     """Start the consumers and the sweep, and run until cancelled."""
-    logging.basicConfig(level=logging.INFO)
+    configure_logging("worker")
     settings = get_settings()
     worker_id = f"worker-{uuid.uuid4().hex[:8]}"
 

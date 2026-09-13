@@ -177,7 +177,7 @@ uv sync                                          # creates .venv, installs deps
 uv run alembic upgrade head
 BOOTSTRAP_ADMIN_PASSWORD='<a real passphrase>' \
   uv run python -m app.cli seed-admins
-uv run uvicorn app.main:app --reload --port 8000
+uv run uvicorn app.main:app --reload --port 8000 --log-config logging.json
 uv run python -m app.worker                      # separate terminal
 ```
 

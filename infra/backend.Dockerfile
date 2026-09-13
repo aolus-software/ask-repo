@@ -33,4 +33,4 @@ EXPOSE 8000
 # Migrate, seed the bootstrap admins (idempotent), then serve. Shell form so the
 # chain runs in order and a failed migration stops the container rather than
 # serving against an empty schema.
-CMD ["sh", "-c", "alembic upgrade head && python -m app.cli seed-admins && uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"]
+CMD ["sh", "-c", "alembic upgrade head && python -m app.cli seed-admins && uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload --log-config logging.json"]

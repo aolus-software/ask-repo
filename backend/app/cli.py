@@ -12,6 +12,7 @@ import sys
 import uuid
 
 from app.config import get_settings
+from app.core.logging import configure_logging
 from app.core.passwords import PasswordPolicyError, check_password, get_common_passwords
 from app.core.security import hash_password
 from app.db.session import get_sessionmaker
@@ -96,7 +97,7 @@ async def seed_admins() -> int:
 
 def main(argv: list[str] | None = None) -> int:
     """Entry point. Returns a process exit code."""
-    logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
+    configure_logging("cli")
     parser = argparse.ArgumentParser(prog="app.cli", description="AskRepo operational commands")
     parser.add_argument("command", choices=["seed-admins"])
     arguments = parser.parse_args(argv)
