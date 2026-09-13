@@ -1,6 +1,13 @@
 "use client";
 
-import { Download, Eraser, Plus, Sparkles } from "lucide-react";
+import {
+  ClipboardCheck,
+  Download,
+  Eraser,
+  MessagesSquare,
+  Plus,
+  Sparkles,
+} from "lucide-react";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 
@@ -11,6 +18,7 @@ import { ChatPanel } from "@/components/checklist/chat-panel";
 import { ItemFilters } from "@/components/checklist/item-filters";
 import { ItemGrid } from "@/components/checklist/item-grid";
 import { ChecklistModuleStatusBadge } from "@/components/checklist/module-status-badge";
+import { RefinementDrawer } from "@/components/checklist/refinement-drawer";
 import { StalenessBadge } from "@/components/checklist/staleness-badge";
 import { NotFound } from "@/components/feedback/not-found";
 import { GenerateMockDataControl } from "@/components/mock-data/generate-control";
@@ -187,6 +195,38 @@ export function ModuleScreen({ moduleId }: { moduleId: string }) {
                 </Button>
               )}
 
+              {pendingChangeSet ? (
+                <RefinementDrawer
+                  label={`Review ${pendingChangeSet.operations.length} ${
+                    pendingChangeSet.operations.length === 1 ? "change" : "changes"
+                  }`}
+                  icon={ClipboardCheck}
+                  variant="default"
+                  title="Pending changes"
+                  description="Tick the operations to keep. Nothing is written to the test plan until you apply."
+                  storageKey="checklist-review"
+                >
+                  <ChangeSetPanel
+                    changeSet={pendingChangeSet}
+                    moduleId={moduleId}
+                    items={checklistModule.items}
+                  />
+                </RefinementDrawer>
+              ) : null}
+
+              <RefinementDrawer
+                label="Refine"
+                icon={MessagesSquare}
+                title="Refine this test plan"
+                description="Ask for changes, or explain what should be different. Proposals arrive as a change set to review."
+                storageKey="checklist-refine"
+              >
+                <ChatPanel
+                  moduleId={moduleId}
+                  hasPendingChangeSet={pendingChangeSetId !== null}
+                />
+              </RefinementDrawer>
+
               <Button variant="outline" onClick={() => setAddingItem(true)}>
                 <Plus className="size-4" />
                 Add test case
@@ -215,14 +255,6 @@ export function ModuleScreen({ moduleId }: { moduleId: string }) {
               <AlertTitle>The last generation failed</AlertTitle>
               <AlertDescription>{checklistModule.error}</AlertDescription>
             </Alert>
-          ) : null}
-
-          {pendingChangeSet ? (
-            <ChangeSetPanel
-              changeSet={pendingChangeSet}
-              moduleId={moduleId}
-              items={checklistModule.items}
-            />
           ) : null}
 
           <ItemFilters currentFilters={filters} onFiltersChange={setFilters} />
@@ -275,11 +307,6 @@ export function ModuleScreen({ moduleId }: { moduleId: string }) {
             open={addingItem}
             onOpenChange={setAddingItem}
           />
-
-          <ChatPanel
-            moduleId={moduleId}
-            hasPendingChangeSet={pendingChangeSetId !== null}
-          />
         </TabsContent>
 
         <TabsContent value="mock-data" className="space-y-6">
@@ -296,6 +323,42 @@ export function ModuleScreen({ moduleId }: { moduleId: string }) {
                 moduleId={moduleId}
                 blockedBecause={mockDataGenerateBlockedBecause}
               />
+
+              {pendingMockDataChangeSet ? (
+                <RefinementDrawer
+                  label={`Review ${pendingMockDataChangeSet.operations.length} ${
+                    pendingMockDataChangeSet.operations.length === 1
+                      ? "change"
+                      : "changes"
+                  }`}
+                  icon={ClipboardCheck}
+                  variant="default"
+                  title="Pending changes"
+                  description="Tick the operations to keep. Nothing is written to the dataset until you apply."
+                  storageKey="mock-data-review"
+                >
+                  <MockDataChangeSetPanel
+                    key={pendingMockDataChangeSet.id}
+                    changeSet={pendingMockDataChangeSet}
+                    moduleId={moduleId}
+                    records={mockData.data?.records ?? []}
+                  />
+                </RefinementDrawer>
+              ) : null}
+
+              <RefinementDrawer
+                label="Refine"
+                icon={MessagesSquare}
+                title="Refine this mock data"
+                description="Ask for changes to these records. Proposals arrive as a change set to review."
+                storageKey="mock-data-refine"
+              >
+                <MockDataChatPanel
+                  moduleId={moduleId}
+                  hasPendingChangeSet={mockDataPendingChangeSetId !== null}
+                  isGenerating={mockData.data?.status === "generating"}
+                />
+              </RefinementDrawer>
               <Button
                 variant="outline"
                 nativeButton={false}
@@ -322,22 +385,7 @@ export function ModuleScreen({ moduleId }: { moduleId: string }) {
             </Alert>
           ) : null}
 
-          {pendingMockDataChangeSet ? (
-            <MockDataChangeSetPanel
-              key={pendingMockDataChangeSet.id}
-              changeSet={pendingMockDataChangeSet}
-              moduleId={moduleId}
-              records={mockData.data?.records ?? []}
-            />
-          ) : null}
-
           <RecordsTable moduleId={moduleId} records={mockData.data?.records ?? []} />
-
-          <MockDataChatPanel
-            moduleId={moduleId}
-            hasPendingChangeSet={mockDataPendingChangeSetId !== null}
-            isGenerating={mockData.data?.status === "generating"}
-          />
         </TabsContent>
       </Tabs>
     </div>
