@@ -11,6 +11,8 @@ incompatibly. Configuration defaults and internal module layout may change in a 
 
 ## [Unreleased]
 
+## [1.1.0] — 2026-09-13
+
 ### Added
 
 - **A path picker for QA Checklist modules** (`docs/PRD.md` §2.1, phase 1.1). `GET
@@ -327,5 +329,6 @@ None of these is a defect. Each is a documented, deliberate scope decision:
 
 ---
 
-[Unreleased]: https://github.com/aolus-software/ask-repo/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/aolus-software/ask-repo/compare/v1.1.0...HEAD
+[1.1.0]: https://github.com/aolus-software/ask-repo/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/aolus-software/ask-repo/releases/tag/v1.0.0
