@@ -22,6 +22,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.config import Settings, get_settings
+from app.core.role_seed import ensure_system_roles
 from app.core.security import create_access_token, hash_password
 from app.db.session import get_sessionmaker, reset_engine
 from app.ingestion.embedder import FakeEmbedder
@@ -109,6 +110,14 @@ async def _clean_tables(_migrated_database: None) -> AsyncIterator[None]:
     tables = ", ".join(f'"{table.name}"' for table in reversed(Base.metadata.sorted_tables))
     async with get_sessionmaker()() as session:
         await session.execute(text(f"TRUNCATE {tables} RESTART IDENTITY CASCADE"))
+        # The three system roles are reference data the RBAC migration installs, not
+        # test data -- truncating them is the part that is wrong, and this restores
+        # the invariant rather than setting anything up. It re-seeds from the same
+        # `SYSTEM_ROLES` the migration reads, so the two cannot disagree. Done inside
+        # this fixture rather than a second autouse one because ordering between two
+        # autouse fixtures is not guaranteed, and a test that ran before the seed
+        # would fail intermittently.
+        await ensure_system_roles(session)
         await session.commit()
     yield
 
