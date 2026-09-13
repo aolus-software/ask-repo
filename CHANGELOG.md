@@ -71,8 +71,46 @@ incompatibly. Configuration defaults and internal module layout may change in a 
   either provider and every chat failure fell through to the unclassified path — one retry
   instead of three for a rate limit, and a pointless retry for a rejected key. It now matches any
   name in the exception's MRO, and knows LangChain's provider-agnostic `Model*Error` bases.
+- **The account menu crashed on every open with an uncaught Base UI error** (`Menu.GroupLabel`
+  requires a `<Menu.Group>` ancestor, which `DropdownMenuLabel` never provided). Fixed by
+  dropping the profile header from the menu — it is now sign-out actions only
+  (`Log out` / `Log out everywhere`); the profile display and self-service change-password entry
+  return once there is a settings page for them to live on. The forced first-login
+  `/change-password` route is unaffected.
+- **A batch of frontend consistency fixes from a full-app UI audit** (`docs/ui-audit-findings.md`,
+  `/audit-ui`). The user-visible ones: a failed list or detail request (backend down, a dropped
+  connection) no longer renders as "nothing here" or "not found" — both now show a retry, and a
+  private conversation is never told it does not exist over a network blip. The checklist and
+  mock-data refinement chats now show the same grounding warnings and "what the model is doing"
+  phase indicator the Ask screen always has, so an uncited or invented proposal on the shared
+  checklist no longer arrives with no warning at all. Deleting a mock-data record now confirms
+  first, like every other destructive action. Error banners (`Alert`'s `destructive` variant)
+  reliably colour their message text instead of leaving it grey inside a red border. A dozen
+  smaller inconsistencies also closed: duplicated page headers and empty states consolidated
+  into shared components, one status→colour mapping for checklist modules and user roles, the
+  auth flow's two screens no longer double in width between them, and `docs/design.md`'s radius
+  and component-inventory sections corrected to match the code.
+- **The Ask screen's conversation list was unusable on a phone.** It stacked inline above the
+  page content with a fixed-height scroll area sized for a full sidebar, so a two-conversation
+  account showed most of a screen of empty space before the actual composer, with no way to get
+  past it faster than scrolling. The list is now a collapsed-by-default drawer on mobile, opened
+  by a "Conversations" button, with the fixed height removed entirely. The desktop sticky
+  sidebar is now collapsible too — a toggle shrinks it to a slim strip and back, remembered per
+  browser.
+- **Login had no placeholder text on either field.** `you@example.com` and a password hint are
+  now shown.
+- **The QA Checklist's test-case grid was the one table in the app with no `Card` behind it**,
+  so it showed the page background through it instead of `bg-card` — visibly different from
+  every other table. `.claude/rules/design-system.md` §11 now states this as a rule: every
+  `<Table>` sits inside a `Card`, with no carve-out for a grid on a detail-page tab.
 
 ### Changed
+
+- **The conversation view — Ask, and both refinement chats — no longer looks flat.** Neither
+  Claude.ai nor ChatGPT bubbles the assistant's reply; both anchor each turn with a small role
+  icon instead. The assistant's turn now gets the same treatment here, live while it streams and
+  once it is stored, and a user's own question can be collapsed to one line with a click — useful
+  for a long question or a pasted block of code without losing your place in the conversation.
 
 - **Every backend process now logs with a UTC timestamp and a service tag.** The API, the worker,
   the CLI and Alembic each configured logging on their own and none emitted a timestamp, so a

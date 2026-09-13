@@ -1,5 +1,6 @@
 "use client";
 
+import { Loader2 } from "lucide-react";
 import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -80,7 +81,7 @@ export function ResultCell({
           value={status}
           onValueChange={(value) => setStatus(value as ChecklistItemStatus)}
         >
-          <SelectTrigger id={`status-${item.id}`}>
+          <SelectTrigger id={`status-${item.id}`} className="w-full">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -106,7 +107,8 @@ export function ResultCell({
           onSave({ currentResult: currentResult === "" ? null : currentResult, status })
         }
       >
-        {isSaving ? "Saving…" : "Save result"}
+        {isSaving ? <Loader2 className="size-4 animate-spin" /> : null}
+        Save result
       </Button>
     </div>
   );

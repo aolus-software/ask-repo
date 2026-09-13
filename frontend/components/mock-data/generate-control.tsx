@@ -33,8 +33,7 @@ export function GenerateMockDataControl({
       disabled={generate.isPending || blockedBecause !== null}
       onClick={() =>
         generate.mutate(count, {
-          onSuccess: () =>
-            toast.success("Generating. The proposals appear here when it finishes."),
+          onSuccess: () => toast.success("Generation started"),
           onError: (error) =>
             toast.error(
               isApiError(error) ? error.message : "That did not start. Try again.",

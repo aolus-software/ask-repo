@@ -52,6 +52,7 @@ export function ChangePasswordScreen() {
           logout link stays, because someone who cannot satisfy the form must still be
           able to leave. */}
       <FormPage
+        width="narrow"
         title="Choose a new password"
         description="Your account was created with a temporary password. Set your own to continue."
         submitLabel="Set password"

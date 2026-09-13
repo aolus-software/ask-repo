@@ -108,3 +108,17 @@ or leaves a gap at the bottom.
 `1, 2, 3, 4, 6, 8, 12` only. An arbitrary `p-5` or `gap-7` in one component is how a layout
 starts looking hand-tuned. The per-context table in `docs/design.md` → Spacing is the default;
 deviate only with a reason worth a comment.
+
+## 11. A `<Table>` always sits inside a `Card`
+
+No exceptions, including a grid on a detail-page tab that is not one of the four-part list
+screens `docs/design.md` → Lists describes. A bare `<Table>` shows the page's `bg-background`
+through it instead of `bg-card`, which reads as a different, less-finished surface from every
+other table in the app — this is exactly how the checklist grid on `/checklist/[moduleId]`
+drifted from `/projects`, `/settings/users`, and `/checklist` (`docs/ui-audit-findings.md`).
+
+`<Card className="p-0">` wraps the table; a horizontal-scroll container, if the table needs
+one, nests **inside** that Card rather than being applied to the Card itself — Card's own
+`overflow-hidden` and an `overflow-x-auto` on the same element fight each other, and which one
+wins depends on Tailwind's generated stylesheet order, not on which class was written last in
+the component.

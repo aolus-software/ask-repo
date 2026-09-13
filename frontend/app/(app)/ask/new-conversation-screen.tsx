@@ -6,6 +6,7 @@ import { useState } from "react";
 import { Composer } from "@/components/ask/composer";
 import { ProjectPicker } from "@/components/ask/project-picker";
 import { FormError } from "@/components/form/form-error";
+import { PageHeader } from "@/components/layout/page-header";
 import { useCreateConversation } from "@/hooks/use-conversations";
 import { setPendingQuestion } from "@/lib/ask/pending";
 
@@ -36,13 +37,10 @@ export function NewConversationScreen() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-semibold tracking-tight">Ask</h1>
-        <p className="text-muted-foreground mt-1 text-base">
-          Questions are answered from the indexed code, with citations. Only you can see
-          them.
-        </p>
-      </div>
+      <PageHeader
+        title="Ask"
+        description="Questions are answered from the indexed code, with citations. Only you can see them."
+      />
 
       <FormError error={create.error} />
 

@@ -4,12 +4,15 @@ import type {
   CitationPayload,
   DoneEventPayload,
   ErrorEventPayload,
+  StatusEventPayload,
 } from "@/lib/api/types";
 
 export interface ChecklistStreamHandlers {
   onCitations: (citations: CitationPayload[]) => void;
   onToken: (text: string) => void;
   onChangeSet: (changeSet: ChangeSetEventPayload) => void;
+  /** The same `status` phase the Ask screen shows (`docs/ui-audit-findings.md` §U8.2). */
+  onPhase?: (phase: string) => void;
 }
 
 export interface ChecklistTurnResult {
@@ -44,6 +47,9 @@ export async function consumeChecklistStream(
 
   for await (const event of parseSseStream(response.body)) {
     switch (event.event) {
+      case "status":
+        handlers.onPhase?.((event.data as StatusEventPayload).phase);
+        break;
       case "citations":
         handlers.onCitations(
           (event.data as { citations: CitationPayload[] }).citations,
@@ -66,7 +72,7 @@ export async function consumeChecklistStream(
         result.error = event.data as ErrorEventPayload;
         break;
       default:
-        // `status`, and anything added later. Ignored deliberately.
+        // Anything added later. Ignored deliberately.
         break;
     }
   }

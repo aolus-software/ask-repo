@@ -70,7 +70,7 @@ export function CreateModuleDialog({
         // module exists either way, and chaining them would report a generation
         // failure as a failed create, inviting a retry that makes a second module.
         onSuccess: (module) => {
-          toast.success("Module created. Generating its checklist\u2026");
+          toast.success("Module created");
           setValues(EMPTY);
           onOpenChange(false);
           generate.mutate(module.id, {

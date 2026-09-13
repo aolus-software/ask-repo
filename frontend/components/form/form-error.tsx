@@ -14,7 +14,7 @@ export function FormError({ error }: { error: unknown }) {
     error instanceof Error && error.message ? error.message : "Something went wrong.";
 
   return (
-    <Alert role="alert" className="border-danger text-danger mb-4">
+    <Alert variant="destructive" className="mb-4">
       <AlertDescription>{message}</AlertDescription>
     </Alert>
   );

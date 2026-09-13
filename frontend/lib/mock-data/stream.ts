@@ -4,12 +4,15 @@ import type {
   DoneEventPayload,
   ErrorEventPayload,
   MockDataChangeSetEventPayload,
+  StatusEventPayload,
 } from "@/lib/api/types";
 
 export interface MockDataStreamHandlers {
   onCitations: (citations: CitationPayload[]) => void;
   onToken: (text: string) => void;
   onChangeSet: (changeSet: MockDataChangeSetEventPayload) => void;
+  /** The same `status` phase the Ask screen shows (`docs/ui-audit-findings.md` §U8.2). */
+  onPhase?: (phase: string) => void;
 }
 
 export interface MockDataTurnResult {
@@ -38,6 +41,9 @@ export async function consumeMockDataStream(
 
   for await (const event of parseSseStream(response.body)) {
     switch (event.event) {
+      case "status":
+        handlers.onPhase?.((event.data as StatusEventPayload).phase);
+        break;
       case "citations":
         handlers.onCitations(
           (event.data as { citations: CitationPayload[] }).citations,

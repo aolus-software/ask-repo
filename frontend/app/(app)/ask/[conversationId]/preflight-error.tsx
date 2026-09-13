@@ -33,10 +33,8 @@ export function PreflightError({
 
   if (!isApiError(error)) {
     return (
-      <Alert className="border-danger">
-        <AlertTitle className="text-danger">
-          That question could not be answered
-        </AlertTitle>
+      <Alert variant="destructive">
+        <AlertTitle>That question could not be answered</AlertTitle>
         <AlertDescription>
           {error instanceof Error ? error.message : "Something went wrong."}
         </AlertDescription>
@@ -47,8 +45,8 @@ export function PreflightError({
   if (error.code === "EMBEDDING_MODEL_CHANGED") {
     const canManage = project.data ? canManageProject(user, project.data) : false;
     return (
-      <Alert className="border-danger">
-        <AlertTitle className="text-danger">This project needs re-indexing</AlertTitle>
+      <Alert variant="destructive">
+        <AlertTitle>This project needs re-indexing</AlertTitle>
         <AlertDescription className="space-y-3">
           <p>
             It was indexed with a different embedding model, so its stored vectors
@@ -84,7 +82,7 @@ export function PreflightError({
 
   if (error.code === "PROJECT_NOT_READY") {
     return (
-      <Alert>
+      <Alert variant="info">
         <AlertTitle>This project is not ready yet</AlertTitle>
         <AlertDescription>
           It is still cloning or indexing. Questions work once it reaches “Ready”.
@@ -94,10 +92,8 @@ export function PreflightError({
   }
 
   return (
-    <Alert className="border-danger">
-      <AlertTitle className="text-danger">
-        That question could not be answered
-      </AlertTitle>
+    <Alert variant="destructive">
+      <AlertTitle>That question could not be answered</AlertTitle>
       <AlertDescription>{error.message}</AlertDescription>
     </Alert>
   );

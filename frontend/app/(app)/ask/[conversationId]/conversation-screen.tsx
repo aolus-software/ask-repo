@@ -6,12 +6,15 @@ import { useEffect, useRef, useState } from "react";
 
 import { PreflightError } from "@/app/(app)/ask/[conversationId]/preflight-error";
 import { Answer } from "@/components/ask/answer";
+import { AssistantTurn } from "@/components/ask/assistant-turn";
 import { Composer } from "@/components/ask/composer";
 import { GroundingNotice } from "@/components/ask/grounding-notice";
 import { MessageList } from "@/components/ask/message-list";
 import { Sources } from "@/components/ask/sources";
+import { DetailError } from "@/components/feedback/detail-error";
 import { NotFound } from "@/components/feedback/not-found";
 import { ProjectStatusBadge } from "@/components/feedback/status-badge";
+import { PageHeader } from "@/components/layout/page-header";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -19,14 +22,7 @@ import { useAskStream } from "@/hooks/use-ask-stream";
 import { useConversation } from "@/hooks/use-conversations";
 import { useProject } from "@/hooks/use-projects";
 import { takePendingQuestion } from "@/lib/ask/pending";
-
-const PHASE_LABELS: Record<string, string> = {
-  queued: "Queued…",
-  classifying: "Understanding the question…",
-  retrieving: "Searching the codebase…",
-  grading: "Checking what it found…",
-  generating: "Writing the answer…",
-};
+import { PHASE_LABELS } from "@/lib/ask/phase-labels";
 
 export function ConversationScreen({ conversationId }: { conversationId: string }) {
   const conversation = useConversation(conversationId);
@@ -61,12 +57,21 @@ export function ConversationScreen({ conversationId }: { conversationId: string 
 
   if (conversation.error) {
     // Every miss is 404, on all four routes: a 403 would confirm the conversation
-    // exists, and is_admin does not widen this (docs/PRD.md §4.2).
-    return <NotFound message="That conversation does not exist." />;
+    // exists, and is_admin does not widen this (docs/PRD.md §4.2). A network or
+    // server failure is neither, and must not read as "deleted" — a conversation is
+    // private and unrecoverable, so that claim is exactly the wrong one to guess at
+    // (`docs/ui-audit-findings.md` §U7.2).
+    return (
+      <DetailError
+        error={conversation.error}
+        notFoundMessage="That conversation does not exist."
+        onRetry={() => conversation.refetch()}
+      />
+    );
   }
 
   const detail = conversation.data;
-  if (!detail) return <NotFound />;
+  if (!detail) return <NotFound message="That conversation does not exist." />;
 
   const isStreaming = state?.isStreaming ?? false;
 
@@ -87,41 +92,38 @@ export function ConversationScreen({ conversationId }: { conversationId: string 
   return (
     <div className="space-y-6">
       {/* Pinned under the navbar so the question you are reading always says which
-          conversation and which project it belongs to. `top-16` is the navbar's 4rem
-          (`docs/design.md` → Layout); the opaque background and the rule beneath it are
-          what stop the answer from appearing to slice through the title as it scrolls
-          under. z-10 sits below the navbar's z-50 and the sidebar's. */}
-      <div className="bg-background border-border sticky top-16 z-10 border-b pb-4">
-        <h1 className="text-3xl font-semibold tracking-tight">
-          {detail.title ?? "New conversation"}
-        </h1>
-
-        <div className="text-muted-foreground mt-2 flex items-center gap-2 text-sm">
-          <FolderGit2 className="size-4 shrink-0" aria-hidden />
-          {project.data ? (
-            <>
-              <Link
-                href={`/projects/${detail.projectId}`}
-                className="text-foreground hover:text-primary font-medium"
-              >
-                {project.data.name}
-              </Link>
-              {/* Shown even when ready: it is the difference between a follow-up
-                  that answers and one that returns PROJECT_NOT_READY. */}
-              <ProjectStatusBadge status={project.data.status} />
-            </>
-          ) : project.isError ? (
-            <span>That project is no longer available.</span>
-          ) : (
-            <Skeleton className="h-4 w-40" />
-          )}
-        </div>
-      </div>
+          conversation and which project it belongs to. */}
+      <PageHeader
+        sticky
+        title={detail.title ?? "New conversation"}
+        meta={
+          <div className="text-muted-foreground mt-2 flex items-center gap-2 text-sm">
+            <FolderGit2 className="size-4 shrink-0" aria-hidden />
+            {project.data ? (
+              <>
+                <Link
+                  href={`/projects/${detail.projectId}`}
+                  className="text-foreground hover:text-primary font-medium"
+                >
+                  {project.data.name}
+                </Link>
+                {/* Shown even when ready: it is the difference between a follow-up
+                    that answers and one that returns PROJECT_NOT_READY. */}
+                <ProjectStatusBadge status={project.data.status} />
+              </>
+            ) : project.isError ? (
+              <span>That project is no longer available.</span>
+            ) : (
+              <Skeleton className="h-4 w-40" />
+            )}
+          </div>
+        }
+      />
 
       <MessageList messages={detail.messages} />
 
       {state ? (
-        <div>
+        <AssistantTurn>
           {state.phase && state.isStreaming ? (
             <p className="text-muted-foreground mb-2 text-sm">
               {PHASE_LABELS[state.phase]}
@@ -153,8 +155,8 @@ export function ConversationScreen({ conversationId }: { conversationId: string 
           ) : null}
 
           {state.terminal === "error" ? (
-            <Alert className="border-danger mt-4">
-              <AlertTitle className="text-danger">The answer stopped</AlertTitle>
+            <Alert variant="destructive" className="mt-4">
+              <AlertTitle>The answer stopped</AlertTitle>
               <AlertDescription>{state.errorMessage}</AlertDescription>
             </Alert>
           ) : null}
@@ -169,7 +171,7 @@ export function ConversationScreen({ conversationId }: { conversationId: string 
               Try again
             </Button>
           ) : null}
-        </div>
+        </AssistantTurn>
       ) : null}
 
       {/* Mounted only when there is an error — it is about this turn, not the

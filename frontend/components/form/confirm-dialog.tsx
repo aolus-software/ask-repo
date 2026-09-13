@@ -2,6 +2,7 @@
 
 import { Loader2 } from "lucide-react";
 
+import { SIZES } from "@/components/form/form-dialog";
 import { FormError } from "@/components/form/form-error";
 import { Button } from "@/components/ui/button";
 import {
@@ -35,7 +36,7 @@ export function ConfirmDialog({
 }) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className={SIZES.sm}>
         <DialogHeader>
           <DialogTitle>{title}</DialogTitle>
           <DialogDescription>{description}</DialogDescription>

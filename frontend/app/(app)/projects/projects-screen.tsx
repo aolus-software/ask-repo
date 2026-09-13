@@ -4,6 +4,7 @@ import { FolderGit2, Plus } from "lucide-react";
 import { useState } from "react";
 
 import { EmptyState } from "@/components/feedback/empty-state";
+import { ListError } from "@/components/feedback/list-error";
 import { ListToolbar } from "@/components/layout/list-toolbar";
 import { PageHeader } from "@/components/layout/page-header";
 import { PaginationFooter } from "@/components/layout/pagination-footer";
@@ -46,7 +47,11 @@ export function ProjectsScreen() {
       />
 
       <Card className="p-0">
-        {!query.isLoading && projects.length === 0 ? (
+        {query.isError ? (
+          <div className="p-6">
+            <ListError error={query.error} onRetry={() => query.refetch()} />
+          </div>
+        ) : !query.isLoading && projects.length === 0 ? (
           <EmptyState
             icon={FolderGit2}
             title={params.search ? "No projects match" : "No projects yet"}

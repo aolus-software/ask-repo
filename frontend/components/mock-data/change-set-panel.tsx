@@ -5,6 +5,10 @@ import { useState } from "react";
 import { toast } from "sonner";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 
+import {
+  OperationRationale,
+  OperationRow,
+} from "@/components/change-sets/operation-row";
 import { ConfirmDialog } from "@/components/form/confirm-dialog";
 import { FormError } from "@/components/form/form-error";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -17,7 +21,6 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Separator } from "@/components/ui/separator";
 import { apiFetch } from "@/lib/api/client";
 import { endpoints } from "@/lib/api/endpoints";
@@ -41,14 +44,6 @@ function isOrphaned(
 ): boolean {
   if (operation.op === "add") return false;
   return !records.some((record) => record.id === operation.recordId);
-}
-
-function Rationale({ rationale }: { rationale: string }) {
-  return (
-    <p className="text-muted-foreground text-sm">
-      {rationale.trim() ? rationale : "No rationale given."}
-    </p>
-  );
 }
 
 export function MockDataChangeSetPanel({
@@ -148,29 +143,26 @@ export function MockDataChangeSetPanel({
           {changeSet.operations.map((operation) => {
             const orphaned = isOrphaned(operation, records);
             return (
-              <div key={operation.id} className="flex items-start gap-3 py-3">
-                <Checkbox
-                  checked={Boolean(checked[operation.id])}
-                  onCheckedChange={() => toggle(operation.id)}
-                  className="mt-1"
-                  aria-label="Include this change"
-                />
-                <div className={orphaned ? "text-muted-foreground flex-1" : "flex-1"}>
-                  <p className="font-medium capitalize">{operation.op}</p>
-                  {orphaned ? (
-                    <p className="text-sm">
-                      This record no longer exists — this change will be skipped
-                    </p>
-                  ) : operation.op === "update" ? (
-                    <p className="text-sm">{fieldMapText(operation.changes ?? {})}</p>
-                  ) : operation.op === "add" ? (
-                    <p className="text-sm">{fieldMapText(operation.fields ?? {})}</p>
-                  ) : null}
-                  <div className="mt-2">
-                    <Rationale rationale={operation.rationale} />
-                  </div>
+              <OperationRow
+                key={operation.id}
+                checked={Boolean(checked[operation.id])}
+                onToggle={() => toggle(operation.id)}
+                orphaned={orphaned}
+              >
+                <p className="font-medium capitalize">{operation.op}</p>
+                {orphaned ? (
+                  <p className="text-sm">
+                    This record no longer exists — this change will be skipped
+                  </p>
+                ) : operation.op === "update" ? (
+                  <p className="text-sm">{fieldMapText(operation.changes ?? {})}</p>
+                ) : operation.op === "add" ? (
+                  <p className="text-sm">{fieldMapText(operation.fields ?? {})}</p>
+                ) : null}
+                <div className="mt-2">
+                  <OperationRationale rationale={operation.rationale} />
                 </div>
-              </div>
+              </OperationRow>
             );
           })}
         </div>

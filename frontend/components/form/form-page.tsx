@@ -13,6 +13,16 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { cn } from "@/lib/utils";
+
+/**
+ * `width` defaults to the app-page size (`docs/design.md` → Layout's `max-w-3xl` for
+ * forms and prose). A form mounted on the shell-less auth background — the forced
+ * password change, next to the narrow sign-in card it follows — passes `"narrow"`
+ * instead, so the two screens do not double in width between them
+ * (`docs/ui-audit-findings.md` §U5.3).
+ */
+const WIDTHS = { default: "max-w-3xl", narrow: "max-w-sm" } as const;
 
 /** Same props as FormDialog, so moving a form between shells is a swap (forms.md §2). */
 export function FormPage({
@@ -24,9 +34,10 @@ export function FormPage({
   error,
   onSubmit,
   children,
-}: FormShellProps & { backHref?: string }) {
+  width = "default",
+}: FormShellProps & { backHref?: string; width?: keyof typeof WIDTHS }) {
   return (
-    <div className="mx-auto w-full max-w-3xl">
+    <div className={cn("mx-auto w-full", WIDTHS[width])}>
       {backHref ? (
         <Button
           variant="ghost"

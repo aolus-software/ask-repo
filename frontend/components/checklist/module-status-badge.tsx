@@ -1,31 +1,12 @@
 import { StatusBadge } from "@/components/feedback/status-badge";
 import type { ChecklistModuleStatus } from "@/lib/api/types";
-import type { StatusTone } from "@/lib/status";
-
-const LABELS: Record<ChecklistModuleStatus, string> = {
-  empty: "Empty",
-  generating: "Generating",
-  review: "Review",
-  ready: "Ready",
-  failed: "Failed",
-};
-
-const TONES: Record<ChecklistModuleStatus, StatusTone> = {
-  empty: "neutral",
-  generating: "warning",
-  // A module with a proposal waiting is not finished, and showing it green would say
-  // it was. `review` is the state the whole feature exists to make visible.
-  review: "warning",
-  ready: "success",
-  failed: "danger",
-};
+import { checklistModuleStatusLabel, checklistModuleStatusTone } from "@/lib/status";
 
 /**
- * One mapping, used by the module list and the module screen alike.
- *
- * Extracted rather than repeated: two copies drift, and the pair that drifts first is
- * always the one where a status means "needs a human" on one screen and "done" on the
- * other.
+ * One mapping, used by the module list and the module screen alike. The mapping
+ * itself lives in `lib/status.ts` beside the project one
+ * (`docs/ui-audit-findings.md` §U4.1) — this stays a thin renderer so both status
+ * domains are provably named in one file.
  */
 export function ChecklistModuleStatusBadge({
   status,
@@ -35,6 +16,10 @@ export function ChecklistModuleStatusBadge({
   className?: string;
 }) {
   return (
-    <StatusBadge tone={TONES[status]} label={LABELS[status]} className={className} />
+    <StatusBadge
+      tone={checklistModuleStatusTone(status)}
+      label={checklistModuleStatusLabel(status)}
+      className={className}
+    />
   );
 }

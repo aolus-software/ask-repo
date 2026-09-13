@@ -12,6 +12,7 @@ const TONE_CLASSES: Record<StatusTone, string> = {
   warning: "bg-warning text-warning-foreground",
   danger: "bg-danger text-danger-foreground",
   neutral: "bg-muted text-muted-foreground",
+  info: "bg-info text-info-foreground",
 };
 
 export function StatusBadge({

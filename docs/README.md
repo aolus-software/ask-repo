@@ -87,6 +87,9 @@ deduplication boundary" → `.claude/rules/ingestion.md`.
   for.
 - **[`../CONTRIBUTING.md`](../CONTRIBUTING.md)** — conventions, check commands, and what is out of
   scope.
+- **[`ui-audit-findings.md`](ui-audit-findings.md)** — the standing record of frontend
+  inconsistency, written by `/audit-ui`. Read-only findings (`U1`–`U12`); nothing in it has been
+  fixed unless a heading says so.
 
 ---
 

@@ -5,21 +5,27 @@ import { useCallback, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { Answer } from "@/components/ask/answer";
+import { AssistantTurn } from "@/components/ask/assistant-turn";
 import { Composer } from "@/components/ask/composer";
+import { GroundingNotice } from "@/components/ask/grounding-notice";
 import { MessageList } from "@/components/ask/message-list";
 import { Sources } from "@/components/ask/sources";
+import { EmptyState } from "@/components/feedback/empty-state";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Skeleton } from "@/components/ui/skeleton";
 import { apiFetch, apiFetchRaw } from "@/lib/api/client";
 import { isApiError } from "@/lib/api/errors";
 import { endpoints } from "@/lib/api/endpoints";
+import { PHASE_LABELS } from "@/lib/ask/phase-labels";
 import type { CitationPayload, MockDataMessageResponse } from "@/lib/api/types";
 import { consumeMockDataStream } from "@/lib/mock-data/stream";
 import { keys } from "@/lib/query/keys";
 
 interface TurnState {
+  phase: string | null;
   citations: CitationPayload[];
   citedIndexes: number[];
+  groundingWarnings: string[];
   text: string;
   isStreaming: boolean;
   errorMessage: string | null;
@@ -28,8 +34,10 @@ interface TurnState {
 
 function initialTurnState(): TurnState {
   return {
+    phase: null,
     citations: [],
     citedIndexes: [],
+    groundingWarnings: [],
     text: "",
     isStreaming: true,
     errorMessage: null,
@@ -41,9 +49,9 @@ function initialTurnState(): TurnState {
  * The module's shared mock-data refinement chat. Structurally identical to
  * `components/checklist/chat-panel.tsx`'s `ChatPanel` -- see that component for why
  * each piece of state exists (the `reconciled` flag, the per-frame token batching,
- * the pre-flight/mid-stream error split). Kept as a separate component rather than a
- * parameterised shared one so this feature and the checklist's own chat can diverge
- * without a shared file changing under both.
+ * the pre-flight/mid-stream error split, the phase label, the grounding notice). Kept
+ * as a separate component rather than a parameterised shared one so this feature and
+ * the checklist's own chat can diverge without a shared file changing under both.
  */
 export function MockDataChatPanel({
   moduleId,
@@ -106,6 +114,10 @@ export function MockDataChatPanel({
         });
 
         const result = await consumeMockDataStream(response, {
+          onPhase: (phase) => {
+            current = { ...current, phase };
+            setTurn(current);
+          },
           onCitations: (citations) => {
             current = { ...current, citations };
             setTurn(current);
@@ -132,6 +144,7 @@ export function MockDataChatPanel({
             ...current,
             isStreaming: false,
             citedIndexes: result.done.citedIndexes,
+            groundingWarnings: result.done.groundingWarnings ?? [],
           };
         } else {
           current = {
@@ -205,27 +218,39 @@ export function MockDataChatPanel({
       ) : messages.data && messages.data.length > 0 ? (
         <MessageList messages={messages.data} />
       ) : (
-        <p className="text-muted-foreground text-sm">
-          No messages yet. Ask for the dataset to be refined, or explain what should
-          change.
-        </p>
+        <EmptyState
+          size="compact"
+          description="No messages yet. Ask for the dataset to be refined, or explain what should change."
+        />
       )}
 
       {turn ? (
-        <div>
+        <AssistantTurn>
+          {turn.phase && turn.isStreaming ? (
+            <p className="text-muted-foreground mb-2 text-sm">
+              {PHASE_LABELS[turn.phase]}
+            </p>
+          ) : null}
+
           {!turn.reconciled ? (
             <>
               <Sources citations={turn.citations} citedIndexes={turn.citedIndexes} />
               <Answer content={turn.text} />
             </>
           ) : null}
+
+          {/* Not gated on reconciliation, for the same reason the Ask screen does
+              not: grounding warnings are not stored on the message
+              (`.claude/rules/rag.md`), so this is the only place they are shown. */}
+          <GroundingNotice warnings={turn.groundingWarnings} />
+
           {turn.errorMessage ? (
-            <Alert className="border-danger mt-4">
-              <AlertTitle className="text-danger">The reply stopped</AlertTitle>
+            <Alert variant="destructive" className="mt-4">
+              <AlertTitle>The reply stopped</AlertTitle>
               <AlertDescription>{turn.errorMessage}</AlertDescription>
             </Alert>
           ) : null}
-        </div>
+        </AssistantTurn>
       ) : null}
 
       {preflightError ? (
