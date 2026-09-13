@@ -18,16 +18,20 @@ carries the headers a browser needs to surface the body.
 
 import logging
 import uuid
-from dataclasses import dataclass
+from collections.abc import Mapping
+from dataclasses import dataclass, field
+from types import MappingProxyType
 
 from fastapi import Request, Response, status
 from fastapi.responses import JSONResponse
+from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoint
 
 from app.config import get_settings
 from app.core.errors import ErrorCode, error_detail
 from app.core.security import TokenExpiredError, TokenInvalidError, decode_access_token
 from app.db.session import get_sessionmaker
+from app.repositories.membership import MembershipRepository
 from app.repositories.user import UserRepository
 
 logger = logging.getLogger(__name__)
@@ -47,6 +51,19 @@ _BEARER_PREFIX = "Bearer "
 
 
 @dataclass(frozen=True, slots=True)
+class ProjectGrant:
+    """One project this caller may reach, and what they may do to it.
+
+    `permissions` is expanded at load time rather than held as a role name, so
+    `access.require_permission` needs no lookup and no session.
+    """
+
+    project_id: uuid.UUID
+    role: str
+    permissions: frozenset[str]
+
+
+@dataclass(frozen=True, slots=True)
 class AuthenticatedUser:
     """Request-scoped identity.
 
@@ -62,6 +79,16 @@ class AuthenticatedUser:
     # Carried because /auth routes run with the gate bypassed and may legitimately
     # observe it as true. Outside /auth, the gate has established it is false.
     must_change_password: bool
+    # Which projects this caller may reach. Loaded once per request beside the user
+    # row, so `access.resolve_project_scope` stays synchronous and its call sites stay
+    # untouched. An empty mapping means no access — never all of it.
+    #
+    # `compare=False, hash=False`: the dataclass is frozen and therefore generates
+    # `__hash__`, and a mapping is not hashable. Nothing hashes an AuthenticatedUser
+    # today; this stops that from becoming a runtime error if something ever does.
+    grants: Mapping[uuid.UUID, ProjectGrant] = field(
+        default_factory=dict, compare=False, hash=False
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -84,6 +111,23 @@ def _is_gate_exempt(path: str) -> bool:
         if path == prefix or path.startswith(prefix + "/"):
             return True
     return False
+
+
+async def _load_grants(
+    session: AsyncSession, user_id: uuid.UUID
+) -> Mapping[uuid.UUID, ProjectGrant]:
+    """This user's project grants, as an immutable mapping.
+
+    A `MappingProxyType` so lookup by project id is O(1) and the snapshot cannot be
+    mutated by a handler that happens to hold the request's identity.
+    """
+    rows = await MembershipRepository(session).load_grants(user_id)
+    return MappingProxyType(
+        {
+            project_id: ProjectGrant(project_id=project_id, role=role, permissions=permissions)
+            for project_id, (role, permissions) in rows.items()
+        }
+    )
 
 
 class AuthContextMiddleware(BaseHTTPMiddleware):
@@ -134,10 +178,11 @@ class AuthContextMiddleware(BaseHTTPMiddleware):
         # before the handler's session opens.
         async with get_sessionmaker()() as session:
             user = await UserRepository(session).get(user_id)
-
-        if user is None:
-            # Covers both "never existed" and "soft-deleted since the token was issued".
-            return AuthContext(user=None, error=ErrorCode.INVALID_TOKEN)
+            if user is None:
+                # Covers both "never existed" and "soft-deleted since the token was
+                # issued". Loading grants for a user who cannot log in is wasted work.
+                return AuthContext(user=None, error=ErrorCode.INVALID_TOKEN)
+            grants = await _load_grants(session, user.id)
 
         return AuthContext(
             user=AuthenticatedUser(
@@ -146,6 +191,7 @@ class AuthContextMiddleware(BaseHTTPMiddleware):
                 email=user.email,
                 is_admin=user.is_admin,
                 must_change_password=user.must_change_password,
+                grants=grants,
             ),
             error=None,
         )
