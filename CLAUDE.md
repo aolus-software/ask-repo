@@ -351,12 +351,15 @@ Thirteen rule files in `.claude/rules/`. Read the ones your change touches.
 | `frontend-bff.md` | Any `proxy.ts`, the `app/api/[...path]` API proxy, `/api/auth/*`, or session/refresh code — cookies, the refresh split, SSE piping |
 | `audit-findings.md` | Writing an audit report |
 
-Five commands in `.claude/commands/`: `audit-flow.md` (read-only sweep, writes
-`docs/audit-findings.md`, fixes nothing), `commit.md` (stage and commit, never push), `open-pr.md`
-(push and open a PR from the real `.github/PULL_REQUEST_TEMPLATE.md`), `scaffold-route.md`
-(generate a new resource's schema/model/repository/service/router per `router.md`/
-`persistence.md`/`response-api.md`), and `rag-check.md` (run the model-backed prompt suite,
-`uv run pytest -m model`).
+Seven commands in `.claude/commands/`: `audit-flow.md` (read-only sweep, writes
+`docs/audit-findings.md`, fixes nothing), `audit-ui.md` (read-only frontend consistency sweep
+across every flow, writes `docs/ui-audit-findings.md`, changes no component), `commit.md` (stage
+and commit, never push), `open-pr.md` (push and open a PR from the real
+`.github/PULL_REQUEST_TEMPLATE.md`), `release-prep.md` (read-only release readiness report —
+reconciles the CHANGELOG against what merged, resolves which issues the PRs close, flags doc and
+version drift; never tags, edits or pushes), `scaffold-route.md` (generate a new resource's
+schema/model/repository/service/router per `router.md`/`persistence.md`/`response-api.md`), and
+`rag-check.md` (run the model-backed prompt suite, `uv run pytest -m model`).
 
 Project skills live in `.claude/skills/`, symlinked to `.agents/skills/` and pinned by
 `skills-lock.json`. Where a rule and a skill overlap, the rule wins: `clean-code.md` covers
