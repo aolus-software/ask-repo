@@ -74,6 +74,27 @@ incompatibly. Configuration defaults and internal module layout may change in a 
 
 ### Changed
 
+- **Every backend process now logs with a UTC timestamp and a service tag.** The API, the worker,
+  the CLI and Alembic each configured logging on their own and none emitted a timestamp, so a
+  line in `make dev` — which interleaves the API and the worker into one terminal — carried
+  neither a time nor any indication of which process wrote it, and reconstructing the order of a
+  Kafka redelivery meant querying Postgres and Kafka directly. One `configure_logging` in
+  `app/core/logging.py` now serves all four: `2026-09-13T02:33:36.949Z INFO     api
+  uvicorn.error: Started server process`. UTC because Kafka records epoch milliseconds and every
+  Postgres column is `timestamptz` in UTC, so the three line up without arithmetic. Uvicorn's own
+  startup and access lines are included — they carry private handlers with `propagate = False`
+  and were otherwise the only untimestamped lines left. **The access log moves from stdout to
+  stderr** as a result, which is where every other line in these processes already went; an
+  operator splitting the two streams is the one case that needs attention. No new configuration.
+
+  Uvicorn is now started with `--log-config logging.json` everywhere it is started — the
+  `Makefile`, both backend Dockerfiles, and the documented manual command. Under `--reload`
+  uvicorn runs a reloader parent that never imports the app, so nothing in application code can
+  reach it and its startup lines were the last ones without a timestamp. The file names
+  `app.core.logging.build_formatter` as its formatter factory rather than restating the format,
+  so the two paths cannot drift. **A uvicorn started without the flag still timestamps
+  everything except those reloader lines.**
+
 - **The QA Checklist module screen keeps its refinement chat and its pending proposal in side
   drawers**, opened from `Refine` and `Review N changes` in the action row, on both the Test Plan
   and Mock Data tabs. They used to render on the page, the proposal above the grid and the chat

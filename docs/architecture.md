@@ -214,6 +214,30 @@ CORS ends up outermost and an auth rejection still carries CORS headers.
 route outside `/auth` returns `403 PASSWORD_CHANGE_REQUIRED` — enforced by middleware, not by a
 per-route dependency, so a route added later is covered without opting in.
 
+**All four processes log in one format**, set by `configure_logging` in `app/core/logging.py` and
+called by the API, the worker, the CLI and `alembic/env.py`:
+
+```
+2026-09-13T02:33:36.949Z INFO     api uvicorn.error: Started server process [81421]
+2026-09-13T02:33:41.796Z INFO     api uvicorn.access: 127.0.0.1:62701 - "GET /health HTTP/1.1" 200
+```
+
+The timestamp is **UTC**, marked `Z`. Kafka records epoch milliseconds and every Postgres column
+is `timestamptz` in UTC (`docs/PRD.md:321`), so a line correlates with both without arithmetic —
+and a developer's own machine, where `make dev` interleaves the API and the worker into one
+terminal, is the only place the three would otherwise disagree. The service tag after the level
+is what separates those two streams. Uvicorn's own loggers are reclaimed rather than left alone,
+because it installs private handlers with `propagate = False` and its lines would otherwise be
+the only untimestamped ones in the process.
+
+**Uvicorn is started with `--log-config logging.json`, and that flag is not optional.** Under
+`--reload` uvicorn runs two processes, and the **reloader parent never imports the app** — so
+`create_app`'s `configure_logging` call never runs there, and its lines (`Will watch for
+changes`, `Started reloader process`) keep uvicorn's own untimestamped format. `logging.json`
+is read when `Config` is constructed, which happens in the parent and the child alike. It does
+not duplicate the format: it names `build_formatter` as its `dictConfig` factory, so there is
+still one definition of what a log line looks like.
+
 ---
 
 ## Two boot-time probes that can stop the process

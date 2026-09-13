@@ -65,4 +65,4 @@ HEALTHCHECK --interval=10s --timeout=5s --retries=5 --start-period=15s \
 
 # The worker overrides this with ["python", "-m", "app.worker"] — same image, same
 # settings, different entrypoint.
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--log-config", "logging.json"]

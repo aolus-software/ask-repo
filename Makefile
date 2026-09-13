@@ -175,13 +175,13 @@ pull-models: ## Pull the configured embedding + chat models into the host Ollama
 dev: ollama-check ## Run backend + frontend dev servers and the worker together (Ctrl-C stops all)
 	@echo "backend :8000 (docs at /docs)   frontend :3000   worker: ingest + checklist"
 	@trap 'kill 0' INT TERM; \
-		( cd $(BACKEND) && uv run uvicorn app.main:app --reload --port 8000 ) & \
+		( cd $(BACKEND) && uv run uvicorn app.main:app --reload --port 8000 --log-config logging.json ) & \
 		( cd $(BACKEND) && uv run python -m app.worker ) & \
 		( cd $(FRONTEND) && bun dev ) & \
 		wait
 
 dev-backend: ## Run the backend dev server only
-	cd $(BACKEND) && uv run uvicorn app.main:app --reload --port 8000
+	cd $(BACKEND) && uv run uvicorn app.main:app --reload --port 8000 --log-config logging.json
 
 dev-frontend: ## Run the frontend dev server only
 	cd $(FRONTEND) && bun dev

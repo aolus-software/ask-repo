@@ -276,7 +276,7 @@ uv sync                                           # creates .venv
 uv run alembic upgrade head                       # apply migrations
 BOOTSTRAP_ADMIN_PASSWORD=<a real passphrase> \
   uv run python -m app.cli seed-admins            # create the bootstrap admins
-uv run uvicorn app.main:app --reload --port 8000
+uv run uvicorn app.main:app --reload --port 8000 --log-config logging.json
 uv run pytest                                     # tests
 uv run pytest tests/test_api_model.py             # one file
 uv run pytest -k camel_case                       # one test by name

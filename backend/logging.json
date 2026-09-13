@@ -1,0 +1,29 @@
+{
+  "_comment": [
+    "Uvicorn's --log-config. This exists for one process: the --reload reloader parent.",
+    "It never imports the app, so create_app's configure_logging() call never runs there and",
+    "its lines ('Will watch for changes', 'Started reloader process') keep uvicorn's own",
+    "untimestamped format. Config.__init__ reads this file in the parent and the child alike.",
+    "The format itself is not duplicated here -- build_formatter in app/core/logging.py is",
+    "named as the factory, so there is still exactly one definition of what a log line is."
+  ],
+  "version": 1,
+  "disable_existing_loggers": false,
+  "formatters": {
+    "askrepo": {
+      "()": "app.core.logging.build_formatter",
+      "service": "api"
+    }
+  },
+  "handlers": {
+    "default": {
+      "class": "logging.StreamHandler",
+      "formatter": "askrepo",
+      "stream": "ext://sys.stderr"
+    }
+  },
+  "root": {
+    "handlers": ["default"],
+    "level": "INFO"
+  }
+}

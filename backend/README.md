@@ -45,7 +45,7 @@ uv sync                                            # creates .venv and installs 
 uv run alembic upgrade head                        # apply migrations
 BOOTSTRAP_ADMIN_PASSWORD=<a real passphrase> \
   uv run python -m app.cli seed-admins             # create the bootstrap admins (idempotent)
-uv run uvicorn app.main:app --reload
+uv run uvicorn app.main:app --reload --log-config logging.json
 ```
 
 The API is then on <http://localhost:8000>, with interactive docs at
@@ -275,6 +275,7 @@ returns `409 EXPORT_TOO_LARGE` over that limit, the same reasoning
 ```
 backend/
 ├── pyproject.toml        # dependencies, ruff + pytest + mypy config
+├── logging.json          # uvicorn --log-config; reaches the --reload parent process
 ├── alembic.ini
 ├── alembic/versions/     # migrations
 ├── .env.example
@@ -301,6 +302,7 @@ backend/
 │   │   ├── access.py     # the phase-2 access-resolver seam
 │   │   ├── crypto.py     # SecretBox (PAT encryption at rest) + scrub
 │   │   ├── errors.py     # AppError, ErrorCode, exception handlers
+│   │   ├── logging.py    # the one log format, shared by all four processes
 │   │   ├── middleware.py # AuthContextMiddleware — identity + the password-change gate
 │   │   ├── passwords.py  # password policy (length, common-password blocklist)
 │   │   ├── rate_limit.py # Redis-backed login rate limiting
