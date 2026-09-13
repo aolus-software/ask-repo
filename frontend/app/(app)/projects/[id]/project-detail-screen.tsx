@@ -3,8 +3,11 @@
 import { MessagesSquare } from "lucide-react";
 import Link from "next/link";
 
+import { DetailError } from "@/components/feedback/detail-error";
+import { JobFailureAlert } from "@/components/feedback/job-failure-alert";
 import { NotFound } from "@/components/feedback/not-found";
 import { ProjectStatusBadge } from "@/components/feedback/status-badge";
+import { PageHeader } from "@/components/layout/page-header";
 import { ProjectRowActions } from "@/components/projects/project-row-actions";
 import { ProjectStats } from "@/components/projects/project-stats";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -12,7 +15,6 @@ import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useProject } from "@/hooks/use-projects";
-import { isApiError } from "@/lib/api/errors";
 import { statusLabel } from "@/lib/status";
 
 export function ProjectDetailScreen({ id }: { id: string }) {
@@ -30,12 +32,13 @@ export function ProjectDetailScreen({ id }: { id: string }) {
   if (query.error) {
     // A project you may not delete answers 403; one that does not exist answers 404.
     // Existence is deliberately public here (response-api.md), so 404 is the only miss.
-    if (isApiError(query.error) && query.error.status === 404) {
-      return (
-        <NotFound message="That project does not exist, or it has been deleted." />
-      );
-    }
-    return <NotFound message={(query.error as Error).message} />;
+    return (
+      <DetailError
+        error={query.error}
+        notFoundMessage="That project does not exist, or it has been deleted."
+        onRetry={() => query.refetch()}
+      />
+    );
   }
 
   const project = query.data;
@@ -45,29 +48,29 @@ export function ProjectDetailScreen({ id }: { id: string }) {
 
   return (
     <div className="mx-auto w-full max-w-7xl space-y-6">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-3">
-            <h1 className="text-3xl font-semibold tracking-tight">{project.name}</h1>
-            <ProjectStatusBadge status={project.status} />
-          </div>
-          <p className="text-muted-foreground mt-1 font-mono text-base">
+      <PageHeader
+        title={project.name}
+        titleAddon={<ProjectStatusBadge status={project.status} />}
+        description={
+          <span className="font-mono">
             {project.repoUrl} @{project.branch}
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          {project.status === "ready" ? (
-            <Button
-              nativeButton={false}
-              render={<Link href={`/ask?projectId=${project.id}`} />}
-            >
-              <MessagesSquare className="size-4" />
-              Ask about this project
-            </Button>
-          ) : null}
-          <ProjectRowActions project={project} context="detail" />
-        </div>
-      </div>
+          </span>
+        }
+        action={
+          <div className="flex items-center gap-2">
+            {project.status === "ready" ? (
+              <Button
+                nativeButton={false}
+                render={<Link href={`/ask?projectId=${project.id}`} />}
+              >
+                <MessagesSquare className="size-4" />
+                Ask about this project
+              </Button>
+            ) : null}
+            <ProjectRowActions project={project} context="detail" />
+          </div>
+        }
+      />
 
       {isWorking ? (
         <div className="space-y-2">
@@ -84,7 +87,7 @@ export function ProjectDetailScreen({ id }: { id: string }) {
       ) : null}
 
       {project.reindexInProgress ? (
-        <Alert>
+        <Alert variant="info">
           <AlertTitle>Re-index running</AlertTitle>
           <AlertDescription>
             The current index stays queryable until the new one is ready.
@@ -93,13 +96,7 @@ export function ProjectDetailScreen({ id }: { id: string }) {
       ) : null}
 
       {project.status === "failed" && project.error ? (
-        <Alert className="border-danger">
-          <AlertTitle className="text-danger">Indexing failed</AlertTitle>
-          {/* Already scrubbed by the backend, so no token can be in it (docs/PRD.md §9). */}
-          <AlertDescription className="font-mono text-sm">
-            {project.error}
-          </AlertDescription>
-        </Alert>
+        <JobFailureAlert title="Indexing failed" message={project.error} />
       ) : null}
 
       <ProjectStats project={project} />

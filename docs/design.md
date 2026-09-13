@@ -25,7 +25,7 @@ variable and never a hex value.
 | `success` | `#00c950` | `#05df72` | project `ready`, verified QA pair |
 | `warning` | `#f59e08` | `#ffb900` | project `indexing`, unverified |
 | `danger` | `#fb2c36` | `#ff6467` | project `failed`, destructive action |
-| `info` | `#00b8db` | `#00d3f2` | neutral notice |
+| `info` | `#00b8db` | `#00d3f2` | neutral notice, and the one role badge (`UserRoleBadge`) |
 | `destructive` | → `danger` | → `danger` | alias so shadcn-generated components match |
 | `muted` | `#f1f5f9` | `#1d293d` | `bg-muted` — inset panels, table headers |
 | `muted-foreground` | `#62748e` | `#90a1b9` | secondary text, placeholders |
@@ -34,7 +34,7 @@ variable and never a hex value.
 | `input` | `#cad5e2` | `#45556c` | form control borders (darker than `border`) |
 | `ring` | `#615fff` | `#7c86ff` | focus ring |
 | `sidebar*` | `#ffffff` | `#0f172a` | eight sidebar-specific roles |
-| `chart-1…5` | see file | see file | retrieval scores, eval results |
+| `chart-1…5` | see file | see file | reserved for retrieval scores, eval results — not yet rendered anywhere (M5+) |
 
 Each colour role has a paired `-foreground` giving the text colour that sits on it. `bg-primary`
 always takes `text-primary-foreground`, never `text-white` — white is wrong the moment a token
@@ -64,9 +64,11 @@ weight in the system.
 
 ## Radius
 
-`--radius: 0.5rem` with `sm`/`md`/`lg`/`xl` derived from it. Use `rounded-md` for cards and
-controls, `rounded-lg` for the sidebar links and dialogs, `rounded-full` only for avatars and
-pills. Never a literal `rounded-[10px]`.
+`--radius: 0.5rem` with `sm`/`md`/`lg`/`xl` derived from it. The generated `Card` and `Dialog`
+components are `rounded-xl` — a hand-written panel meant to sit beside one should match that,
+not the smaller `rounded-md`. Use `rounded-md` for ordinary controls (inputs, buttons),
+`rounded-lg` for the sidebar links and other hoverable list rows, `rounded-full` only for
+avatars and pills. Never a literal `rounded-[10px]`.
 
 ## Layout
 
@@ -101,18 +103,19 @@ inside a card is `space-y-4`; between cards, `gap-6`.
 ## Component inventory
 
 Components come from **shadcn on the Base UI base**, installed via CLI into
-`frontend/components/ui/`, restyled by the tokens above. Nothing is installed yet — this table
-is the intended set, and each row is added by `npx shadcn@latest add <name>` when the screen
-needing it lands.
+`frontend/components/ui/`, restyled by the tokens above. The table below is the installed set —
+add a row (and install it with `npx shadcn@latest add <name>`) when a new screen needs one.
 
 | Surface | Components |
 | --- | --- |
 | Auth screens | `button`, `input`, `label`, `field`, `card`, `alert`, `dialog`, `sonner` |
 | App shell | `sidebar`, `breadcrumb`, `dropdown-menu`, `avatar`, `separator`, `skeleton` |
 | Projects | `table`, `badge`, `select`, `tooltip`, `progress` |
-| Dev Knowledge | `textarea`, `scroll-area`, `collapsible` |
-| QA Checklist | `table`, `textarea`, `tooltip`, `select`, `checkbox`, `alert`, `dropdown-menu` |
+| Dev Knowledge | `textarea`, `scroll-area`, `collapsible`, `combobox` |
+| QA Checklist | `table`, `textarea`, `tooltip`, `select`, `checkbox`, `alert`, `dropdown-menu`, `command`, `popover` |
 | Mock Data tab | `tabs` |
+| Both refinement chats | `sheet` — the drawer `RefinementDrawer` is built on |
+| Lists (all) | `pagination`, `input-group` |
 
 `form` is deliberately absent: shadcn's `form` component wraps **react-hook-form**, which
 `.claude/rules/forms.md` §4 bans by name — validation is owned by the backend's `422` field map,
@@ -131,6 +134,10 @@ Every list screen has the same skeleton:
 2. Toolbar — search input plus filters in the filter grid above.
 3. `card-table` surface — a `Card` with no padding wrapping a `Table`.
 4. Pagination footer inside the same card.
+
+The `card-table` surface applies to **every** `<Table>` in the app, not only the four-part list
+screens above — a grid on a detail-page tab (the QA Checklist's test-case grid, for instance)
+wraps the same way. See `.claude/rules/design-system.md` §11.
 
 - Column order: identity first, status second, timestamps last, actions in a right-aligned final
   column.

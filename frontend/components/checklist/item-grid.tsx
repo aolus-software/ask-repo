@@ -9,8 +9,10 @@ import { ResultCell } from "@/components/checklist/result-cell";
 import { StatusBadge } from "@/components/feedback/status-badge";
 import { ConfirmDialog } from "@/components/form/confirm-dialog";
 import { FormDialog } from "@/components/form/form-dialog";
+import { EmptyState } from "@/components/feedback/empty-state";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 import {
   Dialog,
   DialogContent,
@@ -160,140 +162,151 @@ export function ItemGrid({
 
   if (items.length === 0) {
     return (
-      <p className="text-muted-foreground text-sm">
-        No test cases yet. Generate the checklist, or add one by hand.
-      </p>
+      <Card className="p-0">
+        <EmptyState
+          icon={ClipboardCheck}
+          title="No test cases yet"
+          description="Generate the checklist, or add one by hand."
+        />
+      </Card>
     );
   }
 
   return (
     <>
-      {/* The page body must never scroll horizontally; six columns of prose will not
-          fit a phone, so the table scrolls inside its own container. */}
-      <div className="overflow-x-auto">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Test case</TableHead>
-              <TableHead>Expected result</TableHead>
-              <TableHead>Result</TableHead>
-              <TableHead>Notes</TableHead>
-              <TableHead>Sources</TableHead>
-              <TableHead className="text-right">Actions</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {groupByFeature(items).map((group) => [
-              <TableRow key={`feature-${group.feature}`} className="bg-muted/50">
-                <TableCell colSpan={COLUMN_COUNT} className="text-sm font-semibold">
-                  {group.feature}
-                  <span className="text-muted-foreground ml-2 font-normal">
-                    {group.items.length} test{" "}
-                    {group.items.length === 1 ? "case" : "cases"}
-                  </span>
-                </TableCell>
-              </TableRow>,
-              ...group.items.map((item) => (
-                <TableRow key={item.id} className="align-top">
-                  <TableCell className="min-w-56">
-                    <div className="flex flex-col gap-1 text-sm">
-                      <span className="font-medium">{item.testName}</span>
-                      <div className="flex flex-wrap gap-1">
-                        {/* Only negatives are badged. Positive is the norm, and
+      {/* Every table sits inside a Card — `.claude/rules/design-system.md` §11 — so
+          this one no longer shows the page background through it the way it did
+          before. The scroll container is nested *inside* the Card rather than on it:
+          Card's own `overflow-hidden` would otherwise fight a `overflow-x-auto` on
+          the same element. The page body must never scroll horizontally; six columns
+          of prose will not fit a phone, so the table scrolls inside its own
+          container. */}
+      <Card className="p-0">
+        <div className="overflow-x-auto">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Test case</TableHead>
+                <TableHead>Expected result</TableHead>
+                <TableHead>Result</TableHead>
+                <TableHead>Notes</TableHead>
+                <TableHead>Sources</TableHead>
+                <TableHead className="text-right">Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {groupByFeature(items).map((group) => [
+                <TableRow key={`feature-${group.feature}`} className="bg-muted/50">
+                  <TableCell colSpan={COLUMN_COUNT} className="text-sm font-semibold">
+                    {group.feature}
+                    <span className="text-muted-foreground ml-2 font-normal">
+                      {group.items.length} test{" "}
+                      {group.items.length === 1 ? "case" : "cases"}
+                    </span>
+                  </TableCell>
+                </TableRow>,
+                ...group.items.map((item) => (
+                  <TableRow key={item.id} className="align-top">
+                    <TableCell className="min-w-56">
+                      <div className="flex flex-col gap-1 text-sm">
+                        <span className="font-medium">{item.testName}</span>
+                        <div className="flex flex-wrap gap-1">
+                          {/* Only negatives are badged. Positive is the norm, and
                             badging every row would make the column noise rather than
                             a signal -- the question this answers is "does this
                             feature have failure coverage at all?". */}
-                        {item.kind === "negative" ? (
-                          <Badge
-                            variant="outline"
-                            className="text-warning border-warning/60 w-fit text-xs font-normal"
-                          >
-                            Negative
-                          </Badge>
-                        ) : null}
-                        {item.source === "manual" ? (
-                          <Badge
-                            variant="outline"
-                            className="w-fit text-xs font-normal"
-                          >
-                            Hand-written
-                          </Badge>
+                          {item.kind === "negative" ? (
+                            <Badge
+                              variant="outline"
+                              className="text-warning border-warning/60 w-fit text-xs font-normal"
+                            >
+                              Negative
+                            </Badge>
+                          ) : null}
+                          {item.source === "manual" ? (
+                            <Badge
+                              variant="outline"
+                              className="w-fit text-xs font-normal"
+                            >
+                              Hand-written
+                            </Badge>
+                          ) : null}
+                        </div>
+                      </div>
+                    </TableCell>
+
+                    <TableCell className="min-w-56 text-sm">
+                      {item.expectedResult}
+                    </TableCell>
+
+                    <TableCell className="min-w-44">
+                      <div className="flex flex-col gap-1">
+                        <StatusBadge
+                          tone={RESULT_TONES[item.status]}
+                          label={RESULT_LABELS[item.status]}
+                          className="w-fit"
+                        />
+                        {item.currentResult ? (
+                          <span className="text-muted-foreground text-sm">
+                            {item.currentResult}
+                          </span>
                         ) : null}
                       </div>
-                    </div>
-                  </TableCell>
+                    </TableCell>
 
-                  <TableCell className="min-w-56 text-sm">
-                    {item.expectedResult}
-                  </TableCell>
+                    <TableCell className="text-muted-foreground min-w-40 text-sm">
+                      {item.notes ?? "—"}
+                    </TableCell>
 
-                  <TableCell className="min-w-44">
-                    <div className="flex flex-col gap-1">
-                      <StatusBadge
-                        tone={RESULT_TONES[item.status]}
-                        label={RESULT_LABELS[item.status]}
-                        className="w-fit"
-                      />
-                      {item.currentResult ? (
-                        <span className="text-muted-foreground text-sm">
-                          {item.currentResult}
-                        </span>
-                      ) : null}
-                    </div>
-                  </TableCell>
-
-                  <TableCell className="text-muted-foreground min-w-40 text-sm">
-                    {item.notes ?? "—"}
-                  </TableCell>
-
-                  <TableCell className="min-w-40">
-                    {/* The same component the answer stream renders its sources with.
+                    <TableCell className="min-w-40">
+                      {/* The same component the answer stream renders its sources with.
                         That reuse is why `citations` carries the answer's shape. */}
-                    {item.citations && item.citations.length > 0 ? (
-                      <Sources citations={item.citations} citedIndexes={[]} />
-                    ) : (
-                      <span className="text-muted-foreground text-sm">—</span>
-                    )}
-                  </TableCell>
+                      {item.citations && item.citations.length > 0 ? (
+                        <Sources citations={item.citations} citedIndexes={[]} />
+                      ) : (
+                        <span className="text-muted-foreground text-sm">—</span>
+                      )}
+                    </TableCell>
 
-                  <TableCell className="text-right">
-                    <div className="flex justify-end gap-1">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => setRecording(item)}
-                      >
-                        <ClipboardCheck className="size-4" />
-                        Record result
-                      </Button>
-                      {canEdit(item) ? (
-                        <>
-                          <Button
-                            size="icon"
-                            variant="ghost"
-                            aria-label={`Edit ${item.testName}`}
-                            onClick={() => startEditing(item)}
-                          >
-                            <Pencil className="size-4" />
-                          </Button>
-                          <Button
-                            size="icon"
-                            variant="ghost"
-                            aria-label={`Delete ${item.testName}`}
-                            onClick={() => setPendingDelete(item)}
-                          >
-                            <Trash2 className="size-4" />
-                          </Button>
-                        </>
-                      ) : null}
-                    </div>
-                  </TableCell>
-                </TableRow>
-              )),
-            ])}
-          </TableBody>
-        </Table>
-      </div>
+                    <TableCell className="text-right">
+                      <div className="flex justify-end gap-1">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => setRecording(item)}
+                        >
+                          <ClipboardCheck className="size-4" />
+                          Record result
+                        </Button>
+                        {canEdit(item) ? (
+                          <>
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              aria-label={`Edit ${item.testName}`}
+                              onClick={() => startEditing(item)}
+                            >
+                              <Pencil className="size-4" />
+                            </Button>
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              aria-label={`Delete ${item.testName}`}
+                              onClick={() => setPendingDelete(item)}
+                            >
+                              <Trash2 className="size-4" />
+                            </Button>
+                          </>
+                        ) : null}
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                )),
+              ])}
+            </TableBody>
+          </Table>
+        </div>
+      </Card>
 
       {/* A plain Dialog rather than `FormDialog`: `ResultCell` owns its own fields and
           its own submit, and it is deliberately presentational so the same component

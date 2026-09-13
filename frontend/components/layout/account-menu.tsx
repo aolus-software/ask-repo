@@ -1,7 +1,6 @@
 "use client";
 
-import { KeyRound, LogOut, MonitorSmartphone } from "lucide-react";
-import { useState } from "react";
+import { LogOut, MonitorSmartphone } from "lucide-react";
 
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -9,11 +8,8 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { ChangePasswordDialog } from "@/components/users/change-password-dialog";
 import { useSession } from "@/hooks/use-session";
 
 function initials(name: string): string {
@@ -25,9 +21,15 @@ function initials(name: string): string {
     .join("");
 }
 
+/**
+ * Deliberately just the sign-out actions for now, no profile display and no
+ * change-password entry — both are coming back once there is a proper account
+ * settings page for them to live on. Voluntary self-service password change is
+ * therefore unreachable from the UI until then; the forced first-login flow at
+ * `/change-password` is a separate route and is unaffected.
+ */
 export function AccountMenu() {
   const user = useSession();
-  const [changingPassword, setChangingPassword] = useState(false);
 
   async function logout(all: boolean) {
     await fetch("/api/auth/logout", {
@@ -44,41 +46,24 @@ export function AccountMenu() {
   }
 
   return (
-    <>
-      <DropdownMenu>
-        <DropdownMenuTrigger
-          render={<Button variant="ghost" size="icon" aria-label="Account" />}
-        >
-          <Avatar className="size-8">
-            <AvatarFallback>{initials(user.name)}</AvatarFallback>
-          </Avatar>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" className="w-56">
-          <DropdownMenuLabel>
-            <span className="block font-medium">{user.name}</span>
-            <span className="text-muted-foreground block text-xs">{user.email}</span>
-          </DropdownMenuLabel>
-          <DropdownMenuSeparator />
-          <DropdownMenuItem onClick={() => setChangingPassword(true)}>
-            <KeyRound className="size-4" />
-            Change password
-          </DropdownMenuItem>
-          <DropdownMenuSeparator />
-          <DropdownMenuItem onClick={() => void logout(false)}>
-            <LogOut className="size-4" />
-            Log out
-          </DropdownMenuItem>
-          <DropdownMenuItem onClick={() => void logout(true)}>
-            <MonitorSmartphone className="size-4" />
-            Log out everywhere
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
-
-      <ChangePasswordDialog
-        open={changingPassword}
-        onOpenChange={setChangingPassword}
-      />
-    </>
+    <DropdownMenu>
+      <DropdownMenuTrigger
+        render={<Button variant="ghost" size="icon" aria-label="Account" />}
+      >
+        <Avatar className="size-8">
+          <AvatarFallback>{initials(user.name)}</AvatarFallback>
+        </Avatar>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-48">
+        <DropdownMenuItem onClick={() => void logout(false)}>
+          <LogOut className="size-4" />
+          Log out
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={() => void logout(true)}>
+          <MonitorSmartphone className="size-4" />
+          Log out everywhere
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }

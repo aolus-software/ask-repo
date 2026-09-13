@@ -114,12 +114,15 @@ export function LoginScreen() {
 
           <div className="space-y-4">
             <Field>
-              <FieldLabel htmlFor="email">Email</FieldLabel>
+              <FieldLabel htmlFor="email">
+                Email <span className="text-danger">*</span>
+              </FieldLabel>
               <Input
                 id="email"
                 name="email"
                 type="email"
                 autoComplete="username"
+                placeholder="you@example.com"
                 value={email}
                 onChange={(event) => setEmail(event.target.value)}
                 aria-invalid={Boolean(localErrors.email)}
@@ -128,11 +131,14 @@ export function LoginScreen() {
             </Field>
 
             <Field>
-              <FieldLabel htmlFor="password">Password</FieldLabel>
+              <FieldLabel htmlFor="password">
+                Password <span className="text-danger">*</span>
+              </FieldLabel>
               <PasswordInput
                 id="password"
                 name="password"
                 autoComplete="current-password"
+                placeholder="Enter your password"
                 value={password}
                 onChange={(event) => setPassword(event.target.value)}
                 aria-invalid={Boolean(localErrors.password)}

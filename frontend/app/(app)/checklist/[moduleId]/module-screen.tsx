@@ -20,12 +20,14 @@ import { ItemGrid } from "@/components/checklist/item-grid";
 import { ChecklistModuleStatusBadge } from "@/components/checklist/module-status-badge";
 import { RefinementDrawer } from "@/components/checklist/refinement-drawer";
 import { StalenessBadge } from "@/components/checklist/staleness-badge";
+import { DetailError } from "@/components/feedback/detail-error";
+import { JobFailureAlert } from "@/components/feedback/job-failure-alert";
 import { NotFound } from "@/components/feedback/not-found";
+import { PageHeader } from "@/components/layout/page-header";
 import { GenerateMockDataControl } from "@/components/mock-data/generate-control";
 import { MockDataChangeSetPanel } from "@/components/mock-data/change-set-panel";
 import { MockDataChatPanel } from "@/components/mock-data/chat-panel";
 import { RecordsTable } from "@/components/mock-data/records-table";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -107,13 +109,13 @@ export function ModuleScreen({ moduleId }: { moduleId: string }) {
   }
 
   if (query.error) {
-    // Module existence is deliberately public, so a miss is only ever a 404.
-    if (isApiError(query.error) && query.error.status === 404) {
-      return (
-        <NotFound message="That checklist module does not exist, or it was deleted." />
-      );
-    }
-    return <NotFound message={(query.error as Error).message} />;
+    return (
+      <DetailError
+        error={query.error}
+        notFoundMessage="That checklist module does not exist, or it was deleted."
+        onRetry={() => query.refetch()}
+      />
+    );
   }
 
   if (!checklistModule) return <NotFound />;
@@ -134,127 +136,125 @@ export function ModuleScreen({ moduleId }: { moduleId: string }) {
         </TabsList>
 
         <TabsContent value="checklist" className="space-y-6">
-          <div className="flex flex-wrap items-start justify-between gap-4">
-            <div>
-              <div className="flex flex-wrap items-center gap-3">
-                <h1 className="text-3xl font-semibold tracking-tight">
-                  {checklistModule.name}
-                </h1>
+          <PageHeader
+            title={checklistModule.name}
+            titleAddon={
+              <>
                 <ChecklistModuleStatusBadge status={checklistModule.status} />
                 {checklistModule.stale ? <StalenessBadge /> : null}
-              </div>
-              {/*
-                The scope of the checklist, stated rather than implied. A test plan built
-                from one path is not coverage of the application, and a reader who cannot
-                see which path was enumerated has no way to notice what was never in scope
-                (spec 4.6). This is also why nothing on this screen shows a percentage or a
-                "complete" badge -- there is no such claim to make.
-              */}
-              <p className="text-muted-foreground mt-1 text-base">
+              </>
+            }
+            // The scope of the checklist, stated rather than implied. A test plan
+            // built from one path is not coverage of the application, and a reader
+            // who cannot see which path was enumerated has no way to notice what
+            // was never in scope (spec 4.6). This is also why nothing on this
+            // screen shows a percentage or a "complete" badge -- there is no such
+            // claim to make.
+            description={
+              <>
                 Enumerated from{" "}
                 <span className="font-mono">{checklistModule.sourcePath}</span>. Only
                 files AskRepo indexed are covered.
-              </p>
-            </div>
-
-            <div className="flex items-center gap-2">
-              {generateBlockedBecause ? (
-                <Tooltip>
-                  <TooltipTrigger
-                    render={
-                      <span>
-                        <Button disabled>
-                          <Sparkles className="size-4" />
-                          Generate
-                        </Button>
-                      </span>
+              </>
+            }
+            action={
+              <div className="flex items-center gap-2">
+                {generateBlockedBecause ? (
+                  <Tooltip>
+                    <TooltipTrigger
+                      render={
+                        <span>
+                          <Button disabled>
+                            <Sparkles className="size-4" />
+                            Generate
+                          </Button>
+                        </span>
+                      }
+                    />
+                    <TooltipContent>{generateBlockedBecause}</TooltipContent>
+                  </Tooltip>
+                ) : (
+                  <Button
+                    disabled={generate.isPending}
+                    onClick={() =>
+                      generate.mutate(undefined, {
+                        onSuccess: () => toast.success("Generation started"),
+                        onError: (error) =>
+                          toast.error(
+                            isApiError(error)
+                              ? error.message
+                              : "That did not start. Try again.",
+                          ),
+                      })
                     }
-                  />
-                  <TooltipContent>{generateBlockedBecause}</TooltipContent>
-                </Tooltip>
-              ) : (
-                <Button
-                  disabled={generate.isPending}
-                  onClick={() =>
-                    generate.mutate(undefined, {
-                      onSuccess: () =>
-                        toast.success(
-                          "Generating. The proposals appear here when it finishes.",
-                        ),
-                      onError: (error) =>
-                        toast.error(
-                          isApiError(error)
-                            ? error.message
-                            : "That did not start. Try again.",
-                        ),
-                    })
-                  }
-                >
-                  <Sparkles className="size-4" />
-                  Generate
-                </Button>
-              )}
+                  >
+                    <Sparkles className="size-4" />
+                    Generate
+                  </Button>
+                )}
 
-              {pendingChangeSet ? (
+                {pendingChangeSet ? (
+                  <RefinementDrawer
+                    label={`Review ${pendingChangeSet.operations.length} ${
+                      pendingChangeSet.operations.length === 1 ? "change" : "changes"
+                    }`}
+                    icon={ClipboardCheck}
+                    variant="default"
+                    title="Pending changes"
+                    description="Tick the operations to keep. Nothing is written to the test plan until you apply."
+                    storageKey="checklist-review"
+                  >
+                    <ChangeSetPanel
+                      key={pendingChangeSet.id}
+                      changeSet={pendingChangeSet}
+                      moduleId={moduleId}
+                      items={checklistModule.items}
+                    />
+                  </RefinementDrawer>
+                ) : null}
+
                 <RefinementDrawer
-                  label={`Review ${pendingChangeSet.operations.length} ${
-                    pendingChangeSet.operations.length === 1 ? "change" : "changes"
-                  }`}
-                  icon={ClipboardCheck}
-                  variant="default"
-                  title="Pending changes"
-                  description="Tick the operations to keep. Nothing is written to the test plan until you apply."
-                  storageKey="checklist-review"
+                  label="Refine"
+                  icon={MessagesSquare}
+                  title="Refine this test plan"
+                  description="Ask for changes, or explain what should be different. Proposals arrive as a change set to review."
+                  storageKey="checklist-refine"
                 >
-                  <ChangeSetPanel
-                    changeSet={pendingChangeSet}
+                  <ChatPanel
                     moduleId={moduleId}
-                    items={checklistModule.items}
+                    hasPendingChangeSet={pendingChangeSetId !== null}
                   />
                 </RefinementDrawer>
-              ) : null}
 
-              <RefinementDrawer
-                label="Refine"
-                icon={MessagesSquare}
-                title="Refine this test plan"
-                description="Ask for changes, or explain what should be different. Proposals arrive as a change set to review."
-                storageKey="checklist-refine"
-              >
-                <ChatPanel
-                  moduleId={moduleId}
-                  hasPendingChangeSet={pendingChangeSetId !== null}
-                />
-              </RefinementDrawer>
+                <Button variant="outline" onClick={() => setAddingItem(true)}>
+                  <Plus className="size-4" />
+                  Add test case
+                </Button>
 
-              <Button variant="outline" onClick={() => setAddingItem(true)}>
-                <Plus className="size-4" />
-                Add test case
-              </Button>
-
-              <Button
-                variant="outline"
-                nativeButton={false}
-                render={
-                  <a
-                    href={`/api/checklist-items/export${checklistItemListQueryString({
-                      ...filters,
-                      moduleId,
-                    })}`}
-                  />
-                }
-              >
-                <Download className="size-4" />
-                Export
-              </Button>
-            </div>
-          </div>
+                <Button
+                  variant="outline"
+                  nativeButton={false}
+                  render={
+                    <a
+                      href={`/api/checklist-items/export${checklistItemListQueryString({
+                        ...filters,
+                        moduleId,
+                      })}`}
+                    />
+                  }
+                >
+                  <Download className="size-4" />
+                  Export
+                </Button>
+              </div>
+            }
+          />
 
           {checklistModule.status === "failed" && checklistModule.error ? (
-            <Alert variant="destructive">
-              <AlertTitle>The last generation failed</AlertTitle>
-              <AlertDescription>{checklistModule.error}</AlertDescription>
-            </Alert>
+            <JobFailureAlert
+              title="The last generation failed"
+              message={checklistModule.error}
+            />
           ) : null}
 
           <ItemFilters currentFilters={filters} onFiltersChange={setFilters} />
@@ -379,10 +379,10 @@ export function ModuleScreen({ moduleId }: { moduleId: string }) {
           </div>
 
           {mockData.data?.status === "failed" && mockData.data.error ? (
-            <Alert variant="destructive">
-              <AlertTitle>The last generation failed</AlertTitle>
-              <AlertDescription>{mockData.data.error}</AlertDescription>
-            </Alert>
+            <JobFailureAlert
+              title="The last generation failed"
+              message={mockData.data.error}
+            />
           ) : null}
 
           <RecordsTable moduleId={moduleId} records={mockData.data?.records ?? []} />

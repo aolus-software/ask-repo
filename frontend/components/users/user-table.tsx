@@ -1,7 +1,7 @@
 "use client";
 
 import { TableSkeleton } from "@/components/feedback/table-skeleton";
-import { Badge } from "@/components/ui/badge";
+import { UserRoleBadge } from "@/components/users/user-role-badge";
 import {
   Table,
   TableBody,
@@ -43,11 +43,7 @@ export function UserTable({
               <TableCell className="font-medium">{user.name}</TableCell>
               <TableCell className="text-muted-foreground">{user.email}</TableCell>
               <TableCell>
-                {user.isAdmin ? (
-                  <Badge className="bg-primary text-primary-foreground">Admin</Badge>
-                ) : (
-                  <Badge variant="outline">Member</Badge>
-                )}
+                <UserRoleBadge isAdmin={user.isAdmin} />
               </TableCell>
               <TableCell title={formatAbsolute(user.lastLoginAt)}>
                 {user.lastLoginAt ? formatRelative(user.lastLoginAt) : "Never"}

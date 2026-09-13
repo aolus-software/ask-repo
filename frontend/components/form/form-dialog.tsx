@@ -28,7 +28,11 @@ export interface FormShellProps {
  * Width is a size, never a class: the generated DialogContent defaults to
  * `sm:max-w-sm`, which is too cramped for a labelled form (`forms.md` §3).
  */
-const SIZES = { sm: "sm:max-w-md", md: "sm:max-w-xl", lg: "sm:max-w-3xl" } as const;
+export const SIZES = {
+  sm: "sm:max-w-md",
+  md: "sm:max-w-xl",
+  lg: "sm:max-w-3xl",
+} as const;
 
 export function FormDialog({
   open,

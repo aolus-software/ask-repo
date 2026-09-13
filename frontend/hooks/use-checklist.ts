@@ -3,12 +3,26 @@
 import { useQuery } from "@tanstack/react-query";
 
 import { apiFetch } from "@/lib/api/client";
-import { endpoints } from "@/lib/api/endpoints";
+import { checklistModuleListQueryString, endpoints } from "@/lib/api/endpoints";
 import type {
   ChecklistChangeSetResponse,
   ChecklistModuleDetailResponse,
+  ChecklistModuleListParams,
+  ChecklistModuleResponse,
+  PaginatedResponse,
 } from "@/lib/api/types";
 import { keys } from "@/lib/query/keys";
+
+/** The module list, alongside `useProjects`/`useUsers` (`docs/ui-audit-findings.md` §U3.2). */
+export function useChecklistModules(params: ChecklistModuleListParams) {
+  return useQuery({
+    queryKey: keys.checklistModules.list(params),
+    queryFn: () =>
+      apiFetch<PaginatedResponse<ChecklistModuleResponse>>(
+        `${endpoints.checklistModules.list}${checklistModuleListQueryString(params)}`,
+      ),
+  });
+}
 
 /**
  * One module with its grid.

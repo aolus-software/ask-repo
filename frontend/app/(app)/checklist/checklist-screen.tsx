@@ -1,87 +1,33 @@
 "use client";
 
-import { useCallback } from "react";
-
-import { useQuery } from "@tanstack/react-query";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { Plus } from "lucide-react";
+import { ClipboardCheck, Plus } from "lucide-react";
+import { useState } from "react";
 
 import { CreateModuleDialog } from "@/components/checklist/create-module-dialog";
 import { ModuleFilters } from "@/components/checklist/module-filters";
 import { ModuleTable } from "@/components/checklist/module-table";
 import { EmptyState } from "@/components/feedback/empty-state";
+import { ListError } from "@/components/feedback/list-error";
 import { ListToolbar } from "@/components/layout/list-toolbar";
 import { PageHeader } from "@/components/layout/page-header";
 import { PaginationFooter } from "@/components/layout/pagination-footer";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { apiFetch } from "@/lib/api/client";
-import { checklistModuleListQueryString, endpoints } from "@/lib/api/endpoints";
-import type {
-  ChecklistModuleListParams,
-  ChecklistModuleResponse,
-  PaginatedResponse,
-} from "@/lib/api/types";
-import { keys } from "@/lib/query/keys";
-import { useState } from "react";
+import { useChecklistModules } from "@/hooks/use-checklist";
+import { useListParams } from "@/hooks/use-list-params";
+import type { ChecklistModuleListParams } from "@/lib/api/types";
+
+const EXTRA_PARAMS = ["projectId"] as const;
 
 export function ChecklistScreen() {
-  const router = useRouter();
-  const pathname = usePathname();
-  const searchParams = useSearchParams();
   const [creating, setCreating] = useState(false);
-
-  const params: ChecklistModuleListParams = {
-    page: Number(searchParams.get("page") ?? 1),
-    limit: 25,
-    search: searchParams.get("search") ?? undefined,
-    projectId: searchParams.get("projectId") ?? undefined,
-  };
-
-  const { data, isPending } = useQuery({
-    queryKey: keys.checklistModules.list(params),
-    queryFn: () =>
-      apiFetch<PaginatedResponse<ChecklistModuleResponse>>(
-        `${endpoints.checklistModules.list}${checklistModuleListQueryString(params)}`,
-      ),
-  });
-
-  const modules = data?.items ?? [];
-
-  const handleSearch = useCallback(
-    (value: string) => {
-      const next = new URLSearchParams(searchParams.toString());
-      if (value) next.set("search", value);
-      else next.delete("search");
-      next.delete("page");
-      const qs = next.toString();
-      router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
-    },
-    [searchParams, router, pathname],
+  const { params, searchInput, setSearch, setPage, setParam } = useListParams(
+    { limit: 25 },
+    { extraParams: EXTRA_PARAMS },
   );
-
-  const handleProjectChange = useCallback(
-    (projectId: string | undefined) => {
-      const next = new URLSearchParams(searchParams.toString());
-      if (projectId) next.set("projectId", projectId);
-      else next.delete("projectId");
-      next.delete("page");
-      const qs = next.toString();
-      router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
-    },
-    [searchParams, router, pathname],
-  );
-
-  const handlePageChange = useCallback(
-    (page: number) => {
-      const next = new URLSearchParams(searchParams.toString());
-      if (page > 1) next.set("page", String(page));
-      else next.delete("page");
-      const qs = next.toString();
-      router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
-    },
-    [searchParams, router, pathname],
-  );
+  const listParams = params as ChecklistModuleListParams;
+  const query = useChecklistModules(listParams);
+  const modules = query.data?.items ?? [];
 
   return (
     <div className="mx-auto w-full max-w-7xl">
@@ -97,33 +43,41 @@ export function ChecklistScreen() {
       />
 
       <ListToolbar
-        initialSearch={searchParams.get("search") ?? ""}
+        initialSearch={searchInput}
         placeholder="Search modules and paths"
-        onSearchChange={handleSearch}
+        onSearchChange={setSearch}
         filters={
           <ModuleFilters
-            projectId={params.projectId}
-            onProjectChange={handleProjectChange}
+            projectId={listParams.projectId}
+            onProjectChange={(projectId) => setParam("projectId", projectId)}
           />
         }
       />
 
       <Card className="p-0">
-        {!isPending && modules.length === 0 ? (
+        {query.isError ? (
+          <div className="p-6">
+            <ListError error={query.error} onRetry={() => query.refetch()} />
+          </div>
+        ) : !query.isLoading && modules.length === 0 ? (
           <EmptyState
-            icon={Plus}
-            title="No modules yet"
-            description="Point a module at a path in an indexed repository, then generate its checklist."
+            icon={ClipboardCheck}
+            title={listParams.search ? "No modules match" : "No modules yet"}
+            description={
+              listParams.search
+                ? "Try a different name or path."
+                : "Point a module at a path in an indexed repository, then generate its checklist."
+            }
             action={<Button onClick={() => setCreating(true)}>Create module</Button>}
           />
         ) : (
           <>
-            <ModuleTable modules={modules} isLoading={isPending} />
+            <ModuleTable modules={modules} isLoading={query.isLoading} />
             <PaginationFooter
-              page={data?.page ?? 1}
-              totalPages={data?.totalPages ?? 1}
-              totalCount={data?.totalCount ?? 0}
-              onPageChange={handlePageChange}
+              page={query.data?.page ?? 1}
+              totalPages={query.data?.totalPages ?? 1}
+              totalCount={query.data?.totalCount ?? 0}
+              onPageChange={setPage}
             />
           </>
         )}

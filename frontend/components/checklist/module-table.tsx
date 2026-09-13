@@ -4,6 +4,7 @@ import Link from "next/link";
 
 import { ChecklistModuleStatusBadge } from "@/components/checklist/module-status-badge";
 import { StalenessBadge } from "@/components/checklist/staleness-badge";
+import { StatusBadge } from "@/components/feedback/status-badge";
 import { TableSkeleton } from "@/components/feedback/table-skeleton";
 import {
   Table,
@@ -16,7 +17,7 @@ import {
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { ModuleRowActions } from "@/components/checklist/module-row-actions";
 import type { ChecklistModuleResponse } from "@/lib/api/types";
-import { formatRelative } from "@/lib/dates";
+import { formatAbsolute, formatRelative } from "@/lib/dates";
 
 /** Column order is fixed by `docs/design.md`: identity, status, timestamps, actions. */
 export function ModuleTable({
@@ -68,8 +69,15 @@ export function ModuleTable({
                 <TableCell>
                   <div className="flex flex-col gap-2">
                     <ChecklistModuleStatusBadge status={module.status} />
+                    {/* A second signal for the same fact as the status badge above —
+                        it must agree with it, so it goes through the same tone the
+                        `review` status uses rather than a hand-picked colour
+                        (`docs/ui-audit-findings.md` §U4.2). Kept distinct from the
+                        status badge because a chat-originated change set can be
+                        pending without the module's own status having moved to
+                        `review`. */}
                     {module.pendingChangeSetId ? (
-                      <div className="text-primary text-xs">Review changes</div>
+                      <StatusBadge tone="warning" label="Review changes" />
                     ) : null}
                   </div>
                 </TableCell>
@@ -79,7 +87,7 @@ export function ModuleTable({
                   {module.status === "failed" && module.error ? (
                     <Tooltip>
                       <TooltipTrigger>
-                        <div className="text-destructive cursor-help truncate">
+                        <div className="text-danger cursor-help truncate">
                           {module.failCount}
                         </div>
                       </TooltipTrigger>
@@ -91,7 +99,14 @@ export function ModuleTable({
                 </TableCell>
                 <TableCell className="text-sm">{module.blockedCount}</TableCell>
                 <TableCell className="text-sm">{module.untestedCount}</TableCell>
-                <TableCell className="text-muted-foreground text-sm">
+                <TableCell
+                  className="text-muted-foreground text-sm"
+                  title={
+                    module.lastGeneratedAt
+                      ? formatAbsolute(module.lastGeneratedAt)
+                      : undefined
+                  }
+                >
                   {module.lastGeneratedAt ? (
                     <>
                       {formatRelative(module.lastGeneratedAt)}

@@ -5,6 +5,10 @@ import { useState } from "react";
 import { toast } from "sonner";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 
+import {
+  OperationRationale,
+  OperationRow,
+} from "@/components/change-sets/operation-row";
 import { ConfirmDialog } from "@/components/form/confirm-dialog";
 import { FormError } from "@/components/form/form-error";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -18,7 +22,6 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Separator } from "@/components/ui/separator";
 import { apiFetch } from "@/lib/api/client";
 import { endpoints } from "@/lib/api/endpoints";
@@ -68,40 +71,6 @@ function isOrphaned(
 ): boolean {
   if (operation.op === "add") return false;
   return targetItem(operation, items) === undefined;
-}
-
-function OperationRow({
-  checked,
-  onToggle,
-  orphaned,
-  children,
-}: {
-  checked: boolean;
-  onToggle: () => void;
-  orphaned: boolean;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="flex items-start gap-3 py-3">
-      <Checkbox
-        checked={checked}
-        onCheckedChange={onToggle}
-        className="mt-1"
-        aria-label="Include this change"
-      />
-      <div className={orphaned ? "text-muted-foreground flex-1" : "flex-1"}>
-        {children}
-      </div>
-    </div>
-  );
-}
-
-function Rationale({ rationale }: { rationale: string }) {
-  return (
-    <p className="text-muted-foreground text-sm">
-      {rationale.trim() ? rationale : "No rationale given."}
-    </p>
-  );
 }
 
 export function ChangeSetPanel({
@@ -239,7 +208,7 @@ export function ChangeSetPanel({
                     <p className="mt-1 text-sm">{operation.expectedResult}</p>
                   ) : null}
                   <div className="mt-2">
-                    <Rationale rationale={operation.rationale} />
+                    <OperationRationale rationale={operation.rationale} />
                   </div>
                 </OperationRow>
               ))}
@@ -286,7 +255,7 @@ export function ChangeSetPanel({
                       </>
                     )}
                     <div className="mt-2">
-                      <Rationale rationale={operation.rationale} />
+                      <OperationRationale rationale={operation.rationale} />
                     </div>
                   </OperationRow>
                 );
@@ -321,7 +290,7 @@ export function ChangeSetPanel({
                       </>
                     )}
                     <div className="mt-2">
-                      <Rationale rationale={operation.rationale} />
+                      <OperationRationale rationale={operation.rationale} />
                     </div>
                   </OperationRow>
                 );

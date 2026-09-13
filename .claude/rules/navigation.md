@@ -90,6 +90,7 @@ The shape AskRepo is heading for:
 /ask/[conversationId]   a conversation (private to the operator)
 /checklist              QA Checklist modules (shared)
 /checklist/[moduleId]   the checklist grid, chat and review panel
+/settings               index route — redirects to its first reachable child
 /settings/users         admin only
 ```
 

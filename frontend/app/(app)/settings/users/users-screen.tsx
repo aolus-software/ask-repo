@@ -5,6 +5,7 @@ import { useState } from "react";
 
 import { EmptyState } from "@/components/feedback/empty-state";
 import { Forbidden } from "@/components/feedback/forbidden";
+import { ListError } from "@/components/feedback/list-error";
 import { ListToolbar } from "@/components/layout/list-toolbar";
 import { PageHeader } from "@/components/layout/page-header";
 import { PaginationFooter } from "@/components/layout/pagination-footer";
@@ -56,11 +57,19 @@ export function UsersScreen() {
       />
 
       <Card className="p-0">
-        {!query.isLoading && users.length === 0 ? (
+        {query.isError ? (
+          <div className="p-6">
+            <ListError error={query.error} onRetry={() => query.refetch()} />
+          </div>
+        ) : !query.isLoading && users.length === 0 ? (
           <EmptyState
             icon={Users}
-            title="No accounts match"
-            description="Provision an account for a colleague to get them started."
+            title={params.search ? "No accounts match" : "No accounts yet"}
+            description={
+              params.search
+                ? "Try a different name or email."
+                : "Provision an account for a colleague to get them started."
+            }
             action={<Button onClick={() => setCreating(true)}>Add user</Button>}
           />
         ) : (

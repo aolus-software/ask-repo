@@ -1,8 +1,13 @@
 "use client";
 
-import { Trash2 } from "lucide-react";
+import { Database, Trash2 } from "lucide-react";
+import { useState } from "react";
+import { toast } from "sonner";
 
+import { EmptyState } from "@/components/feedback/empty-state";
+import { ConfirmDialog } from "@/components/form/confirm-dialog";
 import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 import {
   Table,
   TableBody,
@@ -12,6 +17,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { useDeleteMockDataRecord } from "@/hooks/use-mock-data-mutations";
+import { isApiError } from "@/lib/api/errors";
 import type { MockDataRecordResponse } from "@/lib/api/types";
 
 /** Every field key across every record, first-seen order -- the columns are dynamic
@@ -26,6 +32,48 @@ function columnsFor(records: MockDataRecordResponse[]): string[] {
   return seen;
 }
 
+function DeleteRecordButton({ moduleId, id }: { moduleId: string; id: string }) {
+  const [confirming, setConfirming] = useState(false);
+  const remove = useDeleteMockDataRecord(moduleId);
+
+  return (
+    <>
+      <Button
+        variant="ghost"
+        size="icon"
+        aria-label="Delete record"
+        onClick={() => setConfirming(true)}
+      >
+        <Trash2 className="size-4" />
+      </Button>
+      {/* Every other destructive action in the app confirms first — this was the one
+          exception (`docs/ui-audit-findings.md` §U5.1). */}
+      <ConfirmDialog
+        open={confirming}
+        onOpenChange={setConfirming}
+        title="Delete this record?"
+        description="This cannot be undone."
+        confirmLabel="Delete"
+        isPending={remove.isPending}
+        error={remove.error}
+        onConfirm={() =>
+          remove.mutate(id, {
+            onSuccess: () => {
+              toast.success("Record deleted");
+              setConfirming(false);
+            },
+            onError: (error) => {
+              toast.error(
+                isApiError(error) ? error.message : "That did not delete. Try again.",
+              );
+            },
+          })
+        }
+      />
+    </>
+  );
+}
+
 export function RecordsTable({
   moduleId,
   records,
@@ -33,47 +81,48 @@ export function RecordsTable({
   moduleId: string;
   records: MockDataRecordResponse[];
 }) {
-  const deleteRecord = useDeleteMockDataRecord(moduleId);
   const columns = columnsFor(records);
 
+  // Every table sits inside a Card — `.claude/rules/design-system.md` §11 — so this
+  // one no longer shows the page background through it the way it did before.
   if (records.length === 0) {
     return (
-      <p className="text-muted-foreground text-sm">
-        No mock data yet. Generate a batch, or ask for one by chat.
-      </p>
+      <Card className="p-0">
+        <EmptyState
+          icon={Database}
+          title="No mock data yet"
+          description="Generate a batch, or ask for one by chat."
+        />
+      </Card>
     );
   }
 
   return (
-    <Table>
-      <TableHeader>
-        <TableRow>
-          {columns.map((column) => (
-            <TableHead key={column}>{column}</TableHead>
-          ))}
-          <TableHead className="w-10" />
-        </TableRow>
-      </TableHeader>
-      <TableBody>
-        {records.map((record) => (
-          <TableRow key={record.id}>
-            {columns.map((column) => (
-              <TableCell key={column}>{record.fields[column] ?? "—"}</TableCell>
+    <Card className="p-0">
+      <div className="overflow-x-auto">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              {columns.map((column) => (
+                <TableHead key={column}>{column}</TableHead>
+              ))}
+              <TableHead className="w-10" />
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {records.map((record) => (
+              <TableRow key={record.id}>
+                {columns.map((column) => (
+                  <TableCell key={column}>{record.fields[column] ?? "—"}</TableCell>
+                ))}
+                <TableCell>
+                  <DeleteRecordButton moduleId={moduleId} id={record.id} />
+                </TableCell>
+              </TableRow>
             ))}
-            <TableCell>
-              <Button
-                variant="ghost"
-                size="icon"
-                aria-label="Delete record"
-                disabled={deleteRecord.isPending}
-                onClick={() => deleteRecord.mutate(record.id)}
-              >
-                <Trash2 className="size-4" />
-              </Button>
-            </TableCell>
-          </TableRow>
-        ))}
-      </TableBody>
-    </Table>
+          </TableBody>
+        </Table>
+      </div>
+    </Card>
   );
 }
