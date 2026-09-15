@@ -84,7 +84,7 @@ async def test_destructive_gating_holds(
 
     delete_response = await client_for_user_b.delete(f"/projects/{visible.id}")
     assert delete_response.status_code == 403
-    assert delete_response.json()["detail"]["code"] == "NOT_PROJECT_OWNER"
+    assert delete_response.json()["detail"]["code"] == "INSUFFICIENT_ROLE"
 
     assert (await client_for_user_b.post(f"/projects/{visible.id}/reindex")).status_code == 403
 

@@ -1,9 +1,9 @@
 """Mock-data dataset business rules: reads, the generation trigger, and the chat.
 
 Reads scope through `access.resolve_project_scope` and nothing else, exactly like
-`ChecklistModuleService` -- not `created_by`, not `is_admin`. Applying/discarding is
-open to any authenticated user (`app/services/mock_data_change_set.py`); this service
-never gates a read on ownership.
+`ChecklistModuleService` -- not `created_by`, not `is_admin`. Deleting one record
+gates on `access.require_permission` against the module's **project**; `created_by` is
+attribution only (`docs/PRD.md` §5.1). This service never gates a read on ownership.
 """
 
 import asyncio
@@ -23,6 +23,7 @@ from app.config import Settings
 from app.core import access
 from app.core.errors import AppError, ErrorCode
 from app.core.middleware import AuthenticatedUser
+from app.core.permissions import Permission
 from app.models.checklist import ChangeSetOrigin, ChangeSetStatus, ChecklistModule
 from app.models.conversation import FinishReason, MessageRole
 from app.models.mock_data import (
@@ -211,8 +212,7 @@ class MockDataDatasetService:
         return records
 
     async def delete_record(self, record_id: uuid.UUID, *, actor: AuthenticatedUser) -> None:
-        """Delete one record. Gated on `created_by`/`is_admin`, `403` because module
-        (and therefore dataset) existence is deliberately public."""
+        """Delete one record. Gated on `mockdata.edit` on the record's project."""
         record = await self.records.get(record_id)
         if record is None:
             raise AppError(
@@ -222,13 +222,8 @@ class MockDataDatasetService:
             )
         # Module-scope readability first: a record in a project the caller cannot see
         # must 404, not 403 -- the same order `ChecklistItemService.delete` follows.
-        await self._require_readable_module(record.checklist_module_id, actor)
-        if record.created_by != actor.id and not actor.is_admin:
-            raise AppError(
-                status.HTTP_403_FORBIDDEN,
-                ErrorCode.NOT_MOCK_DATA_RECORD_OWNER,
-                "Only the person who created this record, or an admin, can delete it.",
-            )
+        module = await self._require_readable_module(record.checklist_module_id, actor)
+        access.require_permission(actor, module.project_id, Permission.MOCKDATA_EDIT)
         await self.records.soft_delete(record)
         await self.session.commit()
 

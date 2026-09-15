@@ -2,7 +2,7 @@
 
 Access matches projects and inverts conversations: every authenticated user reads every
 item and can record what they observed (spec 2.5). Editing what a test expects is gated
-on `created_by`/`is_admin` — a tester who did not author the checklist must be able to
+on `item.edit` — a tester who did not author the checklist must be able to
 record results without being able to quietly rewrite what was supposed to pass.
 """
 

@@ -78,10 +78,10 @@ async def test_delete_record_requires_ownership(
     grant_membership: GrantMembership,
     db_session: AsyncSession,
 ) -> None:
-    """A record created by someone else cannot be deleted by a non-admin caller who
-    is not its owner -- `403`, not `404`, because user B holds a role on the project
-    and therefore already sees the module, the dataset and the record. A caller with
-    no membership gets `404` instead; that is the row below."""
+    """A record cannot be deleted by a member whose role lacks `mockdata.edit` --
+    `403`, not `404`, because user B holds a role on the project and therefore already
+    sees the module, the dataset and the record. A caller with no membership gets `404`
+    instead; that is the row below."""
     project = await _ready_project(db_session)
     module = await create_checklist_module(db_session, project_id=project.id)
     record = await create_mock_data_record(db_session, module_id=module.id)
@@ -91,7 +91,7 @@ async def test_delete_record_requires_ownership(
     response = await client_for_user_b.delete(f"/mock-data-records/{record.id}")
 
     assert response.status_code == 403
-    assert response.json()["detail"]["code"] == "NOT_MOCK_DATA_RECORD_OWNER"
+    assert response.json()["detail"]["code"] == "INSUFFICIENT_ROLE"
 
 
 async def test_delete_record_is_404_for_a_non_member(

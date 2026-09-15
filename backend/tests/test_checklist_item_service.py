@@ -81,7 +81,7 @@ async def test_a_tester_cannot_rewrite_the_expectation(
         )
 
     assert caught.value.status_code == status.HTTP_403_FORBIDDEN
-    assert caught.value.code is ErrorCode.NOT_CHECKLIST_OWNER
+    assert caught.value.code is ErrorCode.INSUFFICIENT_ROLE
 
 
 async def test_setting_a_result_back_to_untested_clears_the_reviewer(
@@ -328,7 +328,7 @@ async def test_delete_is_gated_and_hides_the_item(
     with pytest.raises(AppError) as refused:
         await service.delete(item.id, actor=await authenticated(db_session, member))
     assert refused.value.status_code == status.HTTP_403_FORBIDDEN
-    assert refused.value.code is ErrorCode.NOT_CHECKLIST_OWNER
+    assert refused.value.code is ErrorCode.INSUFFICIENT_ROLE
 
     await service.delete(item.id, actor=await authenticated(db_session, creator))
 

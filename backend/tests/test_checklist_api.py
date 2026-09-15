@@ -146,7 +146,7 @@ async def test_editing_another_members_item_is_403(
     )
 
     assert response.status_code == 403
-    assert response.json()["detail"]["code"] == "NOT_CHECKLIST_OWNER"
+    assert response.json()["detail"]["code"] == "INSUFFICIENT_ROLE"
 
 
 @pytest.mark.asyncio

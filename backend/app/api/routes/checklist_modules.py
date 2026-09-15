@@ -1,8 +1,8 @@
 """Checklist modules: the unit of generation and of review.
 
 Access matches projects and inverts conversations: every authenticated user reads every
-module and every module's chat, and `created_by` gates editing and deleting rather than
-reading (spec 2.4, 2.5).
+module and every module's chat, and `module.edit`/`module.delete` gate editing and
+deleting rather than reading (spec 2.4, 2.5).
 """
 
 import asyncio

@@ -142,7 +142,7 @@ async def test_deleting_someone_elses_project_is_403_for_a_member_and_404_for_a_
             project.id, actor=await authenticated(db_session, member)
         )
     assert refused.value.status_code == 403
-    assert refused.value.code == ErrorCode.NOT_PROJECT_OWNER
+    assert refused.value.code == ErrorCode.INSUFFICIENT_ROLE
 
 
 async def test_an_admin_can_delete_any_project(db_session: AsyncSession) -> None:

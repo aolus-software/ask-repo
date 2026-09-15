@@ -2,8 +2,9 @@
 
 Two writes with two different rules, and the split is the design (spec 2.5):
 
-- `update` changes what a test *expects*, and needs `created_by` or `is_admin`.
-- `set_result` records what a tester *observed*, and is open to everyone.
+- `update` changes what a test *expects*, and needs `item.edit`.
+- `set_result` records what a tester *observed*, and needs only `result.record`, which
+  every role on the project holds (`docs/PRD.md` §4.3).
 
 A tester who did not author the checklist must be able to record what they saw without
 being able to quietly rewrite the expectation -- otherwise the cheapest way to make a
@@ -21,6 +22,7 @@ from app.config import Settings
 from app.core import access
 from app.core.errors import AppError, ErrorCode
 from app.core.middleware import AuthenticatedUser
+from app.core.permissions import Permission
 from app.models.checklist import (
     ChecklistItem,
     ChecklistItemSource,
@@ -128,9 +130,9 @@ class ChecklistItemService:
         *,
         actor: AuthenticatedUser,
     ) -> ChecklistItemResponse:
-        """Change what a test expects. Gated on `created_by`/`is_admin`."""
+        """Change what a test expects. Gated on `item.edit`."""
         item = await self._require_readable(item_id, actor)
-        self._require_destructive_rights(item, actor)
+        access.require_permission(actor, item.project_id, Permission.ITEM_EDIT)
         if payload.feature is not None:
             item.feature = payload.feature.strip()
         if payload.test_name is not None:
@@ -152,13 +154,20 @@ class ChecklistItemService:
         *,
         actor: AuthenticatedUser,
     ) -> ChecklistItemResponse:
-        """Record what a tester observed. Open to every authenticated user.
+        """Record what a tester observed. Gated on `result.record`, which every role
+        on the project holds.
+
+        The check is deliberately written out even though no role can fail it: it
+        records the `docs/PRD.md` §4.3 decision -- editing an expectation is gated,
+        recording an observation is not -- at the call site, so the absence of a gate
+        here cannot later be read as an oversight.
 
         Both fields together -- which is why the route is `PUT`. `untested` clears the
         reviewer: it means nobody has looked, and leaving a name on it would say
         somebody did.
         """
         item = await self._require_readable(item_id, actor)
+        access.require_permission(actor, item.project_id, Permission.RESULT_RECORD)
         item.current_result = payload.current_result
         item.status = payload.status.value
         if payload.status is ChecklistItemStatus.UNTESTED:
@@ -172,9 +181,9 @@ class ChecklistItemService:
         return ChecklistItemResponse.model_validate(item)
 
     async def delete(self, item_id: uuid.UUID, *, actor: AuthenticatedUser) -> None:
-        """Soft-delete one test case. Gated on `created_by`/`is_admin`."""
+        """Soft-delete one test case. Gated on `item.edit`."""
         item = await self._require_readable(item_id, actor)
-        self._require_destructive_rights(item, actor)
+        access.require_permission(actor, item.project_id, Permission.ITEM_EDIT)
         await self.items.soft_delete(item)
         await self.session.commit()
 
@@ -275,13 +284,3 @@ class ChecklistItemService:
                 "Checklist module not found.",
             )
         return module
-
-    @staticmethod
-    def _require_destructive_rights(item: ChecklistItem, actor: AuthenticatedUser) -> None:
-        """`created_by` or an admin. `403`, because existence is not a secret."""
-        if item.created_by != actor.id and not actor.is_admin:
-            raise AppError(
-                status.HTTP_403_FORBIDDEN,
-                ErrorCode.NOT_CHECKLIST_OWNER,
-                "Only the person who added this test, or an admin, can change what it expects.",
-            )

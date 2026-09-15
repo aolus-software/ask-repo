@@ -129,7 +129,7 @@ async def test_editing_a_module_is_403_for_a_member_and_404_for_a_non_member(
             actor=await authenticated(db_session, member),
         )
     assert refused.value.status_code == status.HTTP_403_FORBIDDEN
-    assert refused.value.code is ErrorCode.NOT_CHECKLIST_OWNER
+    assert refused.value.code is ErrorCode.INSUFFICIENT_ROLE
 
     with pytest.raises(AppError) as unseen:
         await service.update(

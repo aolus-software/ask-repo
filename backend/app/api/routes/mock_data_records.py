@@ -36,6 +36,6 @@ MockDataDatasetServiceDep = Annotated[
 async def delete_mock_data_record(
     record_id: uuid.UUID, current_user: CurrentUser, service: MockDataDatasetServiceDep
 ) -> Response:
-    """Soft-delete the record. Gated on `created_by`/`is_admin`."""
+    """Soft-delete the record. Gated on `mockdata.edit`."""
     await service.delete_record(record_id, actor=current_user)
     return Response(status_code=status.HTTP_204_NO_CONTENT)

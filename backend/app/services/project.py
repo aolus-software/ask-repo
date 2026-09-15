@@ -1,7 +1,9 @@
 """Project lifecycle: create, list, read, reindex, delete.
 
-The `created_by`-or-admin gate lives here rather than in the routes, so `reindex`
-and `delete` cannot drift apart (`.claude/rules/router.md`).
+Destructive operations gate on `access.require_permission`, not on `created_by` --
+`created_by` is attribution only (`docs/PRD.md` §5.1). The gate lives in the service
+rather than the routes so `reindex` and `delete` cannot drift apart
+(`.claude/rules/router.md`).
 """
 
 import logging
@@ -17,6 +19,7 @@ from app.core import access
 from app.core.crypto import SecretBox
 from app.core.errors import AppError, ErrorCode
 from app.core.middleware import AuthenticatedUser
+from app.core.permissions import Permission
 from app.core.repo_url import RepoUrlRejected, validate_repo_url
 from app.ingestion.errors import IngestionError
 from app.ingestion.vector_store import VectorStoreFactory
@@ -166,7 +169,7 @@ class ProjectService:
         that branch measures the wait from there.
         """
         project = await self._require_readable(project_id, actor)
-        self._require_destructive_rights(project, actor)
+        access.require_permission(actor, project.id, Permission.PROJECT_REINDEX)
 
         if project.status in BUSY_STATUSES or project.reindex_in_progress:
             return ReindexResponse(enqueued=False, project=ProjectResponse.model_validate(project))
@@ -193,7 +196,7 @@ class ProjectService:
         project whose content is still queryable.
         """
         project = await self._require_readable(project_id, actor)
-        self._require_destructive_rights(project, actor)
+        access.require_permission(actor, project.id, Permission.PROJECT_DELETE)
         await self._repository.soft_delete(project)
 
         # docs/PRD.md §4.2: deleting a project soft-deletes the conversations against
@@ -276,20 +279,6 @@ class ProjectService:
                 status.HTTP_404_NOT_FOUND, ErrorCode.PROJECT_NOT_FOUND, "Project not found."
             )
         return project
-
-    def _require_destructive_rights(self, project: Project, actor: AuthenticatedUser) -> None:
-        """Delete and reindex need `created_by` or admin (`docs/PRD.md` §4.1).
-
-        403 rather than 404: project existence is deliberately public here, so
-        hiding it would only confuse.
-        """
-        if actor.is_admin or project.created_by == actor.id:
-            return
-        raise AppError(
-            status.HTTP_403_FORBIDDEN,
-            ErrorCode.NOT_PROJECT_OWNER,
-            "Only the person who added this project, or an administrator, can do that.",
-        )
 
 
 def _derive_name(repo_url: str) -> str:
