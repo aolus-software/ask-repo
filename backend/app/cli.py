@@ -14,6 +14,7 @@ import uuid
 from app.config import get_settings
 from app.core.logging import configure_logging
 from app.core.passwords import PasswordPolicyError, check_password, get_common_passwords
+from app.core.role_seed import ensure_system_roles
 from app.core.security import hash_password
 from app.db.session import get_sessionmaker
 from app.models.user import User
@@ -95,11 +96,31 @@ async def seed_admins() -> int:
     return created
 
 
+def restore_system_roles() -> None:
+    """Recreate viewer/editor/owner with their built-in permission sets.
+
+    Immutability (`RoleService._require_editable`) covers the system roles themselves.
+    This covers what it cannot: a custom role that locked someone out, a partial
+    restore, or direct SQL against the box.
+    """
+    asyncio.run(_restore_system_roles())
+
+
+async def _restore_system_roles() -> None:
+    """Reuses `ensure_system_roles` (Task 2), which is the same function the test
+    harness calls after it truncates. One implementation, so a restore on a live box
+    and a restore between tests cannot drift apart."""
+    async with get_sessionmaker()() as session:
+        await ensure_system_roles(session)
+        await session.commit()
+        logger.info("system roles restored")
+
+
 def main(argv: list[str] | None = None) -> int:
     """Entry point. Returns a process exit code."""
     configure_logging("cli")
     parser = argparse.ArgumentParser(prog="app.cli", description="AskRepo operational commands")
-    parser.add_argument("command", choices=["seed-admins"])
+    parser.add_argument("command", choices=["seed-admins", "restore-system-roles"])
     arguments = parser.parse_args(argv)
 
     if arguments.command == "seed-admins":
@@ -109,6 +130,10 @@ def main(argv: list[str] | None = None) -> int:
             logger.error("%s", error)
             return 1
         logger.info("Seeding complete; %d account(s) created", created)
+        return 0
+
+    if arguments.command == "restore-system-roles":
+        restore_system_roles()
         return 0
 
     return 2
