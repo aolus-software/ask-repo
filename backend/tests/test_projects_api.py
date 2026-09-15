@@ -2,6 +2,7 @@
 
 from httpx import AsyncClient
 
+from app.core.permissions import OWNER_NAME, SYSTEM_ROLES
 from app.models.project import ProjectStatus
 
 
@@ -17,6 +18,24 @@ async def test_create_returns_201_and_camel_case(authed_client: AsyncClient) -> 
     # snake_case on the wire is the defect tests/test_api_model.py exists to catch.
     assert "repo_url" not in body
     assert "lastIndexedCommit" in body
+
+
+async def test_create_reports_the_creator_as_owner_on_the_same_response(
+    authed_client: AsyncClient,
+) -> None:
+    """The membership grant happens in the same request as the row insert, but
+    `AuthContextMiddleware` loaded the caller's grant snapshot before that
+    membership existed. `role`/`permissions` must still answer correctly here
+    rather than reading the now-stale snapshot -- confirmed live during Task 17's
+    smoke test, where this came back `role: null, permissions: []`."""
+    response = await authed_client.post(
+        "/projects", json={"repoUrl": "https://github.com/acme/repo.git"}
+    )
+
+    assert response.status_code == 201
+    body = response.json()
+    assert body["role"] == OWNER_NAME
+    assert set(body["permissions"]) == {p.value for p in SYSTEM_ROLES[OWNER_NAME]}
 
 
 async def test_create_never_echoes_the_pat(authed_client: AsyncClient) -> None:

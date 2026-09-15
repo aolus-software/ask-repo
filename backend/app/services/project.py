@@ -20,7 +20,7 @@ from app.core.crypto import SecretBox
 from app.core.errors import AppError, ErrorCode
 from app.core.grant_cache import get_grant_cache
 from app.core.middleware import AuthenticatedUser
-from app.core.permissions import OWNER_NAME, Permission
+from app.core.permissions import OWNER_NAME, SYSTEM_ROLES, Permission
 from app.core.repo_url import RepoUrlRejected, validate_repo_url
 from app.ingestion.errors import IngestionError
 from app.ingestion.vector_store import VectorStoreFactory
@@ -138,7 +138,17 @@ class ProjectService:
         # Produced after the commit: a message referencing an uncommitted row would
         # race the worker. The reconcile sweep covers a produce that fails here.
         await self._enqueue(project.id)
-        return self._to_response(project, actor)
+
+        # Not `_to_response(project, actor)`: `actor.grants` is the snapshot
+        # `AuthContextMiddleware` loaded at the start of this request, before the
+        # membership above existed, so `access.role_for`/`permissions_for` would
+        # answer from stale data and report the creator as having no access to the
+        # project they just made. This method already knows the true answer -- the
+        # actor is `owner`, unconditionally -- without needing a resolver round-trip.
+        response = ProjectResponse.model_validate(project)
+        response.role = OWNER_NAME
+        response.permissions = sorted(permission.value for permission in SYSTEM_ROLES[OWNER_NAME])
+        return response
 
     async def list(
         self, query: ProjectListQuery, *, actor: AuthenticatedUser
