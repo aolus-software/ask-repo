@@ -71,6 +71,38 @@ class MembershipRepository(BaseRepository[ProjectMembership]):
         )
         return result.scalar_one_or_none()
 
+    async def grant(
+        self,
+        *,
+        project_id: uuid.UUID,
+        user_id: uuid.UUID,
+        role_id: uuid.UUID,
+        granted_by: uuid.UUID,
+    ) -> ProjectMembership:
+        """Give a user a role on a project, without committing.
+
+        Constructing the row lives here rather than in the calling service because a
+        service that builds a `ProjectMembership` itself is a second place that
+        decides who may reach a project — exactly what
+        `tests/test_scoping_is_single_point.py` refuses, and what `docs/PRD.md` §7's
+        single-point criterion exists to prevent.
+
+        Flushes rather than commits, so the caller can write the project row and its
+        owner membership in one transaction. A project that exists with no owner
+        breaks the invariant §9 enforces, and a second transaction is a window where
+        exactly that is true.
+        """
+        membership = ProjectMembership(
+            id=uuid.uuid4(),
+            user_id=user_id,
+            project_id=project_id,
+            role_id=role_id,
+            granted_by=granted_by,
+        )
+        self.session.add(membership)
+        await self.session.flush()
+        return membership
+
     async def list_for_project(self, project_id: uuid.UUID) -> Sequence[ProjectMembership]:
         """Every live membership on a project, oldest grant first."""
         result = await self.session.execute(

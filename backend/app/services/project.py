@@ -23,7 +23,6 @@ from app.core.permissions import OWNER_NAME, Permission
 from app.core.repo_url import RepoUrlRejected, validate_repo_url
 from app.ingestion.errors import IngestionError
 from app.ingestion.vector_store import VectorStoreFactory
-from app.models.membership import ProjectMembership
 from app.models.project import Project, ProjectStatus
 from app.queue.protocol import IngestionQueue
 from app.queue.topics import INGEST_TOPIC, IngestionMessage
@@ -121,14 +120,11 @@ class ProjectService:
                 ErrorCode.INTERNAL_ERROR,
                 "The owner role is missing.",
             )
-        self.session.add(
-            ProjectMembership(
-                id=uuid.uuid4(),
-                user_id=actor.id,
-                project_id=project.id,
-                role_id=owner.id,
-                granted_by=actor.id,
-            )
+        await self._members.grant(
+            project_id=project.id,
+            user_id=actor.id,
+            role_id=owner.id,
+            granted_by=actor.id,
         )
         await self.session.commit()
 
