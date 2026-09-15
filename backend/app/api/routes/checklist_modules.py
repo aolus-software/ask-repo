@@ -1,8 +1,10 @@
 """Checklist modules: the unit of generation and of review.
 
-Access matches projects and inverts conversations: every authenticated user reads every
-module and every module's chat, and `module.edit`/`module.delete` gate editing and
-deleting rather than reading (spec 2.4, 2.5).
+Reads are scoped to the caller's project membership, like everything else since Phase
+2.1 — never instance-wide. Within a project every member reads every module and every
+module's chat; `module.create` gates making one, `module.edit`/`module.delete` gate
+editing and deleting, and `generate.run`/`changeset.apply` gate the write paths below
+rather than reading (spec 2.4, 2.5).
 """
 
 import asyncio

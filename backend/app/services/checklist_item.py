@@ -234,17 +234,18 @@ class ChecklistItemService:
     ) -> ChecklistResultsClearResponse:
         """Reset the recorded results the filter selects.
 
-        Ungated, exactly like recording one (spec 2.5). Clearing a result is
-        un-recording it, so gating it on `created_by` would mean a tester could write
-        an observation and then not be allowed to take it back -- and the reason the
-        write is open is that a tester must be able to say what they saw without
-        needing the checklist's author.
+        Gated on `result.record`, exactly like recording one (spec 2.5) -- clearing a
+        result is un-recording it, so it needs the same permission `set_result` does,
+        not a `created_by` check that would mean a tester could write an observation
+        and then not be allowed to take it back.
 
-        It is bounded instead of gated: the request names one module, the module must
-        be in the caller's scope, and the rows are selected through the same scoped
-        query every read uses.
+        The check is deliberately written out even though no role can fail it today
+        (every system role holds `result.record`): it records the intent at the call
+        site, so the absence of a gate here cannot later be read as an oversight, and
+        the module's own membership scope still bounds which rows are reachable.
         """
-        await self._require_readable_module(payload.module_id, actor)
+        module = await self._require_readable_module(payload.module_id, actor)
+        access.require_permission(actor, module.project_id, Permission.RESULT_RECORD)
         cleared = await self.items.clear_results(
             scope=access.resolve_project_scope(actor),
             module_id=payload.module_id,
