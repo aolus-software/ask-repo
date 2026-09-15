@@ -1,7 +1,9 @@
 """Project lifecycle: create, list, read, reindex, delete.
 
-The `created_by`-or-admin gate lives here rather than in the routes, so `reindex`
-and `delete` cannot drift apart (`.claude/rules/router.md`).
+Destructive operations gate on `access.require_permission`, not on `created_by` --
+`created_by` is attribution only (`docs/PRD.md` §5.1). The gate lives in the service
+rather than the routes so `reindex` and `delete` cannot drift apart
+(`.claude/rules/router.md`).
 """
 
 import logging
@@ -16,7 +18,9 @@ from app.config import Settings
 from app.core import access
 from app.core.crypto import SecretBox
 from app.core.errors import AppError, ErrorCode
+from app.core.grant_cache import get_grant_cache
 from app.core.middleware import AuthenticatedUser
+from app.core.permissions import OWNER_NAME, SYSTEM_ROLES, Permission
 from app.core.repo_url import RepoUrlRejected, validate_repo_url
 from app.ingestion.errors import IngestionError
 from app.ingestion.vector_store import VectorStoreFactory
@@ -28,13 +32,20 @@ from app.repositories.checklist_item import ChecklistItemRepository
 from app.repositories.checklist_message import ChecklistMessageRepository
 from app.repositories.checklist_module import ChecklistModuleRepository
 from app.repositories.conversation import ConversationRepository
+from app.repositories.membership import MembershipRepository
 from app.repositories.mock_data_change_set import MockDataChangeSetRepository
 from app.repositories.mock_data_dataset import MockDataDatasetRepository
 from app.repositories.mock_data_message import MockDataMessageRepository
 from app.repositories.mock_data_record import MockDataRecordRepository
 from app.repositories.project import ProjectRepository
-from app.schemas.pagination import ListQuery, PaginatedResponse
-from app.schemas.project import ProjectCreateRequest, ProjectResponse, ReindexResponse
+from app.repositories.role import RoleRepository
+from app.schemas.pagination import PaginatedResponse
+from app.schemas.project import (
+    ProjectCreateRequest,
+    ProjectListQuery,
+    ProjectResponse,
+    ReindexResponse,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -71,6 +82,8 @@ class ProjectService:
         self._mock_data_change_sets = MockDataChangeSetRepository(session)
         self._mock_data_messages = MockDataMessageRepository(session)
         self._mock_data_datasets = MockDataDatasetRepository(session)
+        self._roles = RoleRepository(session)
+        self._members = MembershipRepository(session)
 
     async def create(
         self, payload: ProjectCreateRequest, *, actor: AuthenticatedUser
@@ -102,15 +115,43 @@ class ProjectService:
             encrypted_pat=encrypted_pat,
         )
         await self._repository.add(project)
+
+        # The creator becomes the owner in the same transaction. A project that exists
+        # with no owner breaks the invariant §9 enforces, and a second transaction is
+        # a window where exactly that is true.
+        owner = await self._roles.get_by_name(OWNER_NAME)
+        if owner is None:  # pragma: no cover - the migration seeds it
+            raise AppError(
+                status.HTTP_500_INTERNAL_SERVER_ERROR,
+                ErrorCode.INTERNAL_ERROR,
+                "The owner role is missing.",
+            )
+        await self._members.grant(
+            project_id=project.id,
+            user_id=actor.id,
+            role_id=owner.id,
+            granted_by=actor.id,
+        )
         await self.session.commit()
+        await get_grant_cache().invalidate_user(actor.id)
 
         # Produced after the commit: a message referencing an uncommitted row would
         # race the worker. The reconcile sweep covers a produce that fails here.
         await self._enqueue(project.id)
-        return ProjectResponse.model_validate(project)
+
+        # Not `_to_response(project, actor)`: `actor.grants` is the snapshot
+        # `AuthContextMiddleware` loaded at the start of this request, before the
+        # membership above existed, so `access.role_for`/`permissions_for` would
+        # answer from stale data and report the creator as having no access to the
+        # project they just made. This method already knows the true answer -- the
+        # actor is `owner`, unconditionally -- without needing a resolver round-trip.
+        response = ProjectResponse.model_validate(project)
+        response.role = OWNER_NAME
+        response.permissions = sorted(permission.value for permission in SYSTEM_ROLES[OWNER_NAME])
+        return response
 
     async def list(
-        self, query: ListQuery, *, actor: AuthenticatedUser
+        self, query: ProjectListQuery, *, actor: AuthenticatedUser
     ) -> PaginatedResponse[ProjectResponse]:
         """A page of projects the caller may read.
 
@@ -118,6 +159,17 @@ class ProjectService:
         unrestricted; phase 2 changes the resolver's body and this line stays put.
         """
         scope = access.resolve_project_scope(actor)
+
+        if query.ownerless:
+            if not actor.is_admin:
+                raise AppError(
+                    status.HTTP_403_FORBIDDEN,
+                    ErrorCode.ADMIN_REQUIRED,
+                    "This action requires an administrator account.",
+                )
+            ownerless_ids = await self._members.ownerless_project_ids()
+            scope = scope.narrowed_to(ownerless_ids)
+
         try:
             rows, total = await self._repository.list_page(
                 scope=scope,
@@ -133,7 +185,7 @@ class ProjectService:
             ) from error
 
         return PaginatedResponse.build(
-            [ProjectResponse.model_validate(row) for row in rows],
+            [self._to_response(row, actor) for row in rows],
             page=query.page,
             limit=query.limit,
             total_count=total,
@@ -141,7 +193,8 @@ class ProjectService:
 
     async def get(self, project_id: uuid.UUID, *, actor: AuthenticatedUser) -> ProjectResponse:
         """One project, by id."""
-        return ProjectResponse.model_validate(await self._require_readable(project_id, actor))
+        project = await self._require_readable(project_id, actor)
+        return self._to_response(project, actor)
 
     async def reindex(self, project_id: uuid.UUID, *, actor: AuthenticatedUser) -> ReindexResponse:
         """Trigger a fresh indexing run. Idempotent while one is already in flight.
@@ -166,17 +219,17 @@ class ProjectService:
         that branch measures the wait from there.
         """
         project = await self._require_readable(project_id, actor)
-        self._require_destructive_rights(project, actor)
+        access.require_permission(actor, project.id, Permission.PROJECT_REINDEX)
 
         if project.status in BUSY_STATUSES or project.reindex_in_progress:
-            return ReindexResponse(enqueued=False, project=ProjectResponse.model_validate(project))
+            return ReindexResponse(enqueued=False, project=self._to_response(project, actor))
 
         project.reindex_in_progress = True
         project.updated_at = datetime.now(UTC)
         await self.session.commit()
 
         await self._enqueue(project.id)
-        return ReindexResponse(enqueued=True, project=ProjectResponse.model_validate(project))
+        return ReindexResponse(enqueued=True, project=self._to_response(project, actor))
 
     async def delete(self, project_id: uuid.UUID, *, actor: AuthenticatedUser) -> None:
         """Soft-delete the project and hard-delete its vectors, in one operation.
@@ -193,7 +246,7 @@ class ProjectService:
         project whose content is still queryable.
         """
         project = await self._require_readable(project_id, actor)
-        self._require_destructive_rights(project, actor)
+        access.require_permission(actor, project.id, Permission.PROJECT_DELETE)
         await self._repository.soft_delete(project)
 
         # docs/PRD.md §4.2: deleting a project soft-deletes the conversations against
@@ -267,6 +320,14 @@ class ProjectService:
             )
         )
 
+    @staticmethod
+    def _to_response(project: Project, actor: AuthenticatedUser) -> ProjectResponse:
+        """A project as this caller sees it, including what they may do to it."""
+        response = ProjectResponse.model_validate(project)
+        response.role = access.role_for(actor, project.id)
+        response.permissions = sorted(access.permissions_for(actor, project.id))
+        return response
+
     async def _require_readable(self, project_id: uuid.UUID, actor: AuthenticatedUser) -> Project:
         """Load a project the caller may see, or raise 404."""
         scope = access.resolve_project_scope(actor)
@@ -276,20 +337,6 @@ class ProjectService:
                 status.HTTP_404_NOT_FOUND, ErrorCode.PROJECT_NOT_FOUND, "Project not found."
             )
         return project
-
-    def _require_destructive_rights(self, project: Project, actor: AuthenticatedUser) -> None:
-        """Delete and reindex need `created_by` or admin (`docs/PRD.md` §4.1).
-
-        403 rather than 404: project existence is deliberately public here, so
-        hiding it would only confuse.
-        """
-        if actor.is_admin or project.created_by == actor.id:
-            return
-        raise AppError(
-            status.HTTP_403_FORBIDDEN,
-            ErrorCode.NOT_PROJECT_OWNER,
-            "Only the person who added this project, or an administrator, can do that.",
-        )
 
 
 def _derive_name(repo_url: str) -> str:

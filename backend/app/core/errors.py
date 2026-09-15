@@ -40,7 +40,6 @@ class ErrorCode(StrEnum):
     INVALID_SORT_FIELD = "INVALID_SORT_FIELD"
     RATE_LIMITED = "RATE_LIMITED"
     PROJECT_NOT_FOUND = "PROJECT_NOT_FOUND"
-    NOT_PROJECT_OWNER = "NOT_PROJECT_OWNER"
     INVALID_REPO_URL = "INVALID_REPO_URL"
     VECTOR_STORE_UNAVAILABLE = "VECTOR_STORE_UNAVAILABLE"
     CONVERSATION_NOT_FOUND = "CONVERSATION_NOT_FOUND"
@@ -51,7 +50,6 @@ class ErrorCode(StrEnum):
     EXPORT_TOO_LARGE = "EXPORT_TOO_LARGE"
     CHECKLIST_MODULE_NOT_FOUND = "CHECKLIST_MODULE_NOT_FOUND"
     CHECKLIST_ITEM_NOT_FOUND = "CHECKLIST_ITEM_NOT_FOUND"
-    NOT_CHECKLIST_OWNER = "NOT_CHECKLIST_OWNER"
     CHANGE_SET_NOT_FOUND = "CHANGE_SET_NOT_FOUND"
     CHANGE_SET_PENDING = "CHANGE_SET_PENDING"
     CHANGE_SET_ALREADY_RESOLVED = "CHANGE_SET_ALREADY_RESOLVED"
@@ -62,11 +60,22 @@ class ErrorCode(StrEnum):
     MOCK_DATA_CHANGE_SET_ALREADY_RESOLVED = "MOCK_DATA_CHANGE_SET_ALREADY_RESOLVED"
     MOCK_DATA_GENERATION_IN_PROGRESS = "MOCK_DATA_GENERATION_IN_PROGRESS"
     MOCK_DATA_RECORD_NOT_FOUND = "MOCK_DATA_RECORD_NOT_FOUND"
-    NOT_MOCK_DATA_RECORD_OWNER = "NOT_MOCK_DATA_RECORD_OWNER"
+    INSUFFICIENT_ROLE = "INSUFFICIENT_ROLE"
+    SYSTEM_ROLE_IMMUTABLE = "SYSTEM_ROLE_IMMUTABLE"
+    ROLE_NOT_FOUND = "ROLE_NOT_FOUND"
+    ROLE_IN_USE = "ROLE_IN_USE"
+    ROLE_NAME_EXISTS = "ROLE_NAME_EXISTS"
+    LAST_OWNER = "LAST_OWNER"
+    MEMBERSHIP_NOT_FOUND = "MEMBERSHIP_NOT_FOUND"
+    MEMBERSHIP_EXISTS = "MEMBERSHIP_EXISTS"
 
 
-def error_detail(code: ErrorCode, message: str) -> dict[str, str]:
-    """Build the `detail` object. One construction site, so the shape cannot drift."""
+def error_detail(code: ErrorCode, message: str) -> dict[str, object]:
+    """Build the `detail` object. One construction site, so the shape cannot drift.
+
+    `object`-valued rather than `str`-valued: `AppError`'s `extra` widens this past
+    `code`/`message` with non-string values, e.g. `409 LAST_OWNER`'s `projects` array.
+    """
     return {"code": code.value, "message": message}
 
 
@@ -84,15 +93,28 @@ class AppError(HTTPException):
         message: str,
         *,
         headers: dict[str, str] | None = None,
+        extra: dict[str, object] | None = None,
     ) -> None:
         """`headers` is for the rare case a route needs to attach one to the error
         response itself — e.g. clearing a cookie on a replay — because FastAPI's
         default `HTTPException` handler builds its own response once an exception
         propagates, ignoring anything mutated on the route's injected `Response`.
+
+        `extra` merges additional fields into the detail object alongside `code` and
+        `message` — used for a `409 LAST_OWNER` that names the stranded projects.
+
+        It widens the wire contract, so it comes with an obligation: a route that can
+        raise one **must** declare a model for that status instead of the generic
+        `ERROR_RESPONSES[...]` entry, the way `422` declares `ValidationErrorBody` and
+        `DELETE /users/{id}` declares `LastOwnerErrorResponse`. Otherwise `/docs` and
+        every generated client describe a body the route does not return. Use it when
+        the extra field is what makes the error actionable, never to pass detail a
+        message could carry.
         """
-        super().__init__(
-            status_code=status_code, detail=error_detail(code, message), headers=headers
-        )
+        detail = error_detail(code, message)
+        if extra:
+            detail.update(extra)
+        super().__init__(status_code=status_code, detail=detail, headers=headers)
         self.code = code
         self.message = message
 

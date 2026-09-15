@@ -7,9 +7,12 @@ from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import Settings
+from app.core.permissions import EDITOR_NAME, VIEWER_NAME
 from app.ingestion.vector_store import InMemoryVectorStore
 from app.models.checklist import ChangeSetStatus
 from app.models.project import Project, ProjectStatus
+from app.models.user import User
+from tests.conftest import GrantMembership
 from tests.factories import (
     create_checklist_change_set,
     create_checklist_item,
@@ -46,10 +49,14 @@ async def test_list_modules_returns_a_paginated_envelope(
 
 @pytest.mark.asyncio
 async def test_module_response_is_camel_case(
-    authed_client: AsyncClient, db_session: AsyncSession
+    authed_client: AsyncClient,
+    authed_user: User,
+    grant_membership: GrantMembership,
+    db_session: AsyncSession,
 ) -> None:
     module = await create_checklist_module(db_session)
     await db_session.commit()
+    await grant_membership(authed_user.id, module.project_id, VIEWER_NAME)
 
     body = (await authed_client.get(f"/checklist-modules/{module.id}")).json()
 
@@ -60,13 +67,18 @@ async def test_module_response_is_camel_case(
 
 @pytest.mark.asyncio
 async def test_creating_a_module_on_an_unindexed_path_is_400(
-    authed_client: AsyncClient, db_session: AsyncSession, vector_store: InMemoryVectorStore
+    authed_client: AsyncClient,
+    authed_user: User,
+    grant_membership: GrantMembership,
+    db_session: AsyncSession,
+    vector_store: InMemoryVectorStore,
 ) -> None:
     """Phase 1.1: rejected at creation, on the field the user just filled in, rather
     than accepted with a `201` that fails in a background job an hour later."""
     project = await _ready_project(db_session)
     seed_indexed_paths(vector_store, project.id, "backend/app/config.py")
     await db_session.commit()
+    await grant_membership(authed_user.id, project.id, EDITOR_NAME)
 
     response = await authed_client.post(
         "/checklist-modules",
@@ -86,18 +98,27 @@ async def test_an_unknown_module_is_404(authed_client: AsyncClient) -> None:
 
 
 @pytest.mark.asyncio
-async def test_editing_another_users_item_is_403(
+async def test_editing_another_members_item_is_403(
     client_for_user_a: AsyncClient,
     client_for_user_b: AsyncClient,
+    user_a: User,
+    user_b: User,
+    grant_membership: GrantMembership,
     db_session: AsyncSession,
     vector_store: InMemoryVectorStore,
 ) -> None:
-    """403, not 404: module and item existence is deliberately public."""
+    """403, not 404: user B holds a role on this project, so the item is already on
+    their screen and hiding it would contradict the list they just rendered. A caller
+    with **no** membership gets `404` instead -- the service-level counterpart is
+    `tests/test_checklist_item_service.py::test_delete_is_gated_and_hides_the_item`.
+    """
     project = await _ready_project(db_session)
     # `POST /checklist-modules` refuses a path that matches nothing in the index
     # (phase 1.1), so the tree has to exist before a module can be created against it.
     seed_indexed_paths(vector_store, project.id, "app/auth/routes.py")
     await db_session.commit()
+    await grant_membership(user_a.id, project.id, EDITOR_NAME)
+    await grant_membership(user_b.id, project.id, VIEWER_NAME)
     created = (
         await client_for_user_a.post(
             "/checklist-modules",
@@ -125,17 +146,22 @@ async def test_editing_another_users_item_is_403(
     )
 
     assert response.status_code == 403
-    assert response.json()["detail"]["code"] == "NOT_CHECKLIST_OWNER"
+    assert response.json()["detail"]["code"] == "INSUFFICIENT_ROLE"
 
 
 @pytest.mark.asyncio
-async def test_recording_a_result_is_open_to_anyone(
-    client_for_user_b: AsyncClient, db_session: AsyncSession
+async def test_recording_a_result_is_open_to_any_member(
+    client_for_user_b: AsyncClient,
+    user_b: User,
+    grant_membership: GrantMembership,
+    db_session: AsyncSession,
 ) -> None:
-    """The whole point of the split (spec 2.5): user B authored none of this."""
+    """The whole point of the split (spec 2.5): user B authored none of this, and a
+    `viewer` is a tester -- `result.record` sits with the lowest role there is."""
     module = await create_checklist_module(db_session)
     item = await create_checklist_item(db_session, module_id=module.id)
     await db_session.commit()
+    await grant_membership(user_b.id, module.project_id, VIEWER_NAME)
 
     response = await client_for_user_b.put(
         f"/checklist-items/{item.id}/result",
@@ -172,12 +198,16 @@ async def test_export_is_matched_before_the_id_route(authed_client: AsyncClient)
 
 @pytest.mark.asyncio
 async def test_a_chat_turn_streams_server_sent_events(
-    authed_client: AsyncClient, db_session: AsyncSession
+    authed_client: AsyncClient,
+    authed_user: User,
+    grant_membership: GrantMembership,
+    db_session: AsyncSession,
 ) -> None:
     module = await create_checklist_module(
         db_session, project_id=(await _ready_project(db_session)).id
     )
     await db_session.commit()
+    await grant_membership(authed_user.id, module.project_id, EDITOR_NAME)
 
     async with authed_client.stream(
         "POST", f"/checklist-modules/{module.id}/messages", json={"question": "Add a test."}
@@ -192,13 +222,17 @@ async def test_a_chat_turn_streams_server_sent_events(
 
 @pytest.mark.asyncio
 async def test_generate_publishes_a_job_and_returns_202(
-    authed_client: AsyncClient, db_session: AsyncSession
+    authed_client: AsyncClient,
+    authed_user: User,
+    grant_membership: GrantMembership,
+    db_session: AsyncSession,
 ) -> None:
     """Fire-and-forget: the result is a change set to review, not a response body."""
     module = await create_checklist_module(
         db_session, project_id=(await _ready_project(db_session)).id
     )
     await db_session.commit()
+    await grant_membership(authed_user.id, module.project_id, EDITOR_NAME)
 
     response = await authed_client.post(f"/checklist-modules/{module.id}/generate")
 
@@ -208,10 +242,17 @@ async def test_generate_publishes_a_job_and_returns_202(
 
 @pytest.mark.asyncio
 async def test_applying_a_resolved_change_set_is_409(
-    authed_client: AsyncClient, db_session: AsyncSession
+    authed_client: AsyncClient,
+    authed_user: User,
+    grant_membership: GrantMembership,
+    db_session: AsyncSession,
 ) -> None:
-    change_set = await create_checklist_change_set(db_session, status=ChangeSetStatus.APPLIED)
+    module = await create_checklist_module(db_session)
+    change_set = await create_checklist_change_set(
+        db_session, module_id=module.id, status=ChangeSetStatus.APPLIED
+    )
     await db_session.commit()
+    await grant_membership(authed_user.id, module.project_id, EDITOR_NAME)
 
     response = await authed_client.post(f"/checklist-change-sets/{change_set.id}/apply", json={})
 
@@ -221,11 +262,17 @@ async def test_applying_a_resolved_change_set_is_409(
 
 @pytest.mark.asyncio
 async def test_discarding_a_pending_change_set_resolves_it(
-    authed_client: AsyncClient, db_session: AsyncSession
+    authed_client: AsyncClient,
+    authed_user: User,
+    grant_membership: GrantMembership,
+    db_session: AsyncSession,
 ) -> None:
-    """Open to any authenticated user: reviewing a shared document (spec 5.4)."""
-    change_set = await create_checklist_change_set(db_session)
+    """Open to any member who may apply: reviewing a document the project shares
+    (spec 5.4). It is not gated on who ran the generation."""
+    module = await create_checklist_module(db_session)
+    change_set = await create_checklist_change_set(db_session, module_id=module.id)
     await db_session.commit()
+    await grant_membership(authed_user.id, module.project_id, EDITOR_NAME)
 
     response = await authed_client.post(f"/checklist-change-sets/{change_set.id}/discard")
 

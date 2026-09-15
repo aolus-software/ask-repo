@@ -57,4 +57,12 @@ export const keys = {
   mockDataMessages: {
     forModule: (moduleId: string) => ["mock-data-messages", moduleId] as const,
   },
+  roles: {
+    all: ["roles"] as const,
+    list: ["roles", "list"] as const,
+  },
+  permissionCatalogue: ["permissions", "catalogue"] as const,
+  members: {
+    forProject: (projectId: string) => ["members", projectId] as const,
+  },
 };

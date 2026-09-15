@@ -1,9 +1,9 @@
 """Module business rules.
 
 Reads scope through `access.resolve_project_scope` and nothing else -- not
-`created_by`, not `is_admin`. `created_by`/`is_admin` gate editing, deleting, and
-re-pointing a module, and return `403` rather than `404` because module existence is
-deliberately public (spec 2.5).
+`created_by`, not `is_admin`. Editing, deleting, and re-pointing a module gate on
+`access.require_permission` against the module's **project**; `created_by` is
+attribution only (`docs/PRD.md` §5.1).
 """
 
 import asyncio
@@ -23,6 +23,7 @@ from app.config import Settings
 from app.core import access
 from app.core.errors import AppError, ErrorCode
 from app.core.middleware import AuthenticatedUser
+from app.core.permissions import Permission
 from app.models.checklist import (
     ChangeSetOrigin,
     ChangeSetStatus,
@@ -145,8 +146,9 @@ class ChecklistModuleService:
     async def create(
         self, payload: ChecklistModuleCreateRequest, *, actor: AuthenticatedUser
     ) -> ChecklistModuleResponse:
-        """Name a module against a project the caller may read."""
+        """Name a module against a project the caller may read. Gated on `module.create`."""
         project = await self._require_readable_project(payload.project_id, actor)
+        access.require_permission(actor, project.id, Permission.MODULE_CREATE)
         self._require_indexed(project)
         source_path = payload.source_path.strip().strip("/")
         await self._require_path_indexed(project, source_path)
@@ -170,9 +172,9 @@ class ChecklistModuleService:
         *,
         actor: AuthenticatedUser,
     ) -> ChecklistModuleResponse:
-        """Rename or re-point a module. Gated on `created_by`/`is_admin`."""
+        """Rename or re-point a module. Gated on `module.edit`."""
         module = await self._require_readable(module_id, actor)
-        self._require_destructive_rights(module, actor)
+        access.require_permission(actor, module.project_id, Permission.MODULE_EDIT)
         if payload.name is not None:
             module.name = payload.name.strip()
         if payload.source_path is not None:
@@ -194,11 +196,11 @@ class ChecklistModuleService:
 
     async def delete(self, module_id: uuid.UUID, *, actor: AuthenticatedUser) -> None:
         """Soft-delete a module and everything hanging off it -- its checklist and its
-        mock dataset alike. Nothing reaches Qdrant: neither capability owns vector
-        points, both read the project's.
+        mock dataset alike. Gated on `module.delete`. Nothing reaches Qdrant: neither
+        capability owns vector points, both read the project's.
         """
         module = await self._require_readable(module_id, actor)
-        self._require_destructive_rights(module, actor)
+        access.require_permission(actor, module.project_id, Permission.MODULE_DELETE)
         await self.items.soft_delete_for_module(module_id)
         await self.change_sets.soft_delete_for_module(module_id)
         await self.messages_repository.soft_delete_for_module(module_id)
@@ -218,10 +220,11 @@ class ChecklistModuleService:
         embedding-model guard deliberately does **not** apply: it exists because a
         query embedded by a different model lands in a vector space the collection was
         never built in, and generation embeds nothing -- it filters and scrolls
-        (spec 4.1).
+        (spec 4.1). Gated on `generate.run`.
         """
         module = await self._require_readable(module_id, actor)
         project = await self._require_readable_project(module.project_id, actor)
+        access.require_permission(actor, project.id, Permission.GENERATE_RUN)
         self._require_indexed(project)
         self._require_a_stable_index(project)
 
@@ -430,16 +433,6 @@ class ChecklistModuleService:
                 "Checklist module not found.",
             )
         return module
-
-    @staticmethod
-    def _require_destructive_rights(module: ChecklistModule, actor: AuthenticatedUser) -> None:
-        """`created_by` or an admin. `403`, because existence is not a secret."""
-        if module.created_by != actor.id and not actor.is_admin:
-            raise AppError(
-                status.HTTP_403_FORBIDDEN,
-                ErrorCode.NOT_CHECKLIST_OWNER,
-                "Only the person who created this module, or an admin, can change it.",
-            )
 
     async def _require_readable_project(
         self, project_id: uuid.UUID, actor: AuthenticatedUser

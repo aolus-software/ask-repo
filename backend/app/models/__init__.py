@@ -14,6 +14,7 @@ from app.models.checklist import (
     ChecklistModuleStatus,
 )
 from app.models.conversation import Conversation, FinishReason, Message, MessageRole
+from app.models.membership import ProjectMembership, Role, RolePermission
 from app.models.mock_data import (
     MockDataChangeSet,
     MockDataDataset,
@@ -46,9 +47,12 @@ __all__ = [
     "MockDataMessage",
     "MockDataRecord",
     "Project",
+    "ProjectMembership",
     "ProjectStatus",
     "RefreshToken",
     "RevokedReason",
+    "Role",
+    "RolePermission",
     "SoftDeleteMixin",
     "TimestampMixin",
     "User",

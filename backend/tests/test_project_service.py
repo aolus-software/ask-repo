@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import get_settings
 from app.core.access import ProjectScope
 from app.core.errors import AppError, ErrorCode
-from app.core.middleware import AuthenticatedUser
+from app.core.permissions import VIEWER_NAME
 from app.ingestion.chunker import Chunk
 from app.ingestion.errors import RetryableIngestionError
 from app.ingestion.vector_store import InMemoryVectorStore, VectorStore, VectorStoreFactory
@@ -30,6 +30,7 @@ from app.repositories.mock_data_record import MockDataRecordRepository
 from app.repositories.project import ProjectRepository
 from app.schemas.project import ProjectCreateRequest
 from app.services.project import ProjectService
+from tests.conftest import GrantMembership
 from tests.factories import (
     create_checklist_change_set,
     create_checklist_item,
@@ -41,16 +42,7 @@ from tests.factories import (
     create_project,
     create_user,
 )
-
-
-def actor_for(user_id: uuid.UUID, *, is_admin: bool = False) -> AuthenticatedUser:
-    return AuthenticatedUser(
-        id=user_id,
-        name="Test User",
-        email="a@example.com",
-        is_admin=is_admin,
-        must_change_password=False,
-    )
+from tests.helpers import authenticated
 
 
 def _no_store_expected(collection: str) -> VectorStore:
@@ -78,7 +70,7 @@ async def test_create_enqueues_exactly_one_job(db_session: AsyncSession) -> None
 
     response = await service_for(db_session, queue).create(
         ProjectCreateRequest(repo_url="https://github.com/acme/repo.git", branch="main"),
-        actor=actor_for(user.id),
+        actor=await authenticated(db_session, user),
     )
 
     assert response.status == ProjectStatus.PENDING
@@ -96,7 +88,7 @@ async def test_create_rejects_a_url_that_fails_validation(db_session: AsyncSessi
     with pytest.raises(AppError) as caught:
         await service_for(db_session, queue).create(
             ProjectCreateRequest(repo_url="http://github.com/acme/repo.git"),
-            actor=actor_for(user.id),
+            actor=await authenticated(db_session, user),
         )
 
     assert caught.value.status_code == 400
@@ -111,27 +103,46 @@ async def test_the_pat_is_never_returned(db_session: AsyncSession) -> None:
 
     response = await service_for(db_session, InMemoryIngestionQueue()).create(
         ProjectCreateRequest(repo_url="https://github.com/acme/repo.git", pat="ghp_secret"),
-        actor=actor_for(user.id),
+        actor=await authenticated(db_session, user),
     )
 
     assert "ghp_secret" not in response.model_dump_json()
 
 
-async def test_a_stranger_cannot_delete_someone_elses_project(db_session: AsyncSession) -> None:
-    """docs/PRD.md §7: verified by an automated test."""
+async def test_deleting_someone_elses_project_is_403_for_a_member_and_404_for_a_stranger(
+    db_session: AsyncSession, grant_membership: GrantMembership
+) -> None:
+    """docs/PRD.md §7: verified by an automated test.
+
+    The two refusals are different answers to different questions, and keeping them
+    apart is the security decision (`.claude/rules/response-api.md`):
+
+    - a **non-member** gets `404`. Project existence stopped being public when
+      projects stopped being shared, and a `403` would confirm to anyone who can
+      guess an id that a private repository is indexed here.
+    - a **member** whose role does not carry `project.delete` gets `403`. The project
+      is already in the list they just rendered, so `404` would contradict it.
+    """
     owner = await create_user(db_session)
     stranger = await create_user(db_session)
+    member = await create_user(db_session)
     project = await create_project(db_session, created_by=owner.id)
+    await grant_membership(member.id, project.id, VIEWER_NAME)
     await db_session.commit()
 
-    with pytest.raises(AppError) as caught:
+    with pytest.raises(AppError) as unseen:
         await service_for(db_session, InMemoryIngestionQueue()).delete(
-            project.id, actor=actor_for(stranger.id)
+            project.id, actor=await authenticated(db_session, stranger)
         )
+    assert unseen.value.status_code == 404
+    assert unseen.value.code == ErrorCode.PROJECT_NOT_FOUND
 
-    # 403, not 404: project existence is deliberately public (docs/PRD.md §4.1).
-    assert caught.value.status_code == 403
-    assert caught.value.code == ErrorCode.NOT_PROJECT_OWNER
+    with pytest.raises(AppError) as refused:
+        await service_for(db_session, InMemoryIngestionQueue()).delete(
+            project.id, actor=await authenticated(db_session, member)
+        )
+    assert refused.value.status_code == 403
+    assert refused.value.code == ErrorCode.INSUFFICIENT_ROLE
 
 
 async def test_an_admin_can_delete_any_project(db_session: AsyncSession) -> None:
@@ -141,7 +152,7 @@ async def test_an_admin_can_delete_any_project(db_session: AsyncSession) -> None
     await db_session.commit()
 
     await service_for(db_session, InMemoryIngestionQueue()).delete(
-        project.id, actor=actor_for(admin.id, is_admin=True)
+        project.id, actor=await authenticated(db_session, admin)
     )
     await db_session.commit()
 
@@ -178,7 +189,7 @@ async def test_delete_hard_deletes_the_vectors_in_the_recorded_collection(
         return store
 
     service = service_for(db_session, InMemoryIngestionQueue(), store_factory=store_for)
-    await service.delete(project.id, actor=actor_for(owner.id))
+    await service.delete(project.id, actor=await authenticated(db_session, owner))
 
     assert asked == [recorded]
     assert store.points == []
@@ -198,7 +209,7 @@ async def test_delete_does_not_touch_qdrant_when_nothing_was_ever_indexed(
     assert project.embedding_collection is None
 
     await service_for(db_session, InMemoryIngestionQueue()).delete(
-        project.id, actor=actor_for(owner.id)
+        project.id, actor=await authenticated(db_session, owner)
     )
 
     assert await ProjectRepository(db_session).get(project.id) is None
@@ -210,7 +221,9 @@ async def test_reindex_enqueues_when_the_project_is_idle(db_session: AsyncSessio
     await db_session.commit()
     queue = InMemoryIngestionQueue()
 
-    result = await service_for(db_session, queue).reindex(project.id, actor=actor_for(owner.id))
+    result = await service_for(db_session, queue).reindex(
+        project.id, actor=await authenticated(db_session, owner)
+    )
 
     assert result.enqueued is True
     assert len(queue.messages) == 1
@@ -227,7 +240,7 @@ async def test_reindex_raises_the_flag_before_it_publishes(db_session: AsyncSess
     await db_session.commit()
 
     result = await service_for(db_session, InMemoryIngestionQueue()).reindex(
-        project.id, actor=actor_for(owner.id)
+        project.id, actor=await authenticated(db_session, owner)
     )
 
     assert result.enqueued is True
@@ -247,8 +260,8 @@ async def test_a_second_reindex_is_refused_by_the_flag_the_first_one_raised(
     queue = InMemoryIngestionQueue()
     service = service_for(db_session, queue)
 
-    first = await service.reindex(project.id, actor=actor_for(owner.id))
-    second = await service.reindex(project.id, actor=actor_for(owner.id))
+    first = await service.reindex(project.id, actor=await authenticated(db_session, owner))
+    second = await service.reindex(project.id, actor=await authenticated(db_session, owner))
 
     assert first.enqueued is True
     assert second.enqueued is False
@@ -262,7 +275,9 @@ async def test_reindex_is_a_no_op_while_a_run_is_in_flight(db_session: AsyncSess
     await db_session.commit()
     queue = InMemoryIngestionQueue()
 
-    result = await service_for(db_session, queue).reindex(project.id, actor=actor_for(owner.id))
+    result = await service_for(db_session, queue).reindex(
+        project.id, actor=await authenticated(db_session, owner)
+    )
 
     assert result.enqueued is False
     assert queue.messages == []
@@ -274,7 +289,7 @@ async def test_get_raises_404_for_a_missing_project(db_session: AsyncSession) ->
 
     with pytest.raises(AppError) as caught:
         await service_for(db_session, InMemoryIngestionQueue()).get(
-            uuid.uuid4(), actor=actor_for(user.id)
+            uuid.uuid4(), actor=await authenticated(db_session, user)
         )
     assert caught.value.status_code == 404
 
@@ -305,7 +320,7 @@ async def test_delete_reports_503_when_the_vector_store_is_unreachable(
     )
 
     with pytest.raises(AppError) as raised:
-        await service.delete(project.id, actor=actor_for(owner.id))
+        await service.delete(project.id, actor=await authenticated(db_session, owner))
 
     assert raised.value.status_code == 503
     assert raised.value.code is ErrorCode.VECTOR_STORE_UNAVAILABLE
@@ -333,7 +348,9 @@ async def test_deleting_a_project_soft_deletes_its_conversations(
     await db_session.commit()
     queue = InMemoryIngestionQueue()
 
-    await service_for(db_session, queue).delete(project.id, actor=actor_for(owner.id))
+    await service_for(db_session, queue).delete(
+        project.id, actor=await authenticated(db_session, owner)
+    )
 
     repository = ConversationRepository(db_session)
     for user in (owner, colleague):
@@ -360,6 +377,7 @@ async def test_a_failed_vector_delete_rolls_the_conversation_sweep_back(
     # a sync database call inside an async test.
     conversation_id = conversation.id
     owner_id = owner.id
+    owner_actor = await authenticated(db_session, owner)
     queue = InMemoryIngestionQueue()
 
     def unreachable_store(collection: str) -> VectorStore:
@@ -367,7 +385,7 @@ async def test_a_failed_vector_delete_rolls_the_conversation_sweep_back(
 
     with pytest.raises(AppError) as caught:
         await service_for(db_session, queue, store_factory=unreachable_store).delete(
-            project.id, actor=actor_for(owner_id)
+            project.id, actor=owner_actor
         )
 
     assert caught.value.status_code == 503
@@ -399,7 +417,7 @@ async def test_deleting_a_project_cascades_to_the_whole_checklist(
     await db_session.commit()
 
     await service_for(db_session, InMemoryIngestionQueue()).delete(
-        project.id, actor=actor_for(admin.id, is_admin=True)
+        project.id, actor=await authenticated(db_session, admin)
     )
 
     assert (
@@ -440,7 +458,7 @@ async def test_deleting_a_project_cascades_to_its_mock_data(
     await db_session.commit()
 
     await service_for(db_session, InMemoryIngestionQueue()).delete(
-        project.id, actor=actor_for(admin.id, is_admin=True)
+        project.id, actor=await authenticated(db_session, admin)
     )
 
     assert await MockDataRecordRepository(db_session).list_for_module(module.id) == []

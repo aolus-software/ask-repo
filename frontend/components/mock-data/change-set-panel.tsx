@@ -50,10 +50,13 @@ export function MockDataChangeSetPanel({
   changeSet,
   moduleId,
   records,
+  canApply,
 }: {
   changeSet: MockDataChangeSetResponse;
   moduleId: string;
   records: MockDataRecordResponse[];
+  /** Mirrors the backend's `mockdata.edit` gate; it does not replace it. */
+  canApply: boolean;
 }) {
   const queryClient = useQueryClient();
   const [checked, setChecked] = useState<Record<string, boolean>>(() => {
@@ -174,13 +177,18 @@ export function MockDataChangeSetPanel({
         <Button
           variant="outline"
           onClick={() => setConfirmingDiscard(true)}
-          disabled={applyMutation.isPending || discardMutation.isPending}
+          disabled={!canApply || applyMutation.isPending || discardMutation.isPending}
         >
           Discard
         </Button>
         <Button
           onClick={handleApply}
-          disabled={!hasChecked || applyMutation.isPending || discardMutation.isPending}
+          disabled={
+            !canApply ||
+            !hasChecked ||
+            applyMutation.isPending ||
+            discardMutation.isPending
+          }
         >
           {applyMutation.isPending ? <Loader2 className="size-4 animate-spin" /> : null}
           Apply selected

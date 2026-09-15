@@ -22,10 +22,9 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useDeleteProject, useReindexProject } from "@/hooks/use-project-mutations";
-import { useSession } from "@/hooks/use-session";
 import { isApiError } from "@/lib/api/errors";
 import type { ProjectResponse } from "@/lib/api/types";
-import { canManageProject } from "@/lib/can";
+import { PERMISSION, can } from "@/lib/can";
 
 /**
  * The actions menu for a project, in a list row or on the project's own page.
@@ -41,12 +40,12 @@ export function ProjectRowActions({
   project: ProjectResponse;
   context?: "list" | "detail";
 }) {
-  const user = useSession();
   const [confirmingReindex, setConfirmingReindex] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const reindex = useReindexProject(project.id);
   const remove = useDeleteProject(project.id);
-  const canManage = canManageProject(user, project);
+  const canReindex = can(project, PERMISSION.PROJECT_REINDEX);
+  const canDelete = can(project, PERMISSION.PROJECT_DELETE);
 
   return (
     <>
@@ -87,19 +86,19 @@ export function ProjectRowActions({
             </DropdownMenuItem>
           ) : null}
 
-          {/* Shown only to the creator or an admin. The backend still enforces it. */}
-          {canManage ? (
-            <>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={() => setConfirmingReindex(true)}>
-                <RefreshCw className="size-4" />
-                Re-index
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => setConfirmingDelete(true)}>
-                <Trash2 className="size-4" />
-                Delete
-              </DropdownMenuItem>
-            </>
+          {/* Shown only when the user has the specific permission. The backend still enforces it. */}
+          {canReindex || canDelete ? <DropdownMenuSeparator /> : null}
+          {canReindex ? (
+            <DropdownMenuItem onClick={() => setConfirmingReindex(true)}>
+              <RefreshCw className="size-4" />
+              Re-index
+            </DropdownMenuItem>
+          ) : null}
+          {canDelete ? (
+            <DropdownMenuItem onClick={() => setConfirmingDelete(true)}>
+              <Trash2 className="size-4" />
+              Delete
+            </DropdownMenuItem>
           ) : null}
         </DropdownMenuContent>
       </DropdownMenu>

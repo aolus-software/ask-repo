@@ -1,9 +1,11 @@
 """Checklist test cases: each one carries an expected result and a recorded result.
 
-Access matches projects and inverts conversations: every authenticated user reads every
-item and can record what they observed (spec 2.5). Editing what a test expects is gated
-on `created_by`/`is_admin` — a tester who did not author the checklist must be able to
-record results without being able to quietly rewrite what was supposed to pass.
+Reads are scoped to the caller's project membership, like everything else since Phase
+2.1 — never instance-wide. Within a project every member can record what they observed
+(`result.record`, held by every system role) regardless of who authored the checklist;
+editing what a test expects needs `item.edit` instead — a tester who did not author the
+checklist must be able to record results without being able to quietly rewrite what was
+supposed to pass (spec 2.5).
 """
 
 import uuid

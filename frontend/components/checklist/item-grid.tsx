@@ -43,13 +43,14 @@ import {
   useSaveChecklistItemResult,
   useUpdateChecklistItemDetail,
 } from "@/hooks/use-checklist-mutations";
+import { useProject } from "@/hooks/use-projects";
 import { fieldError, isApiError } from "@/lib/api/errors";
 import type {
   ChecklistItemKind,
   ChecklistItemResponse,
   ChecklistItemStatus,
 } from "@/lib/api/types";
-import { canManageProject } from "@/lib/can";
+import { PERMISSION, can } from "@/lib/can";
 import { groupByFeature } from "@/lib/checklist/operations";
 import type { StatusTone } from "@/lib/status";
 
@@ -110,11 +111,9 @@ interface Draft {
 export function ItemGrid({
   items,
   moduleId,
-  user,
 }: {
   items: ChecklistItemResponse[];
   moduleId: string;
-  user: { id: string; isAdmin: boolean };
 }) {
   const [recording, setRecording] = useState<ChecklistItemResponse | null>(null);
   const [editing, setEditing] = useState<ChecklistItemResponse | null>(null);
@@ -126,9 +125,16 @@ export function ItemGrid({
   const saveResult = useSaveChecklistItemResult(moduleId);
   const updateDetail = useUpdateChecklistItemDetail(moduleId);
   const deleteItem = useDeleteChecklistItem(moduleId);
+  const project = useProject(items[0]?.projectId ?? "");
 
   // Mirrors the backend gate; it does not replace it. A 403 still surfaces as an error.
-  const canEdit = (item: ChecklistItemResponse) => canManageProject(user, item);
+  const canEdit = () =>
+    project.data ? can(project.data, PERMISSION.ITEM_EDIT) : false;
+  // Every system role carries `result.record` (docs/PRD.md §4.3), so this is always
+  // true in practice -- checked explicitly anyway, so its absence elsewhere is never
+  // mistaken for an oversight.
+  const canRecord = () =>
+    project.data ? can(project.data, PERMISSION.RESULT_RECORD) : false;
 
   function startEditing(item: ChecklistItemResponse) {
     setEditing(item);
@@ -270,15 +276,17 @@ export function ItemGrid({
 
                     <TableCell className="text-right">
                       <div className="flex justify-end gap-1">
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => setRecording(item)}
-                        >
-                          <ClipboardCheck className="size-4" />
-                          Record result
-                        </Button>
-                        {canEdit(item) ? (
+                        {canRecord() ? (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => setRecording(item)}
+                          >
+                            <ClipboardCheck className="size-4" />
+                            Record result
+                          </Button>
+                        ) : null}
+                        {canEdit() ? (
                           <>
                             <Button
                               size="icon"
@@ -329,7 +337,7 @@ export function ItemGrid({
               </p>
               <ResultCell
                 item={recording}
-                canEditDefinition={canEdit(recording)}
+                canEditDefinition={canEdit()}
                 isSaving={saveResult.isPending}
                 onSave={(input) =>
                   saveResult.mutate(

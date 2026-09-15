@@ -67,9 +67,16 @@ function initialTurnState(): TurnState {
 export function ChatPanel({
   moduleId,
   hasPendingChangeSet,
+  canSend,
 }: {
   moduleId: string;
   hasPendingChangeSet: boolean;
+  /**
+   * Mirrors the backend's `generate.run` gate; it does not replace it. The chat
+   * itself stays visible and readable to everyone -- only sending is gated, since
+   * refining the checklist is what `generate.run` actually governs.
+   */
+  canSend: boolean;
 }) {
   const queryClient = useQueryClient();
 
@@ -222,12 +229,14 @@ export function ChatPanel({
   );
 
   const isStreaming = turn?.isStreaming ?? false;
-  const composerDisabled = isStreaming || hasPendingChangeSet;
-  const composerPlaceholder = hasPendingChangeSet
-    ? "Apply or discard the pending changes first."
-    : isStreaming
-      ? "Answering…"
-      : "Ask a follow-up, or say what you'd like changed";
+  const composerDisabled = isStreaming || hasPendingChangeSet || !canSend;
+  const composerPlaceholder = !canSend
+    ? "You do not have permission to refine this checklist."
+    : hasPendingChangeSet
+      ? "Apply or discard the pending changes first."
+      : isStreaming
+        ? "Answering…"
+        : "Ask a follow-up, or say what you'd like changed";
 
   return (
     <div className="space-y-6">

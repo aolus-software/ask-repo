@@ -77,9 +77,12 @@ function DeleteRecordButton({ moduleId, id }: { moduleId: string; id: string }) 
 export function RecordsTable({
   moduleId,
   records,
+  canEdit,
 }: {
   moduleId: string;
   records: MockDataRecordResponse[];
+  /** Mirrors the backend's `mockdata.edit` gate; it does not replace it. */
+  canEdit: boolean;
 }) {
   const columns = columnsFor(records);
 
@@ -116,7 +119,9 @@ export function RecordsTable({
                   <TableCell key={column}>{record.fields[column] ?? "—"}</TableCell>
                 ))}
                 <TableCell>
-                  <DeleteRecordButton moduleId={moduleId} id={record.id} />
+                  {canEdit ? (
+                    <DeleteRecordButton moduleId={moduleId} id={record.id} />
+                  ) : null}
                 </TableCell>
               </TableRow>
             ))}

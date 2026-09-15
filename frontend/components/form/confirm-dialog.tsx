@@ -24,6 +24,7 @@ export function ConfirmDialog({
   isPending,
   error,
   onConfirm,
+  children,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -33,6 +34,12 @@ export function ConfirmDialog({
   isPending: boolean;
   error: unknown;
   onConfirm: () => void;
+  /**
+   * Content specific to this confirmation, rendered between the description and
+   * the generic error banner — e.g. `LastOwnerNotice`, which needs the blocking
+   * projects named even when the confirmation's `description` is a fixed string.
+   */
+  children?: React.ReactNode;
 }) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -41,6 +48,7 @@ export function ConfirmDialog({
           <DialogTitle>{title}</DialogTitle>
           <DialogDescription>{description}</DialogDescription>
         </DialogHeader>
+        {children}
         <FormError error={error} />
         <DialogFooter className="gap-2">
           <Button

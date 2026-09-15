@@ -4,6 +4,8 @@ These are never constructed by application code — `AppError` builds the payloa
 exist so `/docs` shows the actual error shape instead of FastAPI's default guess.
 """
 
+import uuid
+
 from app.core.errors import ErrorCode
 from app.schemas.base import ApiModel
 
@@ -23,6 +25,29 @@ class ValidationErrorBody(ErrorBody):
 
 class ValidationErrorResponse(ApiModel):
     detail: ValidationErrorBody
+
+
+class StrandedProject(ApiModel):
+    """A project named in a `LAST_OWNER` refusal, so the caller can go fix it."""
+
+    id: uuid.UUID
+    name: str
+
+
+class LastOwnerErrorBody(ErrorBody):
+    projects: list[StrandedProject]
+
+
+class LastOwnerErrorResponse(ApiModel):
+    """`409 LAST_OWNER` on `DELETE /users/{id}`, which carries the blocking projects.
+
+    A widened body needs its own declared model, the same way `422` has
+    `ValidationErrorBody`. `AppError`'s `extra` can put any key in `detail`; a route
+    that uses it and leaves `ERROR_RESPONSES[409]` in place ships a documented shape
+    that is not the shape it returns.
+    """
+
+    detail: LastOwnerErrorBody
 
 
 # Reusable fragments. A route spreads in only the statuses it can actually return —

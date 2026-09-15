@@ -35,6 +35,9 @@ class Settings(BaseSettings):
     database_url: str = "postgresql+asyncpg://askrepo:askrepo@localhost:5432/askrepo"
     qdrant_url: str = "http://localhost:6333"
     redis_url: str = "redis://localhost:6379/0"
+    # How long a cached grant snapshot survives without an explicit invalidation.
+    # A backstop, not the mechanism — see app/core/grant_cache.py.
+    grant_cache_ttl_seconds: int = 300
 
     # Auth
     secret_key: str = PLACEHOLDER_SECRET_KEY

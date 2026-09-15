@@ -11,6 +11,97 @@ incompatibly. Configuration defaults and internal module layout may change in a 
 
 ## [Unreleased]
 
+Per-project role-based access control (`docs/PRD.md` §2.1, phase 2.1). Projects are no longer
+shared with every account on the instance: each one has members, each member holds one role, and
+each role carries a set of named permissions. **This changes the wire contract in ways a client
+can observe** — see Changed and Removed below before upgrading.
+
+### Added
+
+- **Project membership routes.** `GET /projects/{id}/members` lists everyone with a role on a
+  project (needs `membership.read`, which `viewer` holds). `POST /projects/{id}/members` grants a
+  role (`201`; `membership.grant`), `PATCH /projects/{id}/members/{userId}` changes one
+  (`membership.grant`), and `DELETE /projects/{id}/members/{userId}` revokes it (`204`;
+  `membership.revoke`). New `ErrorCode` values on this surface: `MEMBERSHIP_NOT_FOUND`,
+  `MEMBERSHIP_EXISTS`, `INSUFFICIENT_ROLE` and `LAST_OWNER`.
+- **Role management routes**, all admin-only. `GET /permissions` returns the permission
+  catalogue grouped for the matrix editor; `GET /roles` lists every role with its permissions and
+  `memberCount`; `POST /roles` creates a custom one (`201`); `PATCH /roles/{id}` renames it
+  and/or replaces its permission set; `DELETE /roles/{id}` soft-deletes one nobody holds (`204`).
+  New `ErrorCode` values: `ROLE_NOT_FOUND`, `ROLE_NAME_EXISTS`, `ROLE_IN_USE` and
+  `SYSTEM_ROLE_IMMUTABLE`. `viewer`, `editor` and `owner` are system roles and refuse renaming,
+  deletion and re-permissioning — without that, unchecking `membership.grant` on `owner` would
+  leave nobody on the instance able to grant membership, including to undo it.
+- **`role` and `permissions` on `ProjectResponse`** — the caller's own role name on that project
+  (`null` for an admin with no membership) and their effective permission values, so a client can
+  hide controls it would be refused. The hiding is cosmetic; the server-side check is the control.
+- **`GET /projects?ownerless=true`**, admin-only (`403 ADMIN_REQUIRED` otherwise), narrowing the
+  list to projects with no live owner. The RBAC migration backfills one `owner` membership per
+  project from `created_by` and deliberately does not fabricate one where that account was
+  already deactivated, so this filter is how an admin finds those and grants someone `owner`. It
+  narrows the access resolver's scope rather than replacing it, so it can only ever show less
+  than the caller could already read.
+- **`409 LAST_OWNER` on `DELETE /users/{id}`.** Deactivating an account that is the only live
+  owner of one or more projects is refused, and the error body is widened with a `projects` array
+  of `{id, name}` naming the blockers — "no" alone tells an admin nothing about what to fix. This
+  is the only route in the API whose error body carries more than `{code, message}`, and it is
+  declared as its own response model so `/docs` and generated clients describe it accurately.
+- **`python -m app.cli restore-system-roles`**, a new CLI command. It reconciles `viewer`,
+  `editor` and `owner` back to their built-in permission sets and bumps the grant-cache epoch.
+  For an instance whose seed was damaged by direct SQL or a partial restore; it is not part of
+  the container entrypoint.
+- **`GRANT_CACHE_TTL_SECONDS`** (default `300`). Each user's project grants are read through a
+  Redis cache, since the middleware needs them on every authenticated request. The TTL is a
+  **backstop, not the invalidation mechanism**: a membership change evicts that user's key and a
+  role-permission change bumps an epoch that invalidates every snapshot at once. A Redis outage
+  is not a lockout — the cache falls back to querying Postgres.
+- **Three Postgres tables** — `roles`, `role_permissions`, `project_memberships` — added by
+  migration `58f7e042f75a`, which also seeds the three system roles and runs the `created_by`
+  backfill described above.
+- **UI:** a **Members** tab on `/projects/[id]` (grant, change role, revoke) and admin role
+  management at `/settings/roles` with a permission-matrix editor at `/settings/roles/[id]`.
+  Project, checklist and mock-data controls are now hidden from the server-sent permission set
+  rather than from a client-side ownership rule.
+
+### Changed
+
+- **BREAKING — a non-member now gets `404 PROJECT_NOT_FOUND` on every project route.**
+  Previously every authenticated user could read every project, and the destructive routes
+  (`DELETE /projects/{id}`, `POST /projects/{id}/reindex`) refused a non-creator with `403
+  NOT_PROJECT_OWNER` because project existence was deliberately public. It is not public any
+  more: once projects are reachable only through membership, "you may not see this" and "this
+  does not exist" are the same answer, and a `403` would confirm a private repository exists to
+  anyone who can guess an id. A caller who **is** a member but whose role is too low gets `403
+  INSUFFICIENT_ROLE` instead — they can already see the project in their own list, so a `404`
+  there would contradict what the UI just rendered. Administrators pass every project permission.
+- **BREAKING — `GET /projects` and every list scoped by project now return fewer rows.** Lists of
+  projects, checklist modules, checklist items, mock data and conversations are scoped to the
+  caller's memberships. An existing instance is unaffected in practice on the first upgrade,
+  because the migration grants each project's creator `owner` — but any account that was relying
+  on instance-wide visibility loses it.
+- **Destructive and role-sensitive operations gate on a permission, not on `created_by`.**
+  `created_by` is now purely attribution: the migration read it once to seed memberships, and no
+  check consults it afterwards. Reindex needs `project.reindex`, delete needs `project.delete`,
+  module create needs `module.create`, module edit/delete need `module.edit` / `module.delete`,
+  triggering checklist or mock-data generation needs `generate.run`, applying or discarding a
+  change set needs `changeset.apply`, checklist item edits need `item.edit`, recording a result
+  needs `result.record` (held by every system role, `viewer` included), and mock-data record
+  editing needs `mockdata.edit`.
+- **`AuthContextMiddleware` now loads project grants alongside the user row** on every
+  authenticated request. The user row is deliberately still read from Postgres uncached, because
+  deactivating an account must end its sessions immediately.
+- Conversations are unchanged: still private to one user, still `404` on every miss, still with
+  no administrator bypass. The permission catalogue contains no `conversation.*` member on
+  purpose, which is what makes the admin bypass elsewhere safe.
+
+### Removed
+
+- **BREAKING — `NOT_PROJECT_OWNER`, `NOT_CHECKLIST_OWNER` and `NOT_MOCK_DATA_RECORD_OWNER` are
+  gone from `ErrorCode`.** These named a `created_by`-based refusal that no longer exists; a
+  client switching on them should read `INSUFFICIENT_ROLE` (a member whose role is too low) or
+  `PROJECT_NOT_FOUND` (a non-member) instead. `ErrorCode` values are a wire contract, so this is
+  a breaking removal rather than a rename.
+
 ## [1.1.0] — 2026-09-13
 
 ### Added

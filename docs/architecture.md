@@ -24,7 +24,7 @@ flowchart LR
     subgraph data[" "]
       P[("Postgres<br/>rows")]
       Q[("Qdrant<br/>vectors")]
-      R[("Redis<br/>rate limits")]
+      R[("Redis<br/>rate limits<br/>grant cache")]
       K[["Kafka<br/>job queue"]]
     end
     M{{"Chat model<br/>Ollama / OpenAI / Anthropic"}}
@@ -65,14 +65,18 @@ an embedding model. The worker holds both.
 | --- | --- | --- |
 | **Postgres** | Every row: users, projects, conversations, checklist, mock data | API and worker, through `app/repositories/` |
 | **Qdrant** | Code chunks as vectors, with the chunk text in the payload | API (query) and worker (write) |
-| **Redis** | Login rate-limit counters, and nothing else | API only |
+| **Redis** | Login rate-limit counters, and each user's project-grant snapshot | API only |
 | **Kafka** | The job queue, on 12 topics | API publishes, worker consumes |
 
 Two of these are commonly assumed wrong:
 
-- **Redis does not back the job queue.** Kafka does. Redis holds login rate-limit counters and
-  is not used for anything else. See [`PRD.md`](PRD.md) §5 for why Kafka was chosen over
-  Redis + ARQ despite the extra weight.
+- **Redis does not back the job queue.** Kafka does. Redis has exactly two readers —
+  `app/core/rate_limit.py` for login lockouts and `app/core/grant_cache.py` for the permission
+  snapshot the auth middleware reads on every authenticated request. The second of those puts
+  Redis genuinely on the hot request path, which the rate limiter never did; it is still not
+  authoritative for anything, so an outage degrades to a Postgres query rather than to a
+  denial. See [`PRD.md`](PRD.md) §5 for why Kafka was chosen over Redis + ARQ despite the extra
+  weight, and [`data.md`](data.md) for how the grant cache is invalidated.
 - **Qdrant is the system of record for code content, not an index over files.** The cloned
   working copy is deleted after indexing, so there is no file on disk to re-read at query time.
   The chunk's text lives in the Qdrant payload. See [`rag.md`](rag.md).
@@ -202,13 +206,27 @@ never picked up and jobs whose lease expired. It runs for all three ladders.
 
 **Configuration flows one way**: environment → `.env` → the defaults in `Settings`
 (`app/config.py`). `get_settings()` is `lru_cache`d and injected with `Depends`; nothing else
-reads `os.environ`. All 71 settings are documented in [`configuration.md`](configuration.md).
+reads `os.environ`. All 72 settings are documented in [`configuration.md`](configuration.md).
 
 **Identity is resolved once, in middleware.** `AuthContextMiddleware` decodes the bearer token,
-loads the user row, and puts a frozen `AuthenticatedUser` on `request.state`. Two consequences:
-the user row is read on *every* authenticated request, which is what makes deactivating an
-account take effect immediately; and the middleware is registered before `CORSMiddleware`, so
-CORS ends up outermost and an auth rejection still carries CORS headers.
+then — in a session of its own, opened and closed before the handler's session exists — loads
+two things: the user row from Postgres, and that user's **project grants**, read through the
+Redis cache in `app/core/grant_cache.py` and falling back to a Postgres join when Redis is
+unreachable. Both go onto one frozen `AuthenticatedUser` on `request.state`; the grants are an
+immutable mapping of project id to `(role, permissions)`, so a handler cannot mutate the
+snapshot it was handed.
+
+Three consequences:
+
+- The **user row** is read on *every* authenticated request, which is what makes deactivating an
+  account take effect immediately. It is deliberately **not** cached, for exactly that reason —
+  only the grants are.
+- `app/core/access.py` stays **synchronous**. `resolve_project_scope`, `require_permission` and
+  `permissions_for` do no I/O, because the answer is already in hand — which is what let
+  per-project RBAC land as a change to one function's body rather than a change at its call
+  sites.
+- The middleware is registered before `CORSMiddleware`, so CORS ends up outermost and an auth
+  rejection still carries CORS headers.
 
 **The forced-password-change gate is structural.** While `must_change_password` is set, every
 route outside `/auth` returns `403 PASSWORD_CHANGE_REQUIRED` — enforced by middleware, not by a

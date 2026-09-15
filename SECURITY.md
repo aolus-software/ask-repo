@@ -28,6 +28,11 @@ does and doesn't cover.
 - Credential brute-forcing against the login endpoint.
 - Privilege gaps in destructive operations — deleting or re-indexing something you
   shouldn't be able to.
+- **Reading or acting on a project you hold no membership on.** Since phase 2.1, every
+  project read resolves through one access resolver against the caller's memberships, and
+  every mutation through one named permission. A route, service, or query that scopes
+  projects on its own — or that gates on `created_by` instead of a permission — is a
+  security bug, whether or not its output happens to be correct today.
 - Leakage of one user's private conversations to another.
 - Secrets appearing in logs, tracebacks, or API responses.
 - Prompt injection through indexed repository content — mitigated, not eliminated; see the
@@ -35,9 +40,19 @@ does and doesn't cover.
 
 **Out of scope:**
 
-- **Malicious authenticated users.** All users on an instance are assumed to be trusted
-  colleagues. In phase 1 every user can read and query every project — that is intended
-  behaviour, not a vulnerability. Per-project access control is phase 2.
+- **Malicious authenticated users, within the projects they were granted.** All users on an
+  instance are assumed to be trusted colleagues, and per-project roles are an
+  organizational boundary rather than an adversarial one: they keep people out of projects
+  nobody meant to show them, and they are not a sandbox against a colleague determined to
+  misuse the access they were given. A member who abuses their own role — a viewer recording
+  a false test result, an editor rewriting a checklist — is a personnel matter, not a
+  vulnerability report. **Access a user was never granted is in scope** (see above); misuse
+  of access they hold is not.
+- **Administrators.** `is_admin` is full trust over every project on the instance, by design.
+  Per-project roles do not constrain an administrator and were never intended to; the one
+  thing an administrator still cannot reach is another user's conversations, and that is
+  enforced by there being no conversation permission to hold. Report a path that lets a
+  *non*-admin obtain admin rights; do not report that an admin has them.
 - **Public internet exposure.** The instance has no self-service account flows and is not
   hardened for anonymous traffic. Do not publish it.
 - **Multi-tenancy.** One instance serves one organization. There is no tenant isolation

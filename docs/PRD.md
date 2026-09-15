@@ -31,7 +31,7 @@ Four core features, sitting on top of an auth foundation:
 - Learn **event streaming** the same way. This is why the M1 job queue is Kafka rather than the lighter task queue this workload actually calls for — §5's note on the job queue records that trade, and its costs, explicitly.
 - Produce something usable on real repos — not throwaway toy data.
 - Keep each milestone small enough to finish in days.
-- **Model project access so phase 1's global scope becomes phase 2's per-project RBAC without a rewrite.** Concretely: store `created_by` and `is_admin` from the start, and route every retrieval through a single "which projects may this user see?" resolver, even while that resolver returns _all_ of them.
+- **Model project access so phase 1's global scope becomes phase 2's per-project RBAC without a rewrite.** Concretely: store `created_by` and `is_admin` from the start, and route every retrieval through a single "which projects may this user see?" resolver, even while that resolver returns _all_ of them. **This goal was met and is now spent:** Phase 2.1 landed per-project RBAC by swapping that resolver's body and adding `require_permission` beside it, with zero diff at its 15 call sites. What survives is the invariant, not the phase — one resolver, still confirmed by grep (§7).
 
 > **Timeline note.** Earlier drafts targeted "v1 in days, not weeks." Auth adds a milestone (M0) before any RAG work, but admin-provisioned accounts keep it small — no email verification, no mail provider, no self-service reset. The per-milestone goal holds.
 
@@ -62,14 +62,46 @@ is meant, the word is written.
 
 #### Phase 2.1 — Per-project RBAC
 
-Nothing else in phase 2 moves until this does. Phase 1 shares every project with every
-authenticated user, which is correct for the team that stood the instance up (§4.1) and wrong for
-the audience phase 1.1 opened the tool to — a contractor evaluating AskRepo currently lists and
-queries every repository on the instance. It adds no infrastructure, and it is the enforcement
-point that Phase 2.3's notifications and phase 3's code graph both resolve through, which is why
-it is first rather than merely early.
+**Built.** Nothing else in phase 2 moved until this did. Phase 1 shared every project with every
+authenticated user, which was correct for the team that stood the instance up and wrong for the
+audience phase 1.1 opened the tool to — a contractor evaluating AskRepo listed and queried every
+repository on the instance. It added no infrastructure, and it is the enforcement point that
+Phase 2.3's notifications and phase 3's code graph both resolve through, which is why it came
+first rather than merely early.
 
-- **Per-project RBAC.** Users are assigned to projects and see only their own. Roles per project (viewer / editor / owner). Phase 1's `created_by` becomes the seed for the first membership row; the access resolver named in §2 becomes the enforcement point.
+What shipped:
+
+- **Per-project RBAC.** A user reaches a project because they hold a membership on it, carrying
+  one role. Three system roles are seeded and frozen — `viewer` (read, ask, record a test
+  result), `editor` (plus authoring checklists and mock data), `owner` (plus update, delete,
+  reindex and managing members) — and an admin may define custom roles beside them over the same
+  permission catalogue.
+- **The access resolver in §2 became the enforcement point, as designed.** `resolve_project_scope`
+  answers *which projects*; `require_permission` beside it answers *what may I do to this one*.
+  Both live in `app/core/access.py`, and the 15 existing call sites of the resolver changed by
+  zero lines — which was the whole point of §2's phase-2 readiness goal.
+- **Six inline `created_by`/`is_admin` gates were deleted** and replaced by
+  `require_permission`. `created_by` is now what §7 always said it was: attribution, and nothing
+  else (see §4.1).
+- **New surfaces.** `GET/POST/PATCH/DELETE /projects/{id}/members`, `GET/POST /roles`,
+  `GET/PATCH/DELETE /roles/{id}`, `GET /permissions`, an admin-only `?ownerless=true` filter on
+  `GET /projects` for cleanup, `/settings/roles` and `/settings/roles/[id]` in the UI, a Members
+  tab on `/projects/[id]`, and a `restore-system-roles` CLI command that reconciles the three
+  system roles back to their defined permission sets.
+- **New tables.** `roles`, `role_permissions`, `project_memberships` (`docs/data.md`). The
+  migration seeds the system roles and backfills one `owner` membership per project from
+  `created_by`, which is the only thing that column seeds.
+- **A wire-contract change, breaking.** A caller with no membership now gets
+  `404 PROJECT_NOT_FOUND` on every project route including `DELETE`; a *member* whose role is too
+  low gets `403 INSUFFICIENT_ROLE`. The old `403 NOT_PROJECT_OWNER`, `NOT_CHECKLIST_OWNER` and
+  `NOT_MOCK_DATA_RECORD_OWNER` codes were deleted with the gates that raised them. See §4.1.
+- **Deactivation is guarded.** `DELETE /users/{id}` refuses with `409 LAST_OWNER`, naming the
+  blocking projects, rather than leaving a project with no live owner — which is the answer to
+  what §8 previously listed as an open question.
+- **Grants are cached in Redis** (`app/core/grant_cache.py`), epoch-keyed so a role edit
+  invalidates every snapshot with one `INCR`, TTL `GRANT_CACHE_TTL_SECONDS` (default 300). The
+  user row is deliberately *not* cached, so deactivation stays immediate per §4.0. On a Redis
+  error the cache falls back to Postgres; it never denies access it could not look up.
 #### Phase 2.2 — Append-only audit trail
 
 Directly after RBAC, because the moment access stops being uniform, *who granted whom access to
@@ -89,11 +121,11 @@ and whole, because *one record, two transports* is its central claim and splitti
 across sub-phases is the divergence it warns about. What **ships** here is the record and the
 in-app transport; the email transport ships at Phase 2.4.
 
-- **Notifications — in-app and email.** Every long-running operation in this document is currently silent. §4.1's ingestion is fire-and-forget, M4's generation runs in a worker, and the only way to learn that either finished is to reload the screen showing its status column. That is tolerable for the person who pressed the button and useless for everyone else — the wrong way round for a checklist that §4.3 publishes to the whole instance, where the reviewer who needs to act is routinely not the person who started the generation. The events worth raising are the ones a human is blocked on: a project reached `ready` or `failed` (and the same for a re-index), a checklist or mock-data generation finished and **a change set is pending review**, and a change set someone else applied or discarded.
+- **Notifications — in-app and email.** Every long-running operation in this document is currently silent. §4.1's ingestion is fire-and-forget, M4's generation runs in a worker, and the only way to learn that either finished is to reload the screen showing its status column. That is tolerable for the person who pressed the button and useless for everyone else — the wrong way round for a checklist that §4.3 publishes to every member of its project, where the reviewer who needs to act is routinely not the person who started the generation. The events worth raising are the ones a human is blocked on: a project reached `ready` or `failed` (and the same for a re-index), a checklist or mock-data generation finished and **a change set is pending review**, and a change set someone else applied or discarded.
 
   **One record, two transports.** A notification is a row; email is a delivery attempt against that row, never a parallel feature. Built separately they diverge immediately — an email with no in-app trace, or a read state that does not survive being emailed. Read state is per user, so the storage is a row per `(user, event)` rather than per event, and a fan-out writes N rows for N recipients. That is affordable precisely because §2 targets one organization on one box; it would not be at a different scale.
 
-  **Choosing recipients is an access question, and it must not become a second access resolver.** Phase 1 shares every project (§4.1), so "notify everyone who could read this" means telling the whole instance about every index — noise that trains people to ignore the feature, which costs the notifications that mattered. `created_by` is the natural recipient for an operation someone started, and using it that way is a **third** use of a column §7 otherwise restricts to attribution and destructive gating: it still must not scope reads. Per-project RBAC lands at Phase 2.1, immediately before this, and when it does "who is interested in this project" becomes membership — which must resolve through the same single function the access resolver becomes. Two places deciding who may see a project is exactly what §2's phase-2 readiness goal exists to prevent, and here the failure is not an empty list — it is a notification naming a repository to someone who was never given it.
+  **Choosing recipients is an access question, and it must not become a second access resolver.** Phase 2.1 already decided who may see a project: membership, resolved by `resolve_project_scope`. "Who is interested in this project" must therefore resolve through that same single function, not through a recipient list this phase invents — two places deciding who may see a project is exactly what §2's phase-2 readiness goal exists to prevent, and here the failure is not an empty list, it is a notification naming a private repository to someone who was never given it. `created_by` is a tempting recipient for an operation someone started, but §7 restricts that column to attribution and it must stay there; the person who started a reindex is reachable as *the actor*, not as a scope. Whether every member is notified or only some is a product decision this phase makes — it is not an excuse to filter membership somewhere new.
 
   **Email is the first path *out* of the network, and that is the real cost.** §5 puts the instance behind a VPN with no public exposure, and §9's whole posture is that inputs are untrusted while nothing leaves. A mail host breaks that assumption: repository names, module names, file paths and generated expectations are held internally *because* the instance is internal. So an email carries the event type and a link and nothing else — never an answer, an excerpt, an expected result, a checklist row, or anything derived from clone output. §9's scrubbing obligation extends to this path rather than being re-argued on it, and the same reasoning rules out putting the content in a subject line.
 
@@ -141,7 +173,7 @@ reduce step producing better checklists than a cheaper model would" on its own.
 
   **The infrastructure cost is the largest of any item in this section.** A self-hosted Langfuse is six containers — its own web and worker processes, ClickHouse for the traces, Redis, S3-compatible blob storage, and a Postgres schema — with a practical floor around 4 GB of RAM before ClickHouse fails to start. AskRepo runs four datastores today, so this roughly doubles the stateful surface of a deployment whose §1 premise is that one organization runs it on its own hardware; on a box already running Postgres, Qdrant, Redis and Kafka it is a sizing decision, not a `docker compose up`. Two specifics that bite. Langfuse requires Redis 7 with `maxmemory-policy=noeviction`, which is not what a cache-shaped instance defaults to, so this is a **second** Redis rather than the one `app/core/rate_limit.py` reads — and that is a good thing, since evicting the rate limiter's keys under memory pressure is a behaviour §5 already accepts and tracing must not inherit. And the blob store is the instance's first object storage, a surface §9's secret-handling rules have never had to cover.
 
-  Three things whoever specifies this decides. **Retention** — rows accumulate per call forever, so this needs a prune, and the worker's 60-second sweep already prunes dead refresh tokens. **Who may read it** — cost and latency are operator data, and phase 1 shares everything with every user; admin-only would be the first read in the app *narrower* than the access resolver, which makes it an access decision rather than a UI one, and it must still resolve through the resolver rather than around it. And **whether a call that failed retryably is logged even though the job it belongs to is not** — §5 deliberately records no `failed` status for a retry that is coming back, but that attempt still spent tokens, and a log that omits it under-reports spend by exactly the amount the retry ladder costs.
+  Three things whoever specifies this decides. **Retention** — rows accumulate per call forever, so this needs a prune, and the worker's 60-second sweep already prunes dead refresh tokens. **Who may read it** — cost and latency are operator data spanning every project on the instance, so a per-project scope does not describe it; admin-only would be a read *narrower* than the access resolver on a different axis entirely, which makes it an access decision rather than a UI one, and anything it does surface per project must still resolve through the resolver rather than around it. And **whether a call that failed retryably is logged even though the job it belongs to is not** — §5 deliberately records no `failed` status for a retry that is coming back, but that attempt still spent tokens, and a log that omits it under-reports spend by exactly the amount the retry ladder costs.
 - **User feedback on model output.** Every model-authored thing in this document is published and then forgotten. A Dev Knowledge answer is streamed, a checklist change set is applied or discarded, a mock-data proposal is promoted — and in none of those cases does anything record whether it was any *good*. The person best placed to say so is the one reading it, at the moment they are reading it, and today they have nowhere to put that. So: after any model-authored output, the user can record a judgement on it, and an administrator can read those judgements in aggregate. It covers all three surfaces — §4.2's answers, §4.3's checklist change sets, and §4.4's mock-data change sets — because all three are served by the same `Answerer` (`.claude/rules/rag.md`) and splitting the record by surface would mean three tables answering one question.
 
   **It is evidence for a human, never an input to a prompt, and that is the whole of the design.** The obvious version of this feature — promote the well-rated turns into few-shot examples and the model gets better on its own — is the one thing it must not do. §4.2's guardrails rest on the property `.claude/rules/rag.md` states outright: the model's instructions come from the system message and nowhere else, which is exactly why retrieved code is fenced as data rather than trusted. Feedback is user-authored text about a private repository; concatenating it into that same message makes it an instruction, and the persona bullet below (Phase 2.6) already walks through what a sentence like "answer confidently" does to a guardrail. So the loop is deliberately manual and deliberately slow: feedback accumulates, an administrator reads it, spots a pattern, and edits `app/rag/prompts.py` on purpose. **Nothing feedback-authored ever reaches a model.** An automated loop is a separate feature that would have to argue itself past §9, and it should not be smuggled in as the obvious generalisation of this one.
@@ -150,7 +182,7 @@ reduce step producing better checklists than a cheaper model would" on its own.
 
   **It must not re-surface what `app/rag/grounding.py` already computes.** `unknown_paths` and `uncited_answer` are derived from the finished answer and are objective, already on the wire in `done`, and already rendered. Feedback exists for what those structurally cannot see: an answer that cited real files, raised no warning, and was still wrong — or was correct and useless. A feedback UI that mostly reports the grounding warnings back has added a table and no information.
 
-  **Three surfaces, and they do not have the same privacy answer.** Conversations are private (§4.2) with no administrator bypass anywhere under `/conversations`, and §7 makes that testable. Feedback on an answer therefore cannot become the side door into a colleague's conversation — an administrator reading "this answer was wrong" alongside the question that produced it has read that conversation, whatever the route was called. The checklist and mock data are the opposite case: §4.3 publishes them to the whole instance, so feedback on a change set is a note about a shared document and is not private at all. The shape that follows is that the **aggregate is the product** — counts per reason code, per feature, over time — and reading an individual private turn stays a separate and deliberate act rather than a column in an admin table. Whoever specifies this decides whether that act exists at all; "the administrator sees reason codes and never the question" is a defensible and much simpler answer.
+  **Three surfaces, and they do not have the same privacy answer.** Conversations are private (§4.2) with no administrator bypass anywhere under `/conversations`, and §7 makes that testable. Feedback on an answer therefore cannot become the side door into a colleague's conversation — an administrator reading "this answer was wrong" alongside the question that produced it has read that conversation, whatever the route was called. The checklist and mock data are the opposite case: §4.3 publishes them to every member of the project, so feedback on a change set is a note about a document that team already shares and is not private at all. The shape that follows is that the **aggregate is the product** — counts per reason code, per feature, over time — and reading an individual private turn stays a separate and deliberate act rather than a column in an admin table. Whoever specifies this decides whether that act exists at all; "the administrator sees reason codes and never the question" is a defensible and much simpler answer.
 
   **A row points at what it judges; it never copies it.** Same bound as the AI call log above, for the same reason: the prompt and the completion carry source code from a private repository, and storing a second copy puts it outside the lifecycle §5.1's delete rule governs. So feedback references the message or the change set that already exists, and is deleted with it. The accepted consequence is that feedback can outlive its subject in the one case that matters — a change set is superseded by a regeneration, and §4.3 is explicit that regeneration proposes against the rows that exist rather than replacing them. Feedback whose subject is gone is feedback nobody can act on, and the answer is to let the reason code and the feature dimension survive on their own, aggregated, rather than to snapshot the content to keep it readable.
 
@@ -173,7 +205,7 @@ themselves rather than something an operator turns on.
 
   **A persona must not simply be concatenated into the system prompt, and that is the whole design.** §4.2's guardrails rest on a property `.claude/rules/rag.md` states outright: the model's instructions come from the system message and nowhere else, which is exactly why retrieved code is fenced as data rather than trusted. A persona pasted into that same message *becomes* one of those instructions — and the dangerous ones are not exotic. "Answer confidently", "skip the citations", "give me your best guess" each cancels, on its own, a guardrail that exists because a fluent fabrication about a codebase is the failure this product is most exposed to. So the persona occupies a bounded slot that the non-negotiable rules are stated *after*, and `app/rag/grounding.py`'s checks remain the backstop: they are computed from the finished answer, so `uncited_answer` still fires on a persona that talked the model out of citing, whatever it said.
 
-  **It applies to private answers only, and never to anything shared.** Conversations are per user (§4.2), so a persona shaping them changes only what its owner reads. The QA Checklist is the opposite case: §4.3 publishes it to the whole instance, and both the generator and the refinement chat write a document other people are relied on to test against. A persona reaching either would make a shared artifact's content depend on who happened to press the button — two reviewers seeing different proposals for the same module, and a tester reading an expected result shaped by a colleague's stylistic preference. **Generation and the checklist chat take no persona.** That is a property of the feature, not a gap in it.
+  **It applies to private answers only, and never to anything shared.** Conversations are per user (§4.2), so a persona shaping them changes only what its owner reads. The QA Checklist is the opposite case: §4.3 publishes it to every member of its project, and both the generator and the refinement chat write a document other people are relied on to test against. A persona reaching either would make a shared artifact's content depend on who happened to press the button — two reviewers seeing different proposals for the same module, and a tester reading an expected result shaped by a colleague's stylistic preference. **Generation and the checklist chat take no persona.** That is a property of the feature, not a gap in it.
 
   **Bounded length, for a reason that is not politeness.** The persona rides in the prompt on every turn, so it competes with the excerpts for the context window. An unbounded one crowds out retrieved code and answer quality drops with **nothing reporting an error** — the same silent-degradation class as §4.2's embedding-model guard. A server-enforced character cap is the cheap answer.
 
@@ -347,31 +379,51 @@ The field is `password_hash`, not `password`. The plaintext exists only in the r
 
 ### 4.1 Project (repo-link ingestion)
 
-**What it does:** The entry point for getting a codebase into AskRepo. Any authenticated user submits a repo URL (+ branch, + optional PAT for private repos) to create a Project. The app clones the repo, indexes it, deletes the working copy, and tracks status. **Every project is visible and queryable by every user on the instance.**
+**What it does:** The entry point for getting a codebase into AskRepo. Any authenticated user submits a repo URL (+ branch, + optional PAT for private repos) to create a Project. The app clones the repo, indexes it, deletes the working copy, and tracks status. **A project is visible and queryable to the users holding a membership on it** — its creator, seeded as `owner`, plus whoever they grant — and to administrators.
 
 **User stories**
 
-- As a dev, I can create a project by pasting a repo URL and (optionally) selecting a branch.
+- As a dev, I can create a project by pasting a repo URL and (optionally) selecting a branch, and I am its first owner.
 - As a dev, I can add a private repo by providing a PAT, stored encrypted.
-- As a dev, I can query any project a colleague added, without having to add it myself.
+- As an owner, I can grant a colleague viewer, editor or owner access to my project, and revoke it.
+- As a dev, I can query any project I was granted access to, without having to add it myself — and a project I was not granted does not appear in my list at all.
 - As a dev, I can see project status (pending → cloning → indexing → ready / failed) and basic stats (files indexed, chunk count, last indexed commit), plus the error message when it failed.
-- As a dev, I can manually trigger a re-index of a project I created after pushing changes.
-- As a dev, I can't accidentally delete or re-index a project someone else added.
-- As an admin, I can delete or re-index any project.
+- As an owner, I can manually trigger a re-index after pushing changes.
+- As a viewer or editor, I can't accidentally delete or re-index a project.
+- As an admin, I can delete or re-index any project, and I can see every project on the instance.
 
 **Acceptance criteria**
 
 - `POST /projects` accepts `{repo_url, branch, pat?}`, records the caller as `created_by`, and kicks off an async clone+index job (background task/queue — not synchronous in the request).
-- **`created_by` is attribution and a destructive-operation gate, not ownership.** It does not scope reads.
-- `GET /projects` lists **all** non-deleted projects on the instance. `GET /projects/{id}` returns any project's status, last indexed commit SHA, file/chunk counts, and error detail.
-- `POST /projects/{id}/reindex` and `DELETE /projects/{id}` require the caller to be `created_by` or an admin; otherwise **`403`**. (`403`, not `404` — project existence is deliberately not a secret here, so hiding it would only confuse.)
+- **`created_by` is attribution and nothing else.** It does not scope reads, and since Phase 2.1 it does not gate anything either — its one remaining job beyond attribution was seeding the first `owner` membership at migration time, and it still records who created a project. Gating is `require_permission` on a named permission; scoping is `resolve_project_scope`.
+- `POST /projects` also creates the caller's `owner` membership, in the same transaction. A project with no owner is not a state the write path can produce.
+- `GET /projects` lists the non-deleted projects the caller holds a membership on — every project on the instance, for an administrator. `GET /projects/{id}` returns that project's status, last indexed commit SHA, file/chunk counts, error detail, and **the caller's own role and effective permissions**, so the UI can hide controls it would be refused. Hiding is cosmetic; the permission check is the control.
+- `GET /projects?ownerless=true` is an admin-only filter for cleanup after a departure. It is a **non-access** filter and is applied on top of the resolver's answer (`ProjectScope.narrowed_to`), never in place of it.
+- **The status-code table.** This replaces phase 1's `403 NOT_PROJECT_OWNER` and is a breaking wire-contract change.
+
+  | Caller | `GET /projects/{id}` | `DELETE` / reindex | `POST .../messages` |
+  | --- | --- | --- | --- |
+  | id does not exist | `404 PROJECT_NOT_FOUND` | `404 PROJECT_NOT_FOUND` | `404` |
+  | no membership | `404 PROJECT_NOT_FOUND` | `404 PROJECT_NOT_FOUND` | `404` |
+  | viewer | `200` | `403 INSUFFICIENT_ROLE` | `200` |
+  | editor | `200` | `403 INSUFFICIENT_ROLE` | `200` |
+  | owner | `200` | `204` | `200` |
+  | admin | `200` | `204` | `200` |
+
+  A non-member gets `404`, not `403`: once membership scopes reads, "you may not see this" and "this does not exist" are the same answer, and a `403` would confirm to anyone who can guess an id that a given private repository is indexed here — repository names are inventory of the organization's codebases, the same reasoning §9 applies to egress. The `403` survives only for the case that is genuinely not about existence — **a member whose role is too low** — because they can already see the project in their own list, and answering `404` would contradict the screen in front of them. `NOT_PROJECT_OWNER`, `NOT_CHECKLIST_OWNER` and `NOT_MOCK_DATA_RECORD_OWNER` were deleted from `ErrorCode` with the gates that raised them.
 - **Access resolver.** All retrieval goes through one function, `resolve_project_scope(user)` in
-  `backend/app/core/access.py`, which returns a `ProjectScope`: either `unrestricted` (phase 1's
-  answer for every user) or a concrete set of project ids. Phase 2 replaces its body with a
-  membership lookup and nothing else changes. Retrieval filters Qdrant from that scope — never
-  from an unchecked path parameter. It returns a `ProjectScope` rather than a nullable list
-  because a `None` meaning "unrestricted" is fail-open: an empty `ids` set must mean _no_ access,
-  not all of it.
+  `backend/app/core/access.py`, which returns a `ProjectScope`: either `unrestricted` (an
+  administrator) or the concrete set of project ids the caller holds a membership on. Phase 2.1
+  replaced its body and changed none of its 15 call sites. Retrieval filters Qdrant from that
+  scope — never from an unchecked path parameter. It returns a `ProjectScope` rather than a
+  nullable list because a `None` meaning "unrestricted" is fail-open: an empty `ids` set must
+  mean _no_ access, not all of it — a state that now occurs in production, not only in tests.
+- **One permission gate, beside the resolver.** `require_permission(actor, project_id, permission)`
+  in the same file answers "what may I do to this one", reading the same preloaded grant
+  snapshot. Every destructive or privileged operation on a project resource goes through it;
+  no route or service re-derives the policy inline. An administrator passes every check, which
+  is safe because the permission catalogue deliberately contains no `conversation.*` member —
+  there is nothing there to bypass into (§4.2).
 - Clone uses `git clone --depth 1 --branch <branch> <url>` into a per-project scratch directory (`/data/repos/<project_id>`).
 - **Ingestion safety** (see §9): `https://` scheme only; host must be on a configurable allowlist (default `github.com`, `gitlab.com`); reject any URL resolving to a private, loopback, or link-local address; clone timeout 120s; reject repos over 500 MB.
 - **Quotas:** instance-wide cap on concurrent ingestion jobs (default 2) so one large clone can't starve the box. The cap is **structural, not a setting**: 2 ingest partitions against 2 worker replicas, so a third worker would have no partition to own. Raising it means adding partitions *and* replicas. No per-user project cap — users are trusted colleagues.
@@ -387,7 +439,7 @@ The field is `password_hash`, not `password`. The plaintext exists only in the r
 ```python
 class Project(BaseModel):
     id: UUID
-    created_by: UUID                 # attribution + destructive-op gate, NOT read scope
+    created_by: UUID                 # attribution ONLY — not a gate, not a read scope
     name: str
     repo_url: str
     branch: str = "main"
@@ -420,7 +472,7 @@ class Project(BaseModel):
 
 **Planned, not yet built — editing a project.** A project is currently create-and-delete: there is no `PATCH /projects/{id}`. Two things change under a long-lived project and neither has a repair path today. A repository **moves** — renamed, transferred to another org, migrated to a different host — and its `repo_url` is then wrong. A **PAT expires or is rotated**, and every subsequent clone fails authentication while the project still reports `ready` from its last successful index. In both cases the only recovery is to delete the project and re-create it, which discards its conversations and its checklist modules along with the index, for what is a one-field correction.
 
-The edit is therefore narrow and deliberately not a general update: `repo_url`, `branch`, `name`, and a replacement PAT, gated on `created_by`/`is_admin` like the other destructive operations. Changing `repo_url` or `branch` invalidates the index, so it must either force a reindex or mark the project stale rather than leaving vectors that describe a repository the project no longer points at — that decision, and whether a PAT rotation alone can skip the reindex, is what this needs designing for. Scheduled for a later milestone; the schema above already carries every column it would write.
+The edit is therefore narrow and deliberately not a general update: `repo_url`, `branch`, `name`, and a replacement PAT, gated on the `project.update` permission like the other privileged operations. Changing `repo_url` or `branch` invalidates the index, so it must either force a reindex or mark the project stale rather than leaving vectors that describe a repository the project no longer points at — that decision, and whether a PAT rotation alone can skip the reindex, is what this needs designing for. Scheduled for a later milestone; the schema above already carries every column it would write.
 
 **Out of scope for v1:** automatic re-index via GitHub webhooks, multi-branch indexing, org-wide repo discovery/browsing, deploy keys (PAT only), per-project access lists (phase 2).
 
@@ -487,10 +539,12 @@ would give no sign that anything was missing.
 **Conversation privacy has exactly one deliberate inversion, and it is §4.3's.** Every miss
 under `/conversations` is `404` rather than `403`, on all four routes, and `is_admin` is not
 consulted anywhere — an administrator who could read a colleague's conversation would make the
-sentence above false. The QA Checklist's module chat is *shared*: every authenticated user can
-read every turn, because that chat is the justification record for a document the whole team
-relies on, and §4.3 says so. Naming the inversion here is what stops a future reader treating
-it as a bug in the checklist rather than a decision.
+sentence above false. The QA Checklist's module chat is *shared*: every member of the project
+can read every turn, because that chat is the justification record for a document the whole
+team relies on, and §4.3 says so. Naming the inversion here is what stops a future reader
+treating it as a bug in the checklist rather than a decision. Membership bounds it — the chat
+is shared with the project's team, not with the instance — but within that team it is not
+private, which is the opposite of a conversation.
 
 **Out of scope for v1:** multi-repo cross-referencing (asking questions across two projects at once), code-writing/edit suggestions, sharing a conversation with a colleague.
 
@@ -507,8 +561,8 @@ This replaces the QA List that shipped at M4 earlier — a browsable store of sa
 - **Every write to the checklist is a reviewed change set.** Generation and the refinement chat both produce a *pending* list of `add`/`update`/`remove` operations, each with the rationale that argued for it. Applying is the only path that writes a row. A model that could write directly into a shared test plan would put unreviewed assertions in front of a tester who has no way to tell them from reviewed ones.
 - **The generator enumerates; it does not search.** It scrolls every indexed chunk under the module's path rather than running a top-k query, because top-k cannot report what it left out — and a test plan that silently omits a file is worse than one that names the files it covered.
 - **`current_result` is only ever a human's observation.** AskRepo has not run the application, so it never fills that column in, not even as a suggestion. A generated row always arrives `untested` with an empty result.
-- **The module chat is shared, deliberately inverting §4.2.** A conversation is private; this chat is the justification record for a shared document, so every user can read it and the UI says so before anyone types.
-- **Editing a test is gated; recording a result is not.** Changing `feature`, `test_name`, `expected_result` or `notes` requires `created_by` or an admin. Recording `current_result` and `status` is open to every authenticated user — otherwise the cheapest way to make a failing test pass is to edit the expectation.
+- **The module chat is shared, deliberately inverting §4.2.** A conversation is private; this chat is the justification record for a shared document, so every member of the project can read it and the UI says so before anyone types. Membership bounds who that is (§4.1); within the team it is not private.
+- **Editing a test is gated; recording a result is not.** Changing `feature`, `test_name`, `expected_result` or `notes` requires the `item.edit` permission — an editor or an owner. Recording `current_result` and `status` requires only `result.record`, which every role including `viewer` holds, because a viewer is a tester. The gap is the point: otherwise the cheapest way to make a failing test pass is to edit the expectation.
 - **A module is an entity; a feature is a string.** Modules are rows a user creates and points at a path. Features are a grouping column on the item, because the model discovers them and a table of them would need a reconciliation step every generation.
 
 **User stories**
@@ -523,13 +577,13 @@ This replaces the QA List that shipped at M4 earlier — a browsable store of sa
 
 **Acceptance criteria**
 
-- Storage: four Postgres tables — `checklist_modules`, `checklist_items`, `checklist_change_sets`, `checklist_messages` — scoped by `project_id` and readable by every user. Read scoping goes through the single access resolver (§7), never a route-level filter.
+- Storage: four Postgres tables — `checklist_modules`, `checklist_items`, `checklist_change_sets`, `checklist_messages` — scoped by `project_id` and readable by every member of that project. Read scoping goes through the single access resolver (§7), never a route-level filter.
 - `POST /checklist-modules` refuses a `source_path` that matches nothing in the project's index with `400 MODULE_PATH_NOT_INDEXED`, and so does `PATCH /checklist-modules/{id}` when it changes the path. A rename needs no index. Users pick the path from `GET /projects/{id}/indexed-paths` rather than typing it from memory (§2.1, phase 1.1).
 - `POST /checklist-modules/{id}/generate` returns `202` and runs in the background. It refuses with `409` when a generation is already running (`GENERATION_IN_PROGRESS`), when a change set is already pending (`CHANGE_SET_PENDING`), when the module's path matched nothing in the index (`MODULE_PATH_NOT_INDEXED`), or when the project is not indexed (`PROJECT_NOT_READY`).
 - Generation writes a **pending change set and no items**. `POST /checklist-change-sets/{id}/apply` is the only code path that writes `checklist_items`; applying or discarding a change set already resolved returns `409 CHANGE_SET_ALREADY_RESOLVED`.
 - An `update` or `remove` naming an item that no longer exists at apply time is **skipped, not failed**, and the skipped operation ids are returned in the response so the UI can say so.
 - An operation may only write `feature`, `test_name`, `expected_result` and `notes`. `status`, `current_result` and `created_by` are outside the allowlist, enforced server-side, because `changes` originates in a model's output.
-- Editing a test definition as anyone other than its creator or an admin returns `403 NOT_CHECKLIST_OWNER`. Recording a result (`PUT /checklist-items/{id}/result`) is open to every authenticated user and sets both `current_result` and `status` together.
+- Editing a test definition without the `item.edit` permission returns `403 INSUFFICIENT_ROLE` — or `404 CHECKLIST_ITEM_NOT_FOUND` for a caller with no membership on the project, since the scoped read misses before the permission check runs, per §4.1's table. Recording a result (`PUT /checklist-items/{id}/result`) needs only `result.record`, which every role holds, and sets both `current_result` and `status` together.
 - The module chat streams over the same SSE contract as §4.2's answer stream, with one added event carrying the proposed change set. The client sends only an instruction to apply or discard — never proposal content.
 - Deleting a project soft-deletes all four tables; deleting a module soft-deletes its items, change sets, and chat. Nothing reaches Qdrant: the checklist owns no vector points.
 - `GET /checklist-items/export` takes the same filters as the list route and applies **no pagination**, capped at `CHECKLIST_EXPORT_MAX_ROWS` rows with `409 EXPORT_TOO_LARGE` past the cap.
@@ -541,7 +595,7 @@ This replaces the QA List that shipped at M4 earlier — a browsable store of sa
 class ChecklistModule(BaseModel):
     id: UUID
     project_id: UUID                    # FK projects.id
-    created_by: UUID                    # attribution + destructive gate; never scopes reads
+    created_by: UUID                    # attribution ONLY; never a gate, never a read scope
     name: str                           # "Authentication"
     source_path: str                    # repo-relative dir or file the module covers
     status: Literal["empty", "generating", "review", "ready", "failed"]
@@ -601,7 +655,7 @@ class ChecklistMessage(BaseModel):
     citations: list[Citation] | None
     model: str | None
     finish_reason: str | None
-    created_by: UUID                    # who spoke; every user can read it
+    created_by: UUID                    # who spoke; every member of the project can read it
     created_at: datetime
     updated_at: datetime
     deleted_at: datetime | None
@@ -708,7 +762,7 @@ Redis stays in the stack for login rate limiting only. It does not back the queu
   same argument as `refresh_tokens`. `conversations` does carry `deleted_at` and soft-deletes
   normally.
 - **Soft delete does not reach Qdrant.** Vector points have no `deleted_at`, and a query-time filter would be one forgotten call away from serving deleted content. Rule: **Postgres rows are soft-deleted; the corresponding Qdrant points are hard-deleted in the same operation.**
-- **Attribution vs authorization.** `created_by` exists on projects, checklist modules and checklist items for attribution and to gate destructive operations. It never scopes reads in phase 1. Read scoping is _only_ ever done through `resolve_project_scope` (§4.1), so phase 2 has exactly one place to change.
+- **Attribution vs authorization.** `created_by` exists on projects, checklist modules and checklist items for **attribution only**. It never scopes reads, and since Phase 2.1 it gates nothing either — authorization is `require_permission(actor, project_id, permission)` and read scoping is `resolve_project_scope(user)`, both in `app/core/access.py` and nowhere else (§4.1). A gate that compares `created_by` to the caller is a defect, not a shortcut.
 - **Error shape.** Every error the application raises serialises as
   `{"detail": {"code": "SOME_CODE", "message": "..."}}`. `code` is a stable,
   machine-readable identifier drawn from a single enum; `message` is for a person.
@@ -716,9 +770,10 @@ Redis stays in the stack for login rate limiting only. It does not back the queu
   field name, so a form can render an error per field. This is one shape for the whole
   API — a route inventing its own leaves clients parsing two.
 - **Error codes:**
-  - `403` when the caller may see a thing but not do this to it — e.g. deleting someone
-    else's project. Existence is not secret.
-  - `404` when the caller may not know the thing exists — e.g. another user's conversation.
+  - `403` when the caller may see a thing but not do this to it — e.g. a project **member**
+    whose role lacks `project.delete` (`INSUFFICIENT_ROLE`). They can already see it listed.
+  - `404` when the caller may not know the thing exists — another user's conversation, or a
+    project the caller holds no membership on, on every route including `DELETE` (§4.1).
   - `409` for valid-but-wrong-state (querying a project that isn't `ready`).
   - `429` for rate limits.
 - **Idempotent action endpoints return `202`, not `409`.** Asking for something that is already
@@ -734,7 +789,7 @@ Redis stays in the stack for login rate limiting only. It does not back the queu
 ## 6. Milestones
 
 0. **M0 — Auth & accounts:** admin-provisioned users, login with access/refresh tokens, forced first-login password change, admin password reset, login rate limiting, seeded bootstrap admins. Nothing else can be attributed until this exists.
-1. **M1 — Project ingestion:** `POST /projects` with repo link → clone + index, status tracking, manual re-index, URL validation, `created_by` gating. Moves ingestion out of the API process into a Kafka-driven worker (§5).
+1. **M1 — Project ingestion:** `POST /projects` with repo link → clone + index, status tracking, manual re-index, URL validation, and destructive-operation gating (`created_by`-based at M1; replaced by per-project permissions at Phase 2.1). Moves ingestion out of the API process into a Kafka-driven worker (§5).
 2. **M2 — Dev Knowledge core (shipped):** RAG Q&A against a ready project (no graph yet), with private conversations, SSE streaming, history-aware query rewriting, and the grounding guardrails above.
 3. **M3 — LangGraph wrap (shipped):** turn the chain into a graph with intent routing (codebase question / conversational / out of scope) and a self-critique loop that **grades retrieval before generating** — when the excerpts do not answer the question, the grader supplies a better query and retrieval runs again. The critique deliberately sits before generation rather than after it: a critic that can reject a finished answer can only run on an answer that finished, which means either buffering the whole draft (reintroducing the silence §4.2 added streaming to remove) or visibly retracting a streamed one. See `docs/superpowers/specs/2026-08-30-m3-langgraph-design.md` §2.1.
 4. **M4 — QA Checklist (shipped):** modules over an indexed repository, background generation that scrolls the index and proposes a reviewed change set, a shared module chat that proposes further change sets, human-recorded pass/fail/blocked results, and `.xlsx` export. Replaces the QA List that shipped earlier at this milestone — see `docs/superpowers/specs/2026-09-01-m4-qa-checklist-design.md` §0.
@@ -759,7 +814,7 @@ Most of this seam already exists and is not part of the milestone. §5's chat ro
 deployability for an audience that did not write the code. §2.1 carries what each covers, what it
 costs, and why it sits where it does; the list here is the order and nothing else.
 
-6. **Phase 2.1 — Per-project RBAC:** a membership table, roles per project, and swapping the body of the access resolver §2 built for this. No new infrastructure. Everything after it that asks "who may see this" resolves through it, and phase 3 is blocked on this sub-phase alone.
+6. **Phase 2.1 — Per-project RBAC (shipped):** `roles`, `role_permissions` and `project_memberships`; three seeded system roles plus admin-defined custom ones; `resolve_project_scope`'s body swapped for a membership lookup and `require_permission` added beside it, replacing six inline `created_by` gates. A breaking status-code change (§4.1), a `409 LAST_OWNER` guard on deactivation (§8), a Redis-cached grant snapshot, and the membership/role/permission routes. No new infrastructure. Everything after it that asks "who may see this" resolves through it, and phase 3 is blocked on this sub-phase alone. See §2.1.
 7. **Phase 2.2 — Append-only audit trail:** who did what, never the secret involved. Directly after RBAC, because that is when "who granted whom access to what" first becomes a question with no answer.
 8. **Phase 2.3 — Notifications, the record and in-app delivery:** one row per `(user, event)`, a polled unread count, no socket and no egress. Recipient selection resolves through Phase 2.1's resolver, which is why it cannot come earlier.
 9. **Phase 2.4 — The mail provider:** self-service password reset, plus the email transport of Phase 2.3's record. The instance's **first egress path** (§9) and the first phase-2 decision that changes §1's premise — paid once, for two features.
@@ -774,8 +829,9 @@ costs, and why it sits where it does; the list here is the order and nothing els
 ## 7. Success criteria
 
 - An admin can bring up a fresh instance, log in as a seeded admin, change the initial password, and create an account for a colleague — with no manual database work.
-- **Sharing works as intended:** user B can list and query a project user A created, without any grant step.
-- **Destructive gating holds:** user B attempting to delete or re-index user A's project gets `403`; an admin succeeds. Verified by an automated test.
+- **Access is granted, not assumed:** user B does not see user A's project in `GET /projects` and gets `404 PROJECT_NOT_FOUND` on every route against it until user A grants them a membership; once granted, user B lists and queries it without adding it themselves. Verified by an automated test.
+- **Destructive gating holds, and the `403`/`404` split is the right way round:** a **member** whose role is `viewer` or `editor` attempting to delete or re-index gets `403 INSUFFICIENT_ROLE`; a **non-member** attempting the same gets `404 PROJECT_NOT_FOUND`, never a `403` that would confirm the repository exists; an owner and an admin succeed. Verified by an automated test.
+- **Every live project has a live owner:** deactivating the last owner of a project is refused with `409 LAST_OWNER`, and the body names the projects that block it. Verified by an automated test.
 - **Conversations stay private:** user B cannot list or read user A's conversations, and gets `404` rather than `403`. Verified by an automated test.
 - Can ask Dev Knowledge a real question about a project repository and get a correct, cited answer.
 - A module of a real repository generates a checklist whose proposals a reviewer accepts, a tester records results against it, and the export is usable as the handoff artifact — verified by an automated test.
@@ -784,7 +840,7 @@ costs, and why it sits where it does; the list here is the order and nothing els
 - Mock Data Generator can produce a grounded, usable batch of sample records for a real module in one run — every field name it proposes actually exists in that module's code, and generation fails rather than inventing fields when none is found.
 - **Switching the answering model is configuration, not a migration:** an instance moves from a local model to a hosted provider and back by changing `CHAT_*` settings, with no re-index and no change to stored citations. An instance configured with a model that cannot do structured output fails at startup with a message naming that as the cause, rather than on its first generation (M4.5).
 - No secret (password, token, PAT) appears in any log, traceback, or API response.
-- **Phase-2 readiness:** read scoping happens in exactly one function, confirmed by grep — no route filters projects on its own.
+- **One enforcement point:** read scoping happens in exactly one function and permission checks in one more, both in `app/core/access.py`, confirmed by grep in `backend/tests/test_scoping_is_single_point.py` — no route, service or query filters projects on its own, and no gate re-derives policy from `created_by`. Phase 2.1 proved the criterion by swapping the resolver's body with zero diff at its 15 call sites.
 
 **Known bugs — all three fixed (2026-09-06).** Kept here as a record of what was wrong,
 because two of them turned out to be one defect and the shape is worth not repeating.
@@ -816,9 +872,9 @@ because two of them turned out to be one defect and the shape is worth not repea
 
 ## 8. Open questions
 
-- **~~Are shared PATs acceptable?~~ Decided (M1): yes, with the caveat intact.** Full personal-access-token support ships at M1. The consequence is unchanged and is accepted rather than solved: whoever adds a private repo supplies a PAT that effectively grants every user on the instance read access to that repo's contents via Q&A. Operators should scope PATs as narrowly as the host allows — read-only, single repo. **That is an operator instruction, not something the code enforces.** A GitHub App would make this cleanly org-level rather than person-level, and remains the better answer if this ever moves outside one trusted team.
+- **~~Are shared PATs acceptable?~~ Decided (M1): yes, with the caveat intact.** Full personal-access-token support ships at M1. The consequence is narrowed by Phase 2.1 but not solved, and is still accepted: whoever adds a private repo supplies a PAT that effectively grants every **member of that project** — and every administrator — read access to the repo's contents via Q&A, regardless of whether the host would have granted them that access directly. Granting someone `viewer` is therefore a decision about the underlying repository, not only about AskRepo. Operators should scope PATs as narrowly as the host allows — read-only, single repo. **That is an operator instruction, not something the code enforces.** A GitHub App would make this cleanly org-level rather than person-level, and remains the better answer if this ever moves outside one trusted team.
 - **~~Who can add projects?~~ Decided (M1): any authenticated user.** No `is_admin` check on `POST /projects`, matching §4.1's default. A company that would rather curate the list can add that check in one place; nothing else depends on the answer.
-- **What happens to a departed user's projects?** (Owned by **Phase 2.1** — membership is what makes "transfer to someone" expressible at all.) §3 says shared assets survive a soft-deleted user, leaving `created_by` pointing at a deactivated account. Should destructive rights then fall to admins only, or transfer to someone?
+- **~~What happens to a departed user's projects?~~ Decided (Phase 2.1): offboarding cannot complete until a human names the successor.** Destructive rights do **not** silently fall to admins. `DELETE /users/{id}` refuses with `409 LAST_OWNER` when deactivating the user would leave any project without a live owner, and the response body names those projects so the admin knows what to transfer rather than being told "no"; `DELETE /projects/{id}/members/{userId}` refuses the same way. The invariant is *every live project has at least one live owner*, where "live" reads through to the user row — a deactivated user's memberships are deliberately **not** soft-deleted, so reactivating an account restores exactly the access it had. `created_by` still points at the deactivated account, which is correct: it is attribution and nothing turns on it. The honest limit is that this guard prevents new strandings and cannot repair pre-existing ones, which is what the admin-only `GET /projects?ownerless=true` filter exists to find.
 - Encryption key rotation for stored PATs — re-encrypt in place on rotation, or require re-entry?
 - GitHub webhook auto-reindex — not needed now; worth reconsidering in v2 if re-cloning per re-index becomes painful.
 - **~~Is the email half of notifications (§2.1) worth a mail provider, or is in-app enough?~~ Decided (phase-2 split): sequenced, not resolved — and deliberately so.** In-app costs a table and a polled count and adds no infrastructure and no egress path. Email costs an SMTP dependency, deliverability from a box that is deliberately unreachable, and the §9 egress question — and buys the one thing in-app cannot: reaching someone who is not currently looking at AskRepo, which is the entire point for a generation that takes twenty minutes. The split takes the answer this question already called defensible: in-app ships at **Phase 2.3** and email at **Phase 2.4**. What that buys is not a decision deferred but a decision *informed* — by the time Phase 2.4 starts, the polled unread count has been in real use and there is evidence about whether people actually miss things, which is exactly what nobody has today. **Phase 2.4 may still conclude that in-app was enough**, and that is a legitimate outcome rather than a failure to deliver the sub-phase; what it may not do is pay for a mail provider without that evidence.
