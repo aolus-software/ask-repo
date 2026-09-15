@@ -96,7 +96,6 @@ def test_checklist_error_codes_exist() -> None:
     for name in (
         "CHECKLIST_MODULE_NOT_FOUND",
         "CHECKLIST_ITEM_NOT_FOUND",
-        "NOT_CHECKLIST_OWNER",
         "CHANGE_SET_NOT_FOUND",
         "CHANGE_SET_PENDING",
         "CHANGE_SET_ALREADY_RESOLVED",
@@ -111,6 +110,16 @@ def test_qa_error_codes_are_retired() -> None:
     because the sole producer of each is deleted in the same change and the sole
     consumer is the in-repo frontend replaced alongside it (spec 6.3)."""
     for name in ("QA_PAIR_NOT_FOUND", "NOT_QA_PAIR_OWNER", "NO_PENDING_RUN", "ANSWER_INCOMPLETE"):
+        assert name not in ErrorCode.__members__
+
+
+def test_created_by_ownership_error_codes_are_retired() -> None:
+    """Per-project RBAC (Phase 2.1) replaced every `created_by`-based ownership
+    gate with a permission check, raising `403 INSUFFICIENT_ROLE` instead. These
+    three were each the sole error a single now-deleted gate raised, and the
+    frontend's mirror of `ErrorCode` was retired alongside them in the same
+    change — same precedent as `test_qa_error_codes_are_retired` above."""
+    for name in ("NOT_PROJECT_OWNER", "NOT_CHECKLIST_OWNER", "NOT_MOCK_DATA_RECORD_OWNER"):
         assert name not in ErrorCode.__members__
 
 
