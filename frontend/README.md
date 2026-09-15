@@ -6,10 +6,17 @@ Next.js UI for AskRepo — the codebase-aware assistant described in
 **Milestone progress is recorded in [`docs/PRD.md`](../docs/PRD.md) §6 and nowhere else.** The
 screens that exist are sign-in and the forced first-login password change, the dashboard,
 projects (list, detail, create, re-index, delete), Dev Knowledge with streamed answers, admin
-user management, and the QA Checklist — the `/checklist` module list and the
+user management, admin role management (`/settings/roles` and the `/settings/roles/[id]`
+permission matrix), and the QA Checklist — the `/checklist` module list and the
 `/checklist/[moduleId]` grid with chat and review panel, which also carries a Mock Data tab
 (generate, refine by chat, review the pending change set, export JSON/`.xlsx`) beside the
-checklist grid, no route of its own.
+checklist grid, no route of its own. The project detail page at `/projects/[id]` likewise
+carries a **Members** tab — grant, change role, revoke — as a tab, not a route of its own.
+
+**Controls are hidden from what the server said, never from a client-side rule.** Each project
+response carries the caller's own `role` and effective `permissions`, and the UI hides what
+they would be refused. That hiding is cosmetic: the backend's `require_permission` is the
+control, and a hidden button that was clicked anyway still gets a `403`.
 
 This layer is **not** a thin client. It acts as a backend-for-frontend: it holds the session in
 its own httpOnly cookies and calls the [backend](../backend/README.md) on the browser's behalf,
@@ -85,14 +92,18 @@ frontend/
 │   ├── manifest.ts        # web app manifest — served at /manifest.webmanifest
 │   ├── favicon.ico icon.png apple-icon.png   # copies of ../assets/favicon/
 │   ├── (auth)/            # shell-less: /login, /change-password
-│   ├── (app)/             # the shell: dashboard, projects, ask, checklist (/checklist, /checklist/[moduleId]), settings
+│   ├── (app)/             # the shell: dashboard, projects (/projects, /projects/[id]),
+│   │                      #   ask, checklist (/checklist, /checklist/[moduleId]),
+│   │                      #   settings (/settings/users, /settings/roles, /settings/roles/[id])
 │   └── api/
 │       ├── [...path]/     # the API forwarding route the browser talks to
 │       └── auth/          # login, refresh, logout — the only cookie writers
 ├── components/
 │   ├── ui/                # shadcn, CLI-managed
 │   ├── layout/ form/ feedback/
-│   └── projects/ ask/ checklist/ mock-data/ users/
+│   └── projects/ ask/ checklist/ mock-data/ roles/ users/
+│       #   projects/ also holds the Members tab: member-table, add-member-dialog
+│       #   roles/ holds the role table, create dialog, permission matrix, role badge
 ├── hooks/                 # one file per resource
 ├── lib/
 │   ├── api/               # types, endpoints, errors, both fetch clients
@@ -110,7 +121,9 @@ Re-export from `../assets/` when the mark changes.
 
 ## Configuration
 
-Only one variable — see [`.env.example`](.env.example), and
+Still only one variable — per-project access added no frontend setting, because roles,
+permissions and memberships are all read through the same `API_URL`-proxied backend. See
+[`.env.example`](.env.example), and
 [`../docs/configuration.md`](../docs/configuration.md#frontend) for the reasoning:
 
 - `API_URL` — base URL of the AskRepo API, read on the **server** only: by the API forwarding

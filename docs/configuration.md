@@ -96,10 +96,27 @@ All four are live. Inside Compose the hosts are service names (`postgres`, `qdra
 | --- | --- | --- |
 | `DATABASE_URL` | `postgresql+asyncpg://askrepo:askrepo@localhost:5432/askrepo` | Users, refresh tokens, projects, conversations. The `+asyncpg` driver is required |
 | `QDRANT_URL` | `http://localhost:6333` | Vector store for indexed code chunks. Written by the worker, searched and hard-deleted by the API |
-| `REDIS_URL` | `redis://localhost:6379/0` | Login rate limiting, and nothing else |
+| `REDIS_URL` | `redis://localhost:6379/0` | Login rate limiting, and the per-user grant cache |
+| `GRANT_CACHE_TTL_SECONDS` | `300` | How long a cached grant snapshot survives without an explicit invalidation |
 
 **Redis does not back the job queue.** That is Kafka — see [Kafka](#kafka-the-ingestion-job-queue).
-Redis is read by `app/core/rate_limit.py` alone.
+Redis has exactly two readers: `app/core/rate_limit.py` and `app/core/grant_cache.py`.
+
+`GRANT_CACHE_TTL_SECONDS` is a **backstop, not the mechanism.** Every write that changes who
+may reach what invalidates explicitly — a membership change deletes that one user's key, and a
+role's permission set changing bumps an epoch counter embedded in every key, which makes every
+cached snapshot unreachable at once. The TTL only bounds how long a *missed* invalidation (a
+Redis error swallowed during eviction) can serve a stale answer, and how long orphaned keys from
+a previous epoch linger before expiring.
+
+Raise it and stale permissions survive longer after an invalidation that failed; lower it and
+the three-table grant join runs more often on the hot path — the middleware loads this snapshot
+on every authenticated request. There is no validator forcing it above zero, and setting it to
+`0` does not "disable the cache" cleanly — Redis rejects a zero expiry, the write is logged as a
+failed one, and every request then pays the Postgres join. Keep it a positive number of seconds.
+
+A Redis outage is **not** a lockout. The cache holds a copy of `project_memberships`, so an
+unreachable Redis degrades to querying Postgres directly rather than to denying access.
 
 ### Secrets
 

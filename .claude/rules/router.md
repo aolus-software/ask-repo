@@ -102,28 +102,53 @@ prefix belongs in `GATE_EXEMPT_PREFIXES`; the default answer is no.
 
 ### Destructive operations are gated, and the gate is not the route's job to invent
 
-`docs/PRD.md` §4.1: delete and reindex require the caller to be `created_by` or an admin,
-returning `403` otherwise. That check belongs in the service (or a shared dependency), not
-copy-pasted into handlers, so it cannot drift between routes.
+Every gate on a project resource is **one named permission**, checked through
+`require_permission(actor, project_id, Permission.X)` in `app/core/access.py`:
+
+```python
+# WRONG — an inline gate that re-derives policy and is free to drift
+if project.created_by != actor.id and not actor.is_admin:
+    raise AppError(403, ErrorCode.NOT_PROJECT_OWNER, ...)
+
+# CORRECT
+require_permission(actor, project.id, Permission.PROJECT_DELETE)
+```
+
+`created_by` is **not** part of the gate, not even in a supporting role — it is attribution
+(`docs/PRD.md` §7), and the three `NOT_*_OWNER` error codes that the old inline gates raised
+were deleted along with them. Nothing may reintroduce them.
+
+The check belongs in the **service** (or a shared dependency), never copy-pasted into handlers,
+so a role dimension can be added in one place rather than six. It raises `404 PROJECT_NOT_FOUND`
+for a non-member and `403 INSUFFICIENT_ROLE` for a member whose role is too low — see
+`response-api.md` for why that split falls where it does.
 
 ### Read scoping goes through the access resolver — never the handler
 
-This is the rule with the longest consequence. Phase 1 shares all projects; phase 2 adds
-per-project RBAC. `docs/PRD.md` §2 and §5.1 require that **read scoping happen in exactly one
-function**, so phase 2 is a change to that function's body and nothing else.
+This is the rule with the longest consequence, and phase 2.1 is the proof it paid for itself:
+per-project RBAC landed as a change to `resolve_project_scope`'s body plus `require_permission`
+beside it, with **zero diff at its 15 call sites**. `docs/PRD.md` §2 and §5.1 require that
+**read scoping happen in exactly one function**, and
+`backend/tests/test_scoping_is_single_point.py` enforces it as a grep.
 
 ```python
-# WRONG — puts read scoping in a route. Phase 2 now has to find every one of these.
+# WRONG — puts read scoping in a route, and scopes on the wrong column besides.
 projects = [p for p in service.list_all() if p.created_by == current_user.id]
 
-# CORRECT — the resolver decides; in phase 1 it returns everything
+# CORRECT — the resolver decides; today it answers with the caller's memberships
 scope = access.resolve_project_scope(current_user)
 projects = service.list(scope)
 ```
 
-The resolver returns a `ProjectScope` — either `unrestricted` (phase 1) or a concrete set of
-ids — rather than a nullable list. A `None` meaning "unrestricted" is fail-open: an empty set
-must mean *no* access, not all of it.
+The resolver returns a `ProjectScope` — either `unrestricted` (an administrator) or a concrete
+set of ids — rather than a nullable list. A `None` meaning "unrestricted" is fail-open: an
+empty set must mean *no* access, not all of it, and since phase 2.1 the empty case occurs in
+production rather than only in tests.
+
+A **non-access** filter over the same list — `?ownerless=true` is the only one today — is
+applied *on top of* the resolver's answer with `ProjectScope.narrowed_to(...)`, never in place
+of it. Replacing the scope would make the filter a second enforcement point, which is the thing
+this rule exists to prevent.
 
 A handler that filters projects on its own is a defect even when its output is currently
 identical.
