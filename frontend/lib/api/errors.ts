@@ -14,18 +14,27 @@ export class ApiError extends Error {
   readonly code: ErrorCode;
   /** Keyed by the camelCase field name. Empty when the backend named no fields. */
   readonly fieldErrors: Record<string, string>;
+  /**
+   * `detail` keys beyond `code`/`message`/`fields` — the widened-body carve-out
+   * `CLAUDE.md`'s "One error shape" section documents (e.g. `409 LAST_OWNER`'s
+   * `projects` array). Empty for every ordinary error; a call site checks
+   * `error.code` first and only then reads a known key off `extra`.
+   */
+  readonly extra: Record<string, unknown>;
 
   constructor(
     status: number,
     code: ErrorCode,
     message: string,
     fieldErrors: Record<string, string> = {},
+    extra: Record<string, unknown> = {},
   ) {
     super(message);
     this.name = "ApiError";
     this.status = status;
     this.code = code;
     this.fieldErrors = fieldErrors;
+    this.extra = extra;
   }
 }
 
@@ -49,10 +58,11 @@ export async function parseApiError(response: Response): Promise<ApiError> {
     return new ApiError(response.status, "INTERNAL_ERROR", GENERIC_MESSAGE);
   }
 
-  const { code, message, fields } = detail as {
+  const { code, message, fields, ...extra } = detail as {
     code?: unknown;
     message?: unknown;
     fields?: unknown;
+    [key: string]: unknown;
   };
   if (typeof code !== "string") {
     return new ApiError(response.status, "INTERNAL_ERROR", GENERIC_MESSAGE);
@@ -70,6 +80,7 @@ export async function parseApiError(response: Response): Promise<ApiError> {
     code as ErrorCode,
     typeof message === "string" && message ? message : GENERIC_MESSAGE,
     fieldErrors,
+    extra,
   );
 }
 
