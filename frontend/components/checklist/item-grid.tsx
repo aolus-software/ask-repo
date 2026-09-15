@@ -43,13 +43,14 @@ import {
   useSaveChecklistItemResult,
   useUpdateChecklistItemDetail,
 } from "@/hooks/use-checklist-mutations";
+import { useProject } from "@/hooks/use-projects";
 import { fieldError, isApiError } from "@/lib/api/errors";
 import type {
   ChecklistItemKind,
   ChecklistItemResponse,
   ChecklistItemStatus,
 } from "@/lib/api/types";
-import { canManageProject } from "@/lib/can";
+import { PERMISSION, can } from "@/lib/can";
 import { groupByFeature } from "@/lib/checklist/operations";
 import type { StatusTone } from "@/lib/status";
 
@@ -126,9 +127,10 @@ export function ItemGrid({
   const saveResult = useSaveChecklistItemResult(moduleId);
   const updateDetail = useUpdateChecklistItemDetail(moduleId);
   const deleteItem = useDeleteChecklistItem(moduleId);
+  const project = useProject(items[0]?.projectId ?? "");
 
   // Mirrors the backend gate; it does not replace it. A 403 still surfaces as an error.
-  const canEdit = (item: ChecklistItemResponse) => canManageProject(user, item);
+  const canEdit = () => (project.data ? can(project.data, PERMISSION.ITEM_EDIT) : false);
 
   function startEditing(item: ChecklistItemResponse) {
     setEditing(item);
@@ -278,7 +280,7 @@ export function ItemGrid({
                           <ClipboardCheck className="size-4" />
                           Record result
                         </Button>
-                        {canEdit(item) ? (
+                        {canEdit() ? (
                           <>
                             <Button
                               size="icon"
@@ -329,7 +331,7 @@ export function ItemGrid({
               </p>
               <ResultCell
                 item={recording}
-                canEditDefinition={canEdit(recording)}
+                canEditDefinition={canEdit()}
                 isSaving={saveResult.isPending}
                 onSave={(input) =>
                   saveResult.mutate(

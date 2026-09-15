@@ -96,6 +96,10 @@ export interface ProjectResponse {
   chunkCount: number | null;
   embeddingModel: string | null;
   reindexInProgress: boolean;
+  /** The caller's role on this project. `null` for an admin with no membership. */
+  role: string | null;
+  /** The caller's effective permissions. See `lib/can.ts`. */
+  permissions: string[];
   createdAt: string;
   updatedAt: string;
 }
@@ -412,4 +416,31 @@ export interface ChecklistItemListParams extends ListParams {
   status?: ChecklistItemStatus;
   source?: ChecklistItemSource;
   kind?: ChecklistItemKind;
+}
+
+export interface MemberResponse {
+  userId: string;
+  name: string;
+  email: string;
+  role: string;
+  grantedBy: string | null;
+  grantedAt: string;
+}
+
+export interface RoleResponse {
+  id: string;
+  name: string;
+  description: string | null;
+  isSystem: boolean;
+  permissions: string[];
+  memberCount: number;
+}
+
+export interface PermissionGroupResponse {
+  label: string;
+  permissions: string[];
+}
+
+export interface PermissionCatalogResponse {
+  groups: PermissionGroupResponse[];
 }

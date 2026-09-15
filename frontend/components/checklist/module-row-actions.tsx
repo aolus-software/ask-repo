@@ -24,13 +24,12 @@ import {
   useGenerateChecklistModule,
   useUpdateChecklistModule,
 } from "@/hooks/use-checklist-mutations";
-import { useSession } from "@/hooks/use-session";
+import { useProject } from "@/hooks/use-projects";
 import { fieldError } from "@/lib/api/errors";
 import type { ChecklistModuleResponse } from "@/lib/api/types";
-import { canManageProject } from "@/lib/can";
+import { PERMISSION, can } from "@/lib/can";
 
 export function ModuleRowActions({ module }: { module: ChecklistModuleResponse }) {
-  const user = useSession();
   const [editingName, setEditingName] = useState(module.name);
   const [editingPath, setEditingPath] = useState(module.sourcePath);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
@@ -39,7 +38,9 @@ export function ModuleRowActions({ module }: { module: ChecklistModuleResponse }
   const generate = useGenerateChecklistModule(module.id);
   const update = useUpdateChecklistModule(module.id);
   const remove = useDeleteChecklistModule(module.id);
-  const canManage = canManageProject(user, module);
+  const project = useProject(module.projectId);
+  const canEditModule = project.data ? can(project.data, PERMISSION.MODULE_EDIT) : false;
+  const canDeleteModule = project.data ? can(project.data, PERMISSION.MODULE_DELETE) : false;
 
   const isGenerating = module.status === "generating" || !!module.pendingChangeSetId;
   const generateDisabledReason =
@@ -110,18 +111,18 @@ export function ModuleRowActions({ module }: { module: ChecklistModuleResponse }
             </DropdownMenuItem>
           )}
 
-          {canManage ? (
-            <>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={() => setEditingDialog(true)}>
-                <Edit2 className="size-4" />
-                Edit
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => setConfirmingDelete(true)}>
-                <Trash2 className="size-4" />
-                Delete
-              </DropdownMenuItem>
-            </>
+          {canEditModule || canDeleteModule ? <DropdownMenuSeparator /> : null}
+          {canEditModule ? (
+            <DropdownMenuItem onClick={() => setEditingDialog(true)}>
+              <Edit2 className="size-4" />
+              Edit
+            </DropdownMenuItem>
+          ) : null}
+          {canDeleteModule ? (
+            <DropdownMenuItem onClick={() => setConfirmingDelete(true)}>
+              <Trash2 className="size-4" />
+              Delete
+            </DropdownMenuItem>
           ) : null}
         </DropdownMenuContent>
       </DropdownMenu>
