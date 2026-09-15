@@ -92,15 +92,20 @@ class AppError(HTTPException):
         message: str,
         *,
         headers: dict[str, str] | None = None,
+        extra: dict[str, object] | None = None,
     ) -> None:
         """`headers` is for the rare case a route needs to attach one to the error
         response itself — e.g. clearing a cookie on a replay — because FastAPI's
         default `HTTPException` handler builds its own response once an exception
         propagates, ignoring anything mutated on the route's injected `Response`.
+
+        `extra` merges additional fields into the detail object alongside `code` and
+        `message` — used for a `409 LAST_OWNER` that names the stranded projects.
         """
-        super().__init__(
-            status_code=status_code, detail=error_detail(code, message), headers=headers
-        )
+        detail = error_detail(code, message)
+        if extra:
+            detail.update(extra)
+        super().__init__(status_code=status_code, detail=detail, headers=headers)
         self.code = code
         self.message = message
 

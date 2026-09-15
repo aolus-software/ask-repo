@@ -13,6 +13,7 @@ from pydantic import Field
 
 from app.models.project import ProjectStatus
 from app.schemas.base import ApiModel
+from app.schemas.pagination import ListQuery
 
 
 class ProjectCreateRequest(ApiModel):
@@ -89,3 +90,14 @@ class ReindexResponse(ApiModel):
 
     enqueued: bool
     project: ProjectResponse
+
+
+class ProjectListQuery(ListQuery):
+    """`ListQuery` plus the admin-only ownerless filter.
+
+    A subclass rather than a second parameter: FastAPI flattens a Pydantic query
+    model into individual parameters only while it is the route's sole query
+    parameter (`.claude/rules/rag.md`).
+    """
+
+    ownerless: bool = False

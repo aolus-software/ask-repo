@@ -38,8 +38,13 @@ from app.repositories.mock_data_message import MockDataMessageRepository
 from app.repositories.mock_data_record import MockDataRecordRepository
 from app.repositories.project import ProjectRepository
 from app.repositories.role import RoleRepository
-from app.schemas.pagination import ListQuery, PaginatedResponse
-from app.schemas.project import ProjectCreateRequest, ProjectResponse, ReindexResponse
+from app.schemas.pagination import PaginatedResponse
+from app.schemas.project import (
+    ProjectCreateRequest,
+    ProjectListQuery,
+    ProjectResponse,
+    ReindexResponse,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -134,7 +139,7 @@ class ProjectService:
         return self._to_response(project, actor)
 
     async def list(
-        self, query: ListQuery, *, actor: AuthenticatedUser
+        self, query: ProjectListQuery, *, actor: AuthenticatedUser
     ) -> PaginatedResponse[ProjectResponse]:
         """A page of projects the caller may read.
 
@@ -142,6 +147,17 @@ class ProjectService:
         unrestricted; phase 2 changes the resolver's body and this line stays put.
         """
         scope = access.resolve_project_scope(actor)
+
+        if query.ownerless:
+            if not actor.is_admin:
+                raise AppError(
+                    status.HTTP_403_FORBIDDEN,
+                    ErrorCode.ADMIN_REQUIRED,
+                    "This action requires an administrator account.",
+                )
+            ownerless_ids = await self._members.ownerless_project_ids()
+            scope = access.ProjectScope.of(ownerless_ids)
+
         try:
             rows, total = await self._repository.list_page(
                 scope=scope,

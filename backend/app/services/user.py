@@ -16,6 +16,8 @@ from app.core.errors import AppError, ErrorCode
 from app.core.passwords import PasswordPolicyError, check_password, get_common_passwords
 from app.core.security import hash_password
 from app.models.user import User
+from app.repositories.membership import MembershipRepository
+from app.repositories.project import ProjectRepository
 from app.repositories.refresh_token import RefreshTokenRepository
 from app.repositories.user import UserRepository
 from app.schemas.pagination import ListQuery, PaginatedResponse
@@ -37,6 +39,8 @@ class UserService:
         self.settings = settings
         self.users = UserRepository(session)
         self.tokens = RefreshTokenRepository(session)
+        self._members = MembershipRepository(session)
+        self._projects = ProjectRepository(session)
 
     def _hash(self, password: str) -> str:
         """Apply policy, then hash. One error code for every policy failure."""
@@ -165,6 +169,25 @@ class UserService:
         """
         user = await self._load(user_id)
         await self._guard_last_admin(user)
+
+        # Every live project keeps at least one live owner. Deactivation cannot fix a
+        # stranding that already happened (the migration's backfill may have seeded an
+        # owner who was already deactivated), but it must not create a new one.
+        stranded = await self._members.projects_solely_owned_by(user_id)
+        if stranded:
+            projects = await self._projects.get_many(stranded)
+            raise AppError(
+                status.HTTP_409_CONFLICT,
+                ErrorCode.LAST_OWNER,
+                "Deactivating this user would leave projects with no owner. "
+                "Give someone else the owner role first.",
+                extra={
+                    "projects": [
+                        {"id": str(project.id), "name": project.name} for project in projects
+                    ]
+                },
+            )
+
         await self.users.soft_delete(user)
         await self.tokens.revoke_all_for_user(user.id, reason="user_deactivated")
         await self.session.commit()

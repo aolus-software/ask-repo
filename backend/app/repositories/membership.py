@@ -15,6 +15,7 @@ from sqlalchemy import func, select
 
 from app.core.permissions import OWNER_NAME
 from app.models.membership import ProjectMembership, Role, RolePermission
+from app.models.project import Project
 from app.models.user import User
 from app.repositories.base import BaseRepository
 
@@ -164,3 +165,29 @@ class MembershipRepository(BaseRepository[ProjectMembership]):
             if await self.count_live_owners(project_id, excluding_user=user_id) == 0:
                 at_risk.append(project_id)
         return at_risk
+
+    async def ownerless_project_ids(self) -> Sequence[uuid.UUID]:
+        """Live projects with no live owner.
+
+        Only reachable through the admin-only `?ownerless=true` filter. These exist
+        because the backfill seeds `created_by` unconditionally, including for
+        accounts that were already deactivated — fabricating a replacement owner
+        would write a grant nobody made (spec §6.4).
+        """
+        result = await self.session.execute(
+            select(Project.id)
+            .outerjoin(
+                ProjectMembership,
+                (ProjectMembership.project_id == Project.id)
+                & ProjectMembership.deleted_at.is_(None),
+            )
+            .outerjoin(Role, (Role.id == ProjectMembership.role_id) & (Role.name == OWNER_NAME))
+            .outerjoin(
+                User,
+                (User.id == ProjectMembership.user_id) & User.deleted_at.is_(None),
+            )
+            .where(Project.deleted_at.is_(None))
+            .group_by(Project.id)
+            .having(func.count(User.id) == 0)
+        )
+        return result.scalars().all()
