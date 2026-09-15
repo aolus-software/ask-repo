@@ -41,7 +41,9 @@ export function PreflightError({
   }
 
   if (error.code === "EMBEDDING_MODEL_CHANGED") {
-    const canManage = project.data ? can(project.data, PERMISSION.PROJECT_REINDEX) : false;
+    const canManage = project.data
+      ? can(project.data, PERMISSION.PROJECT_REINDEX)
+      : false;
     return (
       <Alert variant="destructive">
         <AlertTitle>This project needs re-indexing</AlertTitle>

@@ -55,7 +55,8 @@ function RoleCell({
   // 409 LAST_OWNER is about this row specifically — demoting the project's last
   // owner — so it renders here, under the control that caused it, not as a toast
   // that could be describing any row in the table.
-  const isLastOwner = isApiError(mutation.error) && mutation.error.code === "LAST_OWNER";
+  const isLastOwner =
+    isApiError(mutation.error) && mutation.error.code === "LAST_OWNER";
 
   return (
     <div className="space-y-1">

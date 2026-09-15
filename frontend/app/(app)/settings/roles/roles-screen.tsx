@@ -23,8 +23,10 @@ export function RolesScreen() {
 
   const roles = rolesQuery.data ?? [];
   const totalPermissions =
-    catalogQuery.data?.groups.reduce((sum, group) => sum + group.permissions.length, 0) ??
-    0;
+    catalogQuery.data?.groups.reduce(
+      (sum, group) => sum + group.permissions.length,
+      0,
+    ) ?? 0;
   const isLoading = rolesQuery.isLoading || catalogQuery.isLoading;
 
   // The route body is wrapped in its gate. Hiding the nav item is not gating the

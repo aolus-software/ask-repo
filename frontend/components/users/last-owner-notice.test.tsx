@@ -6,12 +6,18 @@ import { ApiError } from "@/lib/api/errors";
 
 describe("LastOwnerNotice", () => {
   it("names every blocking project", () => {
-    const error = new ApiError(409, "LAST_OWNER", "Would leave projects ownerless.", {}, {
-      projects: [
-        { id: "p1", name: "payments-api" },
-        { id: "p2", name: "web" },
-      ],
-    });
+    const error = new ApiError(
+      409,
+      "LAST_OWNER",
+      "Would leave projects ownerless.",
+      {},
+      {
+        projects: [
+          { id: "p1", name: "payments-api" },
+          { id: "p2", name: "web" },
+        ],
+      },
+    );
 
     render(<LastOwnerNotice error={error} />);
 
@@ -20,9 +26,15 @@ describe("LastOwnerNotice", () => {
   });
 
   it("links each project to where the ownership is fixed", () => {
-    const error = new ApiError(409, "LAST_OWNER", "Would leave projects ownerless.", {}, {
-      projects: [{ id: "p1", name: "payments-api" }],
-    });
+    const error = new ApiError(
+      409,
+      "LAST_OWNER",
+      "Would leave projects ownerless.",
+      {},
+      {
+        projects: [{ id: "p1", name: "payments-api" }],
+      },
+    );
 
     render(<LastOwnerNotice error={error} />);
 

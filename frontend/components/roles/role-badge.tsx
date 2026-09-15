@@ -5,13 +5,7 @@ import { Lock } from "lucide-react";
  * `user-role-badge.tsx` — the lock is what tells an admin, before they even open the
  * row, that viewer/editor/owner cannot be edited or deleted (`.claude/rules/design-system.md` §5).
  */
-export function RoleBadge({
-  name,
-  isSystem,
-}: {
-  name: string;
-  isSystem: boolean;
-}) {
+export function RoleBadge({ name, isSystem }: { name: string; isSystem: boolean }) {
   return (
     <span className="inline-flex items-center gap-1.5 font-medium">
       {name}

@@ -185,7 +185,8 @@ export function MockDataChatPanel({
   );
 
   const isStreaming = turn?.isStreaming ?? false;
-  const composerDisabled = isStreaming || hasPendingChangeSet || isGenerating || !canSend;
+  const composerDisabled =
+    isStreaming || hasPendingChangeSet || isGenerating || !canSend;
   // A generation holds this dataset's lease; refining it by chat while that run is
   // in flight is refused server-side with a 409 (`MockDataDatasetService.prepare_turn`)
   // because writing `review` over a `generating` row would blind the reconcile sweep

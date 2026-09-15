@@ -16,7 +16,9 @@ import { keys } from "@/lib/query/keys";
 function useMemberInvalidation(projectId: string) {
   const queryClient = useQueryClient();
   return () => {
-    void queryClient.invalidateQueries({ queryKey: keys.members.forProject(projectId) });
+    void queryClient.invalidateQueries({
+      queryKey: keys.members.forProject(projectId),
+    });
     void queryClient.invalidateQueries({ queryKey: keys.projects.detail(projectId) });
   };
 }

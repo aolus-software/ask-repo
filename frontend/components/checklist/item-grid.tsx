@@ -128,7 +128,8 @@ export function ItemGrid({
   const project = useProject(items[0]?.projectId ?? "");
 
   // Mirrors the backend gate; it does not replace it. A 403 still surfaces as an error.
-  const canEdit = () => (project.data ? can(project.data, PERMISSION.ITEM_EDIT) : false);
+  const canEdit = () =>
+    project.data ? can(project.data, PERMISSION.ITEM_EDIT) : false;
   // Every system role carries `result.record` (docs/PRD.md §4.3), so this is always
   // true in practice -- checked explicitly anyway, so its absence elsewhere is never
   // mistaken for an oversight.

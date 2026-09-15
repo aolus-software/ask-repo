@@ -42,7 +42,6 @@ export function useRole(id: string) {
 export function usePermissionCatalog() {
   return useQuery({
     queryKey: keys.permissionCatalogue,
-    queryFn: () =>
-      apiFetch<PermissionCatalogResponse>(endpoints.permissions.catalogue),
+    queryFn: () => apiFetch<PermissionCatalogResponse>(endpoints.permissions.catalogue),
   });
 }

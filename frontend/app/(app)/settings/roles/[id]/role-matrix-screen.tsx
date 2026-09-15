@@ -112,7 +112,12 @@ export function RoleMatrixScreen({ id }: { id: string }) {
               viewer, editor and owner are built in and cannot be changed.
             </AlertDescription>
           </Alert>
-          <PermissionMatrix groups={groups} selected={selected} onToggle={() => {}} disabled />
+          <PermissionMatrix
+            groups={groups}
+            selected={selected}
+            onToggle={() => {}}
+            disabled
+          />
         </div>
       </FormPage>
     );

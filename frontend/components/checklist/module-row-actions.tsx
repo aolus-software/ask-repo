@@ -39,8 +39,12 @@ export function ModuleRowActions({ module }: { module: ChecklistModuleResponse }
   const update = useUpdateChecklistModule(module.id);
   const remove = useDeleteChecklistModule(module.id);
   const project = useProject(module.projectId);
-  const canEditModule = project.data ? can(project.data, PERMISSION.MODULE_EDIT) : false;
-  const canDeleteModule = project.data ? can(project.data, PERMISSION.MODULE_DELETE) : false;
+  const canEditModule = project.data
+    ? can(project.data, PERMISSION.MODULE_EDIT)
+    : false;
+  const canDeleteModule = project.data
+    ? can(project.data, PERMISSION.MODULE_DELETE)
+    : false;
 
   const isGenerating = module.status === "generating" || !!module.pendingChangeSetId;
   const generateDisabledReason =
