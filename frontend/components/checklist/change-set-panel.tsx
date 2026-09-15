@@ -77,10 +77,13 @@ export function ChangeSetPanel({
   changeSet,
   moduleId,
   items,
+  canApply,
 }: {
   changeSet: ChecklistChangeSetResponse;
   moduleId: string;
   items: ChecklistItemResponse[];
+  /** Mirrors the backend's `changeset.apply` gate; it does not replace it. */
+  canApply: boolean;
 }) {
   const queryClient = useQueryClient();
   const [checked, setChecked] = useState<Record<string, boolean>>(() => {
@@ -305,13 +308,18 @@ export function ChangeSetPanel({
         <Button
           variant="outline"
           onClick={() => setConfirmingDiscard(true)}
-          disabled={applyMutation.isPending || discardMutation.isPending}
+          disabled={!canApply || applyMutation.isPending || discardMutation.isPending}
         >
           Discard
         </Button>
         <Button
           onClick={handleApply}
-          disabled={!hasChecked || applyMutation.isPending || discardMutation.isPending}
+          disabled={
+            !canApply ||
+            !hasChecked ||
+            applyMutation.isPending ||
+            discardMutation.isPending
+          }
         >
           {applyMutation.isPending ? <Loader2 className="size-4 animate-spin" /> : null}
           Apply selected

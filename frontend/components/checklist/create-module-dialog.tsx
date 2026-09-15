@@ -23,6 +23,7 @@ import { useProjects } from "@/hooks/use-projects";
 import { fieldError } from "@/lib/api/errors";
 import { SORT } from "@/lib/api/endpoints";
 import type { ProjectResponse } from "@/lib/api/types";
+import { PERMISSION, can } from "@/lib/can";
 
 const EMPTY = { projectId: "", name: "", sourcePath: "" };
 
@@ -43,7 +44,12 @@ export function CreateModuleDialog({
     sortDirection: "desc",
   });
 
-  const readyProjects = (query.data?.items ?? []).filter((p) => p.status === "ready");
+  // Mirrors the backend gate; it does not replace it. Offering a project the caller
+  // cannot create a module in produces a 403 they cannot act on, the same reasoning
+  // that already excludes a project that is not indexed yet.
+  const readyProjects = (query.data?.items ?? []).filter(
+    (p) => p.status === "ready" && can(p, PERMISSION.MODULE_CREATE),
+  );
   const selectedProject = readyProjects.find((p) => p.id === values.projectId) ?? null;
 
   function handleSubmit(event: React.FormEvent<HTMLFormElement>) {

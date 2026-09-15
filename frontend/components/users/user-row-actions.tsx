@@ -13,6 +13,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { EditUserDialog } from "@/components/users/edit-user-dialog";
+import { LastOwnerNotice } from "@/components/users/last-owner-notice";
 import { ResetPasswordDialog } from "@/components/users/reset-password-dialog";
 import { useDeactivateUser } from "@/hooks/use-user-mutations";
 import type { UserResponse } from "@/lib/api/types";
@@ -73,7 +74,9 @@ export function UserRowActions({ user }: { user: UserResponse }) {
             },
           })
         }
-      />
+      >
+        <LastOwnerNotice error={deactivate.error} />
+      </ConfirmDialog>
     </>
   );
 }
