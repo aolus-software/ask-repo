@@ -22,14 +22,17 @@ from app.checklist.model_output import (
     ProposedOperation,
 )
 from app.config import Settings
+from app.core.permissions import EDITOR_NAME
 from app.ingestion.chunker import Chunk
 from app.ingestion.vector_store import InMemoryVectorStore
 from app.models.project import Project, ProjectStatus
+from app.models.user import User
 from app.queue.checklist import handle_checklist_message
 from app.queue.consumer import JobOutcome
 from app.queue.protocol import InMemoryIngestionQueue
 from app.queue.topics import ChecklistJobMessage
 from app.repositories.checklist_module import ChecklistModuleRepository
+from tests.conftest import GrantMembership
 from tests.factories import create_project
 from tests.fakes import StructuredScriptedChatModel
 
@@ -138,12 +141,20 @@ async def _run_the_queued_generation(
 @pytest.mark.asyncio
 async def test_a_module_goes_from_empty_to_a_recorded_result(
     authed_client: AsyncClient,
+    authed_user: User,
+    grant_membership: GrantMembership,
     db_session: AsyncSession,
     ingestion_queue: InMemoryIngestionQueue,
     vector_store: InMemoryVectorStore,
 ) -> None:
-    """Empty -> generating -> review -> applied -> recorded -> exported."""
+    """Empty -> generating -> review -> applied -> recorded -> exported.
+
+    The caller is an `editor` on the project: the narrowest role that carries every
+    permission this journey needs (`module.create`, `generate.run`, `changeset.apply`,
+    `result.record`). An `owner` would pass too and would prove less.
+    """
     project = await _ready_indexed_project(db_session, vector_store)
+    await grant_membership(authed_user.id, project.id, EDITOR_NAME)
 
     module = (
         await authed_client.post(

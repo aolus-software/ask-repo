@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import Settings
 from app.core.errors import AppError, ErrorCode
+from app.core.permissions import EDITOR_NAME
 from app.models.checklist import ChangeSetOrigin, ChangeSetStatus
 from app.models.mock_data import MockDataChangeSet, MockDataDataset, MockDataRecord
 from app.models.project import ProjectStatus
@@ -14,6 +15,7 @@ from app.repositories.mock_data_change_set import MockDataChangeSetRepository
 from app.repositories.mock_data_record import MockDataRecordRepository
 from app.schemas.mock_data import MockDataChangeSetApplyRequest
 from app.services.mock_data_change_set import MockDataChangeSetService
+from tests.conftest import GrantMembership
 from tests.factories import (
     create_checklist_module,
     create_mock_data_record,
@@ -23,7 +25,9 @@ from tests.factories import (
 from tests.helpers import authenticated
 
 
-async def test_apply_add_creates_a_record(db_session: AsyncSession) -> None:
+async def test_apply_add_creates_a_record(
+    db_session: AsyncSession, grant_membership: GrantMembership
+) -> None:
     """Adding an operation creates a new record with the proposed fields."""
     project = await create_project(db_session, status=ProjectStatus.READY)
     project.embedding_collection = "col"
@@ -61,9 +65,10 @@ async def test_apply_add_creates_a_record(db_session: AsyncSession) -> None:
     await db_session.commit()
 
     actor = await create_user(db_session)
+    await grant_membership(actor.id, project.id, EDITOR_NAME)
     service = MockDataChangeSetService(db_session, Settings())
     result = await service.apply(
-        change_set.id, MockDataChangeSetApplyRequest(), actor=authenticated(actor)
+        change_set.id, MockDataChangeSetApplyRequest(), actor=await authenticated(db_session, actor)
     )
 
     assert len(result.records) == 1
@@ -71,7 +76,9 @@ async def test_apply_add_creates_a_record(db_session: AsyncSession) -> None:
     assert result.skipped_operation_ids == []
 
 
-async def test_apply_update_merges_into_existing_fields(db_session: AsyncSession) -> None:
+async def test_apply_update_merges_into_existing_fields(
+    db_session: AsyncSession, grant_membership: GrantMembership
+) -> None:
     """Updating an operation merges changes into the existing fields."""
     project = await create_project(db_session, status=ProjectStatus.READY)
     project.embedding_collection = "col"
@@ -119,15 +126,18 @@ async def test_apply_update_merges_into_existing_fields(db_session: AsyncSession
     await db_session.commit()
 
     actor = await create_user(db_session)
+    await grant_membership(actor.id, project.id, EDITOR_NAME)
     service = MockDataChangeSetService(db_session, Settings())
     result = await service.apply(
-        change_set.id, MockDataChangeSetApplyRequest(), actor=authenticated(actor)
+        change_set.id, MockDataChangeSetApplyRequest(), actor=await authenticated(db_session, actor)
     )
 
     assert result.records[0].fields == {"name": "Acme", "start": "2026-03-01"}
 
 
-async def test_apply_twice_conflicts(db_session: AsyncSession) -> None:
+async def test_apply_twice_conflicts(
+    db_session: AsyncSession, grant_membership: GrantMembership
+) -> None:
     """Applying a change set twice raises a conflict error."""
     project = await create_project(db_session, status=ProjectStatus.READY)
     project.embedding_collection = "col"
@@ -156,17 +166,24 @@ async def test_apply_twice_conflicts(db_session: AsyncSession) -> None:
     await db_session.commit()
 
     actor = await create_user(db_session)
+    await grant_membership(actor.id, project.id, EDITOR_NAME)
     service = MockDataChangeSetService(db_session, Settings())
-    await service.apply(change_set.id, MockDataChangeSetApplyRequest(), actor=authenticated(actor))
+    await service.apply(
+        change_set.id, MockDataChangeSetApplyRequest(), actor=await authenticated(db_session, actor)
+    )
 
     with pytest.raises(AppError) as excinfo:
         await service.apply(
-            change_set.id, MockDataChangeSetApplyRequest(), actor=authenticated(actor)
+            change_set.id,
+            MockDataChangeSetApplyRequest(),
+            actor=await authenticated(db_session, actor),
         )
     assert excinfo.value.code == ErrorCode.MOCK_DATA_CHANGE_SET_ALREADY_RESOLVED
 
 
-async def test_apply_is_selective_when_operation_ids_are_given(db_session: AsyncSession) -> None:
+async def test_apply_is_selective_when_operation_ids_are_given(
+    db_session: AsyncSession, grant_membership: GrantMembership
+) -> None:
     """Only selected operations are applied; unselected ones are left untouched."""
     project = await create_project(db_session, status=ProjectStatus.READY)
     project.embedding_collection = "col"
@@ -212,18 +229,21 @@ async def test_apply_is_selective_when_operation_ids_are_given(db_session: Async
     await db_session.commit()
 
     actor = await create_user(db_session)
+    await grant_membership(actor.id, project.id, EDITOR_NAME)
     service = MockDataChangeSetService(db_session, Settings())
     result = await service.apply(
         change_set.id,
         MockDataChangeSetApplyRequest(operation_ids=[keep]),
-        actor=authenticated(actor),
+        actor=await authenticated(db_session, actor),
     )
 
     assert len(result.records) == 1
     assert result.records[0].fields == {"name": "Kept"}
 
 
-async def test_remove_operation_soft_deletes_a_record(db_session: AsyncSession) -> None:
+async def test_remove_operation_soft_deletes_a_record(
+    db_session: AsyncSession, grant_membership: GrantMembership
+) -> None:
     """A remove operation soft-deletes the target record."""
     project = await create_project(db_session, status=ProjectStatus.READY)
     project.embedding_collection = "col"
@@ -266,9 +286,10 @@ async def test_remove_operation_soft_deletes_a_record(db_session: AsyncSession) 
     await db_session.commit()
 
     actor = await create_user(db_session)
+    await grant_membership(actor.id, project.id, EDITOR_NAME)
     service = MockDataChangeSetService(db_session, Settings())
     result = await service.apply(
-        change_set.id, MockDataChangeSetApplyRequest(), actor=authenticated(actor)
+        change_set.id, MockDataChangeSetApplyRequest(), actor=await authenticated(db_session, actor)
     )
 
     assert len(result.records) == 1
@@ -278,7 +299,9 @@ async def test_remove_operation_soft_deletes_a_record(db_session: AsyncSession) 
     assert remaining == []
 
 
-async def test_cross_module_operation_is_skipped(db_session: AsyncSession) -> None:
+async def test_cross_module_operation_is_skipped(
+    db_session: AsyncSession, grant_membership: GrantMembership
+) -> None:
     """An operation targeting a record from another module is skipped."""
     project = await create_project(db_session, status=ProjectStatus.READY)
     project.embedding_collection = "col"
@@ -333,9 +356,10 @@ async def test_cross_module_operation_is_skipped(db_session: AsyncSession) -> No
     await db_session.commit()
 
     actor = await create_user(db_session)
+    await grant_membership(actor.id, project.id, EDITOR_NAME)
     service = MockDataChangeSetService(db_session, Settings())
     result = await service.apply(
-        change_set.id, MockDataChangeSetApplyRequest(), actor=authenticated(actor)
+        change_set.id, MockDataChangeSetApplyRequest(), actor=await authenticated(db_session, actor)
     )
 
     assert result.skipped_operation_ids == [cross_module_op]
@@ -345,7 +369,9 @@ async def test_cross_module_operation_is_skipped(db_session: AsyncSession) -> No
     assert record.fields != {"name": "Mutated"}
 
 
-async def test_discard_writes_nothing_and_settles_dataset(db_session: AsyncSession) -> None:
+async def test_discard_writes_nothing_and_settles_dataset(
+    db_session: AsyncSession, grant_membership: GrantMembership
+) -> None:
     """Discard returns DISCARDED status, writes no records, and settles the dataset."""
     project = await create_project(db_session, status=ProjectStatus.READY)
     project.embedding_collection = "col"
@@ -383,8 +409,9 @@ async def test_discard_writes_nothing_and_settles_dataset(db_session: AsyncSessi
     await db_session.commit()
 
     actor = await create_user(db_session)
+    await grant_membership(actor.id, project.id, EDITOR_NAME)
     service = MockDataChangeSetService(db_session, Settings())
-    resolved = await service.discard(change_set.id, actor=authenticated(actor))
+    resolved = await service.discard(change_set.id, actor=await authenticated(db_session, actor))
 
     assert resolved.status == ChangeSetStatus.DISCARDED
     # Verify no records were written
@@ -402,12 +429,16 @@ async def test_change_set_not_found_returns_404(db_session: AsyncSession) -> Non
 
     with pytest.raises(AppError) as excinfo:
         await service.apply(
-            uuid.uuid4(), MockDataChangeSetApplyRequest(), actor=authenticated(actor)
+            uuid.uuid4(),
+            MockDataChangeSetApplyRequest(),
+            actor=await authenticated(db_session, actor),
         )
     assert excinfo.value.code == ErrorCode.MOCK_DATA_CHANGE_SET_NOT_FOUND
 
 
-async def test_apply_preserves_the_order_the_model_proposed(db_session: AsyncSession) -> None:
+async def test_apply_preserves_the_order_the_model_proposed(
+    db_session: AsyncSession, grant_membership: GrantMembership
+) -> None:
     """Applying several `add` operations in one transaction keeps their proposed order.
 
     `created_at` is `server_default=func.now()`, and Postgres's `now()` is constant for
@@ -453,14 +484,19 @@ async def test_apply_preserves_the_order_the_model_proposed(db_session: AsyncSes
     await db_session.commit()
 
     actor = await create_user(db_session)
+    await grant_membership(actor.id, project.id, EDITOR_NAME)
     service = MockDataChangeSetService(db_session, Settings())
-    await service.apply(change_set.id, MockDataChangeSetApplyRequest(), actor=authenticated(actor))
+    await service.apply(
+        change_set.id, MockDataChangeSetApplyRequest(), actor=await authenticated(db_session, actor)
+    )
 
     records = await MockDataRecordRepository(db_session).list_for_module(module.id)
     assert [record.fields["name"] for record in records] == proposed_names
 
 
-async def test_apply_keeps_relative_order_of_a_ticked_subset(db_session: AsyncSession) -> None:
+async def test_apply_keeps_relative_order_of_a_ticked_subset(
+    db_session: AsyncSession, grant_membership: GrantMembership
+) -> None:
     """Ticking only some proposed operations keeps those in their relative order.
 
     Position must come from the operation's index within the full `operations` list,
@@ -505,11 +541,12 @@ async def test_apply_keeps_relative_order_of_a_ticked_subset(db_session: AsyncSe
     await db_session.commit()
 
     actor = await create_user(db_session)
+    await grant_membership(actor.id, project.id, EDITOR_NAME)
     service = MockDataChangeSetService(db_session, Settings())
     await service.apply(
         change_set.id,
         MockDataChangeSetApplyRequest(operation_ids=[op_ids[0], op_ids[2]]),
-        actor=authenticated(actor),
+        actor=await authenticated(db_session, actor),
     )
 
     records = await MockDataRecordRepository(db_session).list_for_module(module.id)

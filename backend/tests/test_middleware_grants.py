@@ -74,8 +74,8 @@ def test_a_grant_carries_the_role_name_and_permissions() -> None:
 async def test_load_grants_builds_a_grant_per_membership(db_session: AsyncSession) -> None:
     """The snapshot is keyed by project id and carries the role's expanded permissions."""
     user = await create_user(db_session)
-    viewed = await create_project(db_session, created_by=user.id)
-    edited = await create_project(db_session, created_by=user.id)
+    viewed = await create_project(db_session, created_by=user.id, grant_owner=False)
+    edited = await create_project(db_session, created_by=user.id, grant_owner=False)
     await _grant(db_session, user_id=user.id, project_id=viewed.id, role=VIEWER_NAME)
     await _grant(db_session, user_id=user.id, project_id=edited.id, role=EDITOR_NAME)
     await db_session.commit()
@@ -107,7 +107,7 @@ async def test_load_grants_is_empty_for_a_user_with_no_membership(
 async def test_the_snapshot_cannot_be_mutated_by_its_holder(db_session: AsyncSession) -> None:
     """A `MappingProxyType`, so a handler cannot widen the access it was handed."""
     user = await create_user(db_session)
-    project = await create_project(db_session, created_by=user.id)
+    project = await create_project(db_session, created_by=user.id, grant_owner=False)
     await _grant(db_session, user_id=user.id, project_id=project.id, role=VIEWER_NAME)
     await db_session.commit()
 
@@ -128,7 +128,7 @@ async def test_the_middleware_loads_grants_onto_the_request(
     route surfaces the snapshot until Task 5 gives it a reader.
     """
     user = await create_user(db_session)
-    project = await create_project(db_session, created_by=user.id)
+    project = await create_project(db_session, created_by=user.id, grant_owner=False)
     await _grant(db_session, user_id=user.id, project_id=project.id, role=EDITOR_NAME)
     await db_session.commit()
 

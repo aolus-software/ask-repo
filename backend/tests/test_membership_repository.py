@@ -34,7 +34,7 @@ async def test_load_grants_returns_role_name_and_expanded_permissions(
     db_session: AsyncSession,
 ) -> None:
     user = await create_user(db_session)
-    project = await create_project(db_session, created_by=user.id)
+    project = await create_project(db_session, created_by=user.id, grant_owner=False)
     viewer = await _role(db_session, "viewer")
     db_session.add(
         ProjectMembership(
@@ -62,7 +62,7 @@ async def test_load_grants_is_empty_for_a_user_with_no_membership(
 
 async def test_load_grants_ignores_a_revoked_membership(db_session: AsyncSession) -> None:
     user = await create_user(db_session)
-    project = await create_project(db_session, created_by=user.id)
+    project = await create_project(db_session, created_by=user.id, grant_owner=False)
     viewer = await _role(db_session, "viewer")
     db_session.add(
         ProjectMembership(
@@ -82,7 +82,7 @@ async def test_count_live_owners_ignores_a_deactivated_user(db_session: AsyncSes
     """Deactivation leaves memberships intact, so the count must read through to the
     user row. Counting the row alone would report an owner who cannot log in."""
     creator = await create_user(db_session)
-    project = await create_project(db_session, created_by=creator.id)
+    project = await create_project(db_session, created_by=creator.id, grant_owner=False)
     departed = await _deactivated_user(db_session)
     owner = await _role(db_session, "owner")
     db_session.add_all(
@@ -106,7 +106,7 @@ async def test_count_live_owners_can_exclude_one_user(db_session: AsyncSession) 
     """The 'would this operation leave none?' question, same shape as
     UserRepository.count_active_admins."""
     creator = await create_user(db_session)
-    project = await create_project(db_session, created_by=creator.id)
+    project = await create_project(db_session, created_by=creator.id, grant_owner=False)
     owner = await _role(db_session, "owner")
     db_session.add(
         ProjectMembership(
@@ -126,8 +126,8 @@ async def test_projects_solely_owned_by_lists_what_deactivation_would_strand(
     db_session: AsyncSession,
 ) -> None:
     creator = await create_user(db_session)
-    stranded = await create_project(db_session, created_by=creator.id)
-    shared = await create_project(db_session, created_by=creator.id)
+    stranded = await create_project(db_session, created_by=creator.id, grant_owner=False)
+    shared = await create_project(db_session, created_by=creator.id, grant_owner=False)
     second_owner = await create_user(db_session)
     owner = await _role(db_session, "owner")
     db_session.add_all(

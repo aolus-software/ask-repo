@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import Settings
 from app.core.errors import AppError, ErrorCode
+from app.core.permissions import EDITOR_NAME, VIEWER_NAME
 from app.models.checklist import ChangeSetOrigin, ChangeSetStatus
 from app.models.conversation import MessageRole
 from app.models.mock_data import MockDataChangeSet, MockDataDatasetStatus, MockDataMessage
@@ -17,6 +18,7 @@ from app.queue.protocol import InMemoryIngestionQueue
 from app.repositories.mock_data_change_set import MockDataChangeSetRepository
 from app.schemas.mock_data import MockDataGenerationRequest, MockDataMessageCreateRequest
 from app.services.mock_data_dataset import MockDataDatasetService
+from tests.conftest import GrantMembership
 from tests.factories import (
     create_checklist_module,
     create_mock_data_message,
@@ -28,15 +30,17 @@ from tests.helpers import authenticated
 
 
 async def test_get_returns_empty_summary_before_any_generation(
-    db_session: AsyncSession,
+    db_session: AsyncSession, grant_membership: GrantMembership
 ) -> None:
     """Before the first generation, no dataset row exists and that is not a 404."""
     project = await create_project(db_session)
     project.embedding_collection = "col"
     module = await create_checklist_module(db_session, project_id=project.id)
     service = MockDataDatasetService(db_session, Settings())
+    reader = await create_user(db_session)
+    await grant_membership(reader.id, project.id, VIEWER_NAME)
 
-    detail = await service.get(module.id, actor=authenticated(await create_user(db_session)))
+    detail = await service.get(module.id, actor=await authenticated(db_session, reader))
 
     assert detail.status == MockDataDatasetStatus.EMPTY
     assert detail.record_count == 0
@@ -44,7 +48,7 @@ async def test_get_returns_empty_summary_before_any_generation(
 
 
 async def test_request_generation_refuses_when_already_generating(
-    db_session: AsyncSession,
+    db_session: AsyncSession, grant_membership: GrantMembership
 ) -> None:
     """Cannot request generation while one is in progress."""
     project = await create_project(db_session)
@@ -53,20 +57,27 @@ async def test_request_generation_refuses_when_already_generating(
     service = MockDataDatasetService(db_session, Settings())
     queue = InMemoryIngestionQueue()
     user = await create_user(db_session)
+    await grant_membership(user.id, project.id, EDITOR_NAME)
     await service.request_generation(
-        module.id, MockDataGenerationRequest(), actor=authenticated(user), queue=queue
+        module.id,
+        MockDataGenerationRequest(),
+        actor=await authenticated(db_session, user),
+        queue=queue,
     )
 
     with pytest.raises(AppError) as excinfo:
         await service.request_generation(
-            module.id, MockDataGenerationRequest(), actor=authenticated(user), queue=queue
+            module.id,
+            MockDataGenerationRequest(),
+            actor=await authenticated(db_session, user),
+            queue=queue,
         )
     assert excinfo.value.status_code == status.HTTP_409_CONFLICT
     assert excinfo.value.code == ErrorCode.MOCK_DATA_GENERATION_IN_PROGRESS
 
 
 async def test_request_generation_refuses_a_pending_change_set(
-    db_session: AsyncSession,
+    db_session: AsyncSession, grant_membership: GrantMembership
 ) -> None:
     """Cannot request generation while changes are pending."""
     project = await create_project(db_session)
@@ -74,6 +85,7 @@ async def test_request_generation_refuses_a_pending_change_set(
     module = await create_checklist_module(db_session, project_id=project.id)
     service = MockDataDatasetService(db_session, Settings())
     user = await create_user(db_session)
+    await grant_membership(user.id, project.id, EDITOR_NAME)
     await service.datasets.get_or_create_for_module(module.id)
     await db_session.commit()
     await MockDataChangeSetRepository(db_session).add(
@@ -93,34 +105,42 @@ async def test_request_generation_refuses_a_pending_change_set(
         await service.request_generation(
             module.id,
             MockDataGenerationRequest(),
-            actor=authenticated(user),
+            actor=await authenticated(db_session, user),
             queue=InMemoryIngestionQueue(),
         )
     assert excinfo.value.code == ErrorCode.MOCK_DATA_CHANGE_SET_PENDING
 
 
-async def test_get_accessible_by_any_authenticated_user(db_session: AsyncSession) -> None:
-    """Phase 1: all projects are shared, so any authenticated user can read any module.
-    The structure correctly goes through the access resolver (resolved_project_scope)."""
+async def test_get_is_invisible_to_a_non_member(db_session: AsyncSession) -> None:
+    """A caller with no membership on the module's project must not be able to tell
+    it apart from one that does not exist, so this is `404` and not `403`.
+
+    Read scoping still goes through the one access resolver -- the service passes
+    `resolve_project_scope(actor)` to the repository and interprets nothing itself.
+    """
     project = await create_project(db_session)
     project.embedding_collection = "col"
     module = await create_checklist_module(db_session, project_id=project.id)
     service = MockDataDatasetService(db_session, Settings())
     stranger = await create_user(db_session)
 
-    # A stranger can read any module in phase 1
-    detail = await service.get(module.id, actor=authenticated(stranger))
+    with pytest.raises(AppError) as excinfo:
+        await service.get(module.id, actor=await authenticated(db_session, stranger))
 
-    assert detail.status == MockDataDatasetStatus.EMPTY
+    assert excinfo.value.status_code == status.HTTP_404_NOT_FOUND
+    assert excinfo.value.code == ErrorCode.CHECKLIST_MODULE_NOT_FOUND
 
 
-async def test_get_with_records_and_pending_change_set(db_session: AsyncSession) -> None:
+async def test_get_with_records_and_pending_change_set(
+    db_session: AsyncSession, grant_membership: GrantMembership
+) -> None:
     """When dataset has records and pending change set, get returns populated summary."""
     project = await create_project(db_session)
     project.embedding_collection = "col"
     module = await create_checklist_module(db_session, project_id=project.id)
     service = MockDataDatasetService(db_session, Settings())
     user = await create_user(db_session)
+    await grant_membership(user.id, project.id, VIEWER_NAME)
 
     # Create a dataset
     await service.datasets.get_or_create_for_module(module.id)
@@ -144,7 +164,7 @@ async def test_get_with_records_and_pending_change_set(db_session: AsyncSession)
     await MockDataChangeSetRepository(db_session).add(change_set)
     await db_session.commit()
 
-    detail = await service.get(module.id, actor=authenticated(user))
+    detail = await service.get(module.id, actor=await authenticated(db_session, user))
 
     assert detail.status == MockDataDatasetStatus.EMPTY  # default status on creation
     assert detail.record_count == 2
@@ -152,7 +172,9 @@ async def test_get_with_records_and_pending_change_set(db_session: AsyncSession)
     assert len(detail.records) == 2
 
 
-async def test_get_stale_when_project_reindexed(db_session: AsyncSession) -> None:
+async def test_get_stale_when_project_reindexed(
+    db_session: AsyncSession, grant_membership: GrantMembership
+) -> None:
     """When dataset.indexed_generation < project.active_generation, stale=True."""
     project = await create_project(db_session)
     project.embedding_collection = "col"
@@ -163,19 +185,24 @@ async def test_get_stale_when_project_reindexed(db_session: AsyncSession) -> Non
     dataset = await service.datasets.get_or_create_for_module(module.id)
     dataset.indexed_generation = 2
     await db_session.commit()
+    reader = await create_user(db_session)
+    await grant_membership(reader.id, project.id, VIEWER_NAME)
 
-    detail = await service.get(module.id, actor=authenticated(await create_user(db_session)))
+    detail = await service.get(module.id, actor=await authenticated(db_session, reader))
 
     assert detail.stale is True
 
 
-async def test_change_sets_for_returns_newest_first(db_session: AsyncSession) -> None:
+async def test_change_sets_for_returns_newest_first(
+    db_session: AsyncSession, grant_membership: GrantMembership
+) -> None:
     """Change sets ordered by created_at descending, newest first."""
     project = await create_project(db_session)
     project.embedding_collection = "col"
     module = await create_checklist_module(db_session, project_id=project.id)
     service = MockDataDatasetService(db_session, Settings())
     user = await create_user(db_session)
+    await grant_membership(user.id, project.id, VIEWER_NAME)
 
     # Create change sets with explicit timestamps to control ordering
     started = datetime.now(UTC)
@@ -202,24 +229,28 @@ async def test_change_sets_for_returns_newest_first(db_session: AsyncSession) ->
     db_session.add_all([older, newer])
     await db_session.commit()
 
-    change_sets = await service.change_sets_for(module.id, actor=authenticated(user))
+    change_sets = await service.change_sets_for(
+        module.id, actor=await authenticated(db_session, user)
+    )
 
     assert len(change_sets) == 2
     assert change_sets[0].id == newer.id
     assert change_sets[1].id == older.id
 
 
-async def test_messages_are_readable_by_any_authenticated_user(
-    db_session: AsyncSession,
+async def test_messages_are_readable_by_any_member(
+    db_session: AsyncSession, grant_membership: GrantMembership
 ) -> None:
-    """Messages are shared; any authenticated user can read them. Ordering is
-    deterministic (newest first) with explicit timestamps."""
+    """The refinement chat is shared across the project's members -- a `viewer` who
+    did not write a word of it still reads the whole thread. Ordering is deterministic
+    (oldest first) with explicit timestamps."""
     project = await create_project(db_session)
     project.embedding_collection = "col"
     module = await create_checklist_module(db_session, project_id=project.id)
     service = MockDataDatasetService(db_session, Settings())
     creator = await create_user(db_session)
-    stranger = await create_user(db_session)
+    reader = await create_user(db_session)
+    await grant_membership(reader.id, project.id, VIEWER_NAME)
 
     # Create messages with explicit timestamps to control ordering
     started = datetime.now(UTC)
@@ -242,7 +273,7 @@ async def test_messages_are_readable_by_any_authenticated_user(
     db_session.add_all([msg1, msg2])
     await db_session.commit()
 
-    messages = await service.messages(module.id, actor=authenticated(stranger))
+    messages = await service.messages(module.id, actor=await authenticated(db_session, reader))
 
     assert len(messages) == 2
     # Messages are returned oldest-first (see MockDataMessageRepository._latest)
@@ -252,7 +283,9 @@ async def test_messages_are_readable_by_any_authenticated_user(
     assert messages[1].content == "Second message"
 
 
-async def test_prepare_turn_creates_dataset_lazily(db_session: AsyncSession) -> None:
+async def test_prepare_turn_creates_dataset_lazily(
+    db_session: AsyncSession, grant_membership: GrantMembership
+) -> None:
     """Dataset row is created on first turn if it doesn't exist."""
     project = await create_project(db_session)
     project.embedding_collection = "col"
@@ -260,6 +293,7 @@ async def test_prepare_turn_creates_dataset_lazily(db_session: AsyncSession) -> 
     module = await create_checklist_module(db_session, project_id=project.id)
     service = MockDataDatasetService(db_session, Settings())
     user = await create_user(db_session)
+    await grant_membership(user.id, project.id, EDITOR_NAME)
 
     # Verify no dataset exists yet
     assert await service.datasets.get_by_module(module.id) is None
@@ -267,7 +301,7 @@ async def test_prepare_turn_creates_dataset_lazily(db_session: AsyncSession) -> 
     context = await service.prepare_turn(
         module.id,
         MockDataMessageCreateRequest(question="What should we test?"),
-        actor=authenticated(user),
+        actor=await authenticated(db_session, user),
     )
 
     # Dataset now exists
@@ -276,7 +310,9 @@ async def test_prepare_turn_creates_dataset_lazily(db_session: AsyncSession) -> 
     assert context.dataset_id == dataset.id
 
 
-async def test_prepare_turn_creates_user_message(db_session: AsyncSession) -> None:
+async def test_prepare_turn_creates_user_message(
+    db_session: AsyncSession, grant_membership: GrantMembership
+) -> None:
     """prepare_turn writes the user message to the database."""
     project = await create_project(db_session)
     project.embedding_collection = "col"
@@ -284,11 +320,12 @@ async def test_prepare_turn_creates_user_message(db_session: AsyncSession) -> No
     module = await create_checklist_module(db_session, project_id=project.id)
     service = MockDataDatasetService(db_session, Settings())
     user = await create_user(db_session)
+    await grant_membership(user.id, project.id, EDITOR_NAME)
 
     context = await service.prepare_turn(
         module.id,
         MockDataMessageCreateRequest(question="What are the edge cases?"),
-        actor=authenticated(user),
+        actor=await authenticated(db_session, user),
     )
 
     messages = await service.messages_repository.list_for_module(module.id, limit=50)
@@ -299,7 +336,9 @@ async def test_prepare_turn_creates_user_message(db_session: AsyncSession) -> No
     assert messages[0].created_by == user.id
 
 
-async def test_prepare_turn_mints_ids(db_session: AsyncSession) -> None:
+async def test_prepare_turn_mints_ids(
+    db_session: AsyncSession, grant_membership: GrantMembership
+) -> None:
     """prepare_turn mints change_set_id and assistant_message_id before any byte is sent."""
     project = await create_project(db_session)
     project.embedding_collection = "col"
@@ -307,11 +346,12 @@ async def test_prepare_turn_mints_ids(db_session: AsyncSession) -> None:
     module = await create_checklist_module(db_session, project_id=project.id)
     service = MockDataDatasetService(db_session, Settings())
     user = await create_user(db_session)
+    await grant_membership(user.id, project.id, EDITOR_NAME)
 
     context = await service.prepare_turn(
         module.id,
         MockDataMessageCreateRequest(question="Test question"),
-        actor=authenticated(user),
+        actor=await authenticated(db_session, user),
     )
 
     assert isinstance(context.assistant_message_id, uuid.UUID)
@@ -320,7 +360,9 @@ async def test_prepare_turn_mints_ids(db_session: AsyncSession) -> None:
     assert context.assistant_message_id != context.change_set_id
 
 
-async def test_prepare_turn_includes_existing_records(db_session: AsyncSession) -> None:
+async def test_prepare_turn_includes_existing_records(
+    db_session: AsyncSession, grant_membership: GrantMembership
+) -> None:
     """prepare_turn maps existing records from the database into the context."""
     project = await create_project(db_session)
     project.embedding_collection = "col"
@@ -328,6 +370,7 @@ async def test_prepare_turn_includes_existing_records(db_session: AsyncSession) 
     module = await create_checklist_module(db_session, project_id=project.id)
     service = MockDataDatasetService(db_session, Settings())
     user = await create_user(db_session)
+    await grant_membership(user.id, project.id, EDITOR_NAME)
 
     # Create existing records
     record1 = await create_mock_data_record(
@@ -340,7 +383,7 @@ async def test_prepare_turn_includes_existing_records(db_session: AsyncSession) 
     context = await service.prepare_turn(
         module.id,
         MockDataMessageCreateRequest(question="Test"),
-        actor=authenticated(user),
+        actor=await authenticated(db_session, user),
     )
 
     assert len(context.existing_records) == 2
@@ -349,24 +392,27 @@ async def test_prepare_turn_includes_existing_records(db_session: AsyncSession) 
     assert str(record2.id) in record_ids
 
 
-async def test_prepare_turn_refuses_when_project_not_ready(db_session: AsyncSession) -> None:
+async def test_prepare_turn_refuses_when_project_not_ready(
+    db_session: AsyncSession, grant_membership: GrantMembership
+) -> None:
     """prepare_turn requires project to be indexed and ready."""
     project = await create_project(db_session, status=ProjectStatus.CLONING)
     module = await create_checklist_module(db_session, project_id=project.id)
     service = MockDataDatasetService(db_session, Settings())
     user = await create_user(db_session)
+    await grant_membership(user.id, project.id, EDITOR_NAME)
 
     with pytest.raises(AppError) as excinfo:
         await service.prepare_turn(
             module.id,
             MockDataMessageCreateRequest(question="Test"),
-            actor=authenticated(user),
+            actor=await authenticated(db_session, user),
         )
     assert excinfo.value.code == ErrorCode.PROJECT_NOT_READY
 
 
 async def test_prepare_turn_refuses_when_embedding_model_changed(
-    db_session: AsyncSession,
+    db_session: AsyncSession, grant_membership: GrantMembership
 ) -> None:
     """prepare_turn refuses when project was indexed with a different embedding model."""
     project = await create_project(db_session)
@@ -375,17 +421,20 @@ async def test_prepare_turn_refuses_when_embedding_model_changed(
     module = await create_checklist_module(db_session, project_id=project.id)
     service = MockDataDatasetService(db_session, Settings())
     user = await create_user(db_session)
+    await grant_membership(user.id, project.id, EDITOR_NAME)
 
     with pytest.raises(AppError) as excinfo:
         await service.prepare_turn(
             module.id,
             MockDataMessageCreateRequest(question="Test"),
-            actor=authenticated(user),
+            actor=await authenticated(db_session, user),
         )
     assert excinfo.value.code == ErrorCode.EMBEDDING_MODEL_CHANGED
 
 
-async def test_prepare_turn_refuses_while_generating(db_session: AsyncSession) -> None:
+async def test_prepare_turn_refuses_while_generating(
+    db_session: AsyncSession, grant_membership: GrantMembership
+) -> None:
     """A refinement turn is refused while a generation holds the dataset's lease.
 
     `status == "generating"` is the only signal the reconcile sweep has that a worker
@@ -400,11 +449,12 @@ async def test_prepare_turn_refuses_while_generating(db_session: AsyncSession) -
     module = await create_checklist_module(db_session, project_id=project.id)
     service = MockDataDatasetService(db_session, Settings())
     user = await create_user(db_session)
+    await grant_membership(user.id, project.id, EDITOR_NAME)
 
     await service.request_generation(
         module.id,
         MockDataGenerationRequest(),
-        actor=authenticated(user),
+        actor=await authenticated(db_session, user),
         queue=InMemoryIngestionQueue(),
     )
 
@@ -412,33 +462,34 @@ async def test_prepare_turn_refuses_while_generating(db_session: AsyncSession) -
         await service.prepare_turn(
             module.id,
             MockDataMessageCreateRequest(question="Refine while generating"),
-            actor=authenticated(user),
+            actor=await authenticated(db_session, user),
         )
     assert excinfo.value.status_code == status.HTTP_409_CONFLICT
     assert excinfo.value.code == ErrorCode.MOCK_DATA_GENERATION_IN_PROGRESS
 
 
 async def test_request_generation_refuses_when_project_not_ready(
-    db_session: AsyncSession,
+    db_session: AsyncSession, grant_membership: GrantMembership
 ) -> None:
     """request_generation requires project to be indexed."""
     project = await create_project(db_session, status=ProjectStatus.CLONING)
     module = await create_checklist_module(db_session, project_id=project.id)
     service = MockDataDatasetService(db_session, Settings())
     user = await create_user(db_session)
+    await grant_membership(user.id, project.id, EDITOR_NAME)
 
     with pytest.raises(AppError) as excinfo:
         await service.request_generation(
             module.id,
             MockDataGenerationRequest(),
-            actor=authenticated(user),
+            actor=await authenticated(db_session, user),
             queue=InMemoryIngestionQueue(),
         )
     assert excinfo.value.code == ErrorCode.PROJECT_NOT_READY
 
 
 async def test_prepare_turn_maps_history_from_prior_messages(
-    db_session: AsyncSession,
+    db_session: AsyncSession, grant_membership: GrantMembership
 ) -> None:
     """prepare_turn builds history from recent prior messages, in order, role intact.
 
@@ -460,6 +511,7 @@ async def test_prepare_turn_maps_history_from_prior_messages(
     module = await create_checklist_module(db_session, project_id=project.id)
     service = MockDataDatasetService(db_session, Settings())
     user = await create_user(db_session)
+    await grant_membership(user.id, project.id, EDITOR_NAME)
 
     await create_mock_data_message(
         db_session,
@@ -481,7 +533,7 @@ async def test_prepare_turn_maps_history_from_prior_messages(
     context = await service.prepare_turn(
         module.id,
         MockDataMessageCreateRequest(question="New question"),
-        actor=authenticated(user),
+        actor=await authenticated(db_session, user),
     )
 
     # `prepare_turn` commits the new user message before building history, so it is
@@ -499,7 +551,7 @@ async def test_get_404s_on_nonexistent_module(db_session: AsyncSession) -> None:
     user = await create_user(db_session)
 
     with pytest.raises(AppError) as excinfo:
-        await service.get(uuid.uuid4(), actor=authenticated(user))
+        await service.get(uuid.uuid4(), actor=await authenticated(db_session, user))
 
     assert excinfo.value.status_code == status.HTTP_404_NOT_FOUND
 
@@ -513,7 +565,7 @@ async def test_request_generation_404s_on_nonexistent_module(db_session: AsyncSe
         await service.request_generation(
             uuid.uuid4(),
             MockDataGenerationRequest(),
-            actor=authenticated(user),
+            actor=await authenticated(db_session, user),
             queue=InMemoryIngestionQueue(),
         )
 
@@ -526,7 +578,7 @@ async def test_messages_404s_on_nonexistent_module(db_session: AsyncSession) -> 
     user = await create_user(db_session)
 
     with pytest.raises(AppError) as excinfo:
-        await service.messages(uuid.uuid4(), actor=authenticated(user))
+        await service.messages(uuid.uuid4(), actor=await authenticated(db_session, user))
 
     assert excinfo.value.status_code == status.HTTP_404_NOT_FOUND
 
@@ -537,7 +589,7 @@ async def test_change_sets_for_404s_on_nonexistent_module(db_session: AsyncSessi
     user = await create_user(db_session)
 
     with pytest.raises(AppError) as excinfo:
-        await service.change_sets_for(uuid.uuid4(), actor=authenticated(user))
+        await service.change_sets_for(uuid.uuid4(), actor=await authenticated(db_session, user))
 
     assert excinfo.value.status_code == status.HTTP_404_NOT_FOUND
 
@@ -551,14 +603,14 @@ async def test_prepare_turn_404s_on_nonexistent_module(db_session: AsyncSession)
         await service.prepare_turn(
             uuid.uuid4(),
             MockDataMessageCreateRequest(question="Test"),
-            actor=authenticated(user),
+            actor=await authenticated(db_session, user),
         )
 
     assert excinfo.value.status_code == status.HTTP_404_NOT_FOUND
 
 
 async def test_mock_data_generation_is_refused_while_a_reindex_is_in_flight(
-    db_session: AsyncSession,
+    db_session: AsyncSession, grant_membership: GrantMembership
 ) -> None:
     """Same guard the checklist takes, for the same reason: a mock-data run stamps its
     own `indexed_generation`, and a reindex keeps `status` at `ready` throughout, so
@@ -571,12 +623,14 @@ async def test_mock_data_generation_is_refused_while_a_reindex_is_in_flight(
     await db_session.commit()
     service = MockDataDatasetService(db_session, Settings())
     queue = InMemoryIngestionQueue()
+    user = await create_user(db_session)
+    await grant_membership(user.id, project.id, EDITOR_NAME)
 
     with pytest.raises(AppError) as excinfo:
         await service.request_generation(
             module.id,
             MockDataGenerationRequest(),
-            actor=authenticated(await create_user(db_session)),
+            actor=await authenticated(db_session, user),
             queue=queue,
         )
 

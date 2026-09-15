@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import Settings
 from app.core.errors import AppError, ErrorCode
+from app.core.permissions import EDITOR_NAME
 from app.models.checklist import (
     ChangeSetStatus,
     ChecklistItemKind,
@@ -18,6 +19,7 @@ from app.models.checklist import (
 from app.repositories.checklist_item import ChecklistItemRepository
 from app.schemas.checklist import ChangeSetApplyRequest
 from app.services.checklist_change_set import ChecklistChangeSetService
+from tests.conftest import GrantMembership
 from tests.factories import (
     create_checklist_change_set,
     create_checklist_item,
@@ -41,7 +43,9 @@ def _add(
     }
 
 
-async def test_apply_adds_items_marked_generated(db_session: AsyncSession) -> None:
+async def test_apply_adds_items_marked_generated(
+    db_session: AsyncSession, grant_membership: GrantMembership
+) -> None:
     """`generated` means a model proposed it AND a human reviewed it. This path is
     the only place that combination can be produced."""
     module = await create_checklist_module(db_session)
@@ -50,10 +54,11 @@ async def test_apply_adds_items_marked_generated(db_session: AsyncSession) -> No
         db_session, module_id=module.id, operations=[_add(operation_id)]
     )
     reviewer = await create_user(db_session)
+    await grant_membership(reviewer.id, module.project_id, EDITOR_NAME)
     service = ChecklistChangeSetService(db_session, Settings())
 
     result = await service.apply(
-        change_set.id, ChangeSetApplyRequest(), actor=authenticated(reviewer)
+        change_set.id, ChangeSetApplyRequest(), actor=await authenticated(db_session, reviewer)
     )
 
     assert len(result.items) == 1
@@ -67,7 +72,7 @@ async def test_apply_adds_items_marked_generated(db_session: AsyncSession) -> No
 
 
 async def test_apply_is_selective_when_operation_ids_are_given(
-    db_session: AsyncSession,
+    db_session: AsyncSession, grant_membership: GrantMembership
 ) -> None:
     module = await create_checklist_module(db_session)
     keep, drop = uuid.uuid4(), uuid.uuid4()
@@ -77,17 +82,21 @@ async def test_apply_is_selective_when_operation_ids_are_given(
         operations=[_add(keep, test_name="kept"), _add(drop, test_name="dropped")],
     )
     service = ChecklistChangeSetService(db_session, Settings())
+    reviewer = await create_user(db_session)
+    await grant_membership(reviewer.id, module.project_id, EDITOR_NAME)
 
     result = await service.apply(
         change_set.id,
         ChangeSetApplyRequest(operation_ids=[keep]),
-        actor=authenticated(await create_user(db_session)),
+        actor=await authenticated(db_session, reviewer),
     )
 
     assert [item.test_name for item in result.items] == ["kept"]
 
 
-async def test_an_update_preserves_a_recorded_result(db_session: AsyncSession) -> None:
+async def test_an_update_preserves_a_recorded_result(
+    db_session: AsyncSession, grant_membership: GrantMembership
+) -> None:
     """The whole reason change sets exist. A regeneration that destroyed a tester's
     day of recorded results would make the feature unusable (spec 2.1)."""
     module = await create_checklist_module(db_session)
@@ -113,9 +122,11 @@ async def test_an_update_preserves_a_recorded_result(db_session: AsyncSession) -
         ],
     )
     service = ChecklistChangeSetService(db_session, Settings())
+    reviewer = await create_user(db_session)
+    await grant_membership(reviewer.id, module.project_id, EDITOR_NAME)
 
     result = await service.apply(
-        change_set.id, ChangeSetApplyRequest(), actor=authenticated(await create_user(db_session))
+        change_set.id, ChangeSetApplyRequest(), actor=await authenticated(db_session, reviewer)
     )
 
     updated = result.items[0]
@@ -125,7 +136,7 @@ async def test_an_update_preserves_a_recorded_result(db_session: AsyncSession) -
 
 
 async def test_an_operation_naming_a_vanished_item_is_skipped_not_failed(
-    db_session: AsyncSession,
+    db_session: AsyncSession, grant_membership: GrantMembership
 ) -> None:
     """The item was deleted between proposal and apply. Failing the whole set for
     that would let one stale row block three good ones (spec 3.3)."""
@@ -146,9 +157,11 @@ async def test_an_operation_naming_a_vanished_item_is_skipped_not_failed(
         ],
     )
     service = ChecklistChangeSetService(db_session, Settings())
+    reviewer = await create_user(db_session)
+    await grant_membership(reviewer.id, module.project_id, EDITOR_NAME)
 
     result = await service.apply(
-        change_set.id, ChangeSetApplyRequest(), actor=authenticated(await create_user(db_session))
+        change_set.id, ChangeSetApplyRequest(), actor=await authenticated(db_session, reviewer)
     )
 
     assert result.skipped_operation_ids == [stale_operation]
@@ -157,7 +170,7 @@ async def test_an_operation_naming_a_vanished_item_is_skipped_not_failed(
 
 
 async def test_an_operation_with_an_unparseable_item_id_is_skipped_not_failed(
-    db_session: AsyncSession,
+    db_session: AsyncSession, grant_membership: GrantMembership
 ) -> None:
     """A model can emit an `itemId` that is not a UUID at all --
     `ProposedOperation.item_id` is typed `str` for exactly this reason, so a
@@ -185,9 +198,11 @@ async def test_an_operation_with_an_unparseable_item_id_is_skipped_not_failed(
         ],
     )
     service = ChecklistChangeSetService(db_session, Settings())
+    reviewer = await create_user(db_session)
+    await grant_membership(reviewer.id, module.project_id, EDITOR_NAME)
 
     result = await service.apply(
-        change_set.id, ChangeSetApplyRequest(), actor=authenticated(await create_user(db_session))
+        change_set.id, ChangeSetApplyRequest(), actor=await authenticated(db_session, reviewer)
     )
 
     assert result.skipped_operation_ids == [bad_operation]
@@ -195,55 +210,61 @@ async def test_an_operation_with_an_unparseable_item_id_is_skipped_not_failed(
     assert result.change_set.status is ChangeSetStatus.APPLIED
 
 
-async def test_applying_an_already_resolved_set_is_409(db_session: AsyncSession) -> None:
+async def test_applying_an_already_resolved_set_is_409(
+    db_session: AsyncSession, grant_membership: GrantMembership
+) -> None:
     module = await create_checklist_module(db_session)
     change_set = await create_checklist_change_set(
         db_session, module_id=module.id, status=ChangeSetStatus.APPLIED
     )
     service = ChecklistChangeSetService(db_session, Settings())
+    reviewer = await create_user(db_session)
+    await grant_membership(reviewer.id, module.project_id, EDITOR_NAME)
 
     with pytest.raises(AppError) as caught:
         await service.apply(
             change_set.id,
             ChangeSetApplyRequest(),
-            actor=authenticated(await create_user(db_session)),
+            actor=await authenticated(db_session, reviewer),
         )
 
     assert caught.value.status_code == status.HTTP_409_CONFLICT
     assert caught.value.code is ErrorCode.CHANGE_SET_ALREADY_RESOLVED
 
 
-async def test_anyone_may_apply_because_reviewing_is_a_shared_act(
-    db_session: AsyncSession,
+async def test_any_member_may_apply_because_reviewing_is_a_shared_act(
+    db_session: AsyncSession, grant_membership: GrantMembership
 ) -> None:
     """Gating on `created_by` would mean only the person who ran the generation could
-    act on it, which is not review (spec 5.4)."""
+    act on it, which is not review (spec 5.4). It is gated on the project role instead:
+    any `editor` on the project may resolve the proposal, whoever produced it."""
     module = await create_checklist_module(db_session)
     change_set = await create_checklist_change_set(
         db_session, module_id=module.id, operations=[_add(uuid.uuid4())]
     )
-    stranger = await create_user(db_session)
+    colleague = await create_user(db_session)
+    await grant_membership(colleague.id, module.project_id, EDITOR_NAME)
     service = ChecklistChangeSetService(db_session, Settings())
 
     result = await service.apply(
-        change_set.id, ChangeSetApplyRequest(), actor=authenticated(stranger)
+        change_set.id, ChangeSetApplyRequest(), actor=await authenticated(db_session, colleague)
     )
 
-    assert result.change_set.resolved_by == stranger.id
+    assert result.change_set.resolved_by == colleague.id
 
 
 async def test_discard_writes_nothing_and_frees_the_module(
-    db_session: AsyncSession,
+    db_session: AsyncSession, grant_membership: GrantMembership
 ) -> None:
     module = await create_checklist_module(db_session, status=ChecklistModuleStatus.REVIEW)
     change_set = await create_checklist_change_set(
         db_session, module_id=module.id, operations=[_add(uuid.uuid4())]
     )
     service = ChecklistChangeSetService(db_session, Settings())
+    reviewer = await create_user(db_session)
+    await grant_membership(reviewer.id, module.project_id, EDITOR_NAME)
 
-    resolved = await service.discard(
-        change_set.id, actor=authenticated(await create_user(db_session))
-    )
+    resolved = await service.discard(change_set.id, actor=await authenticated(db_session, reviewer))
 
     assert resolved.status is ChangeSetStatus.DISCARDED
     assert await ChecklistItemRepository(db_session).list_for_module(module.id) == []
@@ -251,15 +272,19 @@ async def test_discard_writes_nothing_and_frees_the_module(
     assert module.status == ChecklistModuleStatus.EMPTY.value
 
 
-async def test_applying_moves_the_module_to_ready(db_session: AsyncSession) -> None:
+async def test_applying_moves_the_module_to_ready(
+    db_session: AsyncSession, grant_membership: GrantMembership
+) -> None:
     module = await create_checklist_module(db_session, status=ChecklistModuleStatus.REVIEW)
     change_set = await create_checklist_change_set(
         db_session, module_id=module.id, operations=[_add(uuid.uuid4())]
     )
     service = ChecklistChangeSetService(db_session, Settings())
+    reviewer = await create_user(db_session)
+    await grant_membership(reviewer.id, module.project_id, EDITOR_NAME)
 
     await service.apply(
-        change_set.id, ChangeSetApplyRequest(), actor=authenticated(await create_user(db_session))
+        change_set.id, ChangeSetApplyRequest(), actor=await authenticated(db_session, reviewer)
     )
 
     await db_session.refresh(module)
@@ -267,7 +292,7 @@ async def test_applying_moves_the_module_to_ready(db_session: AsyncSession) -> N
 
 
 async def test_update_rejects_forbidden_fields_in_the_allowlist(
-    db_session: AsyncSession,
+    db_session: AsyncSession, grant_membership: GrantMembership
 ) -> None:
     """The update allowlist (`UPDATABLE_FIELDS`) gates which fields a model-authored
     `changes` payload may write. `status`, `currentResult`, and `createdBy` must not be
@@ -302,9 +327,11 @@ async def test_update_rejects_forbidden_fields_in_the_allowlist(
         ],
     )
     service = ChecklistChangeSetService(db_session, Settings())
+    reviewer = await create_user(db_session)
+    await grant_membership(reviewer.id, module.project_id, EDITOR_NAME)
 
     result = await service.apply(
-        change_set.id, ChangeSetApplyRequest(), actor=authenticated(await create_user(db_session))
+        change_set.id, ChangeSetApplyRequest(), actor=await authenticated(db_session, reviewer)
     )
 
     updated = result.items[0]
@@ -314,7 +341,7 @@ async def test_update_rejects_forbidden_fields_in_the_allowlist(
 
 
 async def test_an_operation_on_an_item_from_another_module_is_skipped(
-    db_session: AsyncSession,
+    db_session: AsyncSession, grant_membership: GrantMembership
 ) -> None:
     """The vanished-item guard checks both that the item exists and that it belongs
     to the target module. An item from a different module is silently skipped, not
@@ -346,9 +373,11 @@ async def test_an_operation_on_an_item_from_another_module_is_skipped(
         ],
     )
     service = ChecklistChangeSetService(db_session, Settings())
+    reviewer = await create_user(db_session)
+    await grant_membership(reviewer.id, target_module.project_id, EDITOR_NAME)
 
     result = await service.apply(
-        change_set.id, ChangeSetApplyRequest(), actor=authenticated(await create_user(db_session))
+        change_set.id, ChangeSetApplyRequest(), actor=await authenticated(db_session, reviewer)
     )
 
     assert result.skipped_operation_ids == [cross_module_operation]
@@ -359,7 +388,7 @@ async def test_an_operation_on_an_item_from_another_module_is_skipped(
 
 
 async def test_apply_ignores_an_unrecognised_kind_in_an_update(
-    db_session: AsyncSession,
+    db_session: AsyncSession, grant_membership: GrantMembership
 ) -> None:
     """`kind` is on the update allowlist, but unlike the free-text fields it is
     checked against the enum: the grid filters and the export group on it, so a value
@@ -389,11 +418,13 @@ async def test_apply_ignores_an_unrecognised_kind_in_an_update(
         ],
     )
     service = ChecklistChangeSetService(db_session, Settings())
+    reviewer = await create_user(db_session)
+    await grant_membership(reviewer.id, module.project_id, EDITOR_NAME)
 
     await service.apply(
         change_set.id,
         ChangeSetApplyRequest(operation_ids=None),
-        actor=authenticated(await create_user(db_session)),
+        actor=await authenticated(db_session, reviewer),
     )
 
     await db_session.refresh(item)

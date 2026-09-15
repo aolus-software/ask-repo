@@ -5,7 +5,10 @@ from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import Settings
+from app.core.permissions import VIEWER_NAME
 from app.models.project import Project, ProjectStatus
+from app.models.user import User
+from tests.conftest import GrantMembership
 from tests.factories import create_checklist_module, create_mock_data_record, create_project
 
 
@@ -70,11 +73,32 @@ async def test_generate_twice_conflicts(
 
 @pytest.mark.asyncio
 async def test_delete_record_requires_ownership(
-    client_for_user_b: AsyncClient, db_session: AsyncSession
+    client_for_user_b: AsyncClient,
+    user_b: User,
+    grant_membership: GrantMembership,
+    db_session: AsyncSession,
 ) -> None:
     """A record created by someone else cannot be deleted by a non-admin caller who
-    is not its owner -- `403`, not `404`, because the module (and therefore the
-    dataset and its records) is readable by every authenticated user."""
+    is not its owner -- `403`, not `404`, because user B holds a role on the project
+    and therefore already sees the module, the dataset and the record. A caller with
+    no membership gets `404` instead; that is the row below."""
+    project = await _ready_project(db_session)
+    module = await create_checklist_module(db_session, project_id=project.id)
+    record = await create_mock_data_record(db_session, module_id=module.id)
+    await db_session.commit()
+    await grant_membership(user_b.id, project.id, VIEWER_NAME)
+
+    response = await client_for_user_b.delete(f"/mock-data-records/{record.id}")
+
+    assert response.status_code == 403
+    assert response.json()["detail"]["code"] == "NOT_MOCK_DATA_RECORD_OWNER"
+
+
+async def test_delete_record_is_404_for_a_non_member(
+    client_for_user_b: AsyncClient, db_session: AsyncSession
+) -> None:
+    """The counterpart of the row above: with no membership the record must not be
+    distinguishable from one that does not exist."""
     project = await _ready_project(db_session)
     module = await create_checklist_module(db_session, project_id=project.id)
     record = await create_mock_data_record(db_session, module_id=module.id)
@@ -82,5 +106,4 @@ async def test_delete_record_requires_ownership(
 
     response = await client_for_user_b.delete(f"/mock-data-records/{record.id}")
 
-    assert response.status_code == 403
-    assert response.json()["detail"]["code"] == "NOT_MOCK_DATA_RECORD_OWNER"
+    assert response.status_code == 404

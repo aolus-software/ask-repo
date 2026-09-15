@@ -7,10 +7,13 @@ from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
+from app.core.permissions import VIEWER_NAME
 from app.ingestion.chunker import Chunk
 from app.ingestion.embedder import FakeEmbedder
 from app.ingestion.vector_store import InMemoryVectorStore
 from app.models.project import ProjectStatus
+from app.models.user import User
+from tests.conftest import GrantMembership
 from tests.factories import create_conversation, create_project, create_user
 
 
@@ -70,10 +73,15 @@ async def own_conversation(client: AsyncClient, project_id: uuid.UUID) -> str:
 
 
 async def test_creating_a_conversation_returns_camel_case(
-    authed_client: AsyncClient, db_session: AsyncSession, vector_store: InMemoryVectorStore
+    authed_client: AsyncClient,
+    authed_user: User,
+    grant_membership: GrantMembership,
+    db_session: AsyncSession,
+    vector_store: InMemoryVectorStore,
 ) -> None:
     user = await create_user(db_session)
     project_id = await seed_ready_project(db_session, vector_store, user.id)
+    await grant_membership(authed_user.id, project_id, VIEWER_NAME)
 
     response = await authed_client.post("/conversations", json={"projectId": str(project_id)})
 
@@ -83,11 +91,16 @@ async def test_creating_a_conversation_returns_camel_case(
 
 
 async def test_asking_streams_citations_then_tokens_then_done(
-    authed_client: AsyncClient, db_session: AsyncSession, vector_store: InMemoryVectorStore
+    authed_client: AsyncClient,
+    authed_user: User,
+    grant_membership: GrantMembership,
+    db_session: AsyncSession,
+    vector_store: InMemoryVectorStore,
 ) -> None:
     """The ordering contract, asserted on the wire rather than on the answerer."""
     user = await create_user(db_session)
     project_id = await seed_ready_project(db_session, vector_store, user.id)
+    await grant_membership(authed_user.id, project_id, VIEWER_NAME)
     conversation_id = await own_conversation(authed_client, project_id)
 
     response = await authed_client.post(
@@ -104,12 +117,17 @@ async def test_asking_streams_citations_then_tokens_then_done(
 
 
 async def test_the_stream_carries_the_no_buffering_headers(
-    authed_client: AsyncClient, db_session: AsyncSession, vector_store: InMemoryVectorStore
+    authed_client: AsyncClient,
+    authed_user: User,
+    grant_membership: GrantMembership,
+    db_session: AsyncSession,
+    vector_store: InMemoryVectorStore,
 ) -> None:
     """Without these a proxy accumulates the whole stream and delivers it at once,
     which defeats the entire point of streaming."""
     user = await create_user(db_session)
     project_id = await seed_ready_project(db_session, vector_store, user.id)
+    await grant_membership(authed_user.id, project_id, VIEWER_NAME)
     conversation_id = await own_conversation(authed_client, project_id)
 
     response = await authed_client.post(
@@ -121,11 +139,16 @@ async def test_the_stream_carries_the_no_buffering_headers(
 
 
 async def test_citation_payloads_are_camel_case(
-    authed_client: AsyncClient, db_session: AsyncSession, vector_store: InMemoryVectorStore
+    authed_client: AsyncClient,
+    authed_user: User,
+    grant_membership: GrantMembership,
+    db_session: AsyncSession,
+    vector_store: InMemoryVectorStore,
 ) -> None:
     """These never pass through a response_model, so nothing in FastAPI enforces it."""
     user = await create_user(db_session)
     project_id = await seed_ready_project(db_session, vector_store, user.id)
+    await grant_membership(authed_user.id, project_id, VIEWER_NAME)
     conversation_id = await own_conversation(authed_client, project_id)
 
     response = await authed_client.post(
@@ -140,10 +163,15 @@ async def test_citation_payloads_are_camel_case(
 
 
 async def test_the_answer_is_readable_afterwards(
-    authed_client: AsyncClient, db_session: AsyncSession, vector_store: InMemoryVectorStore
+    authed_client: AsyncClient,
+    authed_user: User,
+    grant_membership: GrantMembership,
+    db_session: AsyncSession,
+    vector_store: InMemoryVectorStore,
 ) -> None:
     user = await create_user(db_session)
     project_id = await seed_ready_project(db_session, vector_store, user.id)
+    await grant_membership(authed_user.id, project_id, VIEWER_NAME)
     conversation_id = await own_conversation(authed_client, project_id)
     await authed_client.post(f"/conversations/{conversation_id}/messages", json={"question": "q"})
 
@@ -156,10 +184,15 @@ async def test_the_answer_is_readable_afterwards(
 
 
 async def test_the_title_comes_from_the_first_question(
-    authed_client: AsyncClient, db_session: AsyncSession, vector_store: InMemoryVectorStore
+    authed_client: AsyncClient,
+    authed_user: User,
+    grant_membership: GrantMembership,
+    db_session: AsyncSession,
+    vector_store: InMemoryVectorStore,
 ) -> None:
     user = await create_user(db_session)
     project_id = await seed_ready_project(db_session, vector_store, user.id)
+    await grant_membership(authed_user.id, project_id, VIEWER_NAME)
     conversation_id = await own_conversation(authed_client, project_id)
 
     await authed_client.post(
@@ -173,14 +206,25 @@ async def test_the_title_comes_from_the_first_question(
 async def test_another_user_cannot_reach_the_conversation_at_all(
     client_for_user_a: AsyncClient,
     client_for_user_b: AsyncClient,
+    user_a: User,
+    user_b: User,
+    grant_membership: GrantMembership,
     db_session: AsyncSession,
     vector_store: InMemoryVectorStore,
 ) -> None:
     """docs/PRD.md §7: user B cannot list or read user A's conversations, and gets
     404 rather than 403. All four routes, because one that returns 403 confirms
-    existence and undoes the other three."""
+    existence and undoes the other three.
+
+    **Both users are members of the project**, deliberately. If B were not, every
+    `404` here could be explained by the project being invisible to them, and the
+    test would prove nothing about conversation privacy -- which is a separate
+    boundary that RBAC does not widen and no permission can reach.
+    """
     user = await create_user(db_session)
     project_id = await seed_ready_project(db_session, vector_store, user.id)
+    await grant_membership(user_a.id, project_id, VIEWER_NAME)
+    await grant_membership(user_b.id, project_id, VIEWER_NAME)
     conversation_id = await own_conversation(client_for_user_a, project_id)
 
     assert (await client_for_user_b.get(f"/conversations/{conversation_id}")).status_code == 404
@@ -196,24 +240,33 @@ async def test_another_user_cannot_reach_the_conversation_at_all(
 async def test_an_admin_is_not_an_exception(
     client_for_user_a: AsyncClient,
     client_for_admin: AsyncClient,
+    user_a: User,
+    grant_membership: GrantMembership,
     db_session: AsyncSession,
     vector_store: InMemoryVectorStore,
 ) -> None:
-    """is_admin gates destructive operations on shared resources. Conversations are
-    not shared, and §4.2 states their privacy without qualification."""
+    """is_admin gates destructive operations on shared resources, and under RBAC it
+    also sees every project. Conversations are the exception it never reaches: §4.2
+    states their privacy without qualification, and the catalogue carries no
+    `conversation.*` permission for an administrator to bypass into."""
     user = await create_user(db_session)
     project_id = await seed_ready_project(db_session, vector_store, user.id)
+    await grant_membership(user_a.id, project_id, VIEWER_NAME)
     conversation_id = await own_conversation(client_for_user_a, project_id)
 
     assert (await client_for_admin.get(f"/conversations/{conversation_id}")).status_code == 404
 
 
 async def test_asking_a_project_that_is_not_ready_is_409(
-    authed_client: AsyncClient, db_session: AsyncSession
+    authed_client: AsyncClient,
+    authed_user: User,
+    grant_membership: GrantMembership,
+    db_session: AsyncSession,
 ) -> None:
     user = await create_user(db_session)
     project = await create_project(db_session, created_by=user.id, status=ProjectStatus.INDEXING)
     await db_session.commit()
+    await grant_membership(authed_user.id, project.id, VIEWER_NAME)
     created = await authed_client.post("/conversations", json={"projectId": str(project.id)})
 
     response = await authed_client.post(
@@ -234,10 +287,15 @@ async def test_a_conversation_against_an_unknown_project_is_404(
 
 
 async def test_an_empty_question_is_422(
-    authed_client: AsyncClient, db_session: AsyncSession, vector_store: InMemoryVectorStore
+    authed_client: AsyncClient,
+    authed_user: User,
+    grant_membership: GrantMembership,
+    db_session: AsyncSession,
+    vector_store: InMemoryVectorStore,
 ) -> None:
     user = await create_user(db_session)
     project_id = await seed_ready_project(db_session, vector_store, user.id)
+    await grant_membership(authed_user.id, project_id, VIEWER_NAME)
     conversation_id = await own_conversation(authed_client, project_id)
 
     response = await authed_client.post(
@@ -249,10 +307,15 @@ async def test_an_empty_question_is_422(
 
 
 async def test_deleting_a_conversation_hides_it(
-    authed_client: AsyncClient, db_session: AsyncSession, vector_store: InMemoryVectorStore
+    authed_client: AsyncClient,
+    authed_user: User,
+    grant_membership: GrantMembership,
+    db_session: AsyncSession,
+    vector_store: InMemoryVectorStore,
 ) -> None:
     user = await create_user(db_session)
     project_id = await seed_ready_project(db_session, vector_store, user.id)
+    await grant_membership(authed_user.id, project_id, VIEWER_NAME)
     conversation_id = await own_conversation(authed_client, project_id)
 
     assert (await authed_client.delete(f"/conversations/{conversation_id}")).status_code == 204

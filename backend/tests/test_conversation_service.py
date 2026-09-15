@@ -9,30 +9,18 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
 from app.core.errors import AppError, ErrorCode
-from app.core.middleware import AuthenticatedUser
 from app.db.session import get_sessionmaker
 from app.models.conversation import FinishReason, MessageRole
 from app.models.project import Project, ProjectStatus
-from app.models.user import User
 from app.rag.answerer import Answerer
 from app.repositories.conversation import MessageRepository
 from app.schemas.conversation import MessageCreateRequest
 from app.services.conversation import ConversationService, stream_turn
 from tests.factories import create_conversation, create_project, create_user
 from tests.fakes import ScriptedChatModel
+from tests.helpers import authenticated
 from tests.test_answerer import RecordingRetriever
 from tests.test_retriever import _span
-
-
-def actor_for(user: User) -> AuthenticatedUser:
-    """The frozen identity the middleware would have built for this row."""
-    return AuthenticatedUser(
-        id=user.id,
-        name=user.name,
-        email=user.email,
-        is_admin=user.is_admin,
-        must_change_password=False,
-    )
 
 
 def service_for(session: AsyncSession) -> ConversationService:
@@ -59,7 +47,9 @@ async def test_another_users_conversation_is_404_not_403(db_session: AsyncSessio
     await db_session.commit()
 
     with pytest.raises(AppError) as caught:
-        await service_for(db_session).get(conversation.id, actor=actor_for(intruder))
+        await service_for(db_session).get(
+            conversation.id, actor=await authenticated(db_session, intruder)
+        )
 
     assert caught.value.status_code == status.HTTP_404_NOT_FOUND
     assert caught.value.code is ErrorCode.CONVERSATION_NOT_FOUND
@@ -74,7 +64,9 @@ async def test_an_admin_gets_404_too(db_session: AsyncSession) -> None:
     await db_session.commit()
 
     with pytest.raises(AppError) as caught:
-        await service_for(db_session).get(conversation.id, actor=actor_for(admin))
+        await service_for(db_session).get(
+            conversation.id, actor=await authenticated(db_session, admin)
+        )
 
     assert caught.value.status_code == status.HTTP_404_NOT_FOUND
 
@@ -87,7 +79,9 @@ async def test_a_project_that_is_not_ready_is_409(db_session: AsyncSession) -> N
 
     with pytest.raises(AppError) as caught:
         await service_for(db_session).prepare_turn(
-            conversation.id, MessageCreateRequest(question="q"), actor=actor_for(user)
+            conversation.id,
+            MessageCreateRequest(question="q"),
+            actor=await authenticated(db_session, user),
         )
 
     assert caught.value.status_code == status.HTTP_409_CONFLICT
@@ -106,7 +100,9 @@ async def test_a_changed_embedding_model_is_409(db_session: AsyncSession) -> Non
 
     with pytest.raises(AppError) as caught:
         await service_for(db_session).prepare_turn(
-            conversation.id, MessageCreateRequest(question="q"), actor=actor_for(user)
+            conversation.id,
+            MessageCreateRequest(question="q"),
+            actor=await authenticated(db_session, user),
         )
 
     assert caught.value.status_code == status.HTTP_409_CONFLICT
@@ -126,7 +122,7 @@ async def test_prepare_turn_persists_the_question_and_titles_the_thread(
     context = await service_for(db_session).prepare_turn(
         conversation.id,
         MessageCreateRequest(question="How does the lease work?"),
-        actor=actor_for(user),
+        actor=await authenticated(db_session, user),
     )
 
     messages = await MessageRepository(db_session).list_for_conversation(conversation.id)
@@ -146,10 +142,14 @@ async def test_the_title_is_not_overwritten_by_the_second_question(
     service = service_for(db_session)
 
     await service.prepare_turn(
-        conversation.id, MessageCreateRequest(question="first"), actor=actor_for(user)
+        conversation.id,
+        MessageCreateRequest(question="first"),
+        actor=await authenticated(db_session, user),
     )
     await service.prepare_turn(
-        conversation.id, MessageCreateRequest(question="second"), actor=actor_for(user)
+        conversation.id,
+        MessageCreateRequest(question="second"),
+        actor=await authenticated(db_session, user),
     )
     await db_session.refresh(conversation)
 
@@ -166,11 +166,15 @@ async def test_history_excludes_turns_that_did_not_finish(db_session: AsyncSessi
     service = service_for(db_session)
 
     await service.prepare_turn(
-        conversation.id, MessageCreateRequest(question="first"), actor=actor_for(user)
+        conversation.id,
+        MessageCreateRequest(question="first"),
+        actor=await authenticated(db_session, user),
     )
     await _store_assistant(db_session, conversation.id, "cut off", FinishReason.ERROR)
     context = await service.prepare_turn(
-        conversation.id, MessageCreateRequest(question="second"), actor=actor_for(user)
+        conversation.id,
+        MessageCreateRequest(question="second"),
+        actor=await authenticated(db_session, user),
     )
 
     assert "cut off" not in [turn.content for turn in context.history]
@@ -184,7 +188,9 @@ async def test_a_broken_stream_persists_the_partial_answer(db_session: AsyncSess
     conversation = await create_conversation(db_session, user_id=user.id, project_id=project.id)
     await db_session.commit()
     context = await service_for(db_session).prepare_turn(
-        conversation.id, MessageCreateRequest(question="q"), actor=actor_for(user)
+        conversation.id,
+        MessageCreateRequest(question="q"),
+        actor=await authenticated(db_session, user),
     )
     answerer = Answerer(
         retriever=RecordingRetriever(spans=[_span("app/a.py", 0, 1, 10)]),
@@ -219,7 +225,9 @@ async def test_a_client_disconnect_persists_the_partial_and_releases_the_permit(
     conversation = await create_conversation(db_session, user_id=user.id, project_id=project.id)
     await db_session.commit()
     context = await service_for(db_session).prepare_turn(
-        conversation.id, MessageCreateRequest(question="q"), actor=actor_for(user)
+        conversation.id,
+        MessageCreateRequest(question="q"),
+        actor=await authenticated(db_session, user),
     )
     semaphore = asyncio.Semaphore(1)
     answerer = Answerer(

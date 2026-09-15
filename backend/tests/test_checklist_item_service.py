@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import Settings
 from app.core.errors import AppError, ErrorCode
+from app.core.permissions import EDITOR_NAME, VIEWER_NAME
 from app.models.checklist import ChecklistItemSource, ChecklistItemStatus
 from app.schemas.checklist import (
     ChecklistItemCreateRequest,
@@ -17,13 +18,16 @@ from app.schemas.checklist import (
     ChecklistResultsClearRequest,
 )
 from app.services.checklist_item import ChecklistItemService
+from tests.conftest import GrantMembership
 from tests.factories import create_checklist_item, create_checklist_module, create_user
 from tests.helpers import authenticated
 
 
-async def test_any_user_may_record_a_result(db_session: AsyncSession) -> None:
+async def test_any_member_may_record_a_result(
+    db_session: AsyncSession, grant_membership: GrantMembership
+) -> None:
     """A tester who did not author the checklist must be able to record what they
-    observed. Ungated, deliberately (spec 2.5)."""
+    observed. `result.record` sits with `viewer`, deliberately (spec 2.5)."""
     module = await create_checklist_module(db_session)
     item = await create_checklist_item(
         db_session,
@@ -32,12 +36,13 @@ async def test_any_user_may_record_a_result(db_session: AsyncSession) -> None:
         created_by=module.created_by,
     )
     tester = await create_user(db_session)
+    await grant_membership(tester.id, module.project_id, VIEWER_NAME)
     service = ChecklistItemService(db_session, Settings())
 
     result = await service.set_result(
         item.id,
         ChecklistItemResultRequest(current_result="Returned 500", status=ChecklistItemStatus.FAIL),
-        actor=authenticated(tester),
+        actor=await authenticated(db_session, tester),
     )
 
     assert result.current_result == "Returned 500"
@@ -47,9 +52,16 @@ async def test_any_user_may_record_a_result(db_session: AsyncSession) -> None:
     assert result.reviewed_at is not None
 
 
-async def test_a_tester_cannot_rewrite_the_expectation(db_session: AsyncSession) -> None:
+async def test_a_tester_cannot_rewrite_the_expectation(
+    db_session: AsyncSession, grant_membership: GrantMembership
+) -> None:
     """Otherwise the cheapest way to make a failing test pass is to edit what was
-    expected -- which is the whole reason the two writes are separate routes."""
+    expected -- which is the whole reason the two writes are separate routes.
+
+    The tester is a member, so this is a `403`: they can see the item and are refused
+    the write. A non-member would get `404` instead -- see
+    `test_delete_is_gated_and_hides_the_item`.
+    """
     module = await create_checklist_module(db_session)
     item = await create_checklist_item(
         db_session,
@@ -58,13 +70,14 @@ async def test_a_tester_cannot_rewrite_the_expectation(db_session: AsyncSession)
         created_by=module.created_by,
     )
     tester = await create_user(db_session)
+    await grant_membership(tester.id, module.project_id, VIEWER_NAME)
     service = ChecklistItemService(db_session, Settings())
 
     with pytest.raises(AppError) as caught:
         await service.update(
             item.id,
             ChecklistItemUpdateRequest(expected_result="Anything is fine"),
-            actor=authenticated(tester),
+            actor=await authenticated(db_session, tester),
         )
 
     assert caught.value.status_code == status.HTTP_403_FORBIDDEN
@@ -72,7 +85,7 @@ async def test_a_tester_cannot_rewrite_the_expectation(db_session: AsyncSession)
 
 
 async def test_setting_a_result_back_to_untested_clears_the_reviewer(
-    db_session: AsyncSession,
+    db_session: AsyncSession, grant_membership: GrantMembership
 ) -> None:
     """`untested` means nobody has looked. Leaving a reviewer on it would say someone
     did, and the pass rate would be computed against a verdict that was withdrawn."""
@@ -86,16 +99,17 @@ async def test_setting_a_result_back_to_untested_clears_the_reviewer(
     )
     service = ChecklistItemService(db_session, Settings())
     tester = await create_user(db_session)
+    await grant_membership(tester.id, module.project_id, VIEWER_NAME)
     await service.set_result(
         item.id,
         ChecklistItemResultRequest(current_result="ok", status=ChecklistItemStatus.PASS),
-        actor=authenticated(tester),
+        actor=await authenticated(db_session, tester),
     )
 
     result = await service.set_result(
         item.id,
         ChecklistItemResultRequest(current_result=None, status=ChecklistItemStatus.UNTESTED),
-        actor=authenticated(tester),
+        actor=await authenticated(db_session, tester),
     )
 
     assert result.reviewed_by is None
@@ -104,7 +118,7 @@ async def test_setting_a_result_back_to_untested_clears_the_reviewer(
 
 
 async def test_a_manual_item_is_marked_manual_and_positioned_last(
-    db_session: AsyncSession,
+    db_session: AsyncSession, grant_membership: GrantMembership
 ) -> None:
     module = await create_checklist_module(db_session)
     await create_checklist_item(
@@ -116,6 +130,8 @@ async def test_a_manual_item_is_marked_manual_and_positioned_last(
         position=0,
     )
     service = ChecklistItemService(db_session, Settings())
+    author = await create_user(db_session)
+    await grant_membership(author.id, module.project_id, EDITOR_NAME)
 
     created = await service.create(
         ChecklistItemCreateRequest(
@@ -124,7 +140,7 @@ async def test_a_manual_item_is_marked_manual_and_positioned_last(
             test_name="Rejects an empty password",
             expected_result="422 VALIDATION_ERROR",
         ),
-        actor=authenticated(await create_user(db_session)),
+        actor=await authenticated(db_session, author),
     )
 
     assert created.source is ChecklistItemSource.MANUAL
@@ -135,7 +151,9 @@ async def test_a_manual_item_is_marked_manual_and_positioned_last(
     assert created.current_result is None
 
 
-async def test_export_refuses_above_the_cap(db_session: AsyncSession) -> None:
+async def test_export_refuses_above_the_cap(
+    db_session: AsyncSession, grant_membership: GrantMembership
+) -> None:
     """`openpyxl` allocates the whole book in memory even write-only, so the cap is
     the only thing bounding it."""
     module = await create_checklist_module(db_session)
@@ -148,10 +166,12 @@ async def test_export_refuses_above_the_cap(db_session: AsyncSession) -> None:
             position=index,
         )
     service = ChecklistItemService(db_session, Settings(checklist_export_max_rows=2))
+    reader = await create_user(db_session)
+    await grant_membership(reader.id, module.project_id, VIEWER_NAME)
 
     with pytest.raises(AppError) as caught:
         await service.export(
-            ChecklistItemListQuery(), actor=authenticated(await create_user(db_session))
+            ChecklistItemListQuery(), actor=await authenticated(db_session, reader)
         )
 
     assert caught.value.status_code == status.HTTP_409_CONFLICT
@@ -159,7 +179,7 @@ async def test_export_refuses_above_the_cap(db_session: AsyncSession) -> None:
 
 
 async def test_export_applies_the_same_filters_and_ignores_pagination(
-    db_session: AsyncSession,
+    db_session: AsyncSession, grant_membership: GrantMembership
 ) -> None:
     """The point is to get the whole filtered set into one file (spec 7)."""
     module = await create_checklist_module(db_session)
@@ -173,10 +193,12 @@ async def test_export_applies_the_same_filters_and_ignores_pagination(
             status=ChecklistItemStatus.PASS if index else ChecklistItemStatus.FAIL,
         )
     service = ChecklistItemService(db_session, Settings())
+    reader = await create_user(db_session)
+    await grant_membership(reader.id, module.project_id, VIEWER_NAME)
 
     content = await service.export(
         ChecklistItemListQuery(limit=1, status=ChecklistItemStatus.PASS),
-        actor=authenticated(await create_user(db_session)),
+        actor=await authenticated(db_session, reader),
     )
 
     from io import BytesIO
@@ -211,7 +233,7 @@ async def test_update_changes_the_definition_and_leaves_the_result_alone(
     await service.set_result(
         item.id,
         ChecklistItemResultRequest(current_result="Returned 500", status=ChecklistItemStatus.FAIL),
-        actor=authenticated(creator),
+        actor=await authenticated(db_session, creator),
     )
 
     updated = await service.update(
@@ -222,7 +244,7 @@ async def test_update_changes_the_definition_and_leaves_the_result_alone(
             expected_result="409 EMAIL_ALREADY_EXISTS",
             notes="Edge case",
         ),
-        actor=authenticated(creator),
+        actor=await authenticated(db_session, creator),
     )
 
     assert updated.feature == "Signup"
@@ -235,11 +257,11 @@ async def test_update_changes_the_definition_and_leaves_the_result_alone(
 
 
 async def test_list_is_scoped_and_filters_within_the_scope(
-    db_session: AsyncSession,
+    db_session: AsyncSession, grant_membership: GrantMembership
 ) -> None:
-    """`list` returns items from modules the caller did not create -- phase 1 shares
-    everything -- and its `module_id` filter narrows within that scope rather than
-    replacing it."""
+    """`list` returns items from modules the caller did not create but is a member of
+    -- scope is membership, never `created_by` -- and its `module_id` filter narrows
+    within that scope rather than replacing it."""
     creator = await create_user(db_session)
     module = await create_checklist_module(db_session, created_by=creator.id)
     item_in_module = await create_checklist_item(
@@ -258,23 +280,34 @@ async def test_list_is_scoped_and_filters_within_the_scope(
         feature="Signup",
     )
     caller = await create_user(db_session)
+    await grant_membership(caller.id, module.project_id, VIEWER_NAME)
+    await grant_membership(caller.id, other_module.project_id, VIEWER_NAME)
     service = ChecklistItemService(db_session, Settings())
 
-    unfiltered = await service.list(ChecklistItemListQuery(), actor=authenticated(caller))
+    unfiltered = await service.list(
+        ChecklistItemListQuery(), actor=await authenticated(db_session, caller)
+    )
     unfiltered_ids = {row.id for row in unfiltered.items}
     assert item_in_module.id in unfiltered_ids
     assert item_in_other_module.id in unfiltered_ids
 
     filtered = await service.list(
-        ChecklistItemListQuery(module_id=module.id), actor=authenticated(caller)
+        ChecklistItemListQuery(module_id=module.id), actor=await authenticated(db_session, caller)
     )
     filtered_ids = {row.id for row in filtered.items}
     assert filtered_ids == {item_in_module.id}
 
 
-async def test_delete_is_gated_and_hides_the_item(db_session: AsyncSession) -> None:
-    """Soft delete: a stranger gets 403 (existence is not a secret), the creator
-    succeeds, and the item stops appearing in `list` afterwards."""
+async def test_delete_is_gated_and_hides_the_item(
+    db_session: AsyncSession, grant_membership: GrantMembership
+) -> None:
+    """Soft delete, and the two refusals the status table keeps apart.
+
+    A **non-member** gets `404`: once projects are not shared, "you may not see this"
+    and "this does not exist" are the same answer. A **member** whose role is too low
+    gets `403` -- they can already see the item, so `404` would contradict the list
+    they just rendered. The creator succeeds, and the item stops appearing in `list`.
+    """
     creator = await create_user(db_session)
     module = await create_checklist_module(db_session, created_by=creator.id)
     item = await create_checklist_item(
@@ -284,23 +317,29 @@ async def test_delete_is_gated_and_hides_the_item(db_session: AsyncSession) -> N
         created_by=creator.id,
     )
     stranger = await create_user(db_session)
+    member = await create_user(db_session)
+    await grant_membership(member.id, module.project_id, VIEWER_NAME)
     service = ChecklistItemService(db_session, Settings())
 
-    with pytest.raises(AppError) as caught:
-        await service.delete(item.id, actor=authenticated(stranger))
-    assert caught.value.status_code == status.HTTP_403_FORBIDDEN
-    assert caught.value.code is ErrorCode.NOT_CHECKLIST_OWNER
+    with pytest.raises(AppError) as unseen:
+        await service.delete(item.id, actor=await authenticated(db_session, stranger))
+    assert unseen.value.status_code == status.HTTP_404_NOT_FOUND
 
-    await service.delete(item.id, actor=authenticated(creator))
+    with pytest.raises(AppError) as refused:
+        await service.delete(item.id, actor=await authenticated(db_session, member))
+    assert refused.value.status_code == status.HTTP_403_FORBIDDEN
+    assert refused.value.code is ErrorCode.NOT_CHECKLIST_OWNER
+
+    await service.delete(item.id, actor=await authenticated(db_session, creator))
 
     remaining = await service.list(
-        ChecklistItemListQuery(module_id=module.id), actor=authenticated(creator)
+        ChecklistItemListQuery(module_id=module.id), actor=await authenticated(db_session, creator)
     )
     assert item.id not in {row.id for row in remaining.items}
 
 
-async def test_clear_results_is_open_to_a_user_who_did_not_create_the_checklist(
-    db_session: AsyncSession,
+async def test_clear_results_is_open_to_a_member_who_did_not_create_the_checklist(
+    db_session: AsyncSession, grant_membership: GrantMembership
 ) -> None:
     """Ungated, exactly like the result write it undoes (spec 2.5).
 
@@ -318,10 +357,12 @@ async def test_clear_results_is_open_to_a_user_who_did_not_create_the_checklist(
         current_result="200 OK",
     )
     service = ChecklistItemService(db_session, Settings())
-    stranger = authenticated(await create_user(db_session))
+    tester = await create_user(db_session)
+    await grant_membership(tester.id, module.project_id, VIEWER_NAME)
 
     response = await service.clear_results(
-        ChecklistResultsClearRequest(module_id=module.id), actor=stranger
+        ChecklistResultsClearRequest(module_id=module.id),
+        actor=await authenticated(db_session, tester),
     )
 
     assert response.cleared_count == 1
@@ -340,7 +381,7 @@ async def test_clear_results_404s_on_a_module_outside_the_scope(
     with pytest.raises(AppError) as caught:
         await service.clear_results(
             ChecklistResultsClearRequest(module_id=uuid.uuid4()),
-            actor=authenticated(await create_user(db_session)),
+            actor=await authenticated(db_session, await create_user(db_session)),
         )
 
     assert caught.value.status_code == 404
