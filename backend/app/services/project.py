@@ -18,6 +18,7 @@ from app.config import Settings
 from app.core import access
 from app.core.crypto import SecretBox
 from app.core.errors import AppError, ErrorCode
+from app.core.grant_cache import get_grant_cache
 from app.core.middleware import AuthenticatedUser
 from app.core.permissions import OWNER_NAME, Permission
 from app.core.repo_url import RepoUrlRejected, validate_repo_url
@@ -132,6 +133,7 @@ class ProjectService:
             granted_by=actor.id,
         )
         await self.session.commit()
+        await get_grant_cache().invalidate_user(actor.id)
 
         # Produced after the commit: a message referencing an uncommitted row would
         # race the worker. The reconcile sweep covers a produce that fails here.

@@ -18,6 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core import access
 from app.core.errors import AppError, ErrorCode
+from app.core.grant_cache import get_grant_cache
 from app.core.middleware import AuthenticatedUser
 from app.core.permissions import OWNER_NAME, Permission
 from app.models.membership import ProjectMembership
@@ -90,6 +91,7 @@ class MembershipService:
         )
         self.session.add(membership)
         await self.session.commit()
+        await get_grant_cache().invalidate_user(user.id)
 
         return MemberResponse(
             user_id=user.id,
@@ -126,6 +128,7 @@ class MembershipService:
 
         membership.role_id = role.id
         await self.session.commit()
+        await get_grant_cache().invalidate_user(user_id)
 
         user = await self._users.get(user_id)
         assert user is not None  # type: ignore[assert-type]
@@ -155,6 +158,7 @@ class MembershipService:
 
         membership.deleted_at = datetime.now(UTC)
         await self.session.commit()
+        await get_grant_cache().invalidate_user(user_id)
 
     async def _refuse_if_last_owner(self, project_id: uuid.UUID, user_id: uuid.UUID) -> None:
         """Every live project keeps at least one live owner.

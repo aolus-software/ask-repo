@@ -12,8 +12,10 @@ import sys
 import uuid
 
 from app.config import get_settings
+from app.core.grant_cache import get_grant_cache
 from app.core.logging import configure_logging
 from app.core.passwords import PasswordPolicyError, check_password, get_common_passwords
+from app.core.permissions import SYSTEM_ROLES
 from app.core.role_seed import ensure_system_roles
 from app.core.security import hash_password
 from app.db.session import get_sessionmaker
@@ -113,7 +115,8 @@ async def _restore_system_roles() -> None:
     async with get_sessionmaker()() as session:
         await ensure_system_roles(session)
         await session.commit()
-        logger.info("system roles restored")
+        await get_grant_cache().bump_epoch()
+        logger.info("system roles restored", extra={"roles": sorted(SYSTEM_ROLES)})
 
 
 def main(argv: list[str] | None = None) -> int:

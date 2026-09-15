@@ -29,9 +29,9 @@ from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoin
 
 from app.config import get_settings
 from app.core.errors import ErrorCode, error_detail
+from app.core.grant_cache import get_grant_cache
 from app.core.security import TokenExpiredError, TokenInvalidError, decode_access_token
 from app.db.session import get_sessionmaker
-from app.repositories.membership import MembershipRepository
 from app.repositories.user import UserRepository
 
 logger = logging.getLogger(__name__)
@@ -118,10 +118,11 @@ async def _load_grants(
 ) -> Mapping[uuid.UUID, ProjectGrant]:
     """This user's project grants, as an immutable mapping.
 
-    A `MappingProxyType` so lookup by project id is O(1) and the snapshot cannot be
-    mutated by a handler that happens to hold the request's identity.
+    Read-through Redis (`app/core/grant_cache.py`), falling back to Postgres when
+    Redis is unreachable. A `MappingProxyType` so lookup is O(1) and a handler cannot
+    mutate the snapshot it was handed.
     """
-    rows = await MembershipRepository(session).load_grants(user_id)
+    rows = await get_grant_cache().load(session, user_id)
     return MappingProxyType(
         {
             project_id: ProjectGrant(project_id=project_id, role=role, permissions=permissions)

@@ -314,6 +314,7 @@ async def grant_membership(db_session: AsyncSession) -> GrantMembership:
     """
     from sqlalchemy import select
 
+    from app.core.grant_cache import get_grant_cache
     from app.models.membership import ProjectMembership, Role
 
     async def _grant(user_id: uuid.UUID, project_id: uuid.UUID, role: str = "owner") -> None:
@@ -324,6 +325,7 @@ async def grant_membership(db_session: AsyncSession) -> GrantMembership:
             )
         )
         await db_session.commit()
+        await get_grant_cache().invalidate_user(user_id)
 
     return _grant
 

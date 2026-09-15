@@ -13,6 +13,7 @@ from fastapi import status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.errors import AppError, ErrorCode
+from app.core.grant_cache import get_grant_cache
 from app.core.permissions import PERMISSION_GROUPS
 from app.models.membership import Role
 from app.repositories.role import RoleRepository
@@ -91,6 +92,7 @@ class RoleService:
             await self._roles.replace_permissions(role.id, payload.permissions)
 
         await self.session.commit()
+        await get_grant_cache().bump_epoch()
         return await self._to_response(role)
 
     async def delete(self, role_id: uuid.UUID) -> None:
@@ -106,6 +108,7 @@ class RoleService:
             )
         role.deleted_at = datetime.now(UTC)
         await self.session.commit()
+        await get_grant_cache().bump_epoch()
 
     async def _require_editable(self, role_id: uuid.UUID) -> Role:
         """Load a role, refusing if it is a system role."""
