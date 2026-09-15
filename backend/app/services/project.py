@@ -19,10 +19,11 @@ from app.core import access
 from app.core.crypto import SecretBox
 from app.core.errors import AppError, ErrorCode
 from app.core.middleware import AuthenticatedUser
-from app.core.permissions import Permission
+from app.core.permissions import OWNER_NAME, Permission
 from app.core.repo_url import RepoUrlRejected, validate_repo_url
 from app.ingestion.errors import IngestionError
 from app.ingestion.vector_store import VectorStoreFactory
+from app.models.membership import ProjectMembership
 from app.models.project import Project, ProjectStatus
 from app.queue.protocol import IngestionQueue
 from app.queue.topics import INGEST_TOPIC, IngestionMessage
@@ -31,11 +32,13 @@ from app.repositories.checklist_item import ChecklistItemRepository
 from app.repositories.checklist_message import ChecklistMessageRepository
 from app.repositories.checklist_module import ChecklistModuleRepository
 from app.repositories.conversation import ConversationRepository
+from app.repositories.membership import MembershipRepository
 from app.repositories.mock_data_change_set import MockDataChangeSetRepository
 from app.repositories.mock_data_dataset import MockDataDatasetRepository
 from app.repositories.mock_data_message import MockDataMessageRepository
 from app.repositories.mock_data_record import MockDataRecordRepository
 from app.repositories.project import ProjectRepository
+from app.repositories.role import RoleRepository
 from app.schemas.pagination import ListQuery, PaginatedResponse
 from app.schemas.project import ProjectCreateRequest, ProjectResponse, ReindexResponse
 
@@ -74,6 +77,8 @@ class ProjectService:
         self._mock_data_change_sets = MockDataChangeSetRepository(session)
         self._mock_data_messages = MockDataMessageRepository(session)
         self._mock_data_datasets = MockDataDatasetRepository(session)
+        self._roles = RoleRepository(session)
+        self._members = MembershipRepository(session)
 
     async def create(
         self, payload: ProjectCreateRequest, *, actor: AuthenticatedUser
@@ -105,12 +110,32 @@ class ProjectService:
             encrypted_pat=encrypted_pat,
         )
         await self._repository.add(project)
+
+        # The creator becomes the owner in the same transaction. A project that exists
+        # with no owner breaks the invariant §9 enforces, and a second transaction is
+        # a window where exactly that is true.
+        owner = await self._roles.get_by_name(OWNER_NAME)
+        if owner is None:  # pragma: no cover - the migration seeds it
+            raise AppError(
+                status.HTTP_500_INTERNAL_SERVER_ERROR,
+                ErrorCode.INTERNAL_ERROR,
+                "The owner role is missing.",
+            )
+        self.session.add(
+            ProjectMembership(
+                id=uuid.uuid4(),
+                user_id=actor.id,
+                project_id=project.id,
+                role_id=owner.id,
+                granted_by=actor.id,
+            )
+        )
         await self.session.commit()
 
         # Produced after the commit: a message referencing an uncommitted row would
         # race the worker. The reconcile sweep covers a produce that fails here.
         await self._enqueue(project.id)
-        return ProjectResponse.model_validate(project)
+        return self._to_response(project, actor)
 
     async def list(
         self, query: ListQuery, *, actor: AuthenticatedUser
@@ -136,7 +161,7 @@ class ProjectService:
             ) from error
 
         return PaginatedResponse.build(
-            [ProjectResponse.model_validate(row) for row in rows],
+            [self._to_response(row, actor) for row in rows],
             page=query.page,
             limit=query.limit,
             total_count=total,
@@ -144,7 +169,8 @@ class ProjectService:
 
     async def get(self, project_id: uuid.UUID, *, actor: AuthenticatedUser) -> ProjectResponse:
         """One project, by id."""
-        return ProjectResponse.model_validate(await self._require_readable(project_id, actor))
+        project = await self._require_readable(project_id, actor)
+        return self._to_response(project, actor)
 
     async def reindex(self, project_id: uuid.UUID, *, actor: AuthenticatedUser) -> ReindexResponse:
         """Trigger a fresh indexing run. Idempotent while one is already in flight.
@@ -172,14 +198,14 @@ class ProjectService:
         access.require_permission(actor, project.id, Permission.PROJECT_REINDEX)
 
         if project.status in BUSY_STATUSES or project.reindex_in_progress:
-            return ReindexResponse(enqueued=False, project=ProjectResponse.model_validate(project))
+            return ReindexResponse(enqueued=False, project=self._to_response(project, actor))
 
         project.reindex_in_progress = True
         project.updated_at = datetime.now(UTC)
         await self.session.commit()
 
         await self._enqueue(project.id)
-        return ReindexResponse(enqueued=True, project=ProjectResponse.model_validate(project))
+        return ReindexResponse(enqueued=True, project=self._to_response(project, actor))
 
     async def delete(self, project_id: uuid.UUID, *, actor: AuthenticatedUser) -> None:
         """Soft-delete the project and hard-delete its vectors, in one operation.
@@ -269,6 +295,14 @@ class ProjectService:
                 original_topic=INGEST_TOPIC,
             )
         )
+
+    @staticmethod
+    def _to_response(project: Project, actor: AuthenticatedUser) -> ProjectResponse:
+        """A project as this caller sees it, including what they may do to it."""
+        response = ProjectResponse.model_validate(project)
+        response.role = access.role_for(actor, project.id)
+        response.permissions = sorted(access.permissions_for(actor, project.id))
+        return response
 
     async def _require_readable(self, project_id: uuid.UUID, actor: AuthenticatedUser) -> Project:
         """Load a project the caller may see, or raise 404."""

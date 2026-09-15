@@ -41,6 +41,11 @@ class ProjectResponse(ApiModel):
     reindex_in_progress: bool
     created_at: datetime
     updated_at: datetime
+    # The caller's own role and effective permissions on this project. `None` for an
+    # administrator with no membership: they hold every permission but no role, and
+    # inventing one would put a word on screen that matches no row.
+    role: str | None = None
+    permissions: list[str] = Field(default_factory=list)
 
 
 class IndexedPathEntry(ApiModel):
