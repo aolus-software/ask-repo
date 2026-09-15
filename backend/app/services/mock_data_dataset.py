@@ -118,9 +118,10 @@ class MockDataDatasetService:
     ) -> MockDataDatasetResponse:
         """Publish a generation job and return immediately. No embedding-model guard,
         for the same reason `ChecklistModuleService.request_generation` has none:
-        generation filters and scrolls, it embeds nothing."""
+        generation filters and scrolls, it embeds nothing. Gated on `generate.run`."""
         module = await self._require_readable_module(module_id, actor)
         project = await self._require_readable_project(module.project_id, actor)
+        access.require_permission(actor, project.id, Permission.GENERATE_RUN)
         self._require_indexed(project)
         self._require_a_stable_index(project)
 

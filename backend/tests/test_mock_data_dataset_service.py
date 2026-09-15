@@ -47,6 +47,30 @@ async def test_get_returns_empty_summary_before_any_generation(
     assert detail.records == []
 
 
+async def test_request_generation_is_refused_for_a_viewer(
+    db_session: AsyncSession, grant_membership: GrantMembership
+) -> None:
+    """`generate.run` is not on the viewer's permission set (`SYSTEM_ROLES`), matching
+    `ChecklistModuleService.request_generation`."""
+    project = await create_project(db_session)
+    project.embedding_collection = "col"
+    module = await create_checklist_module(db_session, project_id=project.id)
+    service = MockDataDatasetService(db_session, Settings())
+    viewer = await create_user(db_session)
+    await grant_membership(viewer.id, project.id, VIEWER_NAME)
+
+    with pytest.raises(AppError) as excinfo:
+        await service.request_generation(
+            module.id,
+            MockDataGenerationRequest(),
+            actor=await authenticated(db_session, viewer),
+            queue=InMemoryIngestionQueue(),
+        )
+
+    assert excinfo.value.status_code == status.HTTP_403_FORBIDDEN
+    assert excinfo.value.code is ErrorCode.INSUFFICIENT_ROLE
+
+
 async def test_request_generation_refuses_when_already_generating(
     db_session: AsyncSession, grant_membership: GrantMembership
 ) -> None:

@@ -249,6 +249,29 @@ async def test_create_refuses_a_project_that_is_not_ready(
     assert caught.value.code is ErrorCode.PROJECT_NOT_READY
 
 
+async def test_create_is_refused_for_a_viewer(
+    db_session: AsyncSession, grant_membership: GrantMembership
+) -> None:
+    """`module.create` is not on the viewer's permission set (`SYSTEM_ROLES`): a
+    viewer may read and test a module but not author new ones."""
+    project = await create_project(db_session)
+    project.embedding_collection = "c"
+    service = checklist_module_service(db_session)
+    viewer = await create_user(db_session)
+    await grant_membership(viewer.id, project.id, VIEWER_NAME)
+
+    with pytest.raises(AppError) as caught:
+        await service.create(
+            ChecklistModuleCreateRequest(
+                project_id=project.id, name="Auth", source_path="app/auth"
+            ),
+            actor=await authenticated(db_session, viewer),
+        )
+
+    assert caught.value.status_code == status.HTTP_403_FORBIDDEN
+    assert caught.value.code is ErrorCode.INSUFFICIENT_ROLE
+
+
 async def test_create_normalises_the_path_and_starts_empty(
     db_session: AsyncSession, grant_membership: GrantMembership
 ) -> None:
@@ -356,6 +379,29 @@ async def test_generation_publishes_a_job_and_returns_generating(
 
     assert result.status is ChecklistModuleStatus.GENERATING
     assert len(queue.messages) == 1
+
+
+async def test_generation_is_refused_for_a_viewer(
+    db_session: AsyncSession, grant_membership: GrantMembership
+) -> None:
+    """`generate.run` is not on the viewer's permission set (`SYSTEM_ROLES`)."""
+    project = await create_project(db_session)
+    project.embedding_collection = "code_chunks__ollama__nomic_embed_text__768"
+    project.embedding_model = Settings().embedding_model
+    module = await create_checklist_module(db_session, project_id=project.id)
+    service = checklist_module_service(db_session)
+    viewer = await create_user(db_session)
+    await grant_membership(viewer.id, project.id, VIEWER_NAME)
+
+    with pytest.raises(AppError) as caught:
+        await service.request_generation(
+            module.id,
+            actor=await authenticated(db_session, viewer),
+            queue=InMemoryIngestionQueue(),
+        )
+
+    assert caught.value.status_code == status.HTTP_403_FORBIDDEN
+    assert caught.value.code is ErrorCode.INSUFFICIENT_ROLE
 
 
 async def test_generation_is_refused_while_one_is_running(

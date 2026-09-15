@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import Settings
 from app.core.errors import AppError, ErrorCode
-from app.core.permissions import EDITOR_NAME
+from app.core.permissions import EDITOR_NAME, VIEWER_NAME
 from app.models.checklist import (
     ChangeSetStatus,
     ChecklistItemKind,
@@ -251,6 +251,46 @@ async def test_any_member_may_apply_because_reviewing_is_a_shared_act(
     )
 
     assert result.change_set.resolved_by == colleague.id
+
+
+async def test_apply_is_refused_for_a_viewer(
+    db_session: AsyncSession, grant_membership: GrantMembership
+) -> None:
+    """`changeset.apply` is not on the viewer's permission set (`SYSTEM_ROLES`):
+    a viewer is a tester, and reviewing a proposal is an editor-level act."""
+    module = await create_checklist_module(db_session)
+    change_set = await create_checklist_change_set(
+        db_session, module_id=module.id, operations=[_add(uuid.uuid4())]
+    )
+    viewer = await create_user(db_session)
+    await grant_membership(viewer.id, module.project_id, VIEWER_NAME)
+    service = ChecklistChangeSetService(db_session, Settings())
+
+    with pytest.raises(AppError) as caught:
+        await service.apply(
+            change_set.id, ChangeSetApplyRequest(), actor=await authenticated(db_session, viewer)
+        )
+
+    assert caught.value.status_code == status.HTTP_403_FORBIDDEN
+    assert caught.value.code is ErrorCode.INSUFFICIENT_ROLE
+
+
+async def test_discard_is_refused_for_a_viewer(
+    db_session: AsyncSession, grant_membership: GrantMembership
+) -> None:
+    module = await create_checklist_module(db_session)
+    change_set = await create_checklist_change_set(
+        db_session, module_id=module.id, operations=[_add(uuid.uuid4())]
+    )
+    viewer = await create_user(db_session)
+    await grant_membership(viewer.id, module.project_id, VIEWER_NAME)
+    service = ChecklistChangeSetService(db_session, Settings())
+
+    with pytest.raises(AppError) as caught:
+        await service.discard(change_set.id, actor=await authenticated(db_session, viewer))
+
+    assert caught.value.status_code == status.HTTP_403_FORBIDDEN
+    assert caught.value.code is ErrorCode.INSUFFICIENT_ROLE
 
 
 async def test_discard_writes_nothing_and_frees_the_module(

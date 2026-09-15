@@ -146,8 +146,9 @@ class ChecklistModuleService:
     async def create(
         self, payload: ChecklistModuleCreateRequest, *, actor: AuthenticatedUser
     ) -> ChecklistModuleResponse:
-        """Name a module against a project the caller may read."""
+        """Name a module against a project the caller may read. Gated on `module.create`."""
         project = await self._require_readable_project(payload.project_id, actor)
+        access.require_permission(actor, project.id, Permission.MODULE_CREATE)
         self._require_indexed(project)
         source_path = payload.source_path.strip().strip("/")
         await self._require_path_indexed(project, source_path)
@@ -219,10 +220,11 @@ class ChecklistModuleService:
         embedding-model guard deliberately does **not** apply: it exists because a
         query embedded by a different model lands in a vector space the collection was
         never built in, and generation embeds nothing -- it filters and scrolls
-        (spec 4.1).
+        (spec 4.1). Gated on `generate.run`.
         """
         module = await self._require_readable(module_id, actor)
         project = await self._require_readable_project(module.project_id, actor)
+        access.require_permission(actor, project.id, Permission.GENERATE_RUN)
         self._require_indexed(project)
         self._require_a_stable_index(project)
 

@@ -3,11 +3,12 @@
 import uuid
 
 import pytest
+from fastapi import status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import Settings
 from app.core.errors import AppError, ErrorCode
-from app.core.permissions import EDITOR_NAME
+from app.core.permissions import EDITOR_NAME, VIEWER_NAME
 from app.models.checklist import ChangeSetOrigin, ChangeSetStatus
 from app.models.mock_data import MockDataChangeSet, MockDataDataset, MockDataRecord
 from app.models.project import ProjectStatus
@@ -367,6 +368,85 @@ async def test_cross_module_operation_is_skipped(
     assert result.records[0].fields == {"name": "Good"}
     await db_session.refresh(record)
     assert record.fields != {"name": "Mutated"}
+
+
+async def test_apply_is_refused_for_a_viewer(
+    db_session: AsyncSession, grant_membership: GrantMembership
+) -> None:
+    """`changeset.apply` is not on the viewer's permission set (`SYSTEM_ROLES`), the
+    same as the checklist change set it mirrors."""
+    project = await create_project(db_session, status=ProjectStatus.READY)
+    project.embedding_collection = "col"
+    module = await create_checklist_module(db_session, project_id=project.id)
+    dataset = MockDataDataset(id=uuid.uuid4(), checklist_module_id=module.id, status="review")
+    db_session.add(dataset)
+    change_set = await MockDataChangeSetRepository(db_session).add(
+        MockDataChangeSet(
+            id=uuid.uuid4(),
+            checklist_module_id=module.id,
+            origin=ChangeSetOrigin.GENERATION.value,
+            summary="1 record",
+            operations=[
+                {
+                    "op": "add",
+                    "id": str(uuid.uuid4()),
+                    "recordId": None,
+                    "fields": {"name": "Acme"},
+                    "changes": None,
+                    "rationale": "r",
+                }
+            ],
+            status=ChangeSetStatus.PENDING.value,
+            created_by=module.created_by,
+        )
+    )
+    await db_session.commit()
+
+    viewer = await create_user(db_session)
+    await grant_membership(viewer.id, project.id, VIEWER_NAME)
+    service = MockDataChangeSetService(db_session, Settings())
+
+    with pytest.raises(AppError) as caught:
+        await service.apply(
+            change_set.id,
+            MockDataChangeSetApplyRequest(),
+            actor=await authenticated(db_session, viewer),
+        )
+
+    assert caught.value.status_code == status.HTTP_403_FORBIDDEN
+    assert caught.value.code is ErrorCode.INSUFFICIENT_ROLE
+
+
+async def test_discard_is_refused_for_a_viewer(
+    db_session: AsyncSession, grant_membership: GrantMembership
+) -> None:
+    project = await create_project(db_session, status=ProjectStatus.READY)
+    project.embedding_collection = "col"
+    module = await create_checklist_module(db_session, project_id=project.id)
+    dataset = MockDataDataset(id=uuid.uuid4(), checklist_module_id=module.id, status="review")
+    db_session.add(dataset)
+    change_set = await MockDataChangeSetRepository(db_session).add(
+        MockDataChangeSet(
+            id=uuid.uuid4(),
+            checklist_module_id=module.id,
+            origin=ChangeSetOrigin.GENERATION.value,
+            summary="should be discarded",
+            operations=[],
+            status=ChangeSetStatus.PENDING.value,
+            created_by=module.created_by,
+        )
+    )
+    await db_session.commit()
+
+    viewer = await create_user(db_session)
+    await grant_membership(viewer.id, project.id, VIEWER_NAME)
+    service = MockDataChangeSetService(db_session, Settings())
+
+    with pytest.raises(AppError) as caught:
+        await service.discard(change_set.id, actor=await authenticated(db_session, viewer))
+
+    assert caught.value.status_code == status.HTTP_403_FORBIDDEN
+    assert caught.value.code is ErrorCode.INSUFFICIENT_ROLE
 
 
 async def test_discard_writes_nothing_and_settles_dataset(
