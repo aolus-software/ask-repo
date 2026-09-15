@@ -16,6 +16,7 @@ from app.api.routes import (
     conversations,
     health,
     index,
+    members,
     mock_data_change_sets,
     mock_data_datasets,
     mock_data_records,
@@ -144,6 +145,7 @@ def create_app() -> FastAPI:
     app.include_router(auth.router)
     app.include_router(users.router)
     app.include_router(projects.router)
+    app.include_router(members.router)
     app.include_router(conversations.router)
     app.include_router(checklist_modules.router)
     app.include_router(checklist_items.router)
