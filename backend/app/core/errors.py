@@ -70,8 +70,12 @@ class ErrorCode(StrEnum):
     MEMBERSHIP_EXISTS = "MEMBERSHIP_EXISTS"
 
 
-def error_detail(code: ErrorCode, message: str) -> dict[str, str]:
-    """Build the `detail` object. One construction site, so the shape cannot drift."""
+def error_detail(code: ErrorCode, message: str) -> dict[str, object]:
+    """Build the `detail` object. One construction site, so the shape cannot drift.
+
+    `object`-valued rather than `str`-valued: `AppError`'s `extra` widens this past
+    `code`/`message` with non-string values, e.g. `409 LAST_OWNER`'s `projects` array.
+    """
     return {"code": code.value, "message": message}
 
 

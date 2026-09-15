@@ -22,7 +22,7 @@ async def _create_project(client: AsyncClient) -> str:
     response = await client.post(
         "/projects", json={"repoUrl": "https://github.com/o/r.git", "branch": "main"}
     )
-    return response.json()["id"]
+    return str(response.json()["id"])
 
 
 async def test_deactivating_a_sole_owner_is_refused(
@@ -128,6 +128,7 @@ async def test_ownerless_lists_projects_whose_only_owner_is_deactivated(
     )
     for membership in owners:
         user = await db_session.get(User, membership.user_id)
+        assert user is not None
         user.deleted_at = datetime.now(UTC)
     await db_session.commit()
 
@@ -165,6 +166,7 @@ async def test_ownerless_still_finds_a_project_that_kept_a_live_viewer(
         .all()
     ):
         owner = await db_session.get(User, membership.user_id)
+        assert owner is not None
         owner.deleted_at = datetime.now(UTC)
     await db_session.commit()
 

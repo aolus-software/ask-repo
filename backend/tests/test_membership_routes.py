@@ -9,7 +9,7 @@ async def _create_project(client: AsyncClient) -> str:
     response = await client.post(
         "/projects", json={"repoUrl": "https://github.com/o/r.git", "branch": "main"}
     )
-    return response.json()["id"]
+    return str(response.json()["id"])
 
 
 async def test_the_creator_is_listed_as_the_only_member(client_for_user_a: AsyncClient) -> None:

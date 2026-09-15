@@ -92,10 +92,13 @@ class GrantCache:
     async def _key_for(self, user_id: uuid.UUID) -> str | None:
         """`askrepo:perm:v1:{epoch}:user:{id}`, or None when Redis is unreachable."""
         try:
-            epoch = await self._client.get(_EPOCH_KEY) or "0"
+            raw_epoch = await self._client.get(_EPOCH_KEY)
         except RedisError:
             logger.warning("grant cache unreachable; falling back to postgres")
             return None
+        # `get_redis()` sets `decode_responses=True`, so this is always `str` at
+        # runtime; the client's stub is untyped on that setting, hence the decode.
+        epoch = raw_epoch.decode() if isinstance(raw_epoch, bytes) else (raw_epoch or "0")
         return f"askrepo:perm:{_SCHEMA}:{epoch}:user:{user_id}"
 
     async def _read(self, key: str) -> dict[uuid.UUID, tuple[str, frozenset[str]]] | None:

@@ -131,7 +131,7 @@ class MembershipService:
         await get_grant_cache().invalidate_user(user_id)
 
         user = await self._users.get(user_id)
-        assert user is not None  # type: ignore[assert-type]
+        assert user is not None
         return MemberResponse(
             user_id=user.id,
             name=user.name,

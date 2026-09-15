@@ -4,6 +4,7 @@
 """
 
 import uuid
+from typing import cast
 
 import redis.asyncio as aioredis
 from redis.exceptions import RedisError
@@ -127,7 +128,7 @@ async def test_redis_down_falls_back_to_postgres_and_is_still_correct(
     """Not deny, not allow — the source of truth. Redis being down makes AskRepo
     slower, never more permissive."""
     user, project, _ = await _seed(db_session)
-    cache = GrantCache(_BrokenRedis(), ttl_seconds=300)
+    cache = GrantCache(cast(aioredis.Redis, _BrokenRedis()), ttl_seconds=300)
 
     grants = await cache.load(db_session, user.id)
 
@@ -139,7 +140,7 @@ async def test_invalidating_with_redis_down_does_not_raise(
     db_session: AsyncSession,
 ) -> None:
     """A write path must not 500 because the cache is unreachable."""
-    cache = GrantCache(_BrokenRedis(), ttl_seconds=300)
+    cache = GrantCache(cast(aioredis.Redis, _BrokenRedis()), ttl_seconds=300)
 
     await cache.invalidate_user(uuid.uuid4())  # must not raise
     await cache.bump_epoch()  # must not raise

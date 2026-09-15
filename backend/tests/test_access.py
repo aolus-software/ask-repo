@@ -6,6 +6,7 @@ that answers "what may they do to this one?".
 """
 
 import uuid
+from typing import cast
 
 import pytest
 from fastapi import HTTPException
@@ -116,7 +117,7 @@ def test_a_non_member_gets_404_not_403() -> None:
         require_permission(_user(), uuid.uuid4(), Permission.PROJECT_READ)
 
     assert raised.value.status_code == 404
-    assert raised.value.detail["code"] == "PROJECT_NOT_FOUND"
+    assert cast(dict[str, object], raised.value.detail)["code"] == "PROJECT_NOT_FOUND"
 
 
 def test_a_member_whose_role_is_too_low_gets_403() -> None:
@@ -129,7 +130,7 @@ def test_a_member_whose_role_is_too_low_gets_403() -> None:
         require_permission(user, project_id, Permission.PROJECT_DELETE)
 
     assert raised.value.status_code == 403
-    assert raised.value.detail["code"] == "INSUFFICIENT_ROLE"
+    assert cast(dict[str, object], raised.value.detail)["code"] == "INSUFFICIENT_ROLE"
 
 
 def test_a_member_with_the_permission_passes() -> None:

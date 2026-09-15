@@ -82,15 +82,6 @@ class ProjectRepository(BaseRepository[Project]):
         rows = await self.session.execute(statement)
         return rows.scalars().all(), total
 
-    async def get_many(self, project_ids: Sequence[uuid.UUID]) -> Sequence[Project]:
-        """Several live projects by id, for an error body that names them."""
-        if not project_ids:
-            return []
-        result = await self.session.execute(
-            self.active_select().where(Project.id.in_(list(project_ids)))
-        )
-        return result.scalars().all()
-
     async def claim(
         self, *, project_id: uuid.UUID, job_id: uuid.UUID, worker_id: str, lease_seconds: int
     ) -> bool:

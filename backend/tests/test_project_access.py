@@ -16,7 +16,7 @@ async def _create_project(client: httpx.AsyncClient) -> str:
         "/projects", json={"repoUrl": "https://github.com/o/r.git", "branch": "main"}
     )
     assert response.status_code == 201
-    return response.json()["id"]
+    return str(response.json()["id"])
 
 
 async def test_the_creator_gets_an_owner_membership(client_for_user_a: Any) -> None:
