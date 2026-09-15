@@ -11,6 +11,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, status
 
 from app.api.deps import SessionDep, require_admin
+from app.schemas.errors import ERROR_RESPONSES
 from app.schemas.role import (
     PermissionCatalogResponse,
     RoleCreateRequest,
@@ -33,25 +34,46 @@ def _service(session: SessionDep) -> RoleService:
 ServiceDep = Annotated[RoleService, Depends(_service)]
 
 
-@router.get("/permissions", response_model=PermissionCatalogResponse)
+@router.get(
+    "/permissions",
+    response_model=PermissionCatalogResponse,
+    summary="List every permission, grouped",
+    responses={code: ERROR_RESPONSES[code] for code in (401, 403)},
+)
 async def list_permissions(service: ServiceDep) -> PermissionCatalogResponse:
     """The permission catalogue, grouped for the role-matrix editor."""
     return service.catalogue()
 
 
-@router.get("/roles", response_model=list[RoleResponse])
+@router.get(
+    "/roles",
+    response_model=list[RoleResponse],
+    summary="List roles",
+    responses={code: ERROR_RESPONSES[code] for code in (401, 403)},
+)
 async def list_roles(service: ServiceDep) -> Sequence[RoleResponse]:
     """Every role on the instance, system roles first."""
     return await service.list_roles()
 
 
-@router.post("/roles", response_model=RoleResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/roles",
+    response_model=RoleResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Create a custom role",
+    responses={code: ERROR_RESPONSES[code] for code in (401, 403, 409, 422)},
+)
 async def create_role(payload: RoleCreateRequest, service: ServiceDep) -> RoleResponse:
     """Create a custom role."""
     return await service.create(payload)
 
 
-@router.patch("/roles/{role_id}", response_model=RoleResponse)
+@router.patch(
+    "/roles/{role_id}",
+    response_model=RoleResponse,
+    summary="Rename a custom role or replace its permissions",
+    responses={code: ERROR_RESPONSES[code] for code in (401, 403, 404, 409, 422)},
+)
 async def update_role(
     role_id: uuid.UUID, payload: RoleUpdateRequest, service: ServiceDep
 ) -> RoleResponse:
@@ -59,7 +81,12 @@ async def update_role(
     return await service.update(role_id, payload)
 
 
-@router.delete("/roles/{role_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+    "/roles/{role_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Delete a custom role",
+    responses={code: ERROR_RESPONSES[code] for code in (401, 403, 404, 409, 422)},
+)
 async def delete_role(role_id: uuid.UUID, service: ServiceDep) -> None:
     """Soft-delete a custom role that nobody holds."""
     await service.delete(role_id)

@@ -331,6 +331,14 @@ Every error the app raises is `{"detail": {"code": ..., "message": ...}}`, built
 `ErrorCode` values are a wire contract — add members, never rename them. `422` adds a `fields`
 map keyed by the `camelCase` field name.
 
+A body may be widened past those two keys only where the extra field is what makes the error
+actionable — `409 LAST_OWNER` names the projects that would be left with no owner, because
+"no" alone tells an admin nothing about what to fix. `AppError`'s `extra` is the mechanism,
+and using it obliges the route to **declare a model for that status** rather than the generic
+`ERROR_RESPONSES[...]` entry (`LastOwnerErrorResponse`, alongside `ValidationErrorBody` for
+`422`). An undeclared widening means `/docs` and every generated client describe a body the
+route does not return, which is the one-error-shape rule failing silently rather than loudly.
+
 ## Rules
 
 Thirteen rule files in `.claude/rules/`. Read the ones your change touches.

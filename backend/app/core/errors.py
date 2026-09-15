@@ -101,6 +101,14 @@ class AppError(HTTPException):
 
         `extra` merges additional fields into the detail object alongside `code` and
         `message` — used for a `409 LAST_OWNER` that names the stranded projects.
+
+        It widens the wire contract, so it comes with an obligation: a route that can
+        raise one **must** declare a model for that status instead of the generic
+        `ERROR_RESPONSES[...]` entry, the way `422` declares `ValidationErrorBody` and
+        `DELETE /users/{id}` declares `LastOwnerErrorResponse`. Otherwise `/docs` and
+        every generated client describe a body the route does not return. Use it when
+        the extra field is what makes the error actionable, never to pass detail a
+        message could carry.
         """
         detail = error_detail(code, message)
         if extra:

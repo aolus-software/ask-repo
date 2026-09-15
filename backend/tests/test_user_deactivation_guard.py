@@ -136,6 +136,43 @@ async def test_ownerless_lists_projects_whose_only_owner_is_deactivated(
     assert project_id in [row["id"] for row in body["items"]]
 
 
+async def test_ownerless_still_finds_a_project_that_kept_a_live_viewer(
+    client_for_admin: AsyncClient,
+    client_for_user_a: AsyncClient,
+    user_b: User,
+    grant_membership: Any,
+    db_session: AsyncSession,
+) -> None:
+    """A live member who is not an owner is not evidence of an owner.
+
+    The owner-role and live-user conditions have to hold on the same membership row.
+    Counted separately, this viewer makes the project look owned and it drops out of
+    the cleanup list — the one case the list exists to surface.
+    """
+    project_id = await _create_project(client_for_user_a)
+    await grant_membership(user_b.id, uuid.UUID(project_id), role="viewer")
+
+    for membership in (
+        (
+            await db_session.execute(
+                select(ProjectMembership).where(
+                    ProjectMembership.project_id == uuid.UUID(project_id),
+                    ProjectMembership.user_id != user_b.id,
+                )
+            )
+        )
+        .scalars()
+        .all()
+    ):
+        owner = await db_session.get(User, membership.user_id)
+        owner.deleted_at = datetime.now(UTC)
+    await db_session.commit()
+
+    body = (await client_for_admin.get("/projects?ownerless=true")).json()
+
+    assert project_id in [row["id"] for row in body["items"]]
+
+
 async def test_ownerless_is_admin_only(authed_client: AsyncClient) -> None:
     response = await authed_client.get("/projects?ownerless=true")
 

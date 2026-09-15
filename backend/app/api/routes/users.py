@@ -13,7 +13,7 @@ from fastapi import APIRouter, Depends, Query, status
 
 from app.api.deps import AdminUser, CurrentUser, SessionDep
 from app.config import Settings, get_settings
-from app.schemas.errors import ERROR_RESPONSES
+from app.schemas.errors import ERROR_RESPONSES, LastOwnerErrorResponse
 from app.schemas.pagination import ListQuery, PaginatedResponse
 from app.schemas.user import (
     ResetPasswordRequest,
@@ -97,7 +97,15 @@ async def update_user(
     "/{user_id}",
     status_code=status.HTTP_204_NO_CONTENT,
     summary="Deactivate an account",
-    responses={code: ERROR_RESPONSES[code] for code in (401, 403, 404, 409, 422)},
+    responses={
+        **{code: ERROR_RESPONSES[code] for code in (401, 403, 404, 422)},
+        # Not the generic 409: this one names the projects that would be left with no
+        # owner, and a client that cannot see them cannot act on the refusal.
+        409: {
+            "model": LastOwnerErrorResponse,
+            "description": "Valid request, wrong state. LAST_OWNER names the blocking projects",
+        },
+    },
 )
 async def delete_user(user_id: uuid.UUID, current_user: AdminUser, service: UserServiceDep) -> None:
     await service.soft_delete(user_id)

@@ -48,6 +48,23 @@ class ProjectScope:
         """Exactly these projects. An empty set means none — not all."""
         return cls(unrestricted=False, ids=frozenset(ids))
 
+    def narrowed_to(self, ids: Iterable[uuid.UUID]) -> Self:
+        """This scope restricted to `ids` — never widened past what it already allows.
+
+        A filter (`?ownerless=true`) selects projects on a property that has nothing to
+        do with access, so it has to be applied *on top of* the resolver's answer rather
+        than in place of it. Replacing the scope would make the filter a second
+        enforcement point, which `docs/PRD.md` §7 exists to prevent.
+
+        The unrestricted case is why this is a method and not a set intersection at the
+        call site: an unrestricted scope carries no ids, so intersecting with its empty
+        `ids` would return nothing instead of everything.
+        """
+        requested = frozenset(ids)
+        if self.unrestricted:
+            return type(self)(unrestricted=False, ids=requested)
+        return type(self)(unrestricted=False, ids=self.ids & requested)
+
 
 def resolve_project_scope(user: AuthenticatedUser) -> ProjectScope:
     """Which projects this caller may read.

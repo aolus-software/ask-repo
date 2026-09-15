@@ -173,21 +173,30 @@ class MembershipRepository(BaseRepository[ProjectMembership]):
         because the backfill seeds `created_by` unconditionally, including for
         accounts that were already deactivated — fabricating a replacement owner
         would write a grant nobody made (spec §6.4).
+
+        `NOT EXISTS` over the same join `count_live_owners` uses, rather than an outer
+        join counted per project. Counting is what makes this easy to get wrong: the
+        owner-role and live-user conditions have to constrain the *same* membership
+        row, and an outer join to `users` that is not itself conditioned on the role
+        match counts a live viewer as evidence of an owner. A project whose only owner
+        is deactivated would then be reported as healthy — invisible to the one tool
+        built to find it.
         """
+        owner_exists = (
+            select(1)
+            .select_from(ProjectMembership)
+            .join(Role, Role.id == ProjectMembership.role_id)
+            .join(User, User.id == ProjectMembership.user_id)
+            .where(
+                ProjectMembership.project_id == Project.id,
+                ProjectMembership.deleted_at.is_(None),
+                Role.name == OWNER_NAME,
+                Role.deleted_at.is_(None),
+                User.deleted_at.is_(None),
+            )
+            .exists()
+        )
         result = await self.session.execute(
-            select(Project.id)
-            .outerjoin(
-                ProjectMembership,
-                (ProjectMembership.project_id == Project.id)
-                & ProjectMembership.deleted_at.is_(None),
-            )
-            .outerjoin(Role, (Role.id == ProjectMembership.role_id) & (Role.name == OWNER_NAME))
-            .outerjoin(
-                User,
-                (User.id == ProjectMembership.user_id) & User.deleted_at.is_(None),
-            )
-            .where(Project.deleted_at.is_(None))
-            .group_by(Project.id)
-            .having(func.count(User.id) == 0)
+            select(Project.id).where(Project.deleted_at.is_(None), ~owner_exists)
         )
         return result.scalars().all()

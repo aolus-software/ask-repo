@@ -77,6 +77,35 @@ def test_project_scope_all_is_still_constructible_deliberately() -> None:
     assert ProjectScope.of([]).unrestricted is False
 
 
+def test_narrowing_an_unrestricted_scope_yields_exactly_the_requested_ids() -> None:
+    """An unrestricted scope carries no ids, so a plain set intersection against it
+    would return nothing. Narrowing has to read it as "everything" instead."""
+    first, second = uuid.uuid4(), uuid.uuid4()
+
+    narrowed = ProjectScope.all().narrowed_to([first, second])
+
+    assert narrowed.unrestricted is False
+    assert narrowed.ids == frozenset({first, second})
+
+
+def test_narrowing_never_widens_a_restricted_scope() -> None:
+    """The filter selects on a property unrelated to access, so it may only remove
+    projects the resolver already allowed — never add one it did not."""
+    allowed, forbidden = uuid.uuid4(), uuid.uuid4()
+
+    narrowed = ProjectScope.of([allowed]).narrowed_to([allowed, forbidden])
+
+    assert narrowed.ids == frozenset({allowed})
+
+
+def test_narrowing_to_nothing_leaves_no_access() -> None:
+    """An empty result is "none", never "all" — the same fail-closed rule `of` follows."""
+    narrowed = ProjectScope.of([uuid.uuid4()]).narrowed_to([])
+
+    assert narrowed.unrestricted is False
+    assert narrowed.ids == frozenset()
+
+
 # ── require_permission ───────────────────────────────────────────────────
 
 

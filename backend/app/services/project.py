@@ -156,7 +156,7 @@ class ProjectService:
                     "This action requires an administrator account.",
                 )
             ownerless_ids = await self._members.ownerless_project_ids()
-            scope = access.ProjectScope.of(ownerless_ids)
+            scope = scope.narrowed_to(ownerless_ids)
 
         try:
             rows, total = await self._repository.list_page(
