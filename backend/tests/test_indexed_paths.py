@@ -14,10 +14,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import Settings
 from app.core.errors import AppError, ErrorCode
+from app.core.permissions import VIEWER_NAME
 from app.ingestion.errors import RetryableIngestionError
 from app.ingestion.vector_store import InMemoryVectorStore
 from app.models.project import Project, ProjectStatus
+from app.models.user import User
 from app.services.indexed_path import IndexedPathCache, IndexedPathReader
+from tests.conftest import GrantMembership
 from tests.factories import create_project
 from tests.helpers import indexed_path_reader, seed_indexed_paths
 
@@ -137,11 +140,16 @@ async def test_an_unreachable_vector_store_is_503_not_500(db_session: AsyncSessi
 
 @pytest.mark.asyncio
 async def test_browsing_the_root_returns_one_level_in_camel_case(
-    authed_client: AsyncClient, db_session: AsyncSession, vector_store: InMemoryVectorStore
+    authed_client: AsyncClient,
+    authed_user: User,
+    grant_membership: GrantMembership,
+    db_session: AsyncSession,
+    vector_store: InMemoryVectorStore,
 ) -> None:
     project = await _indexed_project(db_session)
     seed_indexed_paths(vector_store, project.id, *TREE)
     await db_session.commit()
+    await grant_membership(authed_user.id, project.id, VIEWER_NAME)
 
     response = await authed_client.get(f"/projects/{project.id}/indexed-paths")
 
@@ -160,11 +168,16 @@ async def test_browsing_the_root_returns_one_level_in_camel_case(
 
 @pytest.mark.asyncio
 async def test_browsing_a_directory_takes_a_path_and_tolerates_slashes(
-    authed_client: AsyncClient, db_session: AsyncSession, vector_store: InMemoryVectorStore
+    authed_client: AsyncClient,
+    authed_user: User,
+    grant_membership: GrantMembership,
+    db_session: AsyncSession,
+    vector_store: InMemoryVectorStore,
 ) -> None:
     project = await _indexed_project(db_session)
     seed_indexed_paths(vector_store, project.id, *TREE)
     await db_session.commit()
+    await grant_membership(authed_user.id, project.id, VIEWER_NAME)
 
     response = await authed_client.get(
         f"/projects/{project.id}/indexed-paths", params={"path": "/backend/app/"}
@@ -180,13 +193,18 @@ async def test_browsing_a_directory_takes_a_path_and_tolerates_slashes(
 
 @pytest.mark.asyncio
 async def test_searching_spans_the_tree_and_reports_no_directory(
-    authed_client: AsyncClient, db_session: AsyncSession, vector_store: InMemoryVectorStore
+    authed_client: AsyncClient,
+    authed_user: User,
+    grant_membership: GrantMembership,
+    db_session: AsyncSession,
+    vector_store: InMemoryVectorStore,
 ) -> None:
     """`path` comes back empty on a search: the results span the tree, so echoing the
     directory the client was looking at would misdescribe them."""
     project = await _indexed_project(db_session)
     seed_indexed_paths(vector_store, project.id, *TREE)
     await db_session.commit()
+    await grant_membership(authed_user.id, project.id, VIEWER_NAME)
 
     response = await authed_client.get(
         f"/projects/{project.id}/indexed-paths", params={"path": "backend", "search": "nav"}
@@ -199,12 +217,16 @@ async def test_searching_spans_the_tree_and_reports_no_directory(
 
 @pytest.mark.asyncio
 async def test_browsing_an_unindexed_project_is_409(
-    authed_client: AsyncClient, db_session: AsyncSession
+    authed_client: AsyncClient,
+    authed_user: User,
+    grant_membership: GrantMembership,
+    db_session: AsyncSession,
 ) -> None:
     """`409`, not an empty list: a picker showing no files is indistinguishable from a
     repository that has none, and the user would go looking for the wrong problem."""
     project = await create_project(db_session, status=ProjectStatus.CLONING)
     await db_session.commit()
+    await grant_membership(authed_user.id, project.id, VIEWER_NAME)
 
     response = await authed_client.get(f"/projects/{project.id}/indexed-paths")
 
@@ -229,7 +251,11 @@ async def test_browsing_needs_authentication(client: AsyncClient) -> None:
 
 @pytest.mark.asyncio
 async def test_a_reindex_in_flight_does_not_block_browsing(
-    authed_client: AsyncClient, db_session: AsyncSession, vector_store: InMemoryVectorStore
+    authed_client: AsyncClient,
+    authed_user: User,
+    grant_membership: GrantMembership,
+    db_session: AsyncSession,
+    vector_store: InMemoryVectorStore,
 ) -> None:
     """The live generation is still serving throughout a reindex and this read records
     nothing, so it takes the readiness check and not the stability check -- the same
@@ -238,6 +264,7 @@ async def test_a_reindex_in_flight_does_not_block_browsing(
     project.reindex_in_progress = True
     seed_indexed_paths(vector_store, project.id, *TREE)
     await db_session.commit()
+    await grant_membership(authed_user.id, project.id, VIEWER_NAME)
 
     response = await authed_client.get(f"/projects/{project.id}/indexed-paths")
 
@@ -245,15 +272,18 @@ async def test_a_reindex_in_flight_does_not_block_browsing(
 
 
 @pytest.mark.asyncio
-async def test_another_users_project_tree_is_readable_because_phase_1_shares_projects(
+async def test_a_non_members_project_tree_is_not_readable(
     client_for_user_b: AsyncClient, db_session: AsyncSession, vector_store: InMemoryVectorStore
 ) -> None:
-    """Intended, not a leak (`docs/PRD.md` §4.1): the read scopes through the access
-    resolver, which returns everything in phase 1."""
+    """The tree lists file paths, which describe a private codebase. A caller with no
+    membership must not be able to tell the project apart from one that does not
+    exist, so this is `404` rather than `403` -- and the read still scopes through the
+    one access resolver, whose answer is now "the projects you hold a role on"."""
     project = await _indexed_project(db_session)
     seed_indexed_paths(vector_store, project.id, *TREE)
     await db_session.commit()
 
     response = await client_for_user_b.get(f"/projects/{project.id}/indexed-paths")
 
-    assert response.status_code == status.HTTP_200_OK
+    assert response.status_code == status.HTTP_404_NOT_FOUND
+    assert response.json()["detail"]["code"] == "PROJECT_NOT_FOUND"

@@ -186,7 +186,9 @@ it are worth internalising:
   indexed byte of a repository to derive a few thousand strings.
 - **It is cached per `(project, active_generation)`, in process.** A reindex increments the
   generation, so a swapped index cannot be served a stale tree — the key it would need does not
-  exist yet. Redis is deliberately not involved; it stays the login rate limiter's alone.
+  exist yet. Redis is deliberately not involved: its two readers are the login rate limiter
+  (`app/core/rate_limit.py`) and the per-user grant cache (`app/core/grant_cache.py`), and the
+  path tree is neither. It is still not the job queue either — that is Kafka.
 - **The wire shape is lazy and the cache is not.** The endpoint answers one directory at a time,
   while one scroll builds the whole path list behind it. Qdrant has no notion of a directory, so
   a per-directory read costs a prefix filter over the same collection — one scroll sliced in

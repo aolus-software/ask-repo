@@ -63,6 +63,29 @@ describe("parseApiError", () => {
     expect(error.status).toBe(503);
     expect(error.code).toBe("INTERNAL_ERROR");
   });
+
+  it("captures a widened detail body under extra", async () => {
+    const error = await parseApiError(
+      jsonResponse(
+        {
+          detail: {
+            code: "LAST_OWNER",
+            message: "Would leave projects ownerless.",
+            projects: [{ id: "p1", name: "payments-api" }],
+          },
+        },
+        409,
+      ),
+    );
+    expect(error.extra.projects).toEqual([{ id: "p1", name: "payments-api" }]);
+  });
+
+  it("has an empty extra for an ordinary error", async () => {
+    const error = await parseApiError(
+      jsonResponse({ detail: { code: "LAST_ADMIN", message: "Nope." } }, 409),
+    );
+    expect(error.extra).toEqual({});
+  });
 });
 
 describe("fieldError", () => {

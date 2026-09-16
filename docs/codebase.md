@@ -41,7 +41,12 @@ one exception in the whole codebase is `ask_question`, which must both run a pre
 and return a streaming response — and even there, all the policy is in the service.
 
 Authorization lives in the **service**, not the route, so `reindex` and `delete` cannot drift
-apart in what they permit.
+apart in what they permit. Where a write needs more than membership, the service names the
+permission via `access.require_permission` — reindex, delete, module create/edit/delete,
+generation, change-set apply/discard, checklist item edit, result recording, and mock-data
+record edit each name one. A plain list or read has no call beyond the membership scope
+`resolve_project_scope` already applies. The only router-level gate is `require_admin`, and only
+on `roles.py` where every route is admin-only.
 
 ### The wire boundary: `snake_case` in, `camelCase` out
 
@@ -62,9 +67,13 @@ keyed by the `camelCase` field name.
 
 ### `403` vs `404` is a security decision
 
-- **`403`** when the caller may see the resource but not do this to it — deleting a project
-  someone else created. Project existence is deliberately public.
-- **`404`** when the caller should not learn it exists — another user's conversation.
+- **`404`** when the caller should not learn it exists — another user's conversation, or a
+  project the caller holds no membership on. Project existence is **not** public: once projects
+  are not shared, "you may not see this" and "this does not exist" are the same answer, and a
+  `403` would confirm a private repository exists to anyone who can guess an id.
+- **`403`** when the caller may see the resource but not do this to it — a *member* whose role
+  is too low to delete the project. They can already see it in their own list, so a `404` would
+  contradict what the UI just rendered.
 
 Backwards, this either leaks existence or hides something the user can already see in a list.
 
@@ -72,27 +81,48 @@ Backwards, this either leaks existence or hides something the user can already s
 
 ## The access resolver
 
-This is the single most consequential constraint in the repo, and it is one function:
+This is the single most consequential constraint in the repo, and it is two functions in
+`app/core/access.py`:
 
 ```python
 def resolve_project_scope(user: AuthenticatedUser) -> ProjectScope:
     """Which projects this caller may read."""
-    return ProjectScope.all()          # phase 2 replaces this body
+    if user.is_admin:
+        return ProjectScope.all()
+    return ProjectScope.of(grant.project_id for grant in user.grants.values())
+
+def require_permission(user, project_id, permission) -> None:
+    """What this caller may do to one of them. Raises 404 or 403."""
 ```
 
-Today every authenticated user can list and query every project. **That is designed behaviour,
-not a leak** — [`PRD.md`](PRD.md) §4.1 and `SECURITY.md` both say so. Per-project access control
-is phase 2.
+**All read scoping goes through `resolve_project_scope`, and every gate through
+`require_permission`.** A route, service or query that filters projects on its own is a defect
+*even when its output is currently correct*, because it puts scoping in two places —
+`tests/test_scoping_is_single_point.py` enforces that as a grep.
 
-To make phase 2 a change rather than a rewrite, **all read scoping goes through this one
-function**. A route, service or query that filters projects on its own is a defect *even when its
-output is currently correct*, because it puts read scoping in two places.
+That discipline is what made per-project RBAC a change to one function's body rather than a
+rewrite: phase 2.1 replaced the `return ProjectScope.all()` that shipped in phase 1, added
+`require_permission` beside it, and touched none of the 15 call sites.
+
+`ProjectScope` is an explicit dataclass rather than `list[UUID] | None`, because a `None`
+sentinel meaning "unrestricted" is fail-open — a bug that forgets to set it hands out
+everything. An empty `ids` means *no* projects, never all of them. `narrowed_to` is how an
+orthogonal filter such as `?ownerless=true` applies **on top of** the resolver's answer instead
+of replacing it, so the filter never becomes a second enforcement point.
+
+The grants themselves are loaded once per request by `AuthContextMiddleware`, which is what
+keeps both functions synchronous — see [`architecture.md`](architecture.md).
 
 Its counterpart `resolve_conversation_owner` sits in the same file so the contrast is visible
-rather than folklore: projects are shared, conversations are private.
+rather than folklore: projects are reached through membership, conversations are private to one
+user and have no admin bypass at all. The permission catalogue in `app/core/permissions.py`
+deliberately contains **no `conversation.*` member**, which is what makes the admin bypass in
+`require_permission` safe — there is nothing there to bypass into, and `tests/test_permissions.py`
+fails if one is ever added.
 
-**`created_by` is not ownership.** It is attribution, and it gates destructive operations
-(delete, reindex) alongside `is_admin`. It never scopes reads.
+**`created_by` is not ownership.** It is attribution. The RBAC migration read it once to
+backfill an `owner` membership per project; after that, what a caller may do comes from their
+membership's role, never from that column, and it never scopes reads.
 
 ---
 
@@ -103,19 +133,21 @@ backend/app/
 ├── main.py            FastAPI app + lifespan (topics, probes, queue)
 ├── worker.py          the separate process: 3 consumers + retry ladders + reconcile sweep
 ├── config.py          Settings — the only place os.environ is read
-├── cli.py             seed-admins, run by the container entrypoint
+├── cli.py             seed-admins and restore-system-roles; seed-admins runs from
+│                      the container entrypoint
 │
 ├── api/
 │   ├── deps.py        shared dependencies (CurrentUser, AdminUser, service factories)
-│   └── routes/        12 routers, 56 routes
+│   └── routes/        14 routers, 65 routes
 │
-├── core/              cross-cutting: access, crypto, errors, logging, middleware,
-│                      passwords, rate_limit, repo_url, security
+├── core/              cross-cutting: access, crypto, errors, grant_cache, logging,
+│                      middleware, passwords, permissions, rate_limit, repo_url,
+│                      role_seed, security
 ├── db/session.py      engine + sessionmaker
-├── models/            6 modules, 13 tables
-├── repositories/      12 repositories — the only place SQL is written
+├── models/            7 modules, 16 tables
+├── repositories/      14 repositories — the only place SQL is written
 ├── schemas/           request/response shapes, all on ApiModel
-├── services/          12 services — business rules and authorization,
+├── services/          14 services — business rules and authorization,
 │                      plus path_tree.py: pure tree shaping, no I/O
 │
 ├── ingestion/         cloner, walker, chunker, embedder/, vector_store, pipeline
@@ -126,14 +158,33 @@ backend/app/
 └── mockdata/          generator, model_output, operations
 ```
 
+### The RBAC modules
+
+Per-project access is spread across the same layers as any other feature, plus three modules in
+`core/` that have no equivalent elsewhere:
+
+| Module | Holds |
+| --- | --- |
+| `core/permissions.py` | `Permission` — the source of truth for which permissions exist — the groups the role-matrix UI renders, and the viewer/editor/owner permission sets |
+| `core/role_seed.py` | `ensure_system_roles`, reconciling the three system roles to those sets. One implementation, called by the migration, the test harness, and `cli.py restore-system-roles` |
+| `core/grant_cache.py` | The Redis read-through cache for a user's grants, with epoch and per-user invalidation |
+| `models/membership.py` | `Role`, `RolePermission`, `ProjectMembership` |
+| `repositories/role.py`, `repositories/membership.py` | Their queries, including `load_grants` (the middleware's hot path), `ownerless_project_ids` and `projects_solely_owned_by` |
+| `services/role.py`, `services/membership.py` | Role CRUD with system-role immutability; granting, changing and revoking membership |
+| `api/routes/roles.py`, `api/routes/members.py` | `/roles` + `/permissions` (admin-only, gated at the router) and `/projects/{id}/members` |
+
+Every service write that changes who may reach what **evicts the grant cache after the commit** —
+a role-definition change bumps the epoch, a membership change deletes that user's key.
+
 ### Reading order for a newcomer
 
 1. `config.py` — what is configurable
 2. `models/project.py` — the richest table, and the lease/generation columns
 3. `api/routes/projects.py` → `services/project.py` → `repositories/project.py` — one feature
    through all four layers
-4. `ingestion/pipeline.py` — the write path end to end
-5. `rag/graph/build.py` — the answer graph in one screen
+4. `core/access.py` + `core/permissions.py` — who may see what, and what they may do
+5. `ingestion/pipeline.py` — the write path end to end
+6. `rag/graph/build.py` — the answer graph in one screen
 
 ---
 
@@ -145,13 +196,14 @@ Next.js App Router, and **not a thin client**.
 frontend/
 ├── app/
 │   ├── (auth)/          login, change-password
-│   ├── (app)/           dashboard, projects, ask, checklist, settings
+│   ├── (app)/           dashboard, projects, ask, checklist,
+│   │                    settings (users, roles)
 │   └── api/
 │       ├── [...path]/   the one route the browser talks to — proxies everything
 │       └── auth/        login, logout, refresh — the only handlers that write cookies
 ├── components/
 │   ├── ui/              shadcn on the Base UI base (30 components)
-│   ├── ask/ checklist/ mock-data/ projects/ users/   feature components
+│   ├── ask/ checklist/ mock-data/ projects/ roles/ users/   feature components
 │   ├── form/ feedback/ layout/                       shared shells
 ├── hooks/               React Query hooks
 ├── lib/                 api client, query keys, SSE parser, auth/session

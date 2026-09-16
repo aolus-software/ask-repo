@@ -23,6 +23,7 @@ from app.config import Settings
 from app.core import access
 from app.core.errors import AppError, ErrorCode
 from app.core.middleware import AuthenticatedUser
+from app.core.permissions import Permission
 from app.models.checklist import (
     ChangeSetOrigin,
     ChangeSetStatus,
@@ -135,9 +136,11 @@ class ChecklistChangeSetService:
     ) -> ChangeSetApplyResponse:
         """Apply the named operations, in one transaction.
 
-        Open to any authenticated user: applying a change set is reviewing a shared
-        document, and gating it on `created_by` would mean only the person who ran the
-        generation could act on it (spec 5.4).
+        Open to any project member who holds `changeset.apply`: applying a change set
+        is reviewing a shared document, and gating it on `created_by` would mean only
+        the person who ran the generation could act on it (spec 5.4) -- but a viewer
+        is a tester, not a reviewer, so the role still matters even though ownership
+        does not.
 
         Each stored operation is parsed defensively rather than let a `ValidationError`
         propagate: `ProposedOperation.item_id` is typed `str` at generation time so a
@@ -146,6 +149,7 @@ class ChecklistChangeSetService:
         not parse is therefore skipped like any other one whose target is gone.
         """
         change_set, module = await self._require_pending(change_set_id, actor)
+        access.require_permission(actor, module.project_id, Permission.CHANGESET_APPLY)
         wanted = set(payload.operation_ids) if payload.operation_ids is not None else None
 
         touched: list[ChecklistItem] = []
@@ -187,8 +191,10 @@ class ChecklistChangeSetService:
     async def discard(
         self, change_set_id: uuid.UUID, *, actor: AuthenticatedUser
     ) -> ChecklistChangeSetResponse:
-        """Mark the change set discarded and write nothing else."""
+        """Mark the change set discarded and write nothing else. Gated on
+        `changeset.apply`, matching `apply`: a discard is also a review decision."""
         change_set, module = await self._require_pending(change_set_id, actor)
+        access.require_permission(actor, module.project_id, Permission.CHANGESET_APPLY)
         change_set.status = ChangeSetStatus.DISCARDED.value
         change_set.resolved_by = actor.id
         change_set.resolved_at = datetime.now(UTC)

@@ -16,9 +16,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import Settings
 from app.core.errors import AppError
+from app.core.permissions import VIEWER_NAME
 from app.models.mock_data import MockDataRecord
 from app.services.mock_data_dataset import MockDataDatasetService
 from app.services.mock_data_export import build_mock_data_json, build_mock_data_workbook
+from tests.conftest import GrantMembership
 from tests.factories import (
     create_checklist_module,
     create_mock_data_record,
@@ -65,7 +67,9 @@ def test_build_mock_data_workbook_unions_field_keys_across_records() -> None:
     assert [cell.value for cell in sheet[3]] == ["Globex", "2026-01-01"]
 
 
-async def test_export_json_succeeds_under_cap(db_session: AsyncSession) -> None:
+async def test_export_json_succeeds_under_cap(
+    db_session: AsyncSession, grant_membership: GrantMembership
+) -> None:
     """export_json returns JSON array when records are under cap."""
     # Create project with embedding_collection
     project = await create_project(db_session)
@@ -75,7 +79,8 @@ async def test_export_json_succeeds_under_cap(db_session: AsyncSession) -> None:
     # Create module and record
     module = await create_checklist_module(db_session, project_id=project.id)
     user = await create_user(db_session)
-    actor = authenticated(user)
+    await grant_membership(user.id, project.id, VIEWER_NAME)
+    actor = await authenticated(db_session, user)
 
     await create_mock_data_record(
         db_session, module_id=module.id, fields={"name": "TestService"}, created_by=user.id
@@ -94,7 +99,9 @@ async def test_export_json_succeeds_under_cap(db_session: AsyncSession) -> None:
     assert payload[0]["name"] == "TestService"
 
 
-async def test_export_xlsx_succeeds_under_cap(db_session: AsyncSession) -> None:
+async def test_export_xlsx_succeeds_under_cap(
+    db_session: AsyncSession, grant_membership: GrantMembership
+) -> None:
     """export_xlsx returns valid workbook when records are under cap."""
     # Create project with embedding_collection
     project = await create_project(db_session)
@@ -104,7 +111,8 @@ async def test_export_xlsx_succeeds_under_cap(db_session: AsyncSession) -> None:
     # Create module and records
     module = await create_checklist_module(db_session, project_id=project.id)
     user = await create_user(db_session)
-    actor = authenticated(user)
+    await grant_membership(user.id, project.id, VIEWER_NAME)
+    actor = await authenticated(db_session, user)
 
     # Create records with explicit timestamps to control ordering
     started = datetime.now(UTC)
@@ -140,7 +148,9 @@ async def test_export_xlsx_succeeds_under_cap(db_session: AsyncSession) -> None:
     assert [cell.value for cell in sheet[3]] == ["Globex", "2026-01-01"]
 
 
-async def test_export_refuses_over_the_row_cap(db_session: AsyncSession) -> None:
+async def test_export_refuses_over_the_row_cap(
+    db_session: AsyncSession, grant_membership: GrantMembership
+) -> None:
     """Service rejects export when record count exceeds cap."""
     # Create project with embedding_collection
     project = await create_project(db_session)
@@ -150,7 +160,8 @@ async def test_export_refuses_over_the_row_cap(db_session: AsyncSession) -> None
     # Create module and records with explicit timestamps
     module = await create_checklist_module(db_session, project_id=project.id)
     user = await create_user(db_session)
-    actor = authenticated(user)
+    await grant_membership(user.id, project.id, VIEWER_NAME)
+    actor = await authenticated(db_session, user)
 
     started = datetime.now(UTC)
     records = []
@@ -182,7 +193,7 @@ async def test_export_json_404s_on_nonexistent_module(db_session: AsyncSession) 
     user = await create_user(db_session)
 
     with pytest.raises(AppError) as excinfo:
-        await service.export_json(uuid.uuid4(), actor=authenticated(user))
+        await service.export_json(uuid.uuid4(), actor=await authenticated(db_session, user))
 
     assert excinfo.value.status_code == status.HTTP_404_NOT_FOUND
 
@@ -193,6 +204,6 @@ async def test_export_xlsx_404s_on_nonexistent_module(db_session: AsyncSession) 
     user = await create_user(db_session)
 
     with pytest.raises(AppError) as excinfo:
-        await service.export_xlsx(uuid.uuid4(), actor=authenticated(user))
+        await service.export_xlsx(uuid.uuid4(), actor=await authenticated(db_session, user))
 
     assert excinfo.value.status_code == status.HTTP_404_NOT_FOUND

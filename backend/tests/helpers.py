@@ -5,7 +5,7 @@ import uuid
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import Settings
-from app.core.middleware import AuthenticatedUser
+from app.core.middleware import AuthenticatedUser, _load_grants
 from app.ingestion.vector_store import InMemoryVectorStore
 from app.models.user import User
 from app.services.checklist_module import ChecklistModuleService
@@ -27,11 +27,22 @@ refuse with `MODULE_PATH_NOT_INDEXED`.
 """
 
 
-def authenticated(user: User) -> AuthenticatedUser:
+async def authenticated(session: AsyncSession, user: User) -> AuthenticatedUser:
     """The frozen identity a service receives, built from a row.
 
     `AuthenticatedUser` is deliberately not the ORM `User`: the middleware resolves
     identity in its own session, which closes before the handler runs.
+
+    The grant snapshot is loaded by `AuthContextMiddleware`'s own `_load_grants`, not
+    by a copy of it. `require_permission` reads nothing but that snapshot, so a helper
+    that built it differently — or left it empty — would let a service test pass while
+    the same call through a route was refused, which is the one divergence a
+    hand-rolled actor must not have. That is also why this is async and takes the
+    session: membership lives in the database, exactly as it does in production.
+
+    Call it **after** the memberships exist. The snapshot is a point-in-time copy, so
+    an actor built before `create_project` sees no grant on that project — the same
+    staleness a real request has between one request and the next.
     """
     return AuthenticatedUser(
         id=user.id,
@@ -39,6 +50,7 @@ def authenticated(user: User) -> AuthenticatedUser:
         email=user.email,
         is_admin=user.is_admin,
         must_change_password=user.must_change_password,
+        grants=await _load_grants(session, user.id),
     )
 
 

@@ -33,16 +33,16 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useGenerateChecklistModule } from "@/hooks/use-checklist-mutations";
-import { useSession } from "@/hooks/use-session";
 import { useChecklistModule, useModuleChangeSets } from "@/hooks/use-checklist";
 import { useClearChecklistResults } from "@/hooks/use-checklist-mutations";
 import { useMockDataChangeSets, useMockDataDataset } from "@/hooks/use-mock-data";
+import { useProject } from "@/hooks/use-projects";
 import { checklistItemListQueryString, endpoints } from "@/lib/api/endpoints";
 import { isApiError } from "@/lib/api/errors";
 import type { ChecklistItemListParams } from "@/lib/api/types";
+import { PERMISSION, can } from "@/lib/can";
 
 export function ModuleScreen({ moduleId }: { moduleId: string }) {
-  const user = useSession();
   const query = useChecklistModule(moduleId);
   const generate = useGenerateChecklistModule(moduleId);
   const [filters, setFilters] = useState<Partial<ChecklistItemListParams>>({});
@@ -51,6 +51,17 @@ export function ModuleScreen({ moduleId }: { moduleId: string }) {
   const clearResults = useClearChecklistResults(moduleId);
 
   const checklistModule = query.data;
+  // Mirrors the backend gate; it does not replace it. A 403 still surfaces as an
+  // error. Every permission check on this screen -- checklist and mock data alike --
+  // reads off this one fetch, since both tabs belong to the same project.
+  const project = useProject(checklistModule?.projectId ?? "");
+  const canGenerate = project.data ? can(project.data, PERMISSION.GENERATE_RUN) : false;
+  const canApplyChangeSet = project.data
+    ? can(project.data, PERMISSION.CHANGESET_APPLY)
+    : false;
+  const canEditMockData = project.data
+    ? can(project.data, PERMISSION.MOCKDATA_EDIT)
+    : false;
   const pendingChangeSetId = checklistModule?.pendingChangeSetId ?? null;
   // Only fetched when there is something to review: the audit trail is not on screen
   // otherwise, and a module in `ready` should not pay for the request.
@@ -97,7 +108,9 @@ export function ModuleScreen({ moduleId }: { moduleId: string }) {
       ? "A generation is already running for this dataset."
       : mockDataPendingChangeSetId
         ? "Apply or discard the pending changes before generating again."
-        : null;
+        : !canEditMockData
+          ? "You do not have permission to generate mock data for this project."
+          : null;
 
   if (query.isLoading) {
     return (
@@ -125,7 +138,9 @@ export function ModuleScreen({ moduleId }: { moduleId: string }) {
     ? "A generation is already running for this module."
     : pendingChangeSetId
       ? "Apply or discard the pending changes before generating again."
-      : null;
+      : !canGenerate
+        ? "You do not have permission to generate this checklist."
+        : null;
 
   return (
     <div className="mx-auto w-full max-w-7xl space-y-6">
@@ -209,6 +224,7 @@ export function ModuleScreen({ moduleId }: { moduleId: string }) {
                       changeSet={pendingChangeSet}
                       moduleId={moduleId}
                       items={checklistModule.items}
+                      canApply={canApplyChangeSet}
                     />
                   </RefinementDrawer>
                 ) : null}
@@ -223,6 +239,7 @@ export function ModuleScreen({ moduleId }: { moduleId: string }) {
                   <ChatPanel
                     moduleId={moduleId}
                     hasPendingChangeSet={pendingChangeSetId !== null}
+                    canSend={canGenerate}
                   />
                 </RefinementDrawer>
 
@@ -274,7 +291,7 @@ export function ModuleScreen({ moduleId }: { moduleId: string }) {
             </div>
           ) : null}
 
-          <ItemGrid items={items} moduleId={moduleId} user={user} />
+          <ItemGrid items={items} moduleId={moduleId} />
 
           <ConfirmDialog
             open={confirmingClear}
@@ -342,6 +359,7 @@ export function ModuleScreen({ moduleId }: { moduleId: string }) {
                     changeSet={pendingMockDataChangeSet}
                     moduleId={moduleId}
                     records={mockData.data?.records ?? []}
+                    canApply={canEditMockData}
                   />
                 </RefinementDrawer>
               ) : null}
@@ -357,6 +375,7 @@ export function ModuleScreen({ moduleId }: { moduleId: string }) {
                   moduleId={moduleId}
                   hasPendingChangeSet={mockDataPendingChangeSetId !== null}
                   isGenerating={mockData.data?.status === "generating"}
+                  canSend={canEditMockData}
                 />
               </RefinementDrawer>
               <Button
@@ -385,7 +404,11 @@ export function ModuleScreen({ moduleId }: { moduleId: string }) {
             />
           ) : null}
 
-          <RecordsTable moduleId={moduleId} records={mockData.data?.records ?? []} />
+          <RecordsTable
+            moduleId={moduleId}
+            records={mockData.data?.records ?? []}
+            canEdit={canEditMockData}
+          />
         </TabsContent>
       </Tabs>
     </div>

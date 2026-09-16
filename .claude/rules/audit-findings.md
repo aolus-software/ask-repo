@@ -30,26 +30,26 @@ Use these exact inline bold labels, not `###` headings, so findings scan uniform
 **Where:** `backend/app/api/routes/projects.py:88-96`,
 `backend/app/services/project_service.py:141`
 
-**What this is.** Projects are shared: anyone on the instance can list and query any project
-someone else added. That is intended. What is *not* intended is deleting one — the PRD limits
-delete and reindex to the person who created the project, or an admin, because deleting drops
-the project's vectors and everyone loses the index.
+**What this is.** A project's members can list and query it. That is intended. What is *not*
+intended is a member deleting one who lacks the role for it — the PRD limits delete and
+reindex to a named permission (`project.delete`/`project.reindex`), typically held only by an
+`owner`, because deleting drops the project's vectors and every member loses the index.
 
 **Why this can happen.** The delete route resolves the project by id and calls
-`service.delete()` directly. The `created_by`/`is_admin` comparison that the PRD describes was
-never written — there is no check between the route and the delete. Any authenticated user who
-can see a project id in the list response can delete it, and the list response returns every
-project on the instance.
+`service.delete()` directly. The `require_permission` check the PRD describes was never
+written — there is no check between the route and the delete. Any member who can see the
+project — which membership already grants, independent of role — can delete it.
 
 **What it costs.** One mistaken click destroys a shared index. Re-creating it means a full
 re-clone and re-embed of the repository, because the working copy is deleted after indexing —
 so there is no cheap recovery. There is also no attribution: nothing records who deleted it.
 
-**What we should do.** Add the ownership check in the service, not the route, so reindex picks
-it up too — both operations are gated identically per PRD §4.1. Return `403`, not `404`:
-project existence is deliberately public here. Roughly two hours including the access test the
-PRD §7 success criteria already call for. See `.claude/rules/router.md` → "Destructive
-operations are gated".
+**What we should do.** Add the permission check in the service, not the route, so reindex
+picks it up too — both operations are gated identically per PRD §4.1. Return `403
+INSUFFICIENT_ROLE`, not `404`: the caller is a member and may already see this project, so
+`404` would contradict the screen in front of them — `404` is reserved for a caller who holds
+no membership at all. Roughly two hours including the access test the PRD §7 success criteria
+already call for. See `.claude/rules/router.md` → "Destructive operations are gated".
 ```
 
 ### Block-by-block requirements

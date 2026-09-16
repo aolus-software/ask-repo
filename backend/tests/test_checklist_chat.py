@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.config import Settings
 from app.core.errors import AppError, ErrorCode
+from app.core.permissions import EDITOR_NAME
 from app.models.checklist import ChangeSetOrigin, ChangeSetStatus, ChecklistModule
 from app.models.conversation import FinishReason, MessageRole
 from app.models.project import Project, ProjectStatus
@@ -17,6 +18,7 @@ from app.repositories.checklist_change_set import ChecklistChangeSetRepository
 from app.repositories.checklist_message import ChecklistMessageRepository
 from app.schemas.checklist import ChecklistMessageCreateRequest
 from app.services.checklist_module import stream_checklist_turn
+from tests.conftest import GrantMembership
 from tests.factories import create_checklist_module, create_project, create_user
 from tests.fakes import FakeAnswerer  # yields a scripted event sequence
 from tests.helpers import authenticated, checklist_module_service
@@ -34,18 +36,21 @@ async def _ready_module(session: AsyncSession) -> tuple[Project, ChecklistModule
 @pytest.mark.asyncio
 async def test_prepare_turn_refuses_a_project_that_is_not_ready(
     db_session: AsyncSession,
+    grant_membership: GrantMembership,
 ) -> None:
     """Once SSE headers are sent the status is fixed at 200, so nothing that needs a
     status code may be deferred into the stream (spec 5.1)."""
     project = await create_project(db_session, status=ProjectStatus.CLONING)
     module = await create_checklist_module(db_session, project_id=project.id)
     service = checklist_module_service(db_session)
+    author = await create_user(db_session)
+    await grant_membership(author.id, module.project_id, EDITOR_NAME)
 
     with pytest.raises(AppError) as caught:
         await service.prepare_turn(
             module.id,
             ChecklistMessageCreateRequest(question="Add a test."),
-            actor=authenticated(await create_user(db_session)),
+            actor=await authenticated(db_session, author),
         )
 
     assert caught.value.status_code == status.HTTP_409_CONFLICT
@@ -53,18 +58,23 @@ async def test_prepare_turn_refuses_a_project_that_is_not_ready(
 
 
 @pytest.mark.asyncio
-async def test_prepare_turn_applies_the_embedding_guard(db_session: AsyncSession) -> None:
+async def test_prepare_turn_applies_the_embedding_guard(
+    db_session: AsyncSession,
+    grant_membership: GrantMembership,
+) -> None:
     """It DOES apply here, unlike generation: chat retrieves, and a query embedded by
     a different model lands in a vector space the collection was never built in."""
     project, module = await _ready_module(db_session)
     project.embedding_model = "some-other-model"
     service = checklist_module_service(db_session)
+    author = await create_user(db_session)
+    await grant_membership(author.id, module.project_id, EDITOR_NAME)
 
     with pytest.raises(AppError) as caught:
         await service.prepare_turn(
             module.id,
             ChecklistMessageCreateRequest(question="Add a test."),
-            actor=authenticated(await create_user(db_session)),
+            actor=await authenticated(db_session, author),
         )
 
     assert caught.value.code is ErrorCode.EMBEDDING_MODEL_CHANGED
@@ -73,16 +83,19 @@ async def test_prepare_turn_applies_the_embedding_guard(db_session: AsyncSession
 @pytest.mark.asyncio
 async def test_prepare_turn_persists_the_question_and_mints_ids(
     db_session: AsyncSession,
+    grant_membership: GrantMembership,
 ) -> None:
     """The change-set id is minted here because the row is written under the shield in
     `finally`, and the `changeSet` event has to carry it (spec 5.2)."""
     _, module = await _ready_module(db_session)
     service = checklist_module_service(db_session)
+    author = await create_user(db_session)
+    await grant_membership(author.id, module.project_id, EDITOR_NAME)
 
     context = await service.prepare_turn(
         module.id,
         ChecklistMessageCreateRequest(question="Add a test for an empty password."),
-        actor=authenticated(await create_user(db_session)),
+        actor=await authenticated(db_session, author),
     )
 
     assert context.change_set_id is not None
@@ -94,32 +107,40 @@ async def test_prepare_turn_persists_the_question_and_mints_ids(
 
 
 @pytest.mark.asyncio
-async def test_any_user_may_speak_in_the_shared_chat(db_session: AsyncSession) -> None:
-    """Shared, inverting docs/PRD.md 4.2 deliberately: the chat is the justification
-    record for a shared document (spec 2.4)."""
+async def test_any_member_may_speak_in_the_shared_chat(
+    db_session: AsyncSession, grant_membership: GrantMembership
+) -> None:
+    """Shared across the project's members, inverting docs/PRD.md 4.2 deliberately:
+    the chat is the justification record for a document the project shares (spec 2.4).
+    The speaker here created neither the module nor the project."""
     _, module = await _ready_module(db_session)
-    stranger = await create_user(db_session)
+    colleague = await create_user(db_session)
+    await grant_membership(colleague.id, module.project_id, EDITOR_NAME)
     service = checklist_module_service(db_session)
 
     context = await service.prepare_turn(
         module.id,
         ChecklistMessageCreateRequest(question="Why does this expect 410?"),
-        actor=authenticated(stranger),
+        actor=await authenticated(db_session, colleague),
     )
 
-    assert context.created_by == stranger.id
+    assert context.created_by == colleague.id
 
 
 @pytest.mark.asyncio
 async def test_the_stream_writes_the_message_and_the_change_set(
-    db_session: AsyncSession, sessionmaker: async_sessionmaker[AsyncSession]
+    db_session: AsyncSession,
+    grant_membership: GrantMembership,
+    sessionmaker: async_sessionmaker[AsyncSession],
 ) -> None:
     _, module = await _ready_module(db_session)
     service = checklist_module_service(db_session)
+    author = await create_user(db_session)
+    await grant_membership(author.id, module.project_id, EDITOR_NAME)
     context = await service.prepare_turn(
         module.id,
         ChecklistMessageCreateRequest(question="Add a test."),
-        actor=authenticated(await create_user(db_session)),
+        actor=await authenticated(db_session, author),
     )
     answerer = FakeAnswerer.proposing(
         change_set_id=context.change_set_id, message_id=context.assistant_message_id
@@ -159,17 +180,21 @@ async def test_the_stream_writes_the_message_and_the_change_set(
 
 @pytest.mark.asyncio
 async def test_a_disconnect_still_persists_what_arrived(
-    db_session: AsyncSession, sessionmaker: async_sessionmaker[AsyncSession]
+    db_session: AsyncSession,
+    grant_membership: GrantMembership,
+    sessionmaker: async_sessionmaker[AsyncSession],
 ) -> None:
     """A disconnect arrives as `CancelledError`, and every `await` in a cancelled task
     raises it again immediately -- so an unshielded cleanup runs none of itself and
     loses the partial answer this design exists to keep (spec 5.3)."""
     _, module = await _ready_module(db_session)
     service = checklist_module_service(db_session)
+    author = await create_user(db_session)
+    await grant_membership(author.id, module.project_id, EDITOR_NAME)
     context = await service.prepare_turn(
         module.id,
         ChecklistMessageCreateRequest(question="Add a test."),
-        actor=authenticated(await create_user(db_session)),
+        actor=await authenticated(db_session, author),
     )
     answerer = FakeAnswerer.hanging_after_one_token()
 

@@ -52,7 +52,7 @@ command and the relevant output.
 <!-- Delete this section if the change touches none of it. -->
 
 - [ ] Read scoping still goes through the single access resolver — no route filters projects on its own (PRD §4.1, §5.1)
-- [ ] Destructive operations still gated on `created_by` or `is_admin`
-- [ ] Correct error codes: `403` for "may see but not do", `404` for "may not know it exists" (PRD §5.1)
+- [ ] Destructive and role-sensitive operations still gated on `access.require_permission`, never on `created_by`
+- [ ] Correct error codes: `404 PROJECT_NOT_FOUND` for a non-member, `403 INSUFFICIENT_ROLE` for a member whose role lacks the permission (PRD §5.1)
 - [ ] No secret is logged, returned, or included in a traceback
 - [ ] Any new user-supplied URL is validated per PRD §9 (scheme, host allowlist, private-address rejection)

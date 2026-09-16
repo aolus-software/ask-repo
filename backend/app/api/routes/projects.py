@@ -15,10 +15,11 @@ from app.config import Settings, get_settings
 from app.ingestion.vector_store import VectorStoreFactory, build_store_factory
 from app.queue.protocol import IngestionQueue
 from app.schemas.errors import ERROR_RESPONSES
-from app.schemas.pagination import ListQuery, PaginatedResponse
+from app.schemas.pagination import PaginatedResponse
 from app.schemas.project import (
     IndexedPathsResponse,
     ProjectCreateRequest,
+    ProjectListQuery,
     ProjectResponse,
     ReindexResponse,
 )
@@ -103,7 +104,7 @@ IndexedPathServiceDep = Annotated[IndexedPathService, Depends(get_indexed_path_s
 async def list_projects(
     current_user: CurrentUser,
     service: ProjectServiceDep,
-    query: Annotated[ListQuery, Query()],
+    query: Annotated[ProjectListQuery, Query()],
 ) -> PaginatedResponse[ProjectResponse]:
     return await service.list(query, actor=current_user)
 

@@ -12,6 +12,7 @@ import subprocess
 import uuid
 from collections.abc import AsyncIterator, Callable, Iterator
 from pathlib import Path
+from typing import Protocol
 
 import asyncpg
 import pytest
@@ -22,6 +23,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.config import Settings, get_settings
+from app.core.role_seed import ensure_system_roles
 from app.core.security import create_access_token, hash_password
 from app.db.session import get_sessionmaker, reset_engine
 from app.ingestion.embedder import FakeEmbedder
@@ -37,6 +39,14 @@ from tests.fakes import ScriptedChatModel
 BACKEND_ROOT = Path(__file__).resolve().parent.parent
 TEST_DB_NAME = "askrepo_test"
 TEST_REDIS_DB = 15
+
+
+class GrantMembership(Protocol):
+    """What the `grant_membership` fixture hands back: grant a role, or raise."""
+
+    async def __call__(
+        self, user_id: uuid.UUID, project_id: uuid.UUID, role: str = "owner"
+    ) -> None: ...
 
 
 def _swap_database(url: str, name: str) -> str:
@@ -109,6 +119,14 @@ async def _clean_tables(_migrated_database: None) -> AsyncIterator[None]:
     tables = ", ".join(f'"{table.name}"' for table in reversed(Base.metadata.sorted_tables))
     async with get_sessionmaker()() as session:
         await session.execute(text(f"TRUNCATE {tables} RESTART IDENTITY CASCADE"))
+        # The three system roles are reference data the RBAC migration installs, not
+        # test data -- truncating them is the part that is wrong, and this restores
+        # the invariant rather than setting anything up. It re-seeds from the same
+        # `SYSTEM_ROLES` the migration reads, so the two cannot disagree. Done inside
+        # this fixture rather than a second autouse one because ordering between two
+        # autouse fixtures is not guaranteed, and a test that ran before the seed
+        # would fail intermittently.
+        await ensure_system_roles(session)
         await session.commit()
     yield
 
@@ -280,10 +298,40 @@ def app_with_queue(
     return application
 
 
-async def _authenticated_client(
-    app_with_queue: FastAPI, db_session: AsyncSession, *, is_admin: bool
-) -> AsyncIterator[AsyncClient]:
-    """An `AsyncClient` authenticated as a freshly created, ready-to-use user.
+@pytest.fixture
+async def grant_membership(db_session: AsyncSession) -> GrantMembership:
+    """Grant a role on a project, as the RBAC-era replacement for shared access.
+
+    Returns an async callable. Tests written before Phase 2.1 assumed every user
+    could see every project; they now grant explicitly, which is the behaviour change
+    rather than a test-harness detail.
+
+    **This writes straight to the database, bypassing `MembershipService`.** Once
+    Task 11's Redis grant cache lands it must evict that user's snapshot here too: a
+    test that made any authenticated request before granting has already populated an
+    empty grant set, and the symptom would be a `404` on a project the test just
+    granted, only in tests that happened to call something first.
+    """
+    from sqlalchemy import select
+
+    from app.core.grant_cache import get_grant_cache
+    from app.models.membership import ProjectMembership, Role
+
+    async def _grant(user_id: uuid.UUID, project_id: uuid.UUID, role: str = "owner") -> None:
+        row = (await db_session.execute(select(Role).where(Role.name == role))).scalar_one()
+        db_session.add(
+            ProjectMembership(
+                id=uuid.uuid4(), user_id=user_id, project_id=project_id, role_id=row.id
+            )
+        )
+        await db_session.commit()
+        await get_grant_cache().invalidate_user(user_id)
+
+    return _grant
+
+
+async def _create_user(db_session: AsyncSession, *, is_admin: bool) -> User:
+    """A freshly created, ready-to-use account.
 
     `must_change_password=False`, or the forced-password-change gate returns
     `403 PASSWORD_CHANGE_REQUIRED` on every `/projects` call. Every call creates a
@@ -299,7 +347,11 @@ async def _authenticated_client(
     )
     db_session.add(user)
     await db_session.commit()
+    return user
 
+
+async def _client_for_user(app_with_queue: FastAPI, user: User) -> AsyncIterator[AsyncClient]:
+    """An `AsyncClient` carrying a bearer token for `user`."""
     settings = get_settings()
     token, _ = create_access_token(
         user.id, secret=settings.secret_key, ttl_minutes=settings.access_token_ttl_minutes
@@ -314,36 +366,57 @@ async def _authenticated_client(
 
 
 @pytest.fixture
-async def authed_client(
-    app_with_queue: FastAPI, db_session: AsyncSession
-) -> AsyncIterator[AsyncClient]:
+async def authed_user(db_session: AsyncSession) -> User:
+    """The `User` row behind `authed_client`, for tests that must grant it access.
+
+    `authed_client` depends on this fixture rather than creating its own account, so
+    the two always name the same person. A parallel fixture that built a *second*
+    user would grant access to somebody the client is not.
+    """
+    return await _create_user(db_session, is_admin=False)
+
+
+@pytest.fixture
+async def user_a(db_session: AsyncSession) -> User:
+    """The `User` row behind `client_for_user_a`."""
+    return await _create_user(db_session, is_admin=False)
+
+
+@pytest.fixture
+async def user_b(db_session: AsyncSession) -> User:
+    """The `User` row behind `client_for_user_b`."""
+    return await _create_user(db_session, is_admin=False)
+
+
+@pytest.fixture
+async def admin_user(db_session: AsyncSession) -> User:
+    """The `User` row behind `client_for_admin`."""
+    return await _create_user(db_session, is_admin=True)
+
+
+@pytest.fixture
+async def authed_client(app_with_queue: FastAPI, authed_user: User) -> AsyncIterator[AsyncClient]:
     """An `AsyncClient` authenticated as a freshly created, ready-to-use user."""
-    async for async_client in _authenticated_client(app_with_queue, db_session, is_admin=False):
+    async for async_client in _client_for_user(app_with_queue, authed_user):
         yield async_client
 
 
 @pytest.fixture
-async def client_for_user_a(
-    app_with_queue: FastAPI, db_session: AsyncSession
-) -> AsyncIterator[AsyncClient]:
+async def client_for_user_a(app_with_queue: FastAPI, user_a: User) -> AsyncIterator[AsyncClient]:
     """A distinct authenticated user — the project creator in sharing/gating tests."""
-    async for async_client in _authenticated_client(app_with_queue, db_session, is_admin=False):
+    async for async_client in _client_for_user(app_with_queue, user_a):
         yield async_client
 
 
 @pytest.fixture
-async def client_for_user_b(
-    app_with_queue: FastAPI, db_session: AsyncSession
-) -> AsyncIterator[AsyncClient]:
+async def client_for_user_b(app_with_queue: FastAPI, user_b: User) -> AsyncIterator[AsyncClient]:
     """A second, distinct authenticated user — the reader/attacker in those tests."""
-    async for async_client in _authenticated_client(app_with_queue, db_session, is_admin=False):
+    async for async_client in _client_for_user(app_with_queue, user_b):
         yield async_client
 
 
 @pytest.fixture
-async def client_for_admin(
-    app_with_queue: FastAPI, db_session: AsyncSession
-) -> AsyncIterator[AsyncClient]:
+async def client_for_admin(app_with_queue: FastAPI, admin_user: User) -> AsyncIterator[AsyncClient]:
     """A distinct authenticated admin, who overrides the destructive gate."""
-    async for async_client in _authenticated_client(app_with_queue, db_session, is_admin=True):
+    async for async_client in _client_for_user(app_with_queue, admin_user):
         yield async_client

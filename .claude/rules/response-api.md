@@ -94,14 +94,25 @@ dependencies. Do not copy a sibling route's block.
 
 This is the rule most easily got wrong, and `docs/PRD.md` §5.1 is the authority:
 
-- **`403`** when existence is not a secret. Deleting a project you didn't create returns `403`
-  — projects are deliberately shared instance-wide, so hiding the project's existence would
-  only confuse.
 - **`404`** when the caller should not learn the resource exists. Requesting another user's
-  conversation returns `404`, never `403`, because `403` confirms it is there.
+  conversation returns `404`, never `403`, because `403` confirms it is there. Since phase 2.1
+  this also covers **every** project route for a caller with no membership on that project:
+  project existence is no longer public, repository names are inventory of the organization's
+  private codebases, and "you may not see this" and "this does not exist" are the same answer.
+  A non-member gets `404 PROJECT_NOT_FOUND` on `GET`, `DELETE`, reindex and the chat routes
+  alike.
+- **`403`** when the caller may already see the resource but not do this to it. That is now
+  exactly one case on a project: a **member whose role lacks the permission** —
+  `403 INSUFFICIENT_ROLE`. A viewer deleting a project they can see in their own list gets
+  `403`, because answering `404` would contradict the screen they are looking at.
 
-Getting this backwards either leaks existence or hides a resource the user can plainly see in
-a list. When adding a route, decide which category it is before writing the handler.
+Both answers come from `require_permission` in `app/core/access.py`, which is the only place
+the distinction is made. There is no longer any `created_by`-based variant of it: the three
+`NOT_*_OWNER` error codes were deleted with the gates that raised them.
+
+Getting this backwards either leaks the existence of a private repository or hides a resource
+the user can plainly see in a list. When adding a route, decide which category it is before
+writing the handler.
 
 ## `422` is always possible on a route with a body
 

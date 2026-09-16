@@ -11,6 +11,11 @@ The service identifies itself, reports health, and serves the full auth/accounts
 admin-provisioned users, login, forced first-login password change, session rotation, and login
 rate limiting.
 
+Access is **per project**. Every project has members, each holding one role, and each role
+carries a set of named permissions; `viewer`, `editor` and `owner` ship as immutable system
+roles and admins may define more. See `### Project members` and `### Roles and permissions`
+below.
+
 The project routes and the entire ingestion pipeline are here — clone, walk, chunk, embed, and
 write to Qdrant — along with the Kafka producer, the consumer that turns a queued message into an
 indexing run, the delayed-retry consumers, and `app/worker.py`: the separate process that runs
@@ -120,22 +125,46 @@ wired in yet**, even though all four datastores are now read elsewhere in the ap
 | `GET` | `/users/{id}` | any user | One account |
 | `POST` | `/users` | admin | Provision an account |
 | `PATCH` | `/users/{id}` | admin | Update name or admin flag |
-| `DELETE` | `/users/{id}` | admin | Deactivate, revoking sessions |
+| `DELETE` | `/users/{id}` | admin | Deactivate, revoking sessions. `409 LAST_OWNER` if it would leave any project with no live owner — the body names the blocking projects |
 | `POST` | `/users/{id}/reset-password` | admin | Set a temporary password |
+
+`DELETE /users/{id}` is the one route in the codebase whose error body is wider than
+`{code, message}`. `LAST_OWNER` carries a `projects` array of `{id, name}`, because "no" alone
+tells an admin nothing about what to fix — the widening is declared with its own
+`LastOwnerErrorResponse` model rather than the generic `409` entry, so `/docs` and every
+generated client describe the body the route actually returns. The guard prevents *new*
+strandings; it cannot repair one the RBAC migration's backfill inherited (see
+`?ownerless=true` below).
 
 ### Projects
 
-Every authenticated user can list and read **every** project — phase-1 sharing is intended, not
-a leak (`docs/PRD.md` §4.1). Only the project's `created_by` or an admin may reindex or delete.
+**A project is reachable only by its members.** Access comes from the caller's
+`project_memberships` row and the role it names — see [`../docs/data.md`](../docs/data.md). A
+caller with no membership gets `404 PROJECT_NOT_FOUND` on every route here, including the
+destructive ones: project existence is no longer public, so `403` would confirm a private
+repository exists to anyone who can guess an id. A **member** whose role is too low gets
+`403 INSUFFICIENT_ROLE`. Administrators pass every project permission.
 
 | Method | Path | Auth | Description |
 | --- | --- | --- | --- |
-| `GET` | `/projects` | any user | List all projects, paginated |
-| `GET` | `/projects/{id}` | any user | One project |
-| `GET` | `/projects/{id}/indexed-paths` | any user | Browse (`?path=`) or search (`?search=`) the project's indexed file tree, for the checklist path picker |
-| `POST` | `/projects` | any user | Register a repository and enqueue its first index |
-| `POST` | `/projects/{id}/reindex` | creator or admin | Re-index; raises `reindexInProgress` before publishing, and a run already in flight is a no-op |
-| `DELETE` | `/projects/{id}` | creator or admin | Soft-delete the row and hard-delete its vectors |
+| `GET` | `/projects` | any user | List the projects you are a member of, paginated. Admins see all. `?ownerless=true` (**admin only**, else `403 ADMIN_REQUIRED`) narrows to projects with no live owner |
+| `GET` | `/projects/{id}` | any member | One project, including your own `role` and effective `permissions` on it |
+| `GET` | `/projects/{id}/indexed-paths` | any member | Browse (`?path=`) or search (`?search=`) the project's indexed file tree, for the checklist path picker |
+| `POST` | `/projects` | any user | Register a repository and enqueue its first index. The creator is granted `owner` on it |
+| `POST` | `/projects/{id}/reindex` | `project.reindex` | Re-index; raises `reindexInProgress` before publishing, and a run already in flight is a no-op |
+| `DELETE` | `/projects/{id}` | `project.delete` | Soft-delete the row and hard-delete its vectors |
+
+`ProjectResponse` carries two fields the frontend uses to hide controls it would be refused:
+`role` (the caller's role name on this project, `null` for an admin with no membership) and
+`permissions` (their effective permission values). **Hiding is cosmetic** —
+`access.require_permission` in the service is the control.
+
+`?ownerless=true` exists for one situation the RBAC migration created deliberately. The backfill
+seeded one `owner` membership per project from `created_by` and **did not fabricate owners for
+creators who were already deactivated**, so those projects start with no live owner. They stay
+operable, because admins bypass every project permission, and this filter is how an admin finds
+them to grant someone `owner`. It is applied *on top of* the access resolver's scope rather than
+in place of it, so it can only ever narrow what the caller may already read.
 
 `DELETE` and `indexed-paths` are the two routes here that can return
 **`503 VECTOR_STORE_UNAVAILABLE`**, because they are the two that reach Qdrant. `DELETE` must,
@@ -149,6 +178,55 @@ so a reindex cannot serve a stale tree. It answers one directory at a time, or e
 `?search=`, and refuses with `409 PROJECT_NOT_READY` when there is no index to enumerate. A
 reindex in flight does **not** block it: the live generation is still serving and this read
 records nothing.
+
+### Project members
+
+Who may reach one project, and as what. Every route gates through
+`access.require_permission`, so a non-member gets `404 PROJECT_NOT_FOUND` and an
+under-privileged member gets `403 INSUFFICIENT_ROLE`.
+
+| Method | Path | Auth | Description |
+| --- | --- | --- | --- |
+| `GET` | `/projects/{id}/members` | `membership.read` | Everyone with a role on this project |
+| `POST` | `/projects/{id}/members` | `membership.grant` | Grant a user a role here; `201`. `404 ROLE_NOT_FOUND` / `404 USER_NOT_FOUND`, `409 MEMBERSHIP_EXISTS` if they already hold one |
+| `PATCH` | `/projects/{id}/members/{userId}` | `membership.grant` | Change an existing member's role. `404 MEMBERSHIP_NOT_FOUND`, `404 ROLE_NOT_FOUND`, `409 LAST_OWNER` if it would demote the last owner |
+| `DELETE` | `/projects/{id}/members/{userId}` | `membership.revoke` | Revoke access; `204`. `404 MEMBERSHIP_NOT_FOUND`, `409 LAST_OWNER` if it would remove the last owner |
+
+`viewer` holds `membership.read`, so every member can see who else is on a project. Only
+`owner` holds `membership.grant` and `membership.revoke`.
+
+Both `409 LAST_OWNER` refusals enforce the same invariant as `DELETE /users/{id}`: a live
+project keeps at least one live owner, so nobody can lock a project's own members out of
+managing it.
+
+### Roles and permissions
+
+Role definitions are **instance-wide**; a membership is what carries the project. That is what
+lets one "QA Lead" role be granted on twelve projects without twelve role rows. Every route
+here is admin-only, enforced by a router-level dependency rather than per route, so a route
+added later is gated with no action taken.
+
+| Method | Path | Auth | Description |
+| --- | --- | --- | --- |
+| `GET` | `/permissions` | admin | The permission catalogue, grouped and labelled for the role-matrix editor |
+| `GET` | `/roles` | admin | Every role on the instance, system roles first, each with its permissions and `memberCount` |
+| `POST` | `/roles` | admin | Create a custom role (name + description); `201`. `409 ROLE_NAME_EXISTS` |
+| `PATCH` | `/roles/{id}` | admin | Rename a custom role and/or replace its permission set. `404 ROLE_NOT_FOUND`, `403 SYSTEM_ROLE_IMMUTABLE`, `409 ROLE_NAME_EXISTS`, `422` for a permission not in the catalogue |
+| `DELETE` | `/roles/{id}` | admin | Soft-delete a custom role; `204`. `404 ROLE_NOT_FOUND`, `403 SYSTEM_ROLE_IMMUTABLE`, `409 ROLE_IN_USE` if anyone still holds it |
+
+`viewer`, `editor` and `owner` are **system roles** (`isSystem: true`) and cannot be renamed,
+deleted or re-permissioned — `403 SYSTEM_ROLE_IMMUTABLE`. That immutability is what makes the
+role editor safe to expose at all: without it, unchecking `membership.grant` on `owner` would
+leave nobody on the instance able to grant membership, including to undo it. If a system role is
+damaged some other way — direct SQL, a partial restore — `python -m app.cli restore-system-roles`
+puts it back.
+
+Which permissions exist is anchored in `app/core/permissions.py`, not in a table.
+`role_permissions.permission` is a validated string, and `PATCH /roles/{id}` refuses a value
+that is not in the catalogue, because a stored permission nothing checks is silently dead
+weight. There is deliberately **no `conversation.*` permission** — that absence is what makes
+the administrator bypass in `require_permission` safe, since there is nothing here to bypass
+into.
 
 ### Conversations
 
@@ -192,40 +270,47 @@ stream and deliver it in one piece.
 
 ### QA Checklist
 
-Modules over an indexed repository — a user names a module ("Authentication"), points it at a path in the repository, and requests generation. A background job enumerates the module's files, proposes features and test cases with expected results grounded in the code, and produces a change set for review. Nothing generated enters the checklist unreviewed. Access matches projects and inverts conversations: every authenticated user reads every module and every module's chat, and `created_by` (or an admin) gates editing and deleting. Recording a test result is deliberately open to every authenticated user — a tester must be able to record what they observed without being able to rewrite what was expected.
+Modules over an indexed repository — a user names a module ("Authentication"), points it at a path in the repository, and requests generation. A background job enumerates the module's files, proposes features and test cases with expected results grounded in the code, and produces a change set for review. Nothing generated enters the checklist unreviewed.
+
+Access follows the module's **project**, never `created_by`: reads are scoped by
+`access.resolve_project_scope`, so a module is visible exactly to the project's members, and
+editing and deleting gate on a named permission (`module.edit`, `module.delete`, `item.edit`).
+Recording a test result needs only `result.record`, which **every** system role holds including
+`viewer` — a tester must be able to record what they observed without being able to rewrite
+what was expected.
 
 **Checklist Modules**
 
 | Method | Path | Auth | Description |
 | --- | --- | --- | --- |
-| `GET` | `/checklist-modules` | any user | List modules for readable projects, paginated |
-| `POST` | `/checklist-modules` | any user | Name a module and point it at a path in the indexed repository. `400 MODULE_PATH_NOT_INDEXED` if the path matches nothing |
-| `GET` | `/checklist-modules/{id}` | any user | One module with its test cases, grouped by feature |
-| `PATCH` | `/checklist-modules/{id}` | creator or admin | Rename or re-point the module |
-| `DELETE` | `/checklist-modules/{id}` | creator or admin | Soft-delete the module, its items, its change sets, and its chat |
-| `POST` | `/checklist-modules/{id}/generate` | any user | Publish a generation job; returns the module in `generating` status. `409 PROJECT_NOT_READY` while the project is being re-indexed |
-| `GET` | `/checklist-modules/{id}/change-sets` | any user | List the module's proposed change sets, newest first |
-| `GET` | `/checklist-modules/{id}/messages` | any user | Read the module's refinement chat |
-| `POST` | `/checklist-modules/{id}/messages` | any user | Refine the checklist by chat; **streams the reply and proposes changes** |
+| `GET` | `/checklist-modules` | any member | List modules for projects you are a member of, paginated |
+| `POST` | `/checklist-modules` | `module.create` | Name a module and point it at a path in the indexed repository. `400 MODULE_PATH_NOT_INDEXED` if the path matches nothing |
+| `GET` | `/checklist-modules/{id}` | any member | One module with its test cases, grouped by feature |
+| `PATCH` | `/checklist-modules/{id}` | `module.edit` | Rename or re-point the module |
+| `DELETE` | `/checklist-modules/{id}` | `module.delete` | Soft-delete the module, its items, its change sets, and its chat |
+| `POST` | `/checklist-modules/{id}/generate` | `generate.run` | Publish a generation job; returns the module in `generating` status. `409 PROJECT_NOT_READY` while the project is being re-indexed |
+| `GET` | `/checklist-modules/{id}/change-sets` | any member | List the module's proposed change sets, newest first |
+| `GET` | `/checklist-modules/{id}/messages` | any member | Read the module's refinement chat |
+| `POST` | `/checklist-modules/{id}/messages` | any member | Refine the checklist by chat; **streams the reply and proposes changes** |
 
 **Checklist Items**
 
 | Method | Path | Auth | Description |
 | --- | --- | --- | --- |
-| `GET` | `/checklist-items` | any user | List test cases across modules, paginated; filters for project, module, feature, status, source, kind |
-| `POST` | `/checklist-items` | any user | Add a test case by hand |
-| `PATCH` | `/checklist-items/{id}` | creator or admin | Edit what a test expects (name, feature, expected result, notes) |
-| `PUT` | `/checklist-items/{id}/result` | **any user** | Record a test result (current result and status); open to every user |
-| `DELETE` | `/checklist-items/{id}` | creator or admin | Soft-delete the test case |
-| `GET` | `/checklist-items/export` | any user | Export the filtered checklist as `.xlsx`, regardless of pagination limit |
-| `POST` | `/checklist-items/clear-results` | **any user** | Reset the recorded result on every row the filter selects, within one module |
+| `GET` | `/checklist-items` | any member | List test cases across modules, paginated; filters for project, module, feature, status, source, kind |
+| `POST` | `/checklist-items` | any member | Add a test case by hand |
+| `PATCH` | `/checklist-items/{id}` | `item.edit` | Edit what a test expects (name, feature, expected result, notes) |
+| `PUT` | `/checklist-items/{id}/result` | `result.record` | Record a test result (current result and status); every system role holds this, `viewer` included |
+| `DELETE` | `/checklist-items/{id}` | `item.edit` | Soft-delete the test case |
+| `GET` | `/checklist-items/export` | any member | Export the filtered checklist as `.xlsx`, regardless of pagination limit |
+| `POST` | `/checklist-items/clear-results` | any member | Reset the recorded result on every row the filter selects, within one module |
 
 **Checklist Change Sets**
 
 | Method | Path | Auth | Description |
 | --- | --- | --- | --- |
-| `POST` | `/checklist-change-sets/{id}/apply` | any user | Apply the named operations, or all of them; nothing is written to the checklist until this is called |
-| `POST` | `/checklist-change-sets/{id}/discard` | any user | Throw the proposal away; nothing is written to the checklist |
+| `POST` | `/checklist-change-sets/{id}/apply` | `changeset.apply` | Apply the named operations, or all of them; nothing is written to the checklist until this is called |
+| `POST` | `/checklist-change-sets/{id}/discard` | `changeset.apply` | Throw the proposal away; nothing is written to the checklist |
 
 Nothing generated enters the checklist unreviewed: generation writes a *pending change set*, and `POST /checklist-change-sets/{id}/apply` is the only path that writes `checklist_items`.
 
@@ -234,7 +319,7 @@ Nothing generated enters the checklist unreviewed: generation writes a *pending 
 
 `GET /checklist-items/export` and `POST /checklist-items/clear-results` are declared **before** the parameterised `/checklist-items/{item_id}` routes because FastAPI matches in declaration order: a literal segment declared after a parameterised one is swallowed as an id, so a `GET /checklist-items/{item_id}` added later would take the export's requests unless the export stays first. The export is capped at `checklist_export_max_rows` (default 5000) rows and returns `409 EXPORT_TOO_LARGE` over that limit, since `openpyxl` builds the whole workbook in memory.
 
-Recording a result is open to every authenticated user while editing what a test expects is not: a tester must be able to record what they saw without being able to rewrite what was expected.
+Recording a result is open to every member while editing what a test expects is not: a tester must be able to record what they saw without being able to rewrite what was expected. That is why `result.record` sits in the `viewer` set and `item.edit` does not — otherwise the cheapest way to make a failing test pass is to edit the expectation.
 
 ### Mock Data Generator
 
@@ -242,26 +327,26 @@ Recording a result is open to every authenticated user while editing what a test
 
 | Method | Path | Auth | Description |
 | --- | --- | --- | --- |
-| `GET` | `/checklist-modules/{id}/mock-data` | any user | A module's mock dataset summary and its applied records; an empty summary before the first generation |
-| `POST` | `/checklist-modules/{id}/mock-data-generations` | any user | Publish a generation job; returns the dataset in `generating` status. `409 PROJECT_NOT_READY` while the project is being re-indexed |
-| `GET` | `/checklist-modules/{id}/mock-data-change-sets` | any user | List the dataset's proposed change sets, newest first |
-| `GET` | `/checklist-modules/{id}/mock-data-messages` | any user | Read the dataset's refinement chat |
-| `POST` | `/checklist-modules/{id}/mock-data-messages` | any user | Refine the dataset by chat; **streams the reply and proposes changes** |
-| `GET` | `/checklist-modules/{id}/mock-data/export.json` | any user | Export the dataset's records as a JSON array of field maps |
-| `GET` | `/checklist-modules/{id}/mock-data/export.xlsx` | any user | Export the dataset's records as a spreadsheet |
+| `GET` | `/checklist-modules/{id}/mock-data` | any member | A module's mock dataset summary and its applied records; an empty summary before the first generation |
+| `POST` | `/checklist-modules/{id}/mock-data-generations` | `generate.run` | Publish a generation job; returns the dataset in `generating` status. `409 PROJECT_NOT_READY` while the project is being re-indexed |
+| `GET` | `/checklist-modules/{id}/mock-data-change-sets` | any member | List the dataset's proposed change sets, newest first |
+| `GET` | `/checklist-modules/{id}/mock-data-messages` | any member | Read the dataset's refinement chat |
+| `POST` | `/checklist-modules/{id}/mock-data-messages` | any member | Refine the dataset by chat; **streams the reply and proposes changes** |
+| `GET` | `/checklist-modules/{id}/mock-data/export.json` | any member | Export the dataset's records as a JSON array of field maps |
+| `GET` | `/checklist-modules/{id}/mock-data/export.xlsx` | any member | Export the dataset's records as a spreadsheet |
 
 **Mock Data Records**
 
 | Method | Path | Auth | Description |
 | --- | --- | --- | --- |
-| `DELETE` | `/mock-data-records/{id}` | creator or admin | Soft-delete one record |
+| `DELETE` | `/mock-data-records/{id}` | `mockdata.edit` | Soft-delete one record |
 
 **Mock Data Change Sets**
 
 | Method | Path | Auth | Description |
 | --- | --- | --- | --- |
-| `POST` | `/mock-data-change-sets/{id}/apply` | any user | Apply the named operations, or all of them; nothing is written to the dataset until this is called |
-| `POST` | `/mock-data-change-sets/{id}/discard` | any user | Throw the proposal away; nothing is written to the dataset |
+| `POST` | `/mock-data-change-sets/{id}/apply` | `changeset.apply` | Apply the named operations, or all of them; nothing is written to the dataset until this is called |
+| `POST` | `/mock-data-change-sets/{id}/discard` | `changeset.apply` | Throw the proposal away; nothing is written to the dataset |
 
 A module's mock dataset generates, reviews, and fails independently of its checklist —
 one module can carry a test plan, a mock dataset, both, or neither. Generation is grounded:
@@ -282,7 +367,7 @@ backend/
 ├── app/
 │   ├── main.py           # create_app(): middleware, CORS, routers, Kafka lifespan
 │   ├── config.py         # Settings (pydantic-settings) + get_settings()
-│   ├── cli.py            # `python -m app.cli seed-admins`
+│   ├── cli.py            # `python -m app.cli seed-admins | restore-system-roles`
 │   ├── api/
 │   │   ├── deps.py       # CurrentUser / AdminUser dependencies
 │   │   └── routes/
@@ -291,6 +376,8 @@ backend/
 │   │       ├── auth.py     # POST /auth/login, /refresh, /change-password, ...
 │   │       ├── users.py    # /users CRUD + reset-password
 │   │       ├── projects.py # /projects CRUD + reindex + indexed-paths
+│   │       ├── members.py  # /projects/{id}/members — grant, change role, revoke
+│   │       ├── roles.py    # /roles CRUD + GET /permissions (admin-only router)
 │   │       ├── conversations.py # /conversations CRUD + the SSE answer endpoint
 │   │       ├── checklist_modules.py # /checklist-modules CRUD + generate + chat
 │   │       ├── checklist_items.py   # /checklist-items CRUD + export
@@ -299,13 +386,16 @@ backend/
 │   │       ├── mock_data_records.py     # DELETE /mock-data-records/{id}
 │   │       └── mock_data_change_sets.py # apply + discard mock-data change sets
 │   ├── core/
-│   │   ├── access.py     # the phase-2 access-resolver seam
+│   │   ├── access.py     # resolve_project_scope + require_permission — the only two
 │   │   ├── crypto.py     # SecretBox (PAT encryption at rest) + scrub
 │   │   ├── errors.py     # AppError, ErrorCode, exception handlers
+│   │   ├── grant_cache.py # Redis read-through cache for a user's project grants
 │   │   ├── logging.py    # the one log format, shared by all four processes
-│   │   ├── middleware.py # AuthContextMiddleware — identity + the password-change gate
+│   │   ├── middleware.py # AuthContextMiddleware — identity, grants, password-change gate
 │   │   ├── passwords.py  # password policy (length, common-password blocklist)
+│   │   ├── permissions.py # the permission catalogue + the viewer/editor/owner sets
 │   │   ├── rate_limit.py # Redis-backed login rate limiting
+│   │   ├── role_seed.py  # ensure_system_roles — used by the migration, tests and the CLI
 │   │   ├── repo_url.py   # clone-URL validation: https, allowlist, private-address refusal
 │   │   └── security.py   # hashing, JWT access tokens, opaque refresh tokens
 │   ├── db/session.py     # async engine + sessionmaker
@@ -336,7 +426,8 @@ backend/
 │   ├── checklist/        # QA Checklist: modules, generation, chat, change sets
 │   ├── mockdata/          # Mock Data Generator: generation, model output contracts, change-set ops
 │   ├── worker.py          # the worker entrypoint: consumers + the reconcile sweep
-│   ├── models/            # SQLAlchemy models: User, RefreshToken, Project, Conversation, Message
+│   ├── models/            # SQLAlchemy models: User, RefreshToken, Project, Conversation,
+│   │                      #   Message, Role, RolePermission, ProjectMembership, ...
 │   ├── repositories/      # the only layer that issues `select`
 │   ├── schemas/
 │   │   ├── base.py       # ApiModel — the snake_case → camelCase boundary
@@ -370,7 +461,7 @@ environment.
   silently when set wrong, and the four the app refuses to boot without under
   `APP_ENV=production`.
 
-The four things worth knowing before you touch any of it:
+The things worth knowing before you touch any of it:
 
 - **Complex types are JSON.** `CORS_ORIGINS`, `REPO_HOST_ALLOWLIST` and
   `BOOTSTRAP_ADMIN_EMAILS` must be JSON arrays (`["http://localhost:3000"]`), not
@@ -382,6 +473,10 @@ The four things worth knowing before you touch any of it:
   failure, not a startup one.
 - **`KAFKA_INGEST_PARTITIONS` is the ingestion concurrency cap**, not a tuning knob beside
   one. Worker replicas beyond the partition count sit idle.
+- **`GRANT_CACHE_TTL_SECONDS` (default `300`) is a backstop, not the invalidation mechanism.**
+  Every membership and role write evicts explicitly; the TTL only bounds how long an eviction
+  Redis dropped can serve a stale permission set. A Redis outage is not a lockout — the cache
+  falls back to querying Postgres.
 - **`RAG_MIN_SCORE` is the relevance floor below which no answer is generated at all** — the
   turn ends with a fixed refusal rather than a model call.
 - **`RAG_CLASSIFY_INTENT`, `RAG_GRADE_EVIDENCE` and `RAG_MAX_RETRIEVAL_ATTEMPTS` tune the graph
@@ -413,11 +508,19 @@ real Postgres and real Redis, never SQLite or a mock (see `tests/conftest.py`).
 ```bash
 uv run alembic upgrade head              # apply migrations
 uv run python -m app.cli seed-admins     # create the bootstrap admins (idempotent)
+uv run python -m app.cli restore-system-roles   # repair viewer/editor/owner (idempotent)
 uv run ruff check .                      # lint
 uv run ruff format .                     # format
 uv run mypy .                            # typecheck (strict, over app and tests)
 uv run pytest                            # tests — needs `make infra` first
 ```
+
+`restore-system-roles` reconciles `viewer`, `editor` and `owner` back to the permission sets in
+`app/core/permissions.py` and bumps the grant-cache epoch so every cached snapshot is re-read.
+It reuses the same `ensure_system_roles` the migration and the test harness call, so a restore
+on a live box and a restore between tests cannot drift apart. Unlike `seed-admins`, it is not
+part of the container entrypoint — it exists for an instance whose seed was damaged by direct
+SQL or a partial restore.
 
 `ruff` is configured (in `pyproject.toml`) with `ANN` for type-hint coverage, `T20` to ban
 `print()`, and `LOG`/`G` for logging correctness — the rules in

@@ -6,9 +6,8 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { useReindexProject } from "@/hooks/use-project-mutations";
 import { useProject } from "@/hooks/use-projects";
-import { useSession } from "@/hooks/use-session";
 import { isApiError } from "@/lib/api/errors";
-import { canManageProject } from "@/lib/can";
+import { PERMISSION, can } from "@/lib/can";
 
 /**
  * Pre-flight failures arrive as ordinary HTTP errors before any body, so they render
@@ -27,7 +26,6 @@ export function PreflightError({
   error: unknown;
   projectId: string;
 }) {
-  const user = useSession();
   const project = useProject(projectId);
   const reindex = useReindexProject(projectId);
 
@@ -43,7 +41,9 @@ export function PreflightError({
   }
 
   if (error.code === "EMBEDDING_MODEL_CHANGED") {
-    const canManage = project.data ? canManageProject(user, project.data) : false;
+    const canManage = project.data
+      ? can(project.data, PERMISSION.PROJECT_REINDEX)
+      : false;
     return (
       <Alert variant="destructive">
         <AlertTitle>This project needs re-indexing</AlertTitle>

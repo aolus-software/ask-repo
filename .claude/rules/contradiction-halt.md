@@ -48,10 +48,17 @@ This applies whether the contradiction is with:
 
 ## Worked example
 
-A request to "filter projects by the current user in the list endpoint" contradicts
-`docs/PRD.md` §4.1: projects are deliberately shared instance-wide in phase 1, and read
-scoping must go through the single access resolver rather than a route-level filter. The
-correct response is not to implement it, and not to implement "half" of it — it is to say:
-this looks like phase-2 RBAC arriving early; doing it in the route would put read scoping in
-two places, which §2's phase-2 readiness goal exists to prevent; the compliant version changes
-the resolver's body instead. Then wait.
+A request to "only show people the projects they created — add a `created_by == user.id`
+filter to the list endpoint" contradicts two things at once. `docs/PRD.md` §7 says
+`created_by` is **attribution** and must never scope reads; and §2's single-resolver goal says
+read scoping happens in exactly one function, `resolve_project_scope` in `app/core/access.py`,
+which `tests/test_scoping_is_single_point.py` enforces as a grep.
+
+The correct response is not to implement it, and not to implement "half" of it — it is to say:
+reads are already scoped, and they are scoped to **membership**, not authorship, so a creator
+who was removed from a project would still see it and a colleague who was granted `owner` would
+not. Adding the filter in the route also puts read scoping in two places, which is the failure
+§2 exists to prevent — a later change to the resolver would then silently not apply here. If
+what is actually wanted is a *non-access* filter over the same list (the way `?ownerless=true`
+works), the compliant shape is `ProjectScope.narrowed_to(...)` on top of the resolver's answer,
+never in place of it. Then wait for the user to choose.

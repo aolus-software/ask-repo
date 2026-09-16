@@ -1,24 +1,31 @@
 "use client";
 
-import { MessagesSquare } from "lucide-react";
+import { MessagesSquare, UserPlus } from "lucide-react";
 import Link from "next/link";
+import { useState } from "react";
 
 import { DetailError } from "@/components/feedback/detail-error";
 import { JobFailureAlert } from "@/components/feedback/job-failure-alert";
 import { NotFound } from "@/components/feedback/not-found";
 import { ProjectStatusBadge } from "@/components/feedback/status-badge";
 import { PageHeader } from "@/components/layout/page-header";
+import { AddMemberDialog } from "@/components/projects/add-member-dialog";
+import { MemberTable } from "@/components/projects/member-table";
 import { ProjectRowActions } from "@/components/projects/project-row-actions";
 import { ProjectStats } from "@/components/projects/project-stats";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useProject } from "@/hooks/use-projects";
+import { can, PERMISSION } from "@/lib/can";
 import { statusLabel } from "@/lib/status";
 
 export function ProjectDetailScreen({ id }: { id: string }) {
   const query = useProject(id);
+  const [addingMember, setAddingMember] = useState(false);
 
   if (query.isLoading) {
     return (
@@ -45,6 +52,8 @@ export function ProjectDetailScreen({ id }: { id: string }) {
   if (!project) return <NotFound />;
 
   const isWorking = project.status === "cloning" || project.status === "indexing";
+  const canReadMembers = can(project, PERMISSION.MEMBERSHIP_READ);
+  const canGrantMembers = can(project, PERMISSION.MEMBERSHIP_GRANT);
 
   return (
     <div className="mx-auto w-full max-w-7xl space-y-6">
@@ -72,34 +81,72 @@ export function ProjectDetailScreen({ id }: { id: string }) {
         }
       />
 
-      {isWorking ? (
-        <div className="space-y-2">
-          <p className="text-muted-foreground text-sm font-medium">
-            {statusLabel(project.status)}…
-          </p>
-          {/*
-            Indeterminate on purpose: the API reports a phase, never a percentage.
-            Rendering one would mean inventing it, and an invented bar sitting at 60%
-            for eight minutes is worse than an honest indeterminate one.
-          */}
-          <Progress className="h-2" value={null} />
-        </div>
-      ) : null}
+      <Tabs defaultValue="overview">
+        <TabsList>
+          <TabsTrigger value="overview">Overview</TabsTrigger>
+          {canReadMembers ? <TabsTrigger value="members">Members</TabsTrigger> : null}
+        </TabsList>
 
-      {project.reindexInProgress ? (
-        <Alert variant="info">
-          <AlertTitle>Re-index running</AlertTitle>
-          <AlertDescription>
-            The current index stays queryable until the new one is ready.
-          </AlertDescription>
-        </Alert>
-      ) : null}
+        <TabsContent value="overview" className="space-y-6">
+          {isWorking ? (
+            <div className="space-y-2">
+              <p className="text-muted-foreground text-sm font-medium">
+                {statusLabel(project.status)}…
+              </p>
+              {/*
+                Indeterminate on purpose: the API reports a phase, never a percentage.
+                Rendering one would mean inventing it, and an invented bar sitting at 60%
+                for eight minutes is worse than an honest indeterminate one.
+              */}
+              <Progress className="h-2" value={null} />
+            </div>
+          ) : null}
 
-      {project.status === "failed" && project.error ? (
-        <JobFailureAlert title="Indexing failed" message={project.error} />
-      ) : null}
+          {project.reindexInProgress ? (
+            <Alert variant="info">
+              <AlertTitle>Re-index running</AlertTitle>
+              <AlertDescription>
+                The current index stays queryable until the new one is ready.
+              </AlertDescription>
+            </Alert>
+          ) : null}
 
-      <ProjectStats project={project} />
+          {project.status === "failed" && project.error ? (
+            <JobFailureAlert title="Indexing failed" message={project.error} />
+          ) : null}
+
+          <ProjectStats project={project} />
+        </TabsContent>
+
+        {canReadMembers ? (
+          <TabsContent value="members" className="space-y-4">
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <h2 className="text-lg font-semibold tracking-tight">Members</h2>
+                <p className="text-muted-foreground text-sm">
+                  Who can reach this project, and as what.
+                </p>
+              </div>
+              {canGrantMembers ? (
+                <Button onClick={() => setAddingMember(true)}>
+                  <UserPlus className="size-4" />
+                  Add member
+                </Button>
+              ) : null}
+            </div>
+
+            <Card className="p-0">
+              <MemberTable projectId={project.id} permissions={project.permissions} />
+            </Card>
+
+            <AddMemberDialog
+              projectId={project.id}
+              open={addingMember}
+              onOpenChange={setAddingMember}
+            />
+          </TabsContent>
+        ) : null}
+      </Tabs>
     </div>
   );
 }

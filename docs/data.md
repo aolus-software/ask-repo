@@ -11,22 +11,24 @@ Read [`architecture.md`](architecture.md) first for why there are four.
 
 | Store | Holds | Survives a restart? |
 | --- | --- | --- |
-| **Postgres** | 13 tables — every row the app owns | Yes, and it is the only thing you must back up besides the PAT key |
+| **Postgres** | 16 tables — every row the app owns | Yes, and it is the only thing you must back up besides the PAT key |
 | **Qdrant** | Code chunks as vectors, **with the chunk text in the payload** | Yes, but it is rebuildable by re-indexing |
-| **Redis** | Login rate-limit counters | No, and that is fine — losing them resets a lockout |
+| **Redis** | Login rate-limit counters, and the per-user grant cache | No, and that is fine — a lost lockout resets, and a lost grant snapshot is re-read from Postgres |
 | **Kafka** | Job messages on 12 topics | Yes, but the reconcile sweep recovers anything lost |
 | **Disk** (`/data/repos`) | The cloned working copy, **deleted after indexing** | No. It is scratch space, not a volume to preserve |
 
-Two of these are commonly assumed wrong. **Redis is not the job queue** — Kafka is; Redis backs
-login rate limiting and nothing else. And **Qdrant is the system of record for code content**,
-not an index over files: the working copy is deleted after indexing, so there is no file to
-re-read at query time.
+Two of these are commonly assumed wrong. **Redis is not the job queue** — Kafka is; it holds
+login rate-limit counters and a cache of each user's project grants, and nothing else. Neither
+is authoritative: the grant cache is a copy of `project_memberships`, so a Redis outage
+degrades to a Postgres query rather than to a denial (see [Grants in Redis](#grants-in-redis)).
+And **Qdrant is the system of record for code content**, not an index over files: the working
+copy is deleted after indexing, so there is no file to re-read at query time.
 
 ---
 
 ## The Postgres tables
 
-Thirteen tables in five groups. Every one of them except `refresh_tokens` and `messages` carries
+Sixteen tables in six groups. Every one of them except `refresh_tokens` and `messages` carries
 `created_at`, `updated_at` and `deleted_at`.
 
 ```mermaid
@@ -34,6 +36,10 @@ erDiagram
     users ||--o{ refresh_tokens : "issues"
     users ||--o{ projects : "created_by"
     users ||--o{ conversations : "owns (private)"
+    users ||--o{ project_memberships : "holds"
+    projects ||--o{ project_memberships : "grants access to"
+    roles ||--o{ project_memberships : "assigned as"
+    roles ||--o{ role_permissions : "carries"
     projects ||--o{ conversations : ""
     projects ||--o{ checklist_modules : ""
     conversations ||--o{ messages : ""
@@ -61,6 +67,42 @@ detectable. Access tokens are stateless JWTs (15 minutes) and are not stored at 
 There is no public registration, no email verification and no self-service reset — an admin
 creates accounts, and `must_change_password` forces a change on first login. That is why there
 is **no mail provider anywhere in the stack**.
+
+### Access
+
+| Table | Notable columns |
+| --- | --- |
+| `roles` | `name` (partial unique index where not deleted), `description`, `is_system` |
+| `role_permissions` | `role_id`, `permission` — one row per permission a role carries, unique per `(role_id, permission)` where not deleted |
+| `project_memberships` | `user_id`, `project_id`, `role_id`, `granted_by` — unique per `(user_id, project_id)` where not deleted |
+
+A **role is an instance-wide definition; the assignment carries the project.** That separation
+is what lets one "QA Lead" role be granted on twelve projects without twelve role rows.
+`is_system` marks `viewer`, `editor` and `owner`, which cannot be renamed, deleted or
+re-permissioned — without that immutability, unchecking `membership.grant` on `owner` would
+leave nobody on the instance able to grant membership, including to undo it.
+
+`role_permissions.permission` is a **validated string, not a foreign key.** Which permissions
+exist is anchored in `app/core/permissions.py`, because if existence lived in a table then
+deleting a row would make every check site ask for something that does not exist — and the
+fail-safe answer, deny, would let one `DELETE` brick project deletion instance-wide.
+
+`granted_by` is nullable, and `NULL` means nobody granted it: the memberships the RBAC
+migration derived from `projects.created_by` carry no granter, and fabricating one would
+record a lie in the one table whose purpose is being trustworthy.
+
+**Every unique index in this group is partial on `deleted_at IS NULL`** — the same soft-delete
+pattern as `users.email`, and for a sharper reason here. Revoking a membership soft-deletes the
+row, so without the `WHERE` clause, re-granting access to someone previously revoked would
+collide on a row nobody can see, with an error naming a constraint the admin cannot observe.
+`project_memberships` also carries non-unique partial indexes on `user_id` and `project_id`;
+the `user_id` one is on the hot path, read on every authenticated request.
+
+The RBAC migration (`58f7e042f75a`) seeds the three system roles and backfills one `owner`
+membership per live project from `created_by`. It **does not fabricate owners for deactivated
+creators**: it seeds `created_by` unconditionally, so a project whose creator was already
+soft-deleted starts with no live owner. Those projects stay operable — admins bypass every
+project permission — and `GET /projects?ownerless=true` lists them for an admin to fix.
 
 ### Projects
 
@@ -122,7 +164,7 @@ operation** — and the vector delete runs *before* the commit, so if Qdrant ref
 stays visible rather than becoming a soft-deleted project whose content is still queryable.
 
 Deleting a project also sweeps its conversations, checklist and mock data. Not scoped by owner:
-the project was shared, so the conversations belong to several people and all of them go.
+a project has members, so the conversations belong to several people and all of them go.
 
 ### 2. The lease is the deduplication boundary
 
@@ -206,9 +248,40 @@ Full detail in [`rag.md`](rag.md).
 
 ---
 
+## Grants in Redis
+
+`AuthContextMiddleware` needs every project a caller may reach, on every authenticated request.
+That is a three-table join, so `app/core/grant_cache.py` caches the answer in Redis under
+`askrepo:perm:v1:{epoch}:user:{id}`, with a TTL of `GRANT_CACHE_TTL_SECONDS` (300 by default).
+
+**The cache is a copy, not the truth**, and its failure behaviour differs from the other Redis
+reader on purpose:
+
+| Client | On a Redis error | Why |
+| --- | --- | --- |
+| `app/core/rate_limit.py` | Skip the check | Redis holds the only copy. Failing closed would deny every login |
+| `app/core/grant_cache.py` | Query Postgres instead | The authoritative answer is one join away |
+
+Neither fails closed by denying, and only one degrades by skipping a control. A permission
+cache must never do that, and never has to.
+
+**Invalidation is two mechanisms, because the blast radii differ.** A membership change affects
+one user, so that user's key is deleted — *after* the transaction commits, since evicting before
+it can repopulate the cache with the pre-write value and leave it there for the whole TTL. A
+role's permission set changing affects every holder, which is not knowable from the write
+without a reverse lookup, so the epoch in the key is incremented instead: every existing key
+becomes unreachable at once, atomically, with no partial-failure mode and no user missed.
+Orphaned keys expire on their TTL. That TTL is therefore a **backstop, not the mechanism** — an
+invalidation that Redis dropped is corrected within five minutes rather than never.
+
+**The user row is not cached.** `docs/PRD.md:101` requires deactivation to end sessions
+immediately, and the middleware reads that row from Postgres on every request to deliver it.
+
+---
+
 ## Migrations
 
-Alembic, in `backend/alembic/versions/` — 8 revisions. Run them with `make migrate` (or
+Alembic, in `backend/alembic/versions/` — 9 revisions. Run them with `make migrate` (or
 `uv run alembic upgrade head` from `backend/`). The production entrypoint chains
 `alembic upgrade head && python -m app.cli seed-admins && uvicorn …`, so a deploy migrates
 before it serves.

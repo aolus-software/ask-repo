@@ -35,7 +35,18 @@ export function FormPage({
   onSubmit,
   children,
   width = "default",
-}: FormShellProps & { backHref?: string; width?: keyof typeof WIDTHS }) {
+  hideSubmit = false,
+}: FormShellProps & {
+  backHref?: string;
+  width?: keyof typeof WIDTHS;
+  /**
+   * Omits the `<form>`/submit row entirely — not a disabled button. For content
+   * that is read-only for this viewer (a system role's permission matrix), a
+   * form that visually invites a submit and then 403s on it does the check
+   * backwards (forms.md §2, `.claude/rules/contradiction-halt.md`).
+   */
+  hideSubmit?: boolean;
+}) {
   return (
     <div className={cn("mx-auto w-full", WIDTHS[width])}>
       {backHref ? (
@@ -57,16 +68,20 @@ export function FormPage({
           {description ? <CardDescription>{description}</CardDescription> : null}
         </CardHeader>
         <CardContent>
-          <form onSubmit={onSubmit} noValidate>
-            <FormError error={error} />
+          {hideSubmit ? (
             <div className="space-y-4">{children}</div>
-            <div className="mt-6 flex justify-end gap-2">
-              <Button type="submit" disabled={isPending}>
-                {isPending ? <Loader2 className="size-4 animate-spin" /> : null}
-                {submitLabel}
-              </Button>
-            </div>
-          </form>
+          ) : (
+            <form onSubmit={onSubmit} noValidate>
+              <FormError error={error} />
+              <div className="space-y-4">{children}</div>
+              <div className="mt-6 flex justify-end gap-2">
+                <Button type="submit" disabled={isPending}>
+                  {isPending ? <Loader2 className="size-4 animate-spin" /> : null}
+                  {submitLabel}
+                </Button>
+              </div>
+            </form>
+          )}
         </CardContent>
       </Card>
     </div>

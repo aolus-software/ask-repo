@@ -27,7 +27,20 @@ describe("visibleNavTree", () => {
 
   it("resolves the settings children for an admin", () => {
     const settings = visibleNavTree(admin).find((i) => i.href === "/settings");
-    expect(settings?.children?.map((c) => c.href)).toEqual(["/settings/users"]);
+    expect(settings?.children?.map((c) => c.href)).toEqual([
+      "/settings/users",
+      "/settings/roles",
+    ]);
+  });
+
+  it("hides Roles from a non-admin", () => {
+    const settings = visibleNavTree(member).find((i) => i.href === "/settings");
+    expect(settings?.children?.map((c) => c.title) ?? []).not.toContain("Roles");
+  });
+
+  it("shows Roles to an admin", () => {
+    const settings = visibleNavTree(admin).find((i) => i.href === "/settings");
+    expect(settings?.children?.map((c) => c.title)).toContain("Roles");
   });
 
   it("leaves `children` absent on a leaf rather than an empty array", () => {

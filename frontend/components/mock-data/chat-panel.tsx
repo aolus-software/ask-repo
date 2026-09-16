@@ -57,10 +57,16 @@ export function MockDataChatPanel({
   moduleId,
   hasPendingChangeSet,
   isGenerating,
+  canSend,
 }: {
   moduleId: string;
   hasPendingChangeSet: boolean;
   isGenerating: boolean;
+  /**
+   * Mirrors the backend's `mockdata.edit` gate; it does not replace it. The chat
+   * itself stays visible and readable to everyone -- only sending is gated.
+   */
+  canSend: boolean;
 }) {
   const queryClient = useQueryClient();
 
@@ -179,19 +185,22 @@ export function MockDataChatPanel({
   );
 
   const isStreaming = turn?.isStreaming ?? false;
-  const composerDisabled = isStreaming || hasPendingChangeSet || isGenerating;
+  const composerDisabled =
+    isStreaming || hasPendingChangeSet || isGenerating || !canSend;
   // A generation holds this dataset's lease; refining it by chat while that run is
   // in flight is refused server-side with a 409 (`MockDataDatasetService.prepare_turn`)
   // because writing `review` over a `generating` row would blind the reconcile sweep
   // to a worker that later dies. The composer must not let a user type a paragraph
   // only to have it rejected.
-  const composerPlaceholder = isGenerating
-    ? "A generation is running for this dataset. Wait for it to finish."
-    : hasPendingChangeSet
-      ? "Apply or discard the pending changes first."
-      : isStreaming
-        ? "Answering…"
-        : "Ask for a specific shape, or say what you'd like changed";
+  const composerPlaceholder = !canSend
+    ? "You do not have permission to refine this mock data."
+    : isGenerating
+      ? "A generation is running for this dataset. Wait for it to finish."
+      : hasPendingChangeSet
+        ? "Apply or discard the pending changes first."
+        : isStreaming
+          ? "Answering…"
+          : "Ask for a specific shape, or say what you'd like changed";
 
   return (
     <div className="space-y-6">

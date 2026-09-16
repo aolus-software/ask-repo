@@ -1,8 +1,10 @@
 """A module's mock dataset: reads, the generation trigger, the chat, and export.
 
-Access matches `checklist_modules.py`: every authenticated user reads every module's
-mock dataset and chat; `created_by`/`is_admin` gates nothing here except one-record
-deletes (`mock_data_records.py`).
+Access matches `checklist_modules.py`: reads are scoped to the caller's project
+membership, never instance-wide. Within a project every member reads every module's
+mock dataset and chat; `generate.run` gates triggering a generation, `changeset.apply`
+gates resolving a proposed change set, and `mockdata.edit` gates a one-record delete
+(`mock_data_records.py`).
 """
 
 import asyncio

@@ -30,7 +30,6 @@ export type ErrorCode =
   | "INVALID_SORT_FIELD"
   | "RATE_LIMITED"
   | "PROJECT_NOT_FOUND"
-  | "NOT_PROJECT_OWNER"
   | "INVALID_REPO_URL"
   | "VECTOR_STORE_UNAVAILABLE"
   | "CONVERSATION_NOT_FOUND"
@@ -41,12 +40,24 @@ export type ErrorCode =
   | "EXPORT_TOO_LARGE"
   | "CHECKLIST_MODULE_NOT_FOUND"
   | "CHECKLIST_ITEM_NOT_FOUND"
-  | "NOT_CHECKLIST_OWNER"
   | "CHANGE_SET_NOT_FOUND"
   | "CHANGE_SET_PENDING"
   | "CHANGE_SET_ALREADY_RESOLVED"
   | "GENERATION_IN_PROGRESS"
-  | "MODULE_PATH_NOT_INDEXED";
+  | "MODULE_PATH_NOT_INDEXED"
+  | "MOCK_DATA_CHANGE_SET_NOT_FOUND"
+  | "MOCK_DATA_CHANGE_SET_PENDING"
+  | "MOCK_DATA_CHANGE_SET_ALREADY_RESOLVED"
+  | "MOCK_DATA_GENERATION_IN_PROGRESS"
+  | "MOCK_DATA_RECORD_NOT_FOUND"
+  | "INSUFFICIENT_ROLE"
+  | "SYSTEM_ROLE_IMMUTABLE"
+  | "ROLE_NOT_FOUND"
+  | "ROLE_IN_USE"
+  | "ROLE_NAME_EXISTS"
+  | "LAST_OWNER"
+  | "MEMBERSHIP_NOT_FOUND"
+  | "MEMBERSHIP_EXISTS";
 
 /** The one error shape the whole API uses (`docs/PRD.md` §5.1). */
 export interface ErrorEnvelope {
@@ -96,6 +107,10 @@ export interface ProjectResponse {
   chunkCount: number | null;
   embeddingModel: string | null;
   reindexInProgress: boolean;
+  /** The caller's role on this project. `null` for an admin with no membership. */
+  role: string | null;
+  /** The caller's effective permissions. See `lib/can.ts`. */
+  permissions: string[];
   createdAt: string;
   updatedAt: string;
 }
@@ -412,4 +427,31 @@ export interface ChecklistItemListParams extends ListParams {
   status?: ChecklistItemStatus;
   source?: ChecklistItemSource;
   kind?: ChecklistItemKind;
+}
+
+export interface MemberResponse {
+  userId: string;
+  name: string;
+  email: string;
+  role: string;
+  grantedBy: string | null;
+  grantedAt: string;
+}
+
+export interface RoleResponse {
+  id: string;
+  name: string;
+  description: string | null;
+  isSystem: boolean;
+  permissions: string[];
+  memberCount: number;
+}
+
+export interface PermissionGroupResponse {
+  label: string;
+  permissions: string[];
+}
+
+export interface PermissionCatalogResponse {
+  groups: PermissionGroupResponse[];
 }

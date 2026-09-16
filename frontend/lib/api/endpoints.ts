@@ -71,6 +71,18 @@ export const endpoints = {
     apply: (id: string) => `/mock-data-change-sets/${id}/apply`,
     discard: (id: string) => `/mock-data-change-sets/${id}/discard`,
   },
+  roles: {
+    list: "/roles",
+    detail: (id: string) => `/roles/${id}`,
+  },
+  permissions: {
+    catalogue: "/permissions",
+  },
+  members: {
+    list: (projectId: string) => `/projects/${projectId}/members`,
+    detail: (projectId: string, userId: string) =>
+      `/projects/${projectId}/members/${userId}`,
+  },
 } as const;
 
 /**

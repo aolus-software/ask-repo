@@ -8,13 +8,20 @@ however the internals are rearranged.
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.permissions import VIEWER_NAME
 from app.ingestion.vector_store import InMemoryVectorStore
+from app.models.user import User
+from tests.conftest import GrantMembership
 from tests.factories import create_user
 from tests.test_conversations_api import own_conversation, seed_ready_project, sse_events
 
 
 async def test_a_real_question_gets_a_cited_answer(
-    authed_client: AsyncClient, db_session: AsyncSession, vector_store: InMemoryVectorStore
+    authed_client: AsyncClient,
+    authed_user: User,
+    grant_membership: GrantMembership,
+    db_session: AsyncSession,
+    vector_store: InMemoryVectorStore,
 ) -> None:
     """ "Can ask Dev Knowledge a real question about a project repository and get a
     correct, cited answer."
@@ -25,6 +32,7 @@ async def test_a_real_question_gets_a_cited_answer(
     """
     user = await create_user(db_session)
     project_id = await seed_ready_project(db_session, vector_store, user.id)
+    await grant_membership(authed_user.id, project_id, VIEWER_NAME)
     conversation_id = await own_conversation(authed_client, project_id)
 
     response = await authed_client.post(
@@ -47,6 +55,9 @@ async def test_conversations_stay_private(
     client_for_user_a: AsyncClient,
     client_for_user_b: AsyncClient,
     client_for_admin: AsyncClient,
+    user_a: User,
+    user_b: User,
+    grant_membership: GrantMembership,
     db_session: AsyncSession,
     vector_store: InMemoryVectorStore,
 ) -> None:
@@ -55,10 +66,17 @@ async def test_conversations_stay_private(
 
     The admin is included because §4.2 states the privacy guarantee without
     qualification: an administrator who could read a colleague's conversation would
-    make the sentence false.
+    make the sentence false. Under per-project RBAC that is sharper, not weaker --
+    an admin now sees every project, and still not one conversation.
+
+    Both users hold a role on the project on purpose. If user B could not see the
+    project at all, every `404` below would be explained by project scoping and the
+    test would say nothing about conversation privacy.
     """
     user = await create_user(db_session)
     project_id = await seed_ready_project(db_session, vector_store, user.id)
+    await grant_membership(user_a.id, project_id, VIEWER_NAME)
+    await grant_membership(user_b.id, project_id, VIEWER_NAME)
     conversation_id = await own_conversation(client_for_user_a, project_id)
 
     for client in (client_for_user_b, client_for_admin):
@@ -66,19 +84,25 @@ async def test_conversations_stay_private(
         assert (await client.get("/conversations")).json()["totalCount"] == 0
 
 
-async def test_a_shared_project_is_queryable_by_someone_who_did_not_add_it(
+async def test_a_project_is_queryable_by_a_member_who_did_not_add_it(
     client_for_user_b: AsyncClient,
+    user_b: User,
+    grant_membership: GrantMembership,
     db_session: AsyncSession,
     vector_store: InMemoryVectorStore,
 ) -> None:
-    """ "Sharing works as intended: user B can list and query a project user A
-    created, without any grant step."
+    """Collaboration works as intended: a user who holds a role on a project someone
+    else created can list and query it.
 
-    M1 proved the listing half. This is the query half, and it is the first time the
-    access resolver is exercised by a question rather than by a list.
+    This replaces M2's original "without any grant step" wording. Phase 2.1 removed
+    the instance-wide sharing that sentence described -- the grant is now the step
+    that makes this true, and `created_by` has nothing to do with it. The listing
+    half is M1's; this is the query half, and it is the first time the access
+    resolver is exercised by a question rather than by a list.
     """
-    user_a = await create_user(db_session)
-    project_id = await seed_ready_project(db_session, vector_store, user_a.id)
+    creator = await create_user(db_session)
+    project_id = await seed_ready_project(db_session, vector_store, creator.id)
+    await grant_membership(user_b.id, project_id, VIEWER_NAME)
 
     conversation_id = await own_conversation(client_for_user_b, project_id)
     response = await client_for_user_b.post(
@@ -90,12 +114,17 @@ async def test_a_shared_project_is_queryable_by_someone_who_did_not_add_it(
 
 
 async def test_no_answer_is_produced_without_evidence(
-    authed_client: AsyncClient, db_session: AsyncSession, vector_store: InMemoryVectorStore
+    authed_client: AsyncClient,
+    authed_user: User,
+    grant_membership: GrantMembership,
+    db_session: AsyncSession,
+    vector_store: InMemoryVectorStore,
 ) -> None:
     """The guardrail, end to end: an empty index yields a refusal rather than a
     fluent invention, and says so in machine-readable form."""
     user = await create_user(db_session)
     project_id = await seed_ready_project(db_session, vector_store, user.id)
+    await grant_membership(authed_user.id, project_id, VIEWER_NAME)
     vector_store.points.clear()
     conversation_id = await own_conversation(authed_client, project_id)
 
@@ -109,7 +138,11 @@ async def test_no_answer_is_produced_without_evidence(
 
 
 async def test_a_follow_up_keeps_the_thread_in_context(
-    authed_client: AsyncClient, db_session: AsyncSession, vector_store: InMemoryVectorStore
+    authed_client: AsyncClient,
+    authed_user: User,
+    grant_membership: GrantMembership,
+    db_session: AsyncSession,
+    vector_store: InMemoryVectorStore,
 ) -> None:
     """ "Multi-turn: at least a sliding-window or summarized memory so a 5+ turn
     conversation doesn't lose earlier context."
@@ -120,6 +153,7 @@ async def test_a_follow_up_keeps_the_thread_in_context(
     """
     user = await create_user(db_session)
     project_id = await seed_ready_project(db_session, vector_store, user.id)
+    await grant_membership(authed_user.id, project_id, VIEWER_NAME)
     conversation_id = await own_conversation(authed_client, project_id)
 
     for index in range(5):
@@ -142,18 +176,21 @@ async def test_a_follow_up_keeps_the_thread_in_context(
 async def test_deleting_a_project_takes_its_conversations_with_it(
     client_for_user_a: AsyncClient,
     client_for_admin: AsyncClient,
+    user_a: User,
+    grant_membership: GrantMembership,
     db_session: AsyncSession,
     vector_store: InMemoryVectorStore,
 ) -> None:
     """ "Deleting a project soft-deletes conversations against it" (§4.2).
 
     The admin deletes and user A loses their conversation, so this also covers the
-    part that is easy to miss: the sweep is not scoped to the deleter. A project is
-    shared, so the conversations against it belong to people other than whoever
+    part that is easy to miss: the sweep is not scoped to the deleter. A project has
+    members, so the conversations against it belong to people other than whoever
     presses delete.
     """
     owner = await create_user(db_session)
     project_id = await seed_ready_project(db_session, vector_store, owner.id)
+    await grant_membership(user_a.id, project_id, VIEWER_NAME)
     conversation_id = await own_conversation(client_for_user_a, project_id)
 
     assert (await client_for_admin.delete(f"/projects/{project_id}")).status_code == 204

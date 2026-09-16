@@ -231,7 +231,7 @@ export function RefinementDrawer({
           >
             <span
               data-dragging={dragStart !== null || undefined}
-              className="h-8 w-0.5 rounded-full bg-transparent transition-colors group-hover:bg-border group-focus-visible:bg-ring data-dragging:bg-ring"
+              className="group-hover:bg-border group-focus-visible:bg-ring data-dragging:bg-ring h-8 w-0.5 rounded-full bg-transparent transition-colors"
             />
           </div>
 

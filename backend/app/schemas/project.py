@@ -13,6 +13,7 @@ from pydantic import Field
 
 from app.models.project import ProjectStatus
 from app.schemas.base import ApiModel
+from app.schemas.pagination import ListQuery
 
 
 class ProjectCreateRequest(ApiModel):
@@ -41,6 +42,11 @@ class ProjectResponse(ApiModel):
     reindex_in_progress: bool
     created_at: datetime
     updated_at: datetime
+    # The caller's own role and effective permissions on this project. `None` for an
+    # administrator with no membership: they hold every permission but no role, and
+    # inventing one would put a word on screen that matches no row.
+    role: str | None = None
+    permissions: list[str] = Field(default_factory=list)
 
 
 class IndexedPathEntry(ApiModel):
@@ -84,3 +90,14 @@ class ReindexResponse(ApiModel):
 
     enqueued: bool
     project: ProjectResponse
+
+
+class ProjectListQuery(ListQuery):
+    """`ListQuery` plus the admin-only ownerless filter.
+
+    A subclass rather than a second parameter: FastAPI flattens a Pydantic query
+    model into individual parameters only while it is the route's sole query
+    parameter (`.claude/rules/rag.md`).
+    """
+
+    ownerless: bool = False

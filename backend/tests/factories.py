@@ -2,8 +2,10 @@
 
 import uuid
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.permissions import OWNER_NAME
 from app.core.security import hash_password
 from app.models.checklist import (
     ChangeSetOrigin,
@@ -18,6 +20,7 @@ from app.models.checklist import (
     ChecklistModuleStatus,
 )
 from app.models.conversation import Conversation, MessageRole
+from app.models.membership import ProjectMembership, Role
 from app.models.mock_data import MockDataMessage, MockDataRecord
 from app.models.project import Project, ProjectStatus
 from app.models.user import User
@@ -52,8 +55,18 @@ async def create_project(
     status: ProjectStatus = ProjectStatus.READY,
     repo_url: str = "https://github.com/acme/repo.git",
     name: str = "repo",
+    grant_owner: bool = True,
 ) -> Project:
-    """A project owned by `created_by`, or by a freshly created user."""
+    """A project owned by `created_by`, or by a freshly created user.
+
+    The creator gets an `owner` membership, mirroring what `ProjectService.create` does
+    in production. Without it every factory-built project is invisible to the person
+    who made it, which is not a behaviour any test means to exercise.
+
+    `grant_owner=False` builds a project the creator cannot see — the setup for
+    non-member cases, which would otherwise have to be written by deleting a
+    membership the factory just made.
+    """
     if created_by is None:
         created_by = (await create_user(session)).id
     project = Project(
@@ -66,7 +79,37 @@ async def create_project(
     )
     session.add(project)
     await session.flush()
+
+    if grant_owner:
+        await grant_owner_membership(session, user_id=created_by, project_id=project.id)
+
     return project
+
+
+async def grant_owner_membership(
+    session: AsyncSession, *, user_id: uuid.UUID, project_id: uuid.UUID
+) -> ProjectMembership:
+    """Make `user_id` an owner of `project_id`.
+
+    Split out of `create_project` because a test that adds a *second* owner — a
+    collaborator, or the actor in a gating test — needs the same three lines and
+    should not reimplement the role lookup.
+    """
+    owner = (
+        await session.execute(
+            select(Role).where(Role.name == OWNER_NAME, Role.deleted_at.is_(None))
+        )
+    ).scalar_one()
+    membership = ProjectMembership(
+        id=uuid.uuid4(),
+        user_id=user_id,
+        project_id=project_id,
+        role_id=owner.id,
+        granted_by=user_id,
+    )
+    session.add(membership)
+    await session.flush()
+    return membership
 
 
 async def create_conversation(

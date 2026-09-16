@@ -119,8 +119,16 @@ The parts below are the ones you cannot infer from any single file.
 ### All four datastores are read
 
 What each one holds is in [`docs/data.md`](docs/data.md). The invariant: **Redis does not back
-the job queue** — Kafka does, and Redis is read by the login rate limiter
-(`app/core/rate_limit.py`) and by nothing else.
+the job queue** — Kafka does. Redis has exactly two readers, and both fail open, differently:
+
+- `app/core/rate_limit.py` — the login rate limiter. On a Redis error it **skips the check**
+  and lets the login proceed.
+- `app/core/grant_cache.py` — a read-through cache of each user's project grants, keyed
+  `askrepo:perm:v1:{epoch}:user:{id}`. A role-definition change invalidates every snapshot by
+  `INCR`-ing the epoch; a membership change deletes one key, **after** the commit. On a Redis
+  error it falls back to querying Postgres directly, so it never denies access it cannot look
+  up. The cache holds only grants — the user row is read every request, which is what keeps
+  deactivation immediate.
 
 `InMemoryIngestionQueue` is the test double for both queue protocols, so route, service, consumer
 and retry tests all run with no broker. The only suite needing a real one is
@@ -154,32 +162,56 @@ FastAPI validates nothing about them, and the `SSE_EVENT_MODELS` tuple that test
 only thing holding them to the rule. An event added to the stream but not to the tuple ships
 unchecked.
 
-### Access: shared now, per-project later
+### Access: per-project, through one file
 
 This is the single most consequential design constraint in the repo.
 
-Phase 1 shares every project with every user on the instance. Phase 2 adds per-project RBAC.
-To make that a change rather than a rewrite, **all read scoping goes through one access
-resolver** — a function answering "which project IDs may this user query?" In phase 1 it
-returns everything; phase 2 replaces its body and no route changes.
+Projects are **not** shared instance-wide. A user reaches a project because they hold a
+membership on it, and that membership carries a role whose permission set decides what they may
+do. Everything is decided in `app/core/access.py`, and nowhere else:
 
-A route, service, or query that filters projects on its own is a defect **even when its output
-is currently correct**. `docs/PRD.md` §7 makes it testable: read scoping happens in exactly one
-function, confirmed by grep.
+- `resolve_project_scope(user)` → **which projects** — a `ProjectScope` that is either
+  `unrestricted` (an administrator) or a concrete id set. Never `None`: a nullable
+  "unrestricted" sentinel is fail-open, and an empty set must mean *no* access.
+- `require_permission(user, project_id, Permission.X)` → **what may I do to this one**. Raises,
+  or returns.
+- `permissions_for` / `role_for` → what the frontend serializes so it can hide controls it
+  would be refused. Hiding is cosmetic; `require_permission` is the control.
+
+Roles are rows, not code: `viewer`, `editor` and `owner` are seeded and frozen (admins can
+create their own beside them), while the `Permission` catalogue in `app/core/permissions.py` is
+the source of truth for which permissions *exist*. There is deliberately **no
+`conversation.*` permission** — an admin bypasses every permission, and the absence of one is
+what keeps conversation privacy true for admins too. `tests/test_permissions.py` fails if one
+is ever added.
+
+A route, service, or query that filters projects on its own — or applies a non-access filter
+like `?ownerless=true` by *replacing* the scope instead of `ProjectScope.narrowed_to`-ing it —
+is a defect **even when its output is currently correct**. `docs/PRD.md` §7 makes it testable:
+read scoping happens in exactly one function, confirmed by grep in
+`tests/test_scoping_is_single_point.py`.
 
 ### `created_by` is not ownership
 
-Projects and QA pairs carry `created_by`. It is attribution, and it gates destructive
-operations (delete, reindex) alongside `is_admin`. **It never scopes reads.** Treating it as an
-owner field reintroduces the per-user filtering the access resolver exists to centralize.
+Projects and QA pairs carry `created_by`. It is **attribution, and nothing else** — not a read
+scope, and since phase 2.1 not a gate either, not even in a supporting role alongside
+`is_admin`. Destructive operations are gated by `require_permission` on a named permission
+(`PROJECT_DELETE`, `PROJECT_REINDEX`, `ITEM_EDIT`, `MOCKDATA_EDIT`, …), full stop. The three
+`NOT_PROJECT_OWNER` / `NOT_CHECKLIST_OWNER` / `NOT_MOCK_DATA_RECORD_OWNER` error codes were
+deleted along with the inline gates that raised them; do not reintroduce either.
 
 ### `403` vs `404` is a security decision
 
-- **`403`** when the caller may see the resource but not do this to it — deleting a project
-  someone else created. Project existence is deliberately public.
-- **`404`** when the caller should not learn it exists — another user's conversation.
+- **`404 PROJECT_NOT_FOUND`** when the caller should not learn it exists — a project they hold
+  no membership on, on **every** route including `DELETE`, and another user's conversation.
+  Project existence is no longer public: repository names are inventory of the organization's
+  private codebases, so "you may not see this" and "this does not exist" are the same answer.
+- **`403 INSUFFICIENT_ROLE`** when the caller may already see the resource but not do this to
+  it — a *member* whose role lacks the permission. They can see the project in their own list,
+  so `404` would contradict the screen in front of them.
 
-Backwards, this either leaks existence or hides something the user can see in a list.
+Both come out of `require_permission`. Backwards, this either leaks the existence of a private
+repository or hides something the user can plainly see in a list.
 
 ### Soft delete does not reach Qdrant
 
@@ -331,6 +363,14 @@ Every error the app raises is `{"detail": {"code": ..., "message": ...}}`, built
 `ErrorCode` values are a wire contract — add members, never rename them. `422` adds a `fields`
 map keyed by the `camelCase` field name.
 
+A body may be widened past those two keys only where the extra field is what makes the error
+actionable — `409 LAST_OWNER` names the projects that would be left with no owner, because
+"no" alone tells an admin nothing about what to fix. `AppError`'s `extra` is the mechanism,
+and using it obliges the route to **declare a model for that status** rather than the generic
+`ERROR_RESPONSES[...]` entry (`LastOwnerErrorResponse`, alongside `ValidationErrorBody` for
+`422`). An undeclared widening means `/docs` and every generated client describe a body the
+route does not return, which is the one-error-shape rule failing silently rather than loudly.
+
 ## Rules
 
 Thirteen rule files in `.claude/rules/`. Read the ones your change touches.
@@ -377,8 +417,9 @@ enforced there — if you add a convention, wire it into the config in the same 
 App Router, React 19, Tailwind CSS 4 (CSS-first `@theme`, no `tailwind.config.js` for tokens).
 The routes that exist are `/login`, `/change-password`, `/` (dashboard),
 `/projects`, `/projects/[id]`, `/ask`, `/ask/[conversationId]`, `/settings/users`,
-`/checklist`, and `/checklist/[moduleId]` — the last of which now carries a Mock Data tab
-beside the checklist grid, no new route of its own.
+`/settings/roles`, `/settings/roles/[id]`, `/checklist`, and `/checklist/[moduleId]` — the last
+of which now carries a Mock Data tab beside the checklist grid, no new route of its own.
+`/projects/[id]` likewise carries a Members tab rather than a route.
 
 ### Next is a backend-for-frontend, not a thin client
 
@@ -429,10 +470,3 @@ row when the screen needing it lands.
 `API_URL` is read on the **server** only — by the API proxy, `proxy.ts`, and `serverFetch`. It
 does not need to be reachable from the browser, so under Compose it is the service name
 `http://backend:8000`, not the published host port.
-
-## Phase 1 sharing is intended
-
-Every authenticated user can list and query every project. That is designed behaviour, not a
-leak — `docs/PRD.md` §4.1 and `SECURITY.md` both say so, and `SECURITY.md` puts malicious
-authenticated users outside the threat model. Do not "fix" it, and do not report it as a
-vulnerability. Per-project access control is phase 2.
