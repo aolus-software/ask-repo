@@ -11,6 +11,8 @@ incompatibly. Configuration defaults and internal module layout may change in a 
 
 ## [Unreleased]
 
+## [2.0.0] — 2026-09-16
+
 Per-project role-based access control (`docs/PRD.md` §2.1, phase 2.1). Projects are no longer
 shared with every account on the instance: each one has members, each member holds one role, and
 each role carries a set of named permissions. **This changes the wire contract in ways a client
@@ -420,6 +422,7 @@ None of these is a defect. Each is a documented, deliberate scope decision:
 
 ---
 
-[Unreleased]: https://github.com/aolus-software/ask-repo/compare/v1.1.0...HEAD
+[Unreleased]: https://github.com/aolus-software/ask-repo/compare/v2.0.0...HEAD
+[2.0.0]: https://github.com/aolus-software/ask-repo/compare/v1.1.0...v2.0.0
 [1.1.0]: https://github.com/aolus-software/ask-repo/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/aolus-software/ask-repo/releases/tag/v1.0.0
