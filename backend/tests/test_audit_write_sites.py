@@ -171,3 +171,69 @@ async def test_refresh_replay_records_the_family_and_revoked_count(
     assert rows[0].outcome == "failure"
     assert rows[0].details["revokedCount"] >= 1
     assert isinstance(rows[0].details["familyId"], str)
+
+
+async def test_user_create_records_the_new_values_with_a_null_before(
+    client_for_admin: AsyncClient, audit_rows: AuditRows
+) -> None:
+    response = await client_for_admin.post(
+        "/users",
+        json={
+            "name": "New Person",
+            "email": "new@example.com",
+            "password": "a-long-enough-password",
+            "isAdmin": False,
+        },
+    )
+    assert response.status_code == 201
+
+    rows = await audit_rows(AuditEventType.USER_CREATED)
+    assert len(rows) == 1
+    assert rows[0].target_label == "new@example.com"
+    assert rows[0].details["changed"]["email"] == {"before": None, "after": "new@example.com"}
+    assert rows[0].details["changed"]["isAdmin"] == {"before": None, "after": False}
+    assert rows[0].details["source"] == "api"
+    # The password is nowhere in the row, in any form.
+    assert "a-long-enough-password" not in str(rows[0].details)
+
+
+async def test_user_update_records_only_what_changed(
+    client_for_admin: AsyncClient, user_b: User, audit_rows: AuditRows
+) -> None:
+    response = await client_for_admin.patch(f"/users/{user_b.id}", json={"isAdmin": True})
+    assert response.status_code == 200
+
+    rows = await audit_rows(AuditEventType.USER_UPDATED)
+    assert len(rows) == 1
+    # `email` did not change, so it is absent — `changed` is a diff, not a snapshot.
+    assert rows[0].details["changed"] == {"isAdmin": {"before": False, "after": True}}
+
+
+async def test_user_deactivation_records_who_and_whom(
+    client_for_admin: AsyncClient, user_b: User, admin_user: User, audit_rows: AuditRows
+) -> None:
+    response = await client_for_admin.delete(f"/users/{user_b.id}")
+    assert response.status_code == 204
+
+    rows = await audit_rows(AuditEventType.USER_DEACTIVATED)
+    assert len(rows) == 1
+    assert rows[0].actor_user_id == admin_user.id
+    assert rows[0].target_id == user_b.id
+    assert rows[0].target_label == user_b.email
+    assert rows[0].details == {}
+
+
+async def test_user_password_reset_records_no_password(
+    client_for_admin: AsyncClient, user_b: User, audit_rows: AuditRows
+) -> None:
+    response = await client_for_admin.post(
+        f"/users/{user_b.id}/reset-password",
+        json={"newPassword": "a-brand-new-temporary-password"},
+    )
+    assert response.status_code == 200
+
+    rows = await audit_rows(AuditEventType.USER_PASSWORD_RESET)
+    assert len(rows) == 1
+    assert rows[0].details == {"forced": True}
+    serialised = str(rows[0].details)
+    assert "a-brand-new-temporary-password" not in serialised

@@ -11,7 +11,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query, status
 
-from app.api.deps import AdminUser, CurrentUser, SessionDep
+from app.api.deps import AdminUser, AuditRecorderDep, CurrentUser, SessionDep
 from app.config import Settings, get_settings
 from app.schemas.errors import ERROR_RESPONSES, LastOwnerErrorResponse
 from app.schemas.pagination import ListQuery, PaginatedResponse
@@ -27,10 +27,12 @@ router = APIRouter(prefix="/users", tags=["Users"])
 
 
 def get_user_service(
-    session: SessionDep, settings: Annotated[Settings, Depends(get_settings)]
+    session: SessionDep,
+    settings: Annotated[Settings, Depends(get_settings)],
+    recorder: AuditRecorderDep,
 ) -> UserService:
     """Provide the service with a request-scoped session."""
-    return UserService(session, settings)
+    return UserService(session, settings, recorder=recorder)
 
 
 UserServiceDep = Annotated[UserService, Depends(get_user_service)]
@@ -74,7 +76,7 @@ async def get_user(
 async def create_user(
     payload: UserCreateRequest, current_user: AdminUser, service: UserServiceDep
 ) -> UserResponse:
-    return await service.create(payload)
+    return await service.create(payload, actor=current_user)
 
 
 @router.patch(
@@ -90,7 +92,7 @@ async def update_user(
     current_user: AdminUser,
     service: UserServiceDep,
 ) -> UserResponse:
-    return await service.update(user_id, payload)
+    return await service.update(user_id, payload, actor=current_user)
 
 
 @router.delete(
@@ -108,7 +110,7 @@ async def update_user(
     },
 )
 async def delete_user(user_id: uuid.UUID, current_user: AdminUser, service: UserServiceDep) -> None:
-    await service.soft_delete(user_id)
+    await service.soft_delete(user_id, actor=current_user)
 
 
 @router.post(
@@ -124,4 +126,4 @@ async def reset_user_password(
     current_user: AdminUser,
     service: UserServiceDep,
 ) -> UserResponse:
-    return await service.reset_password(user_id, payload)
+    return await service.reset_password(user_id, payload, actor=current_user)

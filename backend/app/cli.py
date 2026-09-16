@@ -12,6 +12,7 @@ import sys
 import uuid
 
 from app.config import get_settings
+from app.core.audit import AuditEntry, AuditEventType, AuditRecorder
 from app.core.grant_cache import get_grant_cache
 from app.core.logging import configure_logging
 from app.core.passwords import PasswordPolicyError, check_password, get_common_passwords
@@ -79,23 +80,43 @@ async def seed_admins() -> int:
             ) from error
 
         password_hash = hash_password(password, cost=settings.bcrypt_cost)
-        created = 0
+        created_accounts: list[User] = []
         for normalised in missing:
-            await users.add(
-                User(
-                    id=uuid.uuid4(),
-                    name=normalised.split("@")[0],
-                    email=normalised,
-                    password_hash=password_hash,
-                    is_admin=True,
-                    must_change_password=True,
-                )
+            user = User(
+                id=uuid.uuid4(),
+                name=normalised.split("@")[0],
+                email=normalised,
+                password_hash=password_hash,
+                is_admin=True,
+                must_change_password=True,
             )
-            created += 1
+            await users.add(user)
+            created_accounts.append(user)
             logger.info("Created bootstrap admin %s", normalised)
         await session.commit()
 
-    return created
+    # Recorded with a NULL actor, deliberately: nobody logged in to run this, and
+    # attributing the seed to the account it just created would record a lie in the
+    # one table whose purpose is being trustworthy (`.claude/rules/audit-trail.md`).
+    recorder = AuditRecorder(get_sessionmaker())
+    for user in created_accounts:
+        await recorder.record(
+            AuditEntry(
+                event_type=AuditEventType.USER_CREATED,
+                actor_user_id=None,
+                target_type="user",
+                target_id=user.id,
+                target_label=user.email,
+                changed={
+                    "email": (None, user.email),
+                    "isAdmin": (None, user.is_admin),
+                    "mustChangePassword": (None, user.must_change_password),
+                },
+                context={"source": "cli"},
+            )
+        )
+
+    return len(created_accounts)
 
 
 def restore_system_roles() -> None:

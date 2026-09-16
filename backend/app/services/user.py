@@ -12,7 +12,9 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import Settings
+from app.core.audit import AuditEntry, AuditEventType, AuditRecorder
 from app.core.errors import AppError, ErrorCode
+from app.core.middleware import AuthenticatedUser
 from app.core.passwords import PasswordPolicyError, check_password, get_common_passwords
 from app.core.security import hash_password
 from app.models.user import User
@@ -34,13 +36,16 @@ DEFAULT_SORT_FIELD = "created_at"
 class UserService:
     """Business rules for `/users`."""
 
-    def __init__(self, session: AsyncSession, settings: Settings) -> None:
+    def __init__(
+        self, session: AsyncSession, settings: Settings, *, recorder: AuditRecorder
+    ) -> None:
         self.session = session
         self.settings = settings
         self.users = UserRepository(session)
         self.tokens = RefreshTokenRepository(session)
         self._members = MembershipRepository(session)
         self._projects = ProjectRepository(session)
+        self._recorder = recorder
 
     def _hash(self, password: str) -> str:
         """Apply policy, then hash. One error code for every policy failure."""
@@ -110,7 +115,7 @@ class UserService:
         """One account by id."""
         return UserResponse.model_validate(await self._load(user_id))
 
-    async def create(self, payload: UserCreateRequest) -> UserResponse:
+    async def create(self, payload: UserCreateRequest, *, actor: AuthenticatedUser) -> UserResponse:
         """Provision an account. `must_change_password` is set on every new account.
 
         The pre-check below is check-then-insert, not a lock: two admins creating the
@@ -138,14 +143,38 @@ class UserService:
         except IntegrityError as error:
             await self.session.rollback()
             raise self._email_taken() from error
+
+        await self._recorder.record(
+            AuditEntry(
+                event_type=AuditEventType.USER_CREATED,
+                actor_user_id=actor.id,
+                actor_email=actor.email,
+                target_type="user",
+                target_id=user.id,
+                target_label=user.email,
+                changed={
+                    "email": (None, user.email),
+                    "isAdmin": (None, user.is_admin),
+                    "mustChangePassword": (None, user.must_change_password),
+                },
+                context={"source": "api"},
+            )
+        )
         return UserResponse.model_validate(user)
 
-    async def update(self, user_id: uuid.UUID, payload: UserUpdateRequest) -> UserResponse:
+    async def update(
+        self, user_id: uuid.UUID, payload: UserUpdateRequest, *, actor: AuthenticatedUser
+    ) -> UserResponse:
         """Partial update of name and the admin flag."""
         user = await self._load(user_id)
 
         if payload.is_admin is False:
             await self._guard_last_admin(user)
+
+        # Captured before the payload is applied, so `changed` below is a diff of what
+        # actually moved rather than a snapshot of the request or the row.
+        before_email = user.email
+        before_is_admin = user.is_admin
 
         if payload.name is not None:
             user.name = payload.name
@@ -159,9 +188,28 @@ class UserService:
         user.updated_at = datetime.now(UTC)
 
         await self.session.commit()
+
+        changed: dict[str, tuple[object, object]] = {}
+        if user.email != before_email:
+            changed["email"] = (before_email, user.email)
+        if user.is_admin != before_is_admin:
+            changed["isAdmin"] = (before_is_admin, user.is_admin)
+
+        if changed:
+            await self._recorder.record(
+                AuditEntry(
+                    event_type=AuditEventType.USER_UPDATED,
+                    actor_user_id=actor.id,
+                    actor_email=actor.email,
+                    target_type="user",
+                    target_id=user.id,
+                    target_label=user.email,
+                    changed=changed,
+                )
+            )
         return UserResponse.model_validate(user)
 
-    async def soft_delete(self, user_id: uuid.UUID) -> None:
+    async def soft_delete(self, user_id: uuid.UUID, *, actor: AuthenticatedUser) -> None:
         """Deactivate an account and end every session it holds.
 
         The token revocation is what makes `docs/PRD.md:101`'s "immediately" true for
@@ -188,12 +236,25 @@ class UserService:
                 },
             )
 
+        target_id = user.id
+        target_label = user.email
         await self.users.soft_delete(user)
         await self.tokens.revoke_all_for_user(user.id, reason="user_deactivated")
         await self.session.commit()
 
+        await self._recorder.record(
+            AuditEntry(
+                event_type=AuditEventType.USER_DEACTIVATED,
+                actor_user_id=actor.id,
+                actor_email=actor.email,
+                target_type="user",
+                target_id=target_id,
+                target_label=target_label,
+            )
+        )
+
     async def reset_password(
-        self, user_id: uuid.UUID, payload: ResetPasswordRequest
+        self, user_id: uuid.UUID, payload: ResetPasswordRequest, *, actor: AuthenticatedUser
     ) -> UserResponse:
         """Set an admin-supplied temporary password and force a change on next login."""
         user = await self._load(user_id)
@@ -202,4 +263,16 @@ class UserService:
         user.updated_at = datetime.now(UTC)
         await self.tokens.revoke_all_for_user(user.id, reason="admin_reset")
         await self.session.commit()
+
+        await self._recorder.record(
+            AuditEntry(
+                event_type=AuditEventType.USER_PASSWORD_RESET,
+                actor_user_id=actor.id,
+                actor_email=actor.email,
+                target_type="user",
+                target_id=user.id,
+                target_label=user.email,
+                context={"forced": True},
+            )
+        )
         return UserResponse.model_validate(user)
