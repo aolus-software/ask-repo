@@ -138,16 +138,16 @@ backend/app/
 │
 ├── api/
 │   ├── deps.py        shared dependencies (CurrentUser, AdminUser, service factories)
-│   └── routes/        14 routers, 65 routes
+│   └── routes/        15 routers, 67 routes
 │
-├── core/              cross-cutting: access, crypto, errors, grant_cache, logging,
+├── core/              cross-cutting: access, audit, crypto, errors, grant_cache, logging,
 │                      middleware, passwords, permissions, rate_limit, repo_url,
 │                      role_seed, security
 ├── db/session.py      engine + sessionmaker
-├── models/            7 modules, 16 tables
-├── repositories/      14 repositories — the only place SQL is written
+├── models/            8 modules, 17 tables
+├── repositories/      15 repositories — the only place SQL is written
 ├── schemas/           request/response shapes, all on ApiModel
-├── services/          14 services — business rules and authorization,
+├── services/          15 services — business rules and authorization,
 │                      plus path_tree.py: pure tree shaping, no I/O
 │
 ├── ingestion/         cloner, walker, chunker, embedder/, vector_store, pipeline

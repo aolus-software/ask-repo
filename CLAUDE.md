@@ -215,10 +215,35 @@ repository or hides something the user can plainly see in a list.
 
 ### Soft delete does not reach Qdrant
 
-Every Postgres table carries `deleted_at`, and queries filter `deleted_at IS NULL`. Vector
-points have no such column, and a query-time filter would be one forgotten call away from
-serving deleted content. So: **Postgres rows soft-delete; the matching Qdrant points
-hard-delete, in the same operation.**
+Every Postgres table that can be deleted from carries `deleted_at`, and queries filter
+`deleted_at IS NULL`. Vector points have no such column, and a query-time filter would be one
+forgotten call away from serving deleted content. So: **Postgres rows soft-delete; the matching
+Qdrant points hard-delete, in the same operation.**
+
+`audit_events` is the one exception, and it is the next section.
+
+### The audit table is append-only by omission, and the recorder never raises
+
+Mechanism: [`docs/data.md`](docs/data.md) and [`docs/architecture.md`](docs/architecture.md).
+
+**`audit_events` carries neither `TimestampMixin` nor `SoftDeleteMixin`, and both omissions are
+load-bearing.** No `deleted_at` means `BaseRepository.active_select()` has nothing to filter, so
+there is no soft-delete path to reach these rows through at all — append-only stops being a
+convention every future repository method must respect and becomes a property of the model. No
+`updated_at` because a column recording a mutation has no business on a row that is never
+mutated. There is exactly one delete path, `delete_older_than(cutoff)`, and it takes a cutoff and
+nothing else, so it cannot be aimed at anyone's entries. Never add an `update` method; never add
+a route that writes.
+
+**`AuditRecorder.record` opens its own session and never raises.** That is what makes "an audit
+failure cannot fail a user's action" structural rather than a promise each of the ~37 call sites
+keeps. The accepted consequence is not to be quietly reframed as a guarantee: an action that
+commits and then crashes before its audit write leaves no row, silently — the trail is a strong
+record, not a complete one. Services record **after** the commit that made the change true, from
+plain locals, never from an ORM object.
+
+`.claude/rules/audit-trail.md` owns what must be recorded and the two content bans. Adding a
+mutating route means adding an event in the same change.
 
 ### Ingestion is fire-and-forget, and disk is scratch
 
@@ -418,9 +443,11 @@ enforced there — if you add a convention, wire it into the config in the same 
 App Router, React 19, Tailwind CSS 4 (CSS-first `@theme`, no `tailwind.config.js` for tokens).
 The routes that exist are `/login`, `/change-password`, `/` (dashboard),
 `/projects`, `/projects/[id]`, `/ask`, `/ask/[conversationId]`, `/settings/users`,
-`/settings/roles`, `/settings/roles/[id]`, `/checklist`, and `/checklist/[moduleId]` — the last
+`/settings/roles`, `/settings/roles/[id]`, `/settings/audit`, `/settings/audit/[eventId]`,
+`/checklist`, and `/checklist/[moduleId]` — the last
 of which now carries a Mock Data tab beside the checklist grid, no new route of its own.
-`/projects/[id]` likewise carries a Members tab rather than a route.
+`/projects/[id]` likewise carries a Members tab rather than a route. `/settings` itself is not a
+screen: a group's index route only redirects to its first reachable child.
 
 ### Next is a backend-for-frontend, not a thin client
 

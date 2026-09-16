@@ -339,6 +339,15 @@ rather than typed.
 | `INDEXED_PATH_CACHE_MAX_PROJECTS` | `32` | Path lists held at once, least-recently-used evicted past it. The cache is in-process, not in Redis: `CLAUDE.md` keeps Redis to the login rate limiter, and one scroll rebuilds this. |
 | `INDEXED_PATH_SEARCH_LIMIT` | `200` | Matches the picker's search box returns. Past it the response sets `truncated: true` and the UI says so, because a picker silently showing the first N of many teaches the user that what they are looking for is not indexed. |
 
+### Audit trail retention
+
+Phase 2.2 (`docs/PRD.md` §2.1). One setting, and it is the only lever over the `audit_events`
+table — there is no other delete path.
+
+| Variable | Default | What it does |
+| --- | --- | --- |
+| `AUDIT_RETENTION_DAYS` | `0` | How many days of audit history to keep. **`0` means keep forever**, and that is the default on purpose: a fresh instance must not silently start discarding the one record whose purpose is being the record. A positive value is a window the worker's existing 60-second reconcile tick enforces, hard-deleting every row older than `now - N days` via `AuditEventRepository.delete_older_than(cutoff)`. That method **takes a cutoff and nothing else** — no actor filter, no event-type filter — so setting a window is all an operator can do to this table; nobody can aim a delete at a particular person's entries. Worth setting deliberately on a busy instance: the write rate is proportional to QA activity, since `checklist_item.result_recorded` fires once per test a tester ticks. |
+
 ---
 
 ## Values that fail silently

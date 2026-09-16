@@ -11,6 +11,42 @@ incompatibly. Configuration defaults and internal module layout may change in a 
 
 ## [Unreleased]
 
+Append-only audit trail (`docs/PRD.md` §2.1, phase 2.2): who did what, never the secret involved
+and never the content.
+
+### Added
+
+- **Two read routes, both admin-only.** `GET /audit-events` returns a page of events newest
+  first, filterable by `eventType`, `actorUserId`, `projectId`, `outcome`, `occurredFrom` and
+  `occurredTo`; `GET /audit-events/{id}` returns one with its full `details` payload, its
+  `ipAddress`, and a `current` block saying whether the actor is still active and the target
+  still exists. There is deliberately **no route that writes one** — that is how append-only
+  shows up on the wire rather than only in the schema. New `ErrorCode`: `AUDIT_EVENT_NOT_FOUND`.
+- **One Postgres table, `audit_events`** (migration `9d97a74a24fa`). It is the only table in the
+  app carrying neither the timestamp mixin nor the soft-delete mixin, and both omissions are the
+  mechanism: with no `deleted_at` there is no soft-delete path to reach these rows through, and
+  `updated_at` has no business on a row that is never updated. Every write and every export in
+  the app now records one of **37 event types** — auth, accounts, projects, memberships and
+  roles, checklist modules and items (including the destructive bulk result-clear), change-set
+  applies and discards, mock data, and the two exports. The `details` payload is an allowlist per
+  event type rather than a diff of changed columns, so a new column is invisible to the trail
+  until somebody names it.
+- **Conversation creation and deletion are audited as metadata — a user-visible change to what an
+  administrator can see.** `conversation.created` and `conversation.deleted` record the actor,
+  the project and the time. An administrator can therefore see that a colleague opened or deleted
+  a conversation against a given project, and when. **They still cannot see its title or any
+  message:** `targetLabel` is `NULL` for a conversation, the ask route is not audited at all, and
+  no administrator bypass was added anywhere under `/conversations` — every miss there is still
+  `404`. This is a deliberate, narrow amendment to the previously unqualified privacy statement
+  in `docs/PRD.md` §4.2, made and recorded in the same change.
+- **`AUDIT_RETENTION_DAYS`** (default `0`, meaning keep forever). A positive value is a window the
+  worker's existing 60-second reconcile tick enforces by hard-deleting rows older than it. The
+  single delete path takes a cutoff and nothing else — no actor filter, no event-type filter — so
+  an operator sets a window and nobody erases a row.
+- **Two admin screens**, `/settings/audit` (the filterable event list) and
+  `/settings/audit/[eventId]` (one event, its before/after change list and its live `current`
+  block).
+
 ## [2.0.0] — 2026-09-16
 
 Per-project role-based access control (`docs/PRD.md` §2.1, phase 2.1). Projects are no longer
