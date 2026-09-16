@@ -480,7 +480,7 @@ The edit is therefore narrow and deliberately not a general update: `repo_url`, 
 
 ### 4.2 Dev Knowledge (RAG Q&A over a codebase)
 
-**What it does:** Once a Project is indexed (§4.1), answer natural-language questions grounded in the actual code. Any user may query any project; **conversations are private to the user who had them.**
+**What it does:** Once a Project is indexed (§4.1), answer natural-language questions grounded in the actual code. Any user may query any project; **conversations are private to the user who had them: no administrator can read a conversation, its title, or any message, through any route.** An administrator can see, in the audit trail (§2.1, Phase 2.2), that a conversation was created or deleted — against which project and when, never its title or content.
 
 **User stories**
 
@@ -545,6 +545,13 @@ team relies on, and §4.3 says so. Naming the inversion here is what stops a fut
 treating it as a bug in the checklist rather than a decision. Membership bounds it — the chat
 is shared with the project's team, not with the instance — but within that team it is not
 private, which is the opposite of a conversation.
+
+**The audit trail (§2.1, Phase 2.2) carries one deliberate, narrow amendment to that privacy,
+made and recorded here rather than left to contradict the code.** `conversation.created` and
+`conversation.deleted` are audited events an administrator can read: actor, project, and when.
+Access control is untouched — `is_admin` is still consulted nowhere under `/conversations`, and
+every miss there is still `404` — and the event never carries a title or any message content, so
+an administrator learns that a conversation existed and nothing about what it was.
 
 **Out of scope for v1:** multi-repo cross-referencing (asking questions across two projects at once), code-writing/edit suggestions, sharing a conversation with a colleague.
 

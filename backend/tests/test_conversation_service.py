@@ -8,6 +8,7 @@ from fastapi import status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
+from app.core.audit import AuditRecorder
 from app.core.errors import AppError, ErrorCode
 from app.db.session import get_sessionmaker
 from app.models.conversation import FinishReason, MessageRole
@@ -24,7 +25,7 @@ from tests.test_retriever import _span
 
 
 def service_for(session: AsyncSession) -> ConversationService:
-    return ConversationService(session, get_settings())
+    return ConversationService(session, get_settings(), recorder=AuditRecorder(get_sessionmaker()))
 
 
 async def ready_project(session: AsyncSession, owner_id: uuid.UUID) -> Project:

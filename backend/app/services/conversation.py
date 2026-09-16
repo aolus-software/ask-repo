@@ -20,6 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.config import Settings
 from app.core import access
+from app.core.audit import AuditEntry, AuditEventType, AuditRecorder
 from app.core.errors import AppError, ErrorCode
 from app.core.middleware import AuthenticatedUser
 from app.models.conversation import (
@@ -78,12 +79,15 @@ class TurnContext:
 class ConversationService:
     """Business rules for conversations. Owns its transactions."""
 
-    def __init__(self, session: AsyncSession, settings: Settings) -> None:
+    def __init__(
+        self, session: AsyncSession, settings: Settings, *, recorder: AuditRecorder
+    ) -> None:
         self.session = session
         self.settings = settings
         self._conversations = ConversationRepository(session)
         self._messages = MessageRepository(session)
         self._projects = ProjectRepository(session)
+        self._recorder = recorder
 
     async def create(
         self, payload: ConversationCreateRequest, *, actor: AuthenticatedUser
@@ -97,6 +101,20 @@ class ConversationService:
         )
         await self._conversations.add(conversation)
         await self.session.commit()
+        # Metadata only: `target_label` stays `None`. A conversation's title derives
+        # from the user's first question, and `docs/PRD.md` §2.5's ban on storing a
+        # prompt applies to it verbatim -- see `.claude/rules/audit-trail.md` and
+        # spec §1.4.
+        await self._recorder.record(
+            AuditEntry(
+                event_type=AuditEventType.CONVERSATION_CREATED,
+                actor_user_id=actor.id,
+                actor_email=actor.email,
+                target_type="conversation",
+                target_id=conversation.id,
+                project_id=conversation.project_id,
+            )
+        )
         return ConversationResponse.model_validate(conversation, from_attributes=True)
 
     async def list(
@@ -153,8 +171,24 @@ class ConversationService:
         through their conversation.
         """
         conversation = await self._require_own(conversation_id, actor)
+        # Captured before the sweep: messages carry no `deleted_at` of their own and
+        # are reachable only through their conversation, so this is the last point
+        # `list_for_conversation` can still see them.
+        message_count = len(await self._messages.list_for_conversation(conversation.id))
+        project_id = conversation.project_id
         await self._conversations.soft_delete(conversation)
         await self.session.commit()
+        await self._recorder.record(
+            AuditEntry(
+                event_type=AuditEventType.CONVERSATION_DELETED,
+                actor_user_id=actor.id,
+                actor_email=actor.email,
+                target_type="conversation",
+                target_id=conversation_id,
+                project_id=project_id,
+                context={"messageCount": message_count},
+            )
+        )
 
     async def prepare_turn(
         self,
