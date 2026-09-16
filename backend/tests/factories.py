@@ -21,7 +21,7 @@ from app.models.checklist import (
 )
 from app.models.conversation import Conversation, MessageRole
 from app.models.membership import ProjectMembership, Role
-from app.models.mock_data import MockDataMessage, MockDataRecord
+from app.models.mock_data import MockDataChangeSet, MockDataMessage, MockDataRecord
 from app.models.project import Project, ProjectStatus
 from app.models.user import User
 
@@ -281,6 +281,34 @@ async def create_mock_data_record(
     session.add(record)
     await session.flush()
     return record
+
+
+async def create_mock_data_change_set(
+    session: AsyncSession,
+    *,
+    module_id: uuid.UUID,
+    created_by: uuid.UUID | None = None,
+    origin: ChangeSetOrigin = ChangeSetOrigin.GENERATION,
+    status: ChangeSetStatus = ChangeSetStatus.PENDING,
+    summary: str = "1 added",
+    operations: list[dict[str, object]] | None = None,
+) -> MockDataChangeSet:
+    """A mock-data change set awaiting a decision, mirroring
+    `create_checklist_change_set`."""
+    if created_by is None:
+        created_by = (await create_user(session)).id
+    change_set = MockDataChangeSet(
+        id=uuid.uuid4(),
+        checklist_module_id=module_id,
+        origin=origin.value,
+        summary=summary,
+        operations=operations if operations is not None else [],
+        status=status.value,
+        created_by=created_by,
+    )
+    session.add(change_set)
+    await session.flush()
+    return change_set
 
 
 async def create_mock_data_message(

@@ -17,6 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import Settings
 from app.core import access
+from app.core.audit import AuditEntry, AuditEventType, AuditRecorder
 from app.core.errors import AppError, ErrorCode
 from app.core.middleware import AuthenticatedUser
 from app.core.permissions import Permission
@@ -74,13 +75,16 @@ def _change_set_response(change_set: MockDataChangeSet) -> MockDataChangeSetResp
 class MockDataChangeSetService:
     """Review decisions on a proposed mock-data change set."""
 
-    def __init__(self, session: AsyncSession, settings: Settings) -> None:
+    def __init__(
+        self, session: AsyncSession, settings: Settings, *, recorder: AuditRecorder
+    ) -> None:
         self.session = session
         self.settings = settings
         self.change_sets = MockDataChangeSetRepository(session)
         self.records = MockDataRecordRepository(session)
         self.datasets = MockDataDatasetRepository(session)
         self.modules = ChecklistModuleRepository(session)
+        self._recorder = recorder
 
     async def apply(
         self,
@@ -117,8 +121,32 @@ class MockDataChangeSetService:
         change_set.resolved_by = actor.id
         change_set.resolved_at = datetime.now(UTC)
         change_set.updated_at = datetime.now(UTC)
+        # Captured before the commit, matching `ChecklistChangeSetService.apply`: the
+        # audit row reflects what was actually proposed, independent of the commit.
+        origin = change_set.origin
+        operations_proposed = len(change_set.operations)
         await self._settle_dataset(module_id)
         await self.session.commit()
+
+        # The gap between the two counts is the evidence a human reviewed rather than
+        # accepted wholesale. Neither number is the operations themselves -- those name
+        # generated field values, which the content ban forbids storing -- so `changed`
+        # is left empty and only the counts and origin go into `context`.
+        await self._recorder.record(
+            AuditEntry(
+                event_type=AuditEventType.MOCK_DATA_CHANGE_SET_APPLIED,
+                actor_user_id=actor.id,
+                actor_email=actor.email,
+                target_type="mock_data_change_set",
+                target_id=change_set.id,
+                project_id=project_id,
+                context={
+                    "origin": origin,
+                    "operationsProposed": operations_proposed,
+                    "operationsApplied": len(touched),
+                },
+            )
+        )
 
         if skipped:
             logger.info(
@@ -143,8 +171,21 @@ class MockDataChangeSetService:
         change_set.resolved_by = actor.id
         change_set.resolved_at = datetime.now(UTC)
         change_set.updated_at = datetime.now(UTC)
+        origin = change_set.origin
+        operations_proposed = len(change_set.operations)
         await self._settle_dataset(module_id)
         await self.session.commit()
+        await self._recorder.record(
+            AuditEntry(
+                event_type=AuditEventType.MOCK_DATA_CHANGE_SET_DISCARDED,
+                actor_user_id=actor.id,
+                actor_email=actor.email,
+                target_type="mock_data_change_set",
+                target_id=change_set.id,
+                project_id=project_id,
+                context={"origin": origin, "operationsProposed": operations_proposed},
+            )
+        )
         return _change_set_response(change_set)
 
     async def _apply_one(

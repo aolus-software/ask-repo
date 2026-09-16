@@ -10,7 +10,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, status
 
-from app.api.deps import CurrentUser, SessionDep
+from app.api.deps import AuditRecorderDep, CurrentUser, SessionDep
 from app.config import Settings, get_settings
 from app.schemas.errors import ERROR_RESPONSES
 from app.schemas.mock_data import (
@@ -27,10 +27,12 @@ APPLY_EVERY_OPERATION = MockDataChangeSetApplyRequest()
 
 
 def get_mock_data_change_set_service(
-    session: SessionDep, settings: Annotated[Settings, Depends(get_settings)]
+    session: SessionDep,
+    settings: Annotated[Settings, Depends(get_settings)],
+    recorder: AuditRecorderDep,
 ) -> MockDataChangeSetService:
     """Provide the service with a request-scoped session."""
-    return MockDataChangeSetService(session, settings)
+    return MockDataChangeSetService(session, settings, recorder=recorder)
 
 
 MockDataChangeSetServiceDep = Annotated[

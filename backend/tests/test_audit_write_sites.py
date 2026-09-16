@@ -13,6 +13,7 @@ type checking that catches a fixture returning the wrong thing.
 import uuid
 from datetime import UTC, datetime, timedelta
 
+import pytest
 from httpx import AsyncClient
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -30,6 +31,8 @@ from tests.factories import (
     create_checklist_change_set,
     create_checklist_item,
     create_checklist_module,
+    create_mock_data_change_set,
+    create_mock_data_record,
     create_project,
 )
 from tests.helpers import seed_indexed_paths
@@ -812,3 +815,154 @@ async def test_export_records_that_content_left_the_instance(
     assert rows[0].details["filter"] == {"moduleId": str(module.id)}
     assert "first" not in str(rows[0].details)
     assert "second" not in str(rows[0].details)
+
+
+def _mock_data_add_operation(
+    operation_id: uuid.UUID, *, name: str = "Ada Lovelace"
+) -> dict[str, object]:
+    """One `add` operation, shaped like a real mock-data change set's stored payload."""
+    return {
+        "op": "add",
+        "id": str(operation_id),
+        "fields": {"name": name},
+        "rationale": "A plausible user record.",
+    }
+
+
+async def test_mock_data_generation_requested_records_the_indexed_generation(
+    authed_client: AsyncClient,
+    authed_user: User,
+    grant_membership: GrantMembership,
+    db_session: AsyncSession,
+    audit_rows: AuditRows,
+) -> None:
+    project = await _ready_project(db_session)
+    module = await create_checklist_module(db_session, project_id=project.id)
+    await db_session.commit()
+    await grant_membership(authed_user.id, project.id, EDITOR_NAME)
+
+    response = await authed_client.post(f"/checklist-modules/{module.id}/mock-data-generations")
+    assert response.status_code == 202
+
+    rows = await audit_rows(AuditEventType.MOCK_DATA_GENERATION_REQUESTED)
+    assert len(rows) == 1
+    assert rows[0].project_id == project.id
+    assert rows[0].details == {"indexedGeneration": 1}
+
+
+@pytest.mark.parametrize(
+    ("path_suffix", "expected_format"),
+    [("export.json", "json"), ("export.xlsx", "xlsx")],
+)
+async def test_both_mock_data_exports_record_their_format(
+    authed_client: AsyncClient,
+    authed_user: User,
+    grant_membership: GrantMembership,
+    db_session: AsyncSession,
+    audit_rows: AuditRows,
+    path_suffix: str,
+    expected_format: str,
+) -> None:
+    """Two routes, one event, distinguished by a context key rather than by name.
+
+    Splitting them would put the same question -- did this dataset leave the instance?
+    -- behind two names an admin has to know to search for.
+    """
+    module = await create_checklist_module(db_session)
+    await create_mock_data_record(db_session, module_id=module.id)
+    await create_mock_data_record(db_session, module_id=module.id)
+    await db_session.commit()
+    await grant_membership(authed_user.id, module.project_id, EDITOR_NAME)
+
+    response = await authed_client.get(f"/checklist-modules/{module.id}/mock-data/{path_suffix}")
+    assert response.status_code == 200
+
+    rows = await audit_rows(AuditEventType.MOCK_DATA_EXPORTED)
+    assert len(rows) == 1
+    assert rows[0].details["format"] == expected_format
+    assert rows[0].details["rowCount"] == 2
+    assert rows[0].project_id == module.project_id
+
+
+async def test_mock_data_record_delete_records_its_position(
+    authed_client: AsyncClient,
+    authed_user: User,
+    grant_membership: GrantMembership,
+    db_session: AsyncSession,
+    audit_rows: AuditRows,
+) -> None:
+    """The record's field values are generated content and stay out of the row."""
+    module = await create_checklist_module(db_session)
+    record = await create_mock_data_record(
+        db_session, module_id=module.id, fields={"name": "Ada Lovelace"}
+    )
+    await db_session.commit()
+    await grant_membership(authed_user.id, module.project_id, EDITOR_NAME)
+
+    response = await authed_client.delete(f"/mock-data-records/{record.id}")
+    assert response.status_code == 204
+
+    rows = await audit_rows(AuditEventType.MOCK_DATA_RECORD_DELETED)
+    assert len(rows) == 1
+    assert rows[0].details == {"position": record.position}
+    assert "Ada Lovelace" not in str(rows[0].details)
+
+
+async def test_mock_data_apply_records_what_was_proposed_and_what_was_taken(
+    authed_client: AsyncClient,
+    authed_user: User,
+    grant_membership: GrantMembership,
+    db_session: AsyncSession,
+    audit_rows: AuditRows,
+) -> None:
+    module = await create_checklist_module(db_session)
+    first_operation = uuid.uuid4()
+    second_operation = uuid.uuid4()
+    change_set = await create_mock_data_change_set(
+        db_session,
+        module_id=module.id,
+        operations=[
+            _mock_data_add_operation(first_operation, name="first"),
+            _mock_data_add_operation(second_operation, name="second"),
+        ],
+    )
+    await db_session.commit()
+    await grant_membership(authed_user.id, module.project_id, EDITOR_NAME)
+
+    response = await authed_client.post(
+        f"/mock-data-change-sets/{change_set.id}/apply",
+        json={"operationIds": [str(first_operation)]},
+    )
+    assert response.status_code == 200
+
+    rows = await audit_rows(AuditEventType.MOCK_DATA_CHANGE_SET_APPLIED)
+    assert len(rows) == 1
+    assert rows[0].details["operationsProposed"] == len(change_set.operations)
+    assert rows[0].details["operationsApplied"] == 1
+    assert "operations" not in rows[0].details
+
+
+async def test_mock_data_discard_records_what_was_proposed(
+    authed_client: AsyncClient,
+    authed_user: User,
+    grant_membership: GrantMembership,
+    db_session: AsyncSession,
+    audit_rows: AuditRows,
+) -> None:
+    module = await create_checklist_module(db_session)
+    change_set = await create_mock_data_change_set(
+        db_session,
+        module_id=module.id,
+        operations=[_mock_data_add_operation(uuid.uuid4())],
+    )
+    await db_session.commit()
+    await grant_membership(authed_user.id, module.project_id, EDITOR_NAME)
+
+    response = await authed_client.post(f"/mock-data-change-sets/{change_set.id}/discard")
+    assert response.status_code == 200
+
+    rows = await audit_rows(AuditEventType.MOCK_DATA_CHANGE_SET_DISCARDED)
+    assert len(rows) == 1
+    assert rows[0].details["operationsProposed"] == 1
+    assert rows[0].details["origin"] == change_set.origin
+    assert "operations" not in rows[0].details

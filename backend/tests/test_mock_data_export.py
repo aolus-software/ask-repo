@@ -15,8 +15,10 @@ from openpyxl import load_workbook
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import Settings
+from app.core.audit import AuditRecorder
 from app.core.errors import AppError
 from app.core.permissions import VIEWER_NAME
+from app.db.session import get_sessionmaker
 from app.models.mock_data import MockDataRecord
 from app.services.mock_data_dataset import MockDataDatasetService
 from app.services.mock_data_export import build_mock_data_json, build_mock_data_workbook
@@ -89,7 +91,9 @@ async def test_export_json_succeeds_under_cap(
 
     # Create service with max_rows=5
     settings = Settings(mock_data_export_max_rows=5)
-    service = MockDataDatasetService(db_session, settings)
+    service = MockDataDatasetService(
+        db_session, settings, recorder=AuditRecorder(get_sessionmaker())
+    )
 
     # Should return valid JSON bytes
     result = await service.export_json(module.id, actor=actor)
@@ -135,7 +139,9 @@ async def test_export_xlsx_succeeds_under_cap(
 
     # Create service with max_rows=10
     settings = Settings(mock_data_export_max_rows=10)
-    service = MockDataDatasetService(db_session, settings)
+    service = MockDataDatasetService(
+        db_session, settings, recorder=AuditRecorder(get_sessionmaker())
+    )
 
     # Should return valid workbook bytes
     result = await service.export_xlsx(module.id, actor=actor)
@@ -179,7 +185,9 @@ async def test_export_refuses_over_the_row_cap(
 
     # Create service with max_rows=1
     settings = Settings(mock_data_export_max_rows=1)
-    service = MockDataDatasetService(db_session, settings)
+    service = MockDataDatasetService(
+        db_session, settings, recorder=AuditRecorder(get_sessionmaker())
+    )
 
     # Should raise 409 when export exceeds cap
     with pytest.raises(AppError) as excinfo:
@@ -189,7 +197,9 @@ async def test_export_refuses_over_the_row_cap(
 
 async def test_export_json_404s_on_nonexistent_module(db_session: AsyncSession) -> None:
     """export_json raises 404 for nonexistent module id."""
-    service = MockDataDatasetService(db_session, Settings())
+    service = MockDataDatasetService(
+        db_session, Settings(), recorder=AuditRecorder(get_sessionmaker())
+    )
     user = await create_user(db_session)
 
     with pytest.raises(AppError) as excinfo:
@@ -200,7 +210,9 @@ async def test_export_json_404s_on_nonexistent_module(db_session: AsyncSession) 
 
 async def test_export_xlsx_404s_on_nonexistent_module(db_session: AsyncSession) -> None:
     """export_xlsx raises 404 for nonexistent module id."""
-    service = MockDataDatasetService(db_session, Settings())
+    service = MockDataDatasetService(
+        db_session, Settings(), recorder=AuditRecorder(get_sessionmaker())
+    )
     user = await create_user(db_session)
 
     with pytest.raises(AppError) as excinfo:

@@ -7,7 +7,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, Response, status
 
-from app.api.deps import CurrentUser, SessionDep
+from app.api.deps import AuditRecorderDep, CurrentUser, SessionDep
 from app.config import Settings, get_settings
 from app.schemas.errors import ERROR_RESPONSES
 from app.services.mock_data_dataset import MockDataDatasetService
@@ -16,10 +16,12 @@ router = APIRouter(prefix="/mock-data-records", tags=["Mock Data Records"])
 
 
 def get_mock_data_dataset_service(
-    session: SessionDep, settings: Annotated[Settings, Depends(get_settings)]
+    session: SessionDep,
+    settings: Annotated[Settings, Depends(get_settings)],
+    recorder: AuditRecorderDep,
 ) -> MockDataDatasetService:
     """Provide the service with a request-scoped session."""
-    return MockDataDatasetService(session, settings)
+    return MockDataDatasetService(session, settings, recorder=recorder)
 
 
 MockDataDatasetServiceDep = Annotated[
