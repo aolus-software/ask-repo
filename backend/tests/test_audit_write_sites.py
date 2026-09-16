@@ -10,6 +10,7 @@ needs one. `ruff`'s `ANN` rules require the annotation, and `object` would defea
 type checking that catches a fixture returning the wrong thing.
 """
 
+import uuid
 from datetime import UTC, datetime, timedelta
 
 from httpx import AsyncClient
@@ -25,8 +26,28 @@ from app.models import User
 from app.models.checklist import ChecklistItemStatus
 from app.models.project import Project, ProjectStatus
 from tests.conftest import TEST_PASSWORD, AuditRows, GrantMembership
-from tests.factories import create_checklist_item, create_checklist_module, create_project
+from tests.factories import (
+    create_checklist_change_set,
+    create_checklist_item,
+    create_checklist_module,
+    create_project,
+)
 from tests.helpers import seed_indexed_paths
+
+
+def _add_operation(
+    operation_id: uuid.UUID, *, test_name: str = "Rejects a wrong password"
+) -> dict[str, object]:
+    """One `add` operation, shaped like a real change set's stored payload."""
+    return {
+        "op": "add",
+        "id": str(operation_id),
+        "feature": "Login",
+        "testName": test_name,
+        "expectedResult": "401 INVALID_CREDENTIALS",
+        "citations": None,
+        "rationale": "The handler raises on a bcrypt mismatch.",
+    }
 
 
 async def test_login_records_the_success(
@@ -693,3 +714,101 @@ async def test_checklist_item_delete_of_an_untested_item_records_no_loss(
     rows = await audit_rows(AuditEventType.CHECKLIST_ITEM_DELETED)
     assert len(rows) == 1
     assert rows[0].details["hadRecordedResult"] is False
+
+
+async def test_apply_records_what_was_proposed_and_what_was_taken(
+    authed_client: AsyncClient,
+    authed_user: User,
+    grant_membership: GrantMembership,
+    db_session: AsyncSession,
+    audit_rows: AuditRows,
+) -> None:
+    """The gap between the two numbers is the record that a human reviewed.
+
+    Neither carries the operations themselves: those are model-authored content
+    naming files and test cases.
+    """
+    module = await create_checklist_module(db_session)
+    first_operation = uuid.uuid4()
+    second_operation = uuid.uuid4()
+    change_set = await create_checklist_change_set(
+        db_session,
+        module_id=module.id,
+        operations=[
+            _add_operation(first_operation, test_name="first"),
+            _add_operation(second_operation, test_name="second"),
+        ],
+    )
+    await db_session.commit()
+    await grant_membership(authed_user.id, module.project_id, EDITOR_NAME)
+
+    response = await authed_client.post(
+        f"/checklist-change-sets/{change_set.id}/apply",
+        json={"operationIds": [str(first_operation)]},
+    )
+    assert response.status_code == 200
+
+    rows = await audit_rows(AuditEventType.CHECKLIST_CHANGE_SET_APPLIED)
+    assert len(rows) == 1
+    assert rows[0].details["operationsProposed"] == len(change_set.operations)
+    assert rows[0].details["operationsApplied"] == 1
+    assert "operations" not in rows[0].details
+
+
+async def test_discard_records_what_was_proposed(
+    authed_client: AsyncClient,
+    authed_user: User,
+    grant_membership: GrantMembership,
+    db_session: AsyncSession,
+    audit_rows: AuditRows,
+) -> None:
+    """A discard is also a review decision: it records the count of what was
+    thrown away, never the operations themselves."""
+    module = await create_checklist_module(db_session)
+    change_set = await create_checklist_change_set(
+        db_session,
+        module_id=module.id,
+        operations=[_add_operation(uuid.uuid4())],
+    )
+    await db_session.commit()
+    await grant_membership(authed_user.id, module.project_id, EDITOR_NAME)
+
+    response = await authed_client.post(f"/checklist-change-sets/{change_set.id}/discard")
+    assert response.status_code == 200
+
+    rows = await audit_rows(AuditEventType.CHECKLIST_CHANGE_SET_DISCARDED)
+    assert len(rows) == 1
+    assert rows[0].details["operationsProposed"] == 1
+    assert rows[0].details["origin"] == change_set.origin
+    assert "operations" not in rows[0].details
+
+
+async def test_export_records_that_content_left_the_instance(
+    authed_client: AsyncClient,
+    authed_user: User,
+    grant_membership: GrantMembership,
+    db_session: AsyncSession,
+    audit_rows: AuditRows,
+) -> None:
+    """An export changes nothing and is audited anyway.
+
+    It is the one action that takes a private repository's derived content out of the
+    instance, and PRD §9 treats egress as a category of its own. The row says how much
+    left, never what.
+    """
+    module = await create_checklist_module(db_session)
+    await create_checklist_item(db_session, module_id=module.id, test_name="first")
+    await create_checklist_item(db_session, module_id=module.id, test_name="second")
+    await db_session.commit()
+    await grant_membership(authed_user.id, module.project_id, EDITOR_NAME)
+
+    response = await authed_client.get(f"/checklist-items/export?moduleId={module.id}")
+    assert response.status_code == 200
+
+    rows = await audit_rows(AuditEventType.CHECKLIST_EXPORTED)
+    assert len(rows) == 1
+    assert rows[0].details["format"] == "xlsx"
+    assert rows[0].details["rowCount"] == 2
+    assert rows[0].details["filter"] == {"moduleId": str(module.id)}
+    assert "first" not in str(rows[0].details)
+    assert "second" not in str(rows[0].details)

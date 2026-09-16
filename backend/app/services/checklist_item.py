@@ -302,11 +302,48 @@ class ChecklistItemService:
                 ErrorCode.EXPORT_TOO_LARGE,
                 f"That filter matches more than {cap} rows. Narrow it and try again.",
             )
-        return build_workbook(
+        workbook = build_workbook(
             rows,
             names=await self._display_names(rows),
             module_names=await self._module_names(rows),
         )
+        # An export changes nothing, and is audited anyway: it is the one action
+        # that takes a private repository's derived content out of the instance.
+        # `filter` carries the query's filters, matching `clear_results` -- never
+        # the rows themselves, which would put generated test content in the trail.
+        filter_details: dict[str, str] = {}
+        if query.project_id is not None:
+            filter_details["projectId"] = str(query.project_id)
+        if query.module_id is not None:
+            filter_details["moduleId"] = str(query.module_id)
+        if query.feature is not None:
+            filter_details["feature"] = query.feature
+        if query.status is not None:
+            filter_details["status"] = query.status.value
+        if query.source is not None:
+            filter_details["source"] = query.source.value
+        if query.kind is not None:
+            filter_details["kind"] = query.kind.value
+        if query.search is not None:
+            filter_details["search"] = query.search
+        # The filter may narrow by module rather than project directly, so fall
+        # back to what the matched rows actually belong to.
+        project_id = query.project_id or (rows[0].project_id if rows else None)
+        await self._recorder.record(
+            AuditEntry(
+                event_type=AuditEventType.CHECKLIST_EXPORTED,
+                actor_user_id=actor.id,
+                actor_email=actor.email,
+                target_type="checklist_item",
+                project_id=project_id,
+                context={
+                    "format": "xlsx",
+                    "rowCount": len(rows),
+                    "filter": filter_details,
+                },
+            )
+        )
+        return workbook
 
     async def _display_names(self, rows: builtins.list[ChecklistItem]) -> dict[uuid.UUID, str]:
         """Project and user ids mapped to something a human recognises, in two queries."""

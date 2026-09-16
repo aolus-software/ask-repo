@@ -7,8 +7,10 @@ from fastapi import status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import Settings
+from app.core.audit import AuditRecorder
 from app.core.errors import AppError, ErrorCode
 from app.core.permissions import EDITOR_NAME, VIEWER_NAME
+from app.db.session import get_sessionmaker
 from app.models.checklist import (
     ChangeSetStatus,
     ChecklistItemKind,
@@ -55,7 +57,9 @@ async def test_apply_adds_items_marked_generated(
     )
     reviewer = await create_user(db_session)
     await grant_membership(reviewer.id, module.project_id, EDITOR_NAME)
-    service = ChecklistChangeSetService(db_session, Settings())
+    service = ChecklistChangeSetService(
+        db_session, Settings(), recorder=AuditRecorder(get_sessionmaker())
+    )
 
     result = await service.apply(
         change_set.id, ChangeSetApplyRequest(), actor=await authenticated(db_session, reviewer)
@@ -81,7 +85,9 @@ async def test_apply_is_selective_when_operation_ids_are_given(
         module_id=module.id,
         operations=[_add(keep, test_name="kept"), _add(drop, test_name="dropped")],
     )
-    service = ChecklistChangeSetService(db_session, Settings())
+    service = ChecklistChangeSetService(
+        db_session, Settings(), recorder=AuditRecorder(get_sessionmaker())
+    )
     reviewer = await create_user(db_session)
     await grant_membership(reviewer.id, module.project_id, EDITOR_NAME)
 
@@ -121,7 +127,9 @@ async def test_an_update_preserves_a_recorded_result(
             }
         ],
     )
-    service = ChecklistChangeSetService(db_session, Settings())
+    service = ChecklistChangeSetService(
+        db_session, Settings(), recorder=AuditRecorder(get_sessionmaker())
+    )
     reviewer = await create_user(db_session)
     await grant_membership(reviewer.id, module.project_id, EDITOR_NAME)
 
@@ -156,7 +164,9 @@ async def test_an_operation_naming_a_vanished_item_is_skipped_not_failed(
             _add(good_operation),
         ],
     )
-    service = ChecklistChangeSetService(db_session, Settings())
+    service = ChecklistChangeSetService(
+        db_session, Settings(), recorder=AuditRecorder(get_sessionmaker())
+    )
     reviewer = await create_user(db_session)
     await grant_membership(reviewer.id, module.project_id, EDITOR_NAME)
 
@@ -197,7 +207,9 @@ async def test_an_operation_with_an_unparseable_item_id_is_skipped_not_failed(
             _add(good_operation),
         ],
     )
-    service = ChecklistChangeSetService(db_session, Settings())
+    service = ChecklistChangeSetService(
+        db_session, Settings(), recorder=AuditRecorder(get_sessionmaker())
+    )
     reviewer = await create_user(db_session)
     await grant_membership(reviewer.id, module.project_id, EDITOR_NAME)
 
@@ -217,7 +229,9 @@ async def test_applying_an_already_resolved_set_is_409(
     change_set = await create_checklist_change_set(
         db_session, module_id=module.id, status=ChangeSetStatus.APPLIED
     )
-    service = ChecklistChangeSetService(db_session, Settings())
+    service = ChecklistChangeSetService(
+        db_session, Settings(), recorder=AuditRecorder(get_sessionmaker())
+    )
     reviewer = await create_user(db_session)
     await grant_membership(reviewer.id, module.project_id, EDITOR_NAME)
 
@@ -244,7 +258,9 @@ async def test_any_member_may_apply_because_reviewing_is_a_shared_act(
     )
     colleague = await create_user(db_session)
     await grant_membership(colleague.id, module.project_id, EDITOR_NAME)
-    service = ChecklistChangeSetService(db_session, Settings())
+    service = ChecklistChangeSetService(
+        db_session, Settings(), recorder=AuditRecorder(get_sessionmaker())
+    )
 
     result = await service.apply(
         change_set.id, ChangeSetApplyRequest(), actor=await authenticated(db_session, colleague)
@@ -264,7 +280,9 @@ async def test_apply_is_refused_for_a_viewer(
     )
     viewer = await create_user(db_session)
     await grant_membership(viewer.id, module.project_id, VIEWER_NAME)
-    service = ChecklistChangeSetService(db_session, Settings())
+    service = ChecklistChangeSetService(
+        db_session, Settings(), recorder=AuditRecorder(get_sessionmaker())
+    )
 
     with pytest.raises(AppError) as caught:
         await service.apply(
@@ -284,7 +302,9 @@ async def test_discard_is_refused_for_a_viewer(
     )
     viewer = await create_user(db_session)
     await grant_membership(viewer.id, module.project_id, VIEWER_NAME)
-    service = ChecklistChangeSetService(db_session, Settings())
+    service = ChecklistChangeSetService(
+        db_session, Settings(), recorder=AuditRecorder(get_sessionmaker())
+    )
 
     with pytest.raises(AppError) as caught:
         await service.discard(change_set.id, actor=await authenticated(db_session, viewer))
@@ -300,7 +320,9 @@ async def test_discard_writes_nothing_and_frees_the_module(
     change_set = await create_checklist_change_set(
         db_session, module_id=module.id, operations=[_add(uuid.uuid4())]
     )
-    service = ChecklistChangeSetService(db_session, Settings())
+    service = ChecklistChangeSetService(
+        db_session, Settings(), recorder=AuditRecorder(get_sessionmaker())
+    )
     reviewer = await create_user(db_session)
     await grant_membership(reviewer.id, module.project_id, EDITOR_NAME)
 
@@ -319,7 +341,9 @@ async def test_applying_moves_the_module_to_ready(
     change_set = await create_checklist_change_set(
         db_session, module_id=module.id, operations=[_add(uuid.uuid4())]
     )
-    service = ChecklistChangeSetService(db_session, Settings())
+    service = ChecklistChangeSetService(
+        db_session, Settings(), recorder=AuditRecorder(get_sessionmaker())
+    )
     reviewer = await create_user(db_session)
     await grant_membership(reviewer.id, module.project_id, EDITOR_NAME)
 
@@ -366,7 +390,9 @@ async def test_update_rejects_forbidden_fields_in_the_allowlist(
             }
         ],
     )
-    service = ChecklistChangeSetService(db_session, Settings())
+    service = ChecklistChangeSetService(
+        db_session, Settings(), recorder=AuditRecorder(get_sessionmaker())
+    )
     reviewer = await create_user(db_session)
     await grant_membership(reviewer.id, module.project_id, EDITOR_NAME)
 
@@ -412,7 +438,9 @@ async def test_an_operation_on_an_item_from_another_module_is_skipped(
             _add(good_operation),
         ],
     )
-    service = ChecklistChangeSetService(db_session, Settings())
+    service = ChecklistChangeSetService(
+        db_session, Settings(), recorder=AuditRecorder(get_sessionmaker())
+    )
     reviewer = await create_user(db_session)
     await grant_membership(reviewer.id, target_module.project_id, EDITOR_NAME)
 
@@ -457,7 +485,9 @@ async def test_apply_ignores_an_unrecognised_kind_in_an_update(
             }
         ],
     )
-    service = ChecklistChangeSetService(db_session, Settings())
+    service = ChecklistChangeSetService(
+        db_session, Settings(), recorder=AuditRecorder(get_sessionmaker())
+    )
     reviewer = await create_user(db_session)
     await grant_membership(reviewer.id, module.project_id, EDITOR_NAME)
 

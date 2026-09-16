@@ -21,6 +21,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import Settings
 from app.core import access
+from app.core.audit import AuditEntry, AuditEventType, AuditRecorder
 from app.core.errors import AppError, ErrorCode
 from app.core.middleware import AuthenticatedUser
 from app.core.permissions import Permission
@@ -120,12 +121,15 @@ def _change_set_response(change_set: ChecklistChangeSet) -> ChecklistChangeSetRe
 class ChecklistChangeSetService:
     """Review decisions on a proposed change set."""
 
-    def __init__(self, session: AsyncSession, settings: Settings) -> None:
+    def __init__(
+        self, session: AsyncSession, settings: Settings, *, recorder: AuditRecorder
+    ) -> None:
         self.session = session
         self.settings = settings
         self.change_sets = ChecklistChangeSetRepository(session)
         self.items = ChecklistItemRepository(session)
         self.modules = ChecklistModuleRepository(session)
+        self._recorder = recorder
 
     async def apply(
         self,
@@ -172,8 +176,33 @@ class ChecklistChangeSetService:
         change_set.resolved_by = actor.id
         change_set.resolved_at = datetime.now(UTC)
         change_set.updated_at = datetime.now(UTC)
+        # Captured before the commit so the audit row reflects what was actually
+        # proposed, independent of anything the commit itself might touch.
+        origin = change_set.origin
+        operations_proposed = len(change_set.operations)
         await self._settle_module(module)
         await self.session.commit()
+
+        # The gap between the two counts is the evidence a human reviewed rather
+        # than accepted wholesale. Neither number is the operations themselves --
+        # those name files and test cases a model wrote, which the content ban
+        # forbids storing -- so `changed` is left empty and only the counts and
+        # origin go into `context`.
+        await self._recorder.record(
+            AuditEntry(
+                event_type=AuditEventType.CHECKLIST_CHANGE_SET_APPLIED,
+                actor_user_id=actor.id,
+                actor_email=actor.email,
+                target_type="checklist_change_set",
+                target_id=change_set.id,
+                project_id=module.project_id,
+                context={
+                    "origin": origin,
+                    "operationsProposed": operations_proposed,
+                    "operationsApplied": len(touched),
+                },
+            )
+        )
 
         if skipped:
             logger.info(
@@ -199,8 +228,21 @@ class ChecklistChangeSetService:
         change_set.resolved_by = actor.id
         change_set.resolved_at = datetime.now(UTC)
         change_set.updated_at = datetime.now(UTC)
+        origin = change_set.origin
+        operations_proposed = len(change_set.operations)
         await self._settle_module(module)
         await self.session.commit()
+        await self._recorder.record(
+            AuditEntry(
+                event_type=AuditEventType.CHECKLIST_CHANGE_SET_DISCARDED,
+                actor_user_id=actor.id,
+                actor_email=actor.email,
+                target_type="checklist_change_set",
+                target_id=change_set.id,
+                project_id=module.project_id,
+                context={"origin": origin, "operationsProposed": operations_proposed},
+            )
+        )
         return _change_set_response(change_set)
 
     async def _apply_one(
