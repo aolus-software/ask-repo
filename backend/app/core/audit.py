@@ -94,8 +94,8 @@ class AuditEventType(StrEnum):
 # is how they are stored — `ApiModel` has nothing to translate on the way out, so the
 # stored bytes match the wire.
 CHANGED_FIELDS: dict[AuditEventType, frozenset[str]] = {
-    AuditEventType.USER_CREATED: frozenset({"email", "isAdmin", "mustChangePassword"}),
-    AuditEventType.USER_UPDATED: frozenset({"email", "isAdmin", "mustChangePassword"}),
+    AuditEventType.USER_CREATED: frozenset({"name", "email", "isAdmin", "mustChangePassword"}),
+    AuditEventType.USER_UPDATED: frozenset({"name", "email", "isAdmin", "mustChangePassword"}),
     AuditEventType.PROJECT_CREATED: frozenset({"name", "repoUrlHost", "branch"}),
     AuditEventType.PROJECT_DELETED: frozenset({"name", "repoUrlHost"}),
     AuditEventType.MEMBERSHIP_GRANTED: frozenset({"roleName"}),

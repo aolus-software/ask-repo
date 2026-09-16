@@ -237,3 +237,20 @@ async def test_user_password_reset_records_no_password(
     assert rows[0].details == {"forced": True}
     serialised = str(rows[0].details)
     assert "a-brand-new-temporary-password" not in serialised
+
+
+async def test_user_rename_records_a_name_only_change(
+    client_for_admin: AsyncClient, user_b: User, audit_rows: AuditRows
+) -> None:
+    before_name = user_b.name
+    response = await client_for_admin.patch(f"/users/{user_b.id}", json={"name": "Renamed Person"})
+    assert response.status_code == 200
+
+    rows = await audit_rows(AuditEventType.USER_UPDATED)
+    assert len(rows) == 1
+    # `isAdmin` did not change, so it is absent — a name-only edit must not be dropped
+    # just because it doesn't touch the fields the allowlist used to permit.
+    assert rows[0].details["changed"] == {
+        "name": {"before": before_name, "after": "Renamed Person"}
+    }
+    assert "isAdmin" not in rows[0].details["changed"]
