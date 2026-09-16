@@ -68,6 +68,7 @@ class ErrorCode(StrEnum):
     LAST_OWNER = "LAST_OWNER"
     MEMBERSHIP_NOT_FOUND = "MEMBERSHIP_NOT_FOUND"
     MEMBERSHIP_EXISTS = "MEMBERSHIP_EXISTS"
+    AUDIT_EVENT_NOT_FOUND = "AUDIT_EVENT_NOT_FOUND"
 
 
 def error_detail(code: ErrorCode, message: str) -> dict[str, object]:
