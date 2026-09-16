@@ -373,7 +373,7 @@ route does not return, which is the one-error-shape rule failing silently rather
 
 ## Rules
 
-Thirteen rule files in `.claude/rules/`. Read the ones your change touches.
+Fourteen rule files in `.claude/rules/`. Read the ones your change touches.
 
 | Rule | Read it when |
 | --- | --- |
@@ -389,6 +389,7 @@ Thirteen rule files in `.claude/rules/`. Read the ones your change touches.
 | `forms.md` | Any form — dialog vs page, validation ownership, field composition |
 | `navigation.md` | Sidebar, breadcrumbs, or adding a route |
 | `frontend-bff.md` | Any `proxy.ts`, the `app/api/[...path]` API proxy, `/api/auth/*`, or session/refresh code — cookies, the refresh split, SSE piping |
+| `audit-trail.md` | Any write or export in any service — what must record an audit event, the four exemptions, and the two content bans. **Adding a mutating route means adding an event in the same change** |
 | `audit-findings.md` | Writing an audit report |
 
 Seven commands in `.claude/commands/`: `audit-flow.md` (read-only sweep, writes
