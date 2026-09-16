@@ -1,7 +1,6 @@
 """The audit trail: the append-only model, and the repository built over it."""
 
 import logging
-import uuid
 
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -107,7 +106,6 @@ async def test_record_writes_a_row(
     from app.models import AuditEvent
 
     recorder = AuditRecorder(sessionmaker)
-    actor_id = uuid.uuid4()
 
     await recorder.record(
         AuditEntry(
