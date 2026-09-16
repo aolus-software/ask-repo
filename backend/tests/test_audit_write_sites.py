@@ -309,3 +309,137 @@ async def test_reindex_records_the_generation_it_supersedes(
     rows = await audit_rows(AuditEventType.PROJECT_REINDEX_REQUESTED)
     assert len(rows) == 1
     assert rows[0].details == {"supersededGeneration": project.active_generation}
+
+
+async def test_membership_grant_targets_the_grantee_not_the_row(
+    client_for_user_a: AsyncClient, user_b: User, audit_rows: AuditRows
+) -> None:
+    """The row reads as "X granted b@example.com viewer on <project>".
+
+    Targeting the membership id instead would need a join through a row a later
+    revocation has soft-deleted. `client_for_user_a` is the project's creator, so it
+    is granted `owner` automatically and needs no separate setup.
+    """
+    created = await client_for_user_a.post(
+        "/projects", json={"repoUrl": "https://github.com/o/r.git", "branch": "main"}
+    )
+    assert created.status_code == 201
+    project_id = created.json()["id"]
+
+    response = await client_for_user_a.post(
+        f"/projects/{project_id}/members",
+        json={"userId": str(user_b.id), "role": "viewer"},
+    )
+    assert response.status_code == 201
+
+    rows = await audit_rows(AuditEventType.MEMBERSHIP_GRANTED)
+    assert len(rows) == 1
+    assert rows[0].target_type == "user"
+    assert rows[0].target_id == user_b.id
+    assert rows[0].target_label == user_b.email
+    assert str(rows[0].project_id) == project_id
+    assert rows[0].details["changed"]["roleName"] == {"before": None, "after": "viewer"}
+
+
+async def test_membership_role_change_records_old_and_new_role_names(
+    client_for_user_a: AsyncClient, user_b: User, audit_rows: AuditRows
+) -> None:
+    created = await client_for_user_a.post(
+        "/projects", json={"repoUrl": "https://github.com/o/r2.git", "branch": "main"}
+    )
+    project_id = created.json()["id"]
+    await client_for_user_a.post(
+        f"/projects/{project_id}/members",
+        json={"userId": str(user_b.id), "role": "viewer"},
+    )
+
+    response = await client_for_user_a.patch(
+        f"/projects/{project_id}/members/{user_b.id}", json={"role": "editor"}
+    )
+    assert response.status_code == 200
+
+    rows = await audit_rows(AuditEventType.MEMBERSHIP_ROLE_CHANGED)
+    assert len(rows) == 1
+    assert rows[0].target_type == "user"
+    assert rows[0].target_id == user_b.id
+    assert rows[0].details["changed"]["roleName"] == {"before": "viewer", "after": "editor"}
+
+
+async def test_membership_revoke_records_the_role_it_removed(
+    client_for_user_a: AsyncClient, user_b: User, audit_rows: AuditRows
+) -> None:
+    created = await client_for_user_a.post(
+        "/projects", json={"repoUrl": "https://github.com/o/r3.git", "branch": "main"}
+    )
+    project_id = created.json()["id"]
+    await client_for_user_a.post(
+        f"/projects/{project_id}/members",
+        json={"userId": str(user_b.id), "role": "viewer"},
+    )
+
+    response = await client_for_user_a.delete(f"/projects/{project_id}/members/{user_b.id}")
+    assert response.status_code == 204
+
+    rows = await audit_rows(AuditEventType.MEMBERSHIP_REVOKED)
+    assert len(rows) == 1
+    assert rows[0].target_id == user_b.id
+    assert rows[0].details["changed"]["roleName"] == {"before": "viewer", "after": None}
+
+
+async def test_role_create_records_a_null_before(
+    client_for_admin: AsyncClient, audit_rows: AuditRows
+) -> None:
+    response = await client_for_admin.post(
+        "/roles", json={"name": "QA Lead", "description": "Runs the test plan."}
+    )
+    assert response.status_code == 201
+
+    rows = await audit_rows(AuditEventType.ROLE_CREATED)
+    assert len(rows) == 1
+    assert rows[0].project_id is None
+    assert rows[0].details["changed"]["name"] == {"before": None, "after": "QA Lead"}
+    assert rows[0].details["changed"]["permissions"] == {"before": None, "after": []}
+
+
+async def test_role_update_records_the_permission_set_before_and_after(
+    client_for_admin: AsyncClient, audit_rows: AuditRows
+) -> None:
+    """The most valuable diff in the table.
+
+    This is the one write in the app that can widen what every holder of a role may
+    do, across every project, and nothing else records it.
+    """
+    created = await client_for_admin.post("/roles", json={"name": "QA Lead 2"})
+    role_id = created.json()["id"]
+
+    response = await client_for_admin.patch(
+        f"/roles/{role_id}", json={"permissions": ["project.read", "project.delete"]}
+    )
+    assert response.status_code == 200
+
+    rows = await audit_rows(AuditEventType.ROLE_UPDATED)
+    assert len(rows) == 1
+    change = rows[0].details["changed"]["permissions"]
+    assert "project.delete" in change["after"]
+    assert "project.delete" not in change["before"]
+    # A role is instance-wide; the assignment carries the project.
+    assert rows[0].project_id is None
+
+
+async def test_role_delete_records_the_permissions_it_held(
+    client_for_admin: AsyncClient, audit_rows: AuditRows
+) -> None:
+    created = await client_for_admin.post("/roles", json={"name": "Temp Role"})
+    role_id = created.json()["id"]
+    await client_for_admin.patch(f"/roles/{role_id}", json={"permissions": ["project.read"]})
+
+    response = await client_for_admin.delete(f"/roles/{role_id}")
+    assert response.status_code == 204
+
+    rows = await audit_rows(AuditEventType.ROLE_DELETED)
+    assert len(rows) == 1
+    assert rows[0].details["changed"]["name"] == {"before": "Temp Role", "after": None}
+    assert rows[0].details["changed"]["permissions"] == {
+        "before": ["project.read"],
+        "after": None,
+    }

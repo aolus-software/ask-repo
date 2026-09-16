@@ -17,6 +17,7 @@ from fastapi import status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core import access
+from app.core.audit import AuditEntry, AuditEventType, AuditRecorder
 from app.core.errors import AppError, ErrorCode
 from app.core.grant_cache import get_grant_cache
 from app.core.middleware import AuthenticatedUser
@@ -31,11 +32,12 @@ from app.schemas.membership import MemberCreateRequest, MemberResponse, MemberUp
 class MembershipService:
     """Project membership. One service call per route."""
 
-    def __init__(self, session: AsyncSession) -> None:
+    def __init__(self, session: AsyncSession, *, recorder: AuditRecorder) -> None:
         self.session = session
         self._members = MembershipRepository(session)
         self._roles = RoleRepository(session)
         self._users = UserRepository(session)
+        self._recorder = recorder
 
     async def list_members(
         self, project_id: uuid.UUID, *, actor: AuthenticatedUser
@@ -92,6 +94,18 @@ class MembershipService:
         self.session.add(membership)
         await self.session.commit()
         await get_grant_cache().invalidate_user(user.id)
+        await self._recorder.record(
+            AuditEntry(
+                event_type=AuditEventType.MEMBERSHIP_GRANTED,
+                actor_user_id=actor.id,
+                actor_email=actor.email,
+                target_type="user",
+                target_id=user.id,
+                target_label=user.email,
+                project_id=project_id,
+                changed={"roleName": (None, role.name)},
+            )
+        )
 
         return MemberResponse(
             user_id=user.id,
@@ -126,12 +140,27 @@ class MembershipService:
         if role.name != OWNER_NAME:
             await self._refuse_if_last_owner(project_id, user_id)
 
+        old_role = await self._roles.get(membership.role_id)
+        old_role_name = old_role.name if old_role is not None else None
+
         membership.role_id = role.id
         await self.session.commit()
         await get_grant_cache().invalidate_user(user_id)
 
         user = await self._users.get(user_id)
         assert user is not None
+        await self._recorder.record(
+            AuditEntry(
+                event_type=AuditEventType.MEMBERSHIP_ROLE_CHANGED,
+                actor_user_id=actor.id,
+                actor_email=actor.email,
+                target_type="user",
+                target_id=user.id,
+                target_label=user.email,
+                project_id=project_id,
+                changed={"roleName": (old_role_name, role.name)},
+            )
+        )
         return MemberResponse(
             user_id=user.id,
             name=user.name,
@@ -156,9 +185,24 @@ class MembershipService:
             )
         await self._refuse_if_last_owner(project_id, user_id)
 
+        role = await self._roles.get(membership.role_id)
+        user = await self._users.get(user_id)
+
         membership.deleted_at = datetime.now(UTC)
         await self.session.commit()
         await get_grant_cache().invalidate_user(user_id)
+        await self._recorder.record(
+            AuditEntry(
+                event_type=AuditEventType.MEMBERSHIP_REVOKED,
+                actor_user_id=actor.id,
+                actor_email=actor.email,
+                target_type="user",
+                target_id=user_id,
+                target_label=user.email if user is not None else None,
+                project_id=project_id,
+                changed={"roleName": (role.name if role is not None else None, None)},
+            )
+        )
 
     async def _refuse_if_last_owner(self, project_id: uuid.UUID, user_id: uuid.UUID) -> None:
         """Every live project keeps at least one live owner.

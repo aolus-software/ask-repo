@@ -10,7 +10,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, status
 
-from app.api.deps import SessionDep, require_admin
+from app.api.deps import AuditRecorderDep, CurrentUser, SessionDep, require_admin
 from app.schemas.errors import ERROR_RESPONSES
 from app.schemas.role import (
     PermissionCatalogResponse,
@@ -27,8 +27,8 @@ from app.services.role import RoleService
 router = APIRouter(tags=["roles"], dependencies=[Depends(require_admin)])
 
 
-def _service(session: SessionDep) -> RoleService:
-    return RoleService(session)
+def _service(session: SessionDep, recorder: AuditRecorderDep) -> RoleService:
+    return RoleService(session, recorder=recorder)
 
 
 ServiceDep = Annotated[RoleService, Depends(_service)]
@@ -63,9 +63,11 @@ async def list_roles(service: ServiceDep) -> Sequence[RoleResponse]:
     summary="Create a custom role",
     responses={code: ERROR_RESPONSES[code] for code in (401, 403, 409, 422)},
 )
-async def create_role(payload: RoleCreateRequest, service: ServiceDep) -> RoleResponse:
+async def create_role(
+    payload: RoleCreateRequest, service: ServiceDep, current_user: CurrentUser
+) -> RoleResponse:
     """Create a custom role."""
-    return await service.create(payload)
+    return await service.create(payload, actor=current_user)
 
 
 @router.patch(
@@ -75,10 +77,13 @@ async def create_role(payload: RoleCreateRequest, service: ServiceDep) -> RoleRe
     responses={code: ERROR_RESPONSES[code] for code in (401, 403, 404, 409, 422)},
 )
 async def update_role(
-    role_id: uuid.UUID, payload: RoleUpdateRequest, service: ServiceDep
+    role_id: uuid.UUID,
+    payload: RoleUpdateRequest,
+    service: ServiceDep,
+    current_user: CurrentUser,
 ) -> RoleResponse:
     """Rename a custom role and/or replace its permissions."""
-    return await service.update(role_id, payload)
+    return await service.update(role_id, payload, actor=current_user)
 
 
 @router.delete(
@@ -87,6 +92,6 @@ async def update_role(
     summary="Delete a custom role",
     responses={code: ERROR_RESPONSES[code] for code in (401, 403, 404, 409, 422)},
 )
-async def delete_role(role_id: uuid.UUID, service: ServiceDep) -> None:
+async def delete_role(role_id: uuid.UUID, service: ServiceDep, current_user: CurrentUser) -> None:
     """Soft-delete a custom role that nobody holds."""
-    await service.delete(role_id)
+    await service.delete(role_id, actor=current_user)
