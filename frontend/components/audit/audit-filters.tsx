@@ -50,7 +50,9 @@ export function AuditFilters({
                 without this the trigger reads "any" or "project.deleted" instead of
                 the wording in the menu. */}
             <SelectValue>
-              {(value: string) => (value === ANY ? "All events" : auditEventLabel(value))}
+              {(value: string) =>
+                value === ANY ? "All events" : auditEventLabel(value)
+              }
             </SelectValue>
           </SelectTrigger>
           <SelectContent>

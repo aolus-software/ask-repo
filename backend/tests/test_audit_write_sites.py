@@ -312,6 +312,7 @@ async def test_project_delete_records_the_blast_radius(
     assert len(rows) == 1
     assert rows[0].target_label == project.name
     assert rows[0].project_id == project.id
+    assert rows[0].actor_user_id == authed_user.id
     assert changed_field(rows[0].details, "name") == {"before": project.name, "after": None}
     assert "conversationsDeleted" in rows[0].details
     assert "checklistModulesDeleted" in rows[0].details

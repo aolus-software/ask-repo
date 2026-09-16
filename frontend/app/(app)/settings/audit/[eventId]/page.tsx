@@ -21,7 +21,8 @@ export default async function AuditEventPage({
   try {
     await queryClient.prefetchQuery({
       queryKey: keys.auditEvents.detail(eventId),
-      queryFn: () => serverFetch<AuditEventResponse>(endpoints.auditEvents.detail(eventId)),
+      queryFn: () =>
+        serverFetch<AuditEventResponse>(endpoints.auditEvents.detail(eventId)),
     });
   } catch {
     // Not fatal — the client refetches and renders NotFound or the error.

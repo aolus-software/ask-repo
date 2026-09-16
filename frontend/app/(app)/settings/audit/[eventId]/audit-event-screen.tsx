@@ -3,7 +3,10 @@
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 
-import { AuditChangeList, type AuditChange } from "@/components/audit/audit-change-list";
+import {
+  AuditChangeList,
+  type AuditChange,
+} from "@/components/audit/audit-change-list";
 import { DetailError } from "@/components/feedback/detail-error";
 import { Forbidden } from "@/components/feedback/forbidden";
 import { NotFound } from "@/components/feedback/not-found";
@@ -116,7 +119,9 @@ export function AuditEventScreen({ id }: { id: string }) {
           <Field label="Project">
             {event.projectId ?? <span className="text-muted-foreground">—</span>}
           </Field>
-          <Field label="Outcome">{event.outcome === "failure" ? "Failure" : "Success"}</Field>
+          <Field label="Outcome">
+            {event.outcome === "failure" ? "Failure" : "Success"}
+          </Field>
           <Field label="Source IP">
             {event.ipAddress ?? <span className="text-muted-foreground">—</span>}
           </Field>

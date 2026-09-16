@@ -156,6 +156,30 @@ def _app_routes() -> set[tuple[str, str]]:
     return found
 
 
+def test_the_walker_finds_a_plausible_number_of_routes() -> None:
+    """Guards against the nesting bug this walker used to have.
+
+    `_iter_api_routes` once missed every route nested behind `app.include_router(...)`
+    and silently enumerated zero — `test_every_mutating_route_is_classified` still
+    passed, because an empty set has no unclassified members, and the regression was
+    only caught by coincidence when the stale-entries test happened to fail. A floor
+    on the total route count catches the same regression by name: it found 65
+    (method, path) pairs when this guard was written, and 67 after Task 12 added two
+    more. The floor is round and well below either figure so a route added later does
+    not itself break this test.
+    """
+    all_routes = {
+        (method, route.path)
+        for route in _iter_api_routes(app.routes)
+        for method in route.methods or set()
+    }
+
+    assert len(all_routes) >= 60, (
+        f"The route walker found only {len(all_routes)} routes — it likely stopped "
+        "recursing into a nested router again. See the docstring above."
+    )
+
+
 def test_every_mutating_route_is_classified() -> None:
     """A new mutating route fails here until somebody decides what it records.
 

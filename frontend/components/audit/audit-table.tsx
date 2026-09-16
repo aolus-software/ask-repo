@@ -54,7 +54,10 @@ export function AuditTable({
                 </TableCell>
                 <TableCell>
                   <Link href={`/settings/audit/${event.id}`}>
-                    <StatusBadge tone="neutral" label={auditEventLabel(event.eventType)} />
+                    <StatusBadge
+                      tone="neutral"
+                      label={auditEventLabel(event.eventType)}
+                    />
                   </Link>
                 </TableCell>
                 <TableCell className="text-sm">
@@ -77,7 +80,9 @@ export function AuditTable({
                   />
                 </TableCell>
                 <TableCell className="text-muted-foreground text-sm">
-                  {event.changedFields.length > 0 ? event.changedFields.join(", ") : "—"}
+                  {event.changedFields.length > 0
+                    ? event.changedFields.join(", ")
+                    : "—"}
                 </TableCell>
               </TableRow>
             ))

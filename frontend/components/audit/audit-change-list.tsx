@@ -59,11 +59,7 @@ function ChangeValue({ value }: { value: unknown }) {
  * The absent side is always the muted em dash, never the literal string "null" —
  * printing "null" would make a normal create or delete read as a bug.
  */
-export function AuditChangeList({
-  changed,
-}: {
-  changed: Record<string, AuditChange>;
-}) {
+export function AuditChangeList({ changed }: { changed: Record<string, AuditChange> }) {
   const entries = Object.entries(changed);
 
   if (entries.length === 0) {

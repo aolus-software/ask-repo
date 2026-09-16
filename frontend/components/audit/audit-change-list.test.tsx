@@ -6,7 +6,9 @@ import { AuditChangeList } from "@/components/audit/audit-change-list";
 describe("AuditChangeList", () => {
   it("renders a create as an added value, not as 'null'", () => {
     render(
-      <AuditChangeList changed={{ email: { before: null, after: "new@example.com" } }} />,
+      <AuditChangeList
+        changed={{ email: { before: null, after: "new@example.com" } }}
+      />,
     );
 
     expect(screen.getByText("new@example.com")).toBeInTheDocument();
@@ -30,7 +32,12 @@ describe("AuditChangeList", () => {
   it("renders a list value without collapsing it to a string", () => {
     render(
       <AuditChangeList
-        changed={{ permissions: { before: ["project.read"], after: ["project.read", "project.delete"] } }}
+        changed={{
+          permissions: {
+            before: ["project.read"],
+            after: ["project.read", "project.delete"],
+          },
+        }}
       />,
     );
 
