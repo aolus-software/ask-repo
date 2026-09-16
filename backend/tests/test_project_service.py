@@ -8,8 +8,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
 from app.core.access import ProjectScope
+from app.core.audit import AuditRecorder
 from app.core.errors import AppError, ErrorCode
 from app.core.permissions import VIEWER_NAME
+from app.db.session import get_sessionmaker
 from app.ingestion.chunker import Chunk
 from app.ingestion.errors import RetryableIngestionError
 from app.ingestion.vector_store import InMemoryVectorStore, VectorStore, VectorStoreFactory
@@ -60,7 +62,13 @@ def service_for(
     *,
     store_factory: VectorStoreFactory = _no_store_expected,
 ) -> ProjectService:
-    return ProjectService(session, get_settings(), queue, store_factory=store_factory)
+    return ProjectService(
+        session,
+        get_settings(),
+        queue,
+        store_factory=store_factory,
+        recorder=AuditRecorder(get_sessionmaker()),
+    )
 
 
 async def test_create_enqueues_exactly_one_job(db_session: AsyncSession) -> None:

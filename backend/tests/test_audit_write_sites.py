@@ -20,7 +20,9 @@ from app.config import get_settings
 from app.core.audit import AuditEventType
 from app.core.security import sha256_hex
 from app.models import User
+from app.models.project import Project, ProjectStatus
 from tests.conftest import TEST_PASSWORD, AuditRows
+from tests.factories import create_project
 
 
 async def test_login_records_the_success(
@@ -254,3 +256,56 @@ async def test_user_rename_records_a_name_only_change(
         "name": {"before": before_name, "after": "Renamed Person"}
     }
     assert "isAdmin" not in rows[0].details["changed"]
+
+
+async def test_project_delete_records_the_blast_radius(
+    authed_client: AsyncClient,
+    db_session: AsyncSession,
+    authed_user: User,
+    audit_rows: AuditRows,
+) -> None:
+    """The name is the point: a deleted project takes its created_by with it.
+
+    The counts are the rest of it — PRD §4.2 sweeps every member's conversations with
+    the project, so "a shared index disappeared on Tuesday" wants the blast radius,
+    and it is only knowable at delete time.
+    """
+    project: Project = await create_project(
+        db_session, created_by=authed_user.id, status=ProjectStatus.READY
+    )
+    await db_session.commit()
+
+    response = await authed_client.delete(f"/projects/{project.id}")
+    assert response.status_code == 204
+
+    rows = await audit_rows(AuditEventType.PROJECT_DELETED)
+    assert len(rows) == 1
+    assert rows[0].target_label == project.name
+    assert rows[0].project_id == project.id
+    assert rows[0].details["changed"]["name"] == {"before": project.name, "after": None}
+    assert "conversationsDeleted" in rows[0].details
+    assert "checklistModulesDeleted" in rows[0].details
+
+
+async def test_reindex_records_the_generation_it_supersedes(
+    authed_client: AsyncClient,
+    db_session: AsyncSession,
+    authed_user: User,
+    audit_rows: AuditRows,
+) -> None:
+    """The new generation does not exist yet — the worker increments it.
+
+    Recording the one being superseded is the only number available at request time,
+    and it is the one that identifies what was replaced.
+    """
+    project: Project = await create_project(
+        db_session, created_by=authed_user.id, status=ProjectStatus.READY
+    )
+    await db_session.commit()
+
+    response = await authed_client.post(f"/projects/{project.id}/reindex")
+    assert response.status_code == 202
+
+    rows = await audit_rows(AuditEventType.PROJECT_REINDEX_REQUESTED)
+    assert len(rows) == 1
+    assert rows[0].details == {"supersededGeneration": project.active_generation}

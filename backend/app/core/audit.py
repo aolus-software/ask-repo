@@ -18,6 +18,7 @@ import uuid
 from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Literal
+from urllib.parse import urlsplit
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -157,6 +158,20 @@ CONTEXT_KEYS: dict[AuditEventType, frozenset[str]] = {
 
 type ChangedValue = str | bool | int | float | list[str] | None
 type Outcome = Literal["success", "failure"]
+
+
+def repo_url_host(url: str) -> str | None:
+    """The hostname of a clone URL, with any embedded credentials dropped.
+
+    A PAT rides in the userinfo of a clone URL, so this parses and keeps `hostname`
+    rather than trimming a prefix: `urlsplit().hostname` excludes userinfo and the
+    port by construction, which a string operation would have to be rewritten to keep
+    true under a URL shape nobody anticipated.
+    """
+    try:
+        return urlsplit(url).hostname
+    except ValueError:
+        return None
 
 
 @dataclass(frozen=True, slots=True)

@@ -10,7 +10,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query, Request, status
 
-from app.api.deps import CurrentUser, SessionDep
+from app.api.deps import AuditRecorderDep, CurrentUser, SessionDep
 from app.config import Settings, get_settings
 from app.ingestion.vector_store import VectorStoreFactory, build_store_factory
 from app.queue.protocol import IngestionQueue
@@ -60,9 +60,10 @@ def get_project_service(
     settings: Annotated[Settings, Depends(get_settings)],
     queue: Annotated[IngestionQueue, Depends(get_ingestion_queue)],
     store_factory: Annotated[VectorStoreFactory, Depends(get_store_factory)],
+    recorder: AuditRecorderDep,
 ) -> ProjectService:
     """Provide the service with a request-scoped session."""
-    return ProjectService(session, settings, queue, store_factory=store_factory)
+    return ProjectService(session, settings, queue, store_factory=store_factory, recorder=recorder)
 
 
 def get_indexed_path_reader(

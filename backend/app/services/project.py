@@ -16,6 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import Settings
 from app.core import access
+from app.core.audit import AuditEntry, AuditEventType, AuditRecorder, repo_url_host
 from app.core.crypto import SecretBox
 from app.core.errors import AppError, ErrorCode
 from app.core.grant_cache import get_grant_cache
@@ -67,11 +68,13 @@ class ProjectService:
         queue: IngestionQueue,
         *,
         store_factory: VectorStoreFactory,
+        recorder: AuditRecorder,
     ) -> None:
         self.session = session
         self.settings = settings
         self.queue = queue
         self.store_factory = store_factory
+        self._recorder = recorder
         self._repository = ProjectRepository(session)
         self._conversations = ConversationRepository(session)
         self._checklist_modules = ChecklistModuleRepository(session)
@@ -134,6 +137,23 @@ class ProjectService:
         )
         await self.session.commit()
         await get_grant_cache().invalidate_user(actor.id)
+        await self._recorder.record(
+            AuditEntry(
+                event_type=AuditEventType.PROJECT_CREATED,
+                actor_user_id=actor.id,
+                actor_email=actor.email,
+                target_type="project",
+                target_id=project.id,
+                target_label=project.name,
+                project_id=project.id,
+                changed={
+                    "name": (None, project.name),
+                    "repoUrlHost": (None, repo_url_host(payload.repo_url)),
+                    "branch": (None, payload.branch),
+                },
+                context={"patSupplied": payload.pat is not None},
+            )
+        )
 
         # Produced after the commit: a message referencing an uncommitted row would
         # race the worker. The reconcile sweep covers a produce that fails here.
@@ -224,9 +244,26 @@ class ProjectService:
         if project.status in BUSY_STATUSES or project.reindex_in_progress:
             return ReindexResponse(enqueued=False, project=self._to_response(project, actor))
 
+        # Captured before the flag flips: the new generation does not exist yet, the
+        # worker increments it, so the one being superseded is the only number
+        # available at request time and the one that identifies what was replaced.
+        superseded_generation = project.active_generation
+
         project.reindex_in_progress = True
         project.updated_at = datetime.now(UTC)
         await self.session.commit()
+        await self._recorder.record(
+            AuditEntry(
+                event_type=AuditEventType.PROJECT_REINDEX_REQUESTED,
+                actor_user_id=actor.id,
+                actor_email=actor.email,
+                target_type="project",
+                target_id=project.id,
+                target_label=project.name,
+                project_id=project.id,
+                context={"supersededGeneration": superseded_generation},
+            )
+        )
 
         await self._enqueue(project.id)
         return ReindexResponse(enqueued=True, project=self._to_response(project, actor))
@@ -247,6 +284,16 @@ class ProjectService:
         """
         project = await self._require_readable(project_id, actor)
         access.require_permission(actor, project.id, Permission.PROJECT_DELETE)
+
+        # Captured before the sweeps below mutate or soft-delete anything: the audit
+        # record is written only after the commit that follows, from these locals —
+        # never from the ORM row, which by then may be soft-deleted or reloaded.
+        project_name = project.name
+        repo_url_host_value = repo_url_host(project.repo_url)
+        file_count = project.file_count
+        chunk_count = project.chunk_count
+        embedding_collection = project.embedding_collection
+
         await self._repository.soft_delete(project)
 
         # docs/PRD.md §4.2: deleting a project soft-deletes the conversations against
@@ -269,9 +316,11 @@ class ProjectService:
         await self._checklist_items.soft_delete_for_project(project.id)
         await self._checklist_change_sets.soft_delete_for_project(project.id)
         await self._checklist_messages.soft_delete_for_project(project.id)
-        modules = await self._checklist_modules.soft_delete_for_project(project.id)
-        if modules:
-            logger.info("Soft-deleted %d checklist module(s) with project %s", modules, project.id)
+        modules_deleted = await self._checklist_modules.soft_delete_for_project(project.id)
+        if modules_deleted:
+            logger.info(
+                "Soft-deleted %d checklist module(s) with project %s", modules_deleted, project.id
+            )
 
         # Same containment for the mock-data generator: it shares the checklist
         # module's lifecycle but generates independently, so it gets its own sweep
@@ -307,6 +356,28 @@ class ProjectService:
                 ) from error
 
         await self.session.commit()
+        await self._recorder.record(
+            AuditEntry(
+                event_type=AuditEventType.PROJECT_DELETED,
+                actor_user_id=actor.id,
+                actor_email=actor.email,
+                target_type="project",
+                target_id=project.id,
+                target_label=project_name,
+                project_id=project.id,
+                changed={
+                    "name": (project_name, None),
+                    "repoUrlHost": (repo_url_host_value, None),
+                },
+                context={
+                    "fileCount": file_count,
+                    "chunkCount": chunk_count,
+                    "embeddingCollection": embedding_collection,
+                    "conversationsDeleted": swept,
+                    "checklistModulesDeleted": modules_deleted,
+                },
+            )
+        )
 
     async def _enqueue(self, project_id: uuid.UUID) -> None:
         """Publish one job for this project."""
