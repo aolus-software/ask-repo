@@ -83,9 +83,9 @@ class AuditEventRepository(BaseRepository[AuditEvent]):
         order = AuditEvent.created_at.desc() if descending else AuditEvent.created_at.asc()
         rows = await self.session.execute(statement.order_by(order).limit(limit).offset(offset))
 
-        count_statement = self._filtered(**filters).with_only_columns(
-            func.count(AuditEvent.id)
-        ).order_by(None)
+        count_statement = (
+            self._filtered(**filters).with_only_columns(func.count(AuditEvent.id)).order_by(None)
+        )
         total = await self.session.execute(count_statement)
 
         return list(rows.scalars().all()), total.scalar_one()

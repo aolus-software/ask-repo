@@ -185,9 +185,7 @@ def test_every_exemption_is_one_of_the_four() -> None:
     `isinstance(value, str)` alone would also match every classified event. The
     reasons are exactly the values that are *not* one of the catalogue's own names.
     """
-    reasons = {
-        value for value in ROUTE_EVENTS.values() if not isinstance(value, AuditEventType)
-    }
+    reasons = {value for value in ROUTE_EVENTS.values() if not isinstance(value, AuditEventType)}
 
     assert reasons <= VALID_EXEMPTIONS, (
         f"Undocumented exemption reason: {reasons - VALID_EXEMPTIONS}"
