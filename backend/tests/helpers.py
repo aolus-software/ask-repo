@@ -5,7 +5,9 @@ import uuid
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import Settings
+from app.core.audit import AuditRecorder
 from app.core.middleware import AuthenticatedUser, _load_grants
+from app.db.session import get_sessionmaker
 from app.ingestion.vector_store import InMemoryVectorStore
 from app.models.user import User
 from app.services.checklist_module import ChecklistModuleService
@@ -104,7 +106,9 @@ def checklist_module_service(
     """The service, wired to a reader that sees `paths` (or the default tree)."""
     resolved = settings or Settings()
     reader, _ = indexed_path_reader(*paths, settings=resolved)
-    return ChecklistModuleService(session, resolved, indexed_paths=reader)
+    return ChecklistModuleService(
+        session, resolved, indexed_paths=reader, recorder=AuditRecorder(get_sessionmaker())
+    )
 
 
 def seed_indexed_paths(

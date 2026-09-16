@@ -156,7 +156,7 @@ CONTEXT_KEYS: dict[AuditEventType, frozenset[str]] = {
     AuditEventType.CONVERSATION_DELETED: frozenset({"messageCount"}),
 }
 
-type ChangedValue = str | bool | int | float | list[str] | None
+type ChangedValue = str | bool | int | float | list[str] | dict[str, str] | None
 type Outcome = Literal["success", "failure"]
 
 

@@ -13,7 +13,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query, Response, status
 
-from app.api.deps import CurrentUser, SessionDep
+from app.api.deps import AuditRecorderDep, CurrentUser, SessionDep
 from app.config import Settings, get_settings
 from app.schemas.checklist import (
     ChecklistItemCreateRequest,
@@ -34,10 +34,12 @@ XLSX_MEDIA_TYPE = "application/vnd.openxmlformats-officedocument.spreadsheetml.s
 
 
 def get_checklist_item_service(
-    session: SessionDep, settings: Annotated[Settings, Depends(get_settings)]
+    session: SessionDep,
+    settings: Annotated[Settings, Depends(get_settings)],
+    recorder: AuditRecorderDep,
 ) -> ChecklistItemService:
     """Provide the service with a request-scoped session."""
-    return ChecklistItemService(session, settings)
+    return ChecklistItemService(session, settings, recorder=recorder)
 
 
 ChecklistItemServiceDep = Annotated[ChecklistItemService, Depends(get_checklist_item_service)]

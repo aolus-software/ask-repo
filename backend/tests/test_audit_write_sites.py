@@ -18,11 +18,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
 from app.core.audit import AuditEventType
+from app.core.permissions import EDITOR_NAME
 from app.core.security import sha256_hex
+from app.ingestion.vector_store import InMemoryVectorStore
 from app.models import User
+from app.models.checklist import ChecklistItemStatus
 from app.models.project import Project, ProjectStatus
-from tests.conftest import TEST_PASSWORD, AuditRows
-from tests.factories import create_project
+from tests.conftest import TEST_PASSWORD, AuditRows, GrantMembership
+from tests.factories import create_checklist_item, create_checklist_module, create_project
+from tests.helpers import seed_indexed_paths
 
 
 async def test_login_records_the_success(
@@ -443,3 +447,249 @@ async def test_role_delete_records_the_permissions_it_held(
         "before": ["project.read"],
         "after": None,
     }
+
+
+async def _ready_project(db_session: AsyncSession) -> Project:
+    """An indexed project: the pre-condition for creating a module or generating."""
+    project = await create_project(db_session, status=ProjectStatus.READY)
+    project.embedding_collection = "code_chunks__ollama__nomic_embed_text__768"
+    project.embedding_model = get_settings().embedding_model
+    project.active_generation = 1
+    await db_session.flush()
+    return project
+
+
+async def test_checklist_module_create_records_name_and_source_path(
+    authed_client: AsyncClient,
+    authed_user: User,
+    grant_membership: GrantMembership,
+    db_session: AsyncSession,
+    vector_store: InMemoryVectorStore,
+    audit_rows: AuditRows,
+) -> None:
+    project = await _ready_project(db_session)
+    seed_indexed_paths(vector_store, project.id, "app/auth/routes.py")
+    await db_session.commit()
+    await grant_membership(authed_user.id, project.id, EDITOR_NAME)
+
+    response = await authed_client.post(
+        "/checklist-modules",
+        json={"projectId": str(project.id), "name": "Auth", "sourcePath": "app/auth"},
+    )
+    assert response.status_code == 201
+
+    rows = await audit_rows(AuditEventType.CHECKLIST_MODULE_CREATED)
+    assert len(rows) == 1
+    assert rows[0].project_id == project.id
+    assert rows[0].target_label == "Auth"
+    assert rows[0].details["changed"]["name"] == {"before": None, "after": "Auth"}
+    assert rows[0].details["changed"]["sourcePath"] == {"before": None, "after": "app/auth"}
+
+
+async def test_checklist_module_rename_records_only_the_name(
+    authed_client: AsyncClient,
+    authed_user: User,
+    grant_membership: GrantMembership,
+    db_session: AsyncSession,
+    audit_rows: AuditRows,
+) -> None:
+    """A partial update diffs against what actually moved -- `sourcePath` did not
+    change, so it must be absent rather than repeated as a before-equals-after pair."""
+    module = await create_checklist_module(db_session, name="Old Name")
+    await db_session.commit()
+    await grant_membership(authed_user.id, module.project_id, EDITOR_NAME)
+
+    response = await authed_client.patch(
+        f"/checklist-modules/{module.id}", json={"name": "New Name"}
+    )
+    assert response.status_code == 200
+
+    rows = await audit_rows(AuditEventType.CHECKLIST_MODULE_UPDATED)
+    assert len(rows) == 1
+    assert rows[0].details["changed"] == {"name": {"before": "Old Name", "after": "New Name"}}
+    assert "sourcePath" not in rows[0].details["changed"]
+
+
+async def test_checklist_module_delete_records_the_item_count(
+    authed_client: AsyncClient,
+    authed_user: User,
+    grant_membership: GrantMembership,
+    db_session: AsyncSession,
+    audit_rows: AuditRows,
+) -> None:
+    module = await create_checklist_module(db_session, name="Auth", source_path="app/auth")
+    await create_checklist_item(db_session, module_id=module.id, test_name="first")
+    await create_checklist_item(db_session, module_id=module.id, test_name="second")
+    await db_session.commit()
+    await grant_membership(authed_user.id, module.project_id, EDITOR_NAME)
+
+    response = await authed_client.delete(f"/checklist-modules/{module.id}")
+    assert response.status_code == 204
+
+    rows = await audit_rows(AuditEventType.CHECKLIST_MODULE_DELETED)
+    assert len(rows) == 1
+    assert rows[0].details["changed"]["name"] == {"before": "Auth", "after": None}
+    assert rows[0].details["changed"]["sourcePath"] == {"before": "app/auth", "after": None}
+    # Read before the sweep ran -- the count that matters is what was actually lost.
+    assert rows[0].details["itemCount"] == 2
+
+
+async def test_checklist_module_generation_requested_records_the_indexed_generation(
+    authed_client: AsyncClient,
+    authed_user: User,
+    grant_membership: GrantMembership,
+    db_session: AsyncSession,
+    audit_rows: AuditRows,
+) -> None:
+    project = await _ready_project(db_session)
+    module = await create_checklist_module(db_session, project_id=project.id)
+    await db_session.commit()
+    await grant_membership(authed_user.id, project.id, EDITOR_NAME)
+
+    response = await authed_client.post(f"/checklist-modules/{module.id}/generate")
+    assert response.status_code == 202
+
+    rows = await audit_rows(AuditEventType.CHECKLIST_MODULE_GENERATION_REQUESTED)
+    assert len(rows) == 1
+    assert rows[0].details == {"indexedGeneration": 1}
+
+
+async def test_checklist_item_create_records_manual_origin(
+    authed_client: AsyncClient,
+    authed_user: User,
+    grant_membership: GrantMembership,
+    db_session: AsyncSession,
+    audit_rows: AuditRows,
+) -> None:
+    module = await create_checklist_module(db_session)
+    await db_session.commit()
+    await grant_membership(authed_user.id, module.project_id, EDITOR_NAME)
+
+    response = await authed_client.post(
+        "/checklist-items",
+        json={
+            "moduleId": str(module.id),
+            "feature": "Login",
+            "testName": "Rejects a bad password",
+            "expectedResult": "401",
+        },
+    )
+    assert response.status_code == 201
+
+    rows = await audit_rows(AuditEventType.CHECKLIST_ITEM_CREATED)
+    assert len(rows) == 1
+    assert rows[0].details["origin"] == "manual"
+    assert rows[0].details["changed"]["feature"] == {"before": None, "after": "Login"}
+    assert rows[0].details["changed"]["testName"] == {
+        "before": None,
+        "after": "Rejects a bad password",
+    }
+    # The body a human wrote is nowhere in the row.
+    assert "401" not in str(rows[0].details)
+
+
+async def test_checklist_item_update_records_only_the_changed_fields(
+    authed_client: AsyncClient,
+    authed_user: User,
+    grant_membership: GrantMembership,
+    db_session: AsyncSession,
+    audit_rows: AuditRows,
+) -> None:
+    module = await create_checklist_module(db_session)
+    item = await create_checklist_item(db_session, module_id=module.id, feature="Login")
+    await db_session.commit()
+    await grant_membership(authed_user.id, module.project_id, EDITOR_NAME)
+
+    response = await authed_client.patch(
+        f"/checklist-items/{item.id}", json={"feature": "Authentication"}
+    )
+    assert response.status_code == 200
+
+    rows = await audit_rows(AuditEventType.CHECKLIST_ITEM_UPDATED)
+    assert len(rows) == 1
+    assert rows[0].details["changed"] == {"feature": {"before": "Login", "after": "Authentication"}}
+    assert "testName" not in rows[0].details["changed"]
+    assert "expectedResult" not in rows[0].details["changed"]
+
+
+async def test_recording_a_result_is_its_own_event(
+    authed_client: AsyncClient,
+    authed_user: User,
+    grant_membership: GrantMembership,
+    db_session: AsyncSession,
+    audit_rows: AuditRows,
+) -> None:
+    """Separate from checklist_item.updated even though both are a PATCH-shaped write.
+
+    `status` and `current_result` are the two columns the change-set apply path is
+    forbidden to write, because they claim a human observation. Keeping the event that
+    legitimately writes them distinct is what makes "who recorded this pass?"
+    answerable without reading the payload of every update.
+    """
+    module = await create_checklist_module(db_session)
+    item = await create_checklist_item(db_session, module_id=module.id)
+    await db_session.commit()
+    await grant_membership(authed_user.id, module.project_id, EDITOR_NAME)
+
+    response = await authed_client.put(
+        f"/checklist-items/{item.id}/result",
+        json={"status": "pass", "currentResult": "works as described"},
+    )
+    assert response.status_code == 200
+
+    recorded = await audit_rows(AuditEventType.CHECKLIST_ITEM_RESULT_RECORDED)
+    edited = await audit_rows(AuditEventType.CHECKLIST_ITEM_UPDATED)
+    assert len(recorded) == 1
+    assert not edited
+    assert recorded[0].details["changed"]["status"] == {"before": "untested", "after": "pass"}
+    assert recorded[0].details["changed"]["currentResult"] == {
+        "before": None,
+        "after": "works as described",
+    }
+
+
+async def test_checklist_item_delete_records_a_recorded_result_as_lost(
+    authed_client: AsyncClient,
+    authed_user: User,
+    grant_membership: GrantMembership,
+    db_session: AsyncSession,
+    audit_rows: AuditRows,
+) -> None:
+    module = await create_checklist_module(db_session)
+    item = await create_checklist_item(
+        db_session,
+        module_id=module.id,
+        status=ChecklistItemStatus.PASS,
+        current_result="Returned 200",
+    )
+    await db_session.commit()
+    await grant_membership(authed_user.id, module.project_id, EDITOR_NAME)
+
+    response = await authed_client.delete(f"/checklist-items/{item.id}")
+    assert response.status_code == 204
+
+    rows = await audit_rows(AuditEventType.CHECKLIST_ITEM_DELETED)
+    assert len(rows) == 1
+    assert rows[0].details["hadRecordedResult"] is True
+    assert rows[0].details["changed"]["feature"]["after"] is None
+    assert rows[0].details["changed"]["testName"]["after"] is None
+
+
+async def test_checklist_item_delete_of_an_untested_item_records_no_loss(
+    authed_client: AsyncClient,
+    authed_user: User,
+    grant_membership: GrantMembership,
+    db_session: AsyncSession,
+    audit_rows: AuditRows,
+) -> None:
+    module = await create_checklist_module(db_session)
+    item = await create_checklist_item(db_session, module_id=module.id)
+    await db_session.commit()
+    await grant_membership(authed_user.id, module.project_id, EDITOR_NAME)
+
+    response = await authed_client.delete(f"/checklist-items/{item.id}")
+    assert response.status_code == 204
+
+    rows = await audit_rows(AuditEventType.CHECKLIST_ITEM_DELETED)
+    assert len(rows) == 1
+    assert rows[0].details["hadRecordedResult"] is False
