@@ -455,3 +455,44 @@ export interface PermissionGroupResponse {
 export interface PermissionCatalogResponse {
   groups: PermissionGroupResponse[];
 }
+
+export type AuditOutcome = "success" | "failure";
+
+/** One row as the table renders it. `changedFields` names what changed; the values
+ * live in `AuditEventResponse.details`, which the list response omits on purpose —
+ * some rows carry two full permission lists, too much wire for a scannable table. */
+export interface AuditEventSummary {
+  id: string;
+  createdAt: string;
+  eventType: string;
+  outcome: AuditOutcome;
+  actorUserId: string | null;
+  actorEmail: string | null;
+  targetType: string | null;
+  targetId: string | null;
+  targetLabel: string | null;
+  projectId: string | null;
+  changedFields: string[];
+}
+
+/** Live lookups, fenced off from the stored row so a present-tense answer cannot be
+ * mistaken for part of the record. */
+export interface AuditEventCurrent {
+  actorStillActive: boolean | null;
+  targetStillExists: boolean | null;
+}
+
+export interface AuditEventResponse extends AuditEventSummary {
+  details: Record<string, unknown>;
+  ipAddress: string | null;
+  current: AuditEventCurrent;
+}
+
+export interface AuditEventListParams extends ListParams {
+  eventType?: string;
+  actorUserId?: string;
+  projectId?: string;
+  outcome?: AuditOutcome;
+  occurredFrom?: string;
+  occurredTo?: string;
+}

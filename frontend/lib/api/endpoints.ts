@@ -1,4 +1,5 @@
 import type {
+  AuditEventListParams,
   ChecklistItemListParams,
   ChecklistModuleListParams,
   ListParams,
@@ -82,6 +83,10 @@ export const endpoints = {
     list: (projectId: string) => `/projects/${projectId}/members`,
     detail: (projectId: string, userId: string) =>
       `/projects/${projectId}/members/${userId}`,
+  },
+  auditEvents: {
+    list: "/audit-events",
+    detail: (id: string) => `/audit-events/${id}`,
   },
 } as const;
 
@@ -169,6 +174,19 @@ export function checklistItemListQueryString(params: ChecklistItemListParams): s
   if (params.status) search.set("status", params.status);
   if (params.source) search.set("source", params.source);
   if (params.kind) search.set("kind", params.kind);
+  const qs = search.toString();
+  return qs ? `?${qs}` : "";
+}
+
+/** `listQueryString` plus the audit trail's own filters. */
+export function auditEventListQueryString(params: AuditEventListParams): string {
+  const search = new URLSearchParams(listQueryString(params).replace(/^\?/, ""));
+  if (params.eventType) search.set("eventType", params.eventType);
+  if (params.actorUserId) search.set("actorUserId", params.actorUserId);
+  if (params.projectId) search.set("projectId", params.projectId);
+  if (params.outcome) search.set("outcome", params.outcome);
+  if (params.occurredFrom) search.set("occurredFrom", params.occurredFrom);
+  if (params.occurredTo) search.set("occurredTo", params.occurredTo);
   const qs = search.toString();
   return qs ? `?${qs}` : "";
 }

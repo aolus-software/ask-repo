@@ -30,6 +30,7 @@ describe("visibleNavTree", () => {
     expect(settings?.children?.map((c) => c.href)).toEqual([
       "/settings/users",
       "/settings/roles",
+      "/settings/audit",
     ]);
   });
 
@@ -54,6 +55,31 @@ describe("visibleNavTree", () => {
 
     expect(hrefs).toContain("/checklist");
     expect(hrefs).not.toContain("/qa");
+  });
+
+  it("hides the audit trail from a non-admin", () => {
+    const settings = visibleNavTree({ isAdmin: false }).find(
+      (item) => item.title === "Settings",
+    );
+
+    // `settings` is `undefined` here, not a group with no matching child: every
+    // child of Settings is `adminOnly`, so a non-admin's tree hides the group
+    // entirely (`visibleNavTree` drops a group whose children all filter out).
+    // `?? false` makes that the same assertion either way, matching the `?? []`
+    // pattern the existing "hides Roles" test above already uses for this reason.
+    expect(
+      settings?.children?.some((child) => child.href === "/settings/audit") ?? false,
+    ).toBe(false);
+  });
+
+  it("shows the audit trail to an admin", () => {
+    const settings = visibleNavTree({ isAdmin: true }).find(
+      (item) => item.title === "Settings",
+    );
+
+    expect(settings?.children?.some((child) => child.href === "/settings/audit")).toBe(
+      true,
+    );
   });
 });
 
