@@ -11,9 +11,10 @@ from typing import Annotated
 from fastapi import Depends, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.audit import AuditRecorder
 from app.core.errors import AppError, ErrorCode
 from app.core.middleware import AuthContext, AuthenticatedUser
-from app.db.session import get_session
+from app.db.session import get_session, get_sessionmaker
 
 
 async def session_dependency() -> AsyncIterator[AsyncSession]:
@@ -54,6 +55,30 @@ def require_admin(
     return current_user
 
 
+def get_audit_recorder() -> AuditRecorder:
+    """The audit writer, on its own session.
+
+    Built from the sessionmaker rather than from `SessionDep` deliberately: the write
+    happens *after* the service commits, and a persistence guarantee should not rest
+    on when FastAPI closes the request's `AsyncExitStack`. Lazy construction means a
+    settings override in a test reaches it, the same way it reaches the middleware.
+    """
+    return AuditRecorder(get_sessionmaker())
+
+
+def get_client_ip(request: Request) -> str | None:
+    """The source host, for the auth events that record one.
+
+    This is the *direct peer*. Behind a reverse proxy it is the proxy unless uvicorn
+    runs with `--proxy-headers` and `--forwarded-allow-ips`, which `docs/deployment.md`
+    covers — a wrong address here is worse than none, so nothing parses
+    `X-Forwarded-For` by hand.
+    """
+    return request.client.host if request.client else None
+
+
 CurrentUser = Annotated[AuthenticatedUser, Depends(get_current_user)]
 AdminUser = Annotated[AuthenticatedUser, Depends(require_admin)]
 SessionDep = Annotated[AsyncSession, Depends(session_dependency)]
+AuditRecorderDep = Annotated[AuditRecorder, Depends(get_audit_recorder)]
+ClientIpDep = Annotated[str | None, Depends(get_client_ip)]

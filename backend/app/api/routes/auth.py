@@ -12,7 +12,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, Request, Response, status
 
-from app.api.deps import CurrentUser, SessionDep
+from app.api.deps import AuditRecorderDep, ClientIpDep, CurrentUser, SessionDep
 from app.config import Settings, get_settings
 from app.core.errors import AppError, ErrorCode
 from app.core.rate_limit import (
@@ -47,16 +47,21 @@ def _read_refresh_cookie(request: Request, settings: Settings) -> str | None:
 
 
 def get_auth_service(
-    session: SessionDep, settings: SettingsDep, attempts: LoginAttemptLimiterDep
+    session: SessionDep,
+    settings: SettingsDep,
+    attempts: LoginAttemptLimiterDep,
+    recorder: AuditRecorderDep,
+    client_ip: ClientIpDep,
 ) -> AuthService:
     """Provide the service with a request-scoped session.
 
     `attempts` is only exercised by `login`, but wiring it here rather than per-route
     keeps every handler down to one service call — see `.claude/rules/router.md`.
     Building a `LoginAttemptLimiter` does no I/O, so the routes that never touch it pay
-    nothing for carrying it.
+    nothing for carrying it. The recorder and the client IP arrive the same way and for
+    the same reason.
     """
-    return AuthService(session, settings, attempts)
+    return AuthService(session, settings, attempts, recorder=recorder, client_ip=client_ip)
 
 
 AuthServiceDep = Annotated[AuthService, Depends(get_auth_service)]

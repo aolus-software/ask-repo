@@ -12,6 +12,7 @@ from fastapi import status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import Settings
+from app.core.audit import AuditEntry, AuditEventType, AuditRecorder
 from app.core.errors import AppError, ErrorCode
 from app.core.passwords import PasswordPolicyError, check_password, get_common_passwords
 from app.core.rate_limit import LoginAttemptLimiter
@@ -36,13 +37,21 @@ class AuthService:
     """Business rules for `/auth`."""
 
     def __init__(
-        self, session: AsyncSession, settings: Settings, attempts: LoginAttemptLimiter
+        self,
+        session: AsyncSession,
+        settings: Settings,
+        attempts: LoginAttemptLimiter,
+        *,
+        recorder: AuditRecorder,
+        client_ip: str | None = None,
     ) -> None:
         self.session = session
         self.settings = settings
         self.attempts = attempts
         self.users = UserRepository(session)
         self.tokens = RefreshTokenRepository(session)
+        self._recorder = recorder
+        self._client_ip = client_ip
 
     # --- helpers -----------------------------------------------------------
 
@@ -123,15 +132,53 @@ class AuthService:
         clears it — a raw per-email counter would otherwise be a lockout weapon
         (`app/core/rate_limit.py`). `check_email` runs outside the `try` so an address
         already over budget raises its own `429` rather than being counted again.
+
+        Both outcomes are audited, and the failure branch is the reason this records
+        here rather than in the route: the route sees a `401` and not whether the
+        address matched an account, which is what decides whether the submitted string
+        may be stored at all (`.claude/rules/audit-trail.md`).
         """
         await self.attempts.check_email(email)
         try:
             issued = await self._authenticate_and_issue(email, password)
         except Exception:
             await self.attempts.record_failure(email)
+            await self._record_failed_login(email)
             raise
         await self.attempts.clear(email)
+        await self._recorder.record(
+            AuditEntry(
+                event_type=AuditEventType.AUTH_LOGIN_SUCCEEDED,
+                actor_user_id=issued[0].user.id,
+                actor_email=issued[0].user.email,
+                ip_address=self._client_ip,
+                context={"mustChangePassword": issued[0].user.must_change_password},
+            )
+        )
         return issued
+
+    async def _record_failed_login(self, email: str) -> None:
+        """Record the attempt, storing the address only if it names a live account.
+
+        The submitted string is raw request input and people paste passwords into the
+        email field. A match means the address is already in `users` and storing it
+        adds nothing new; no match means it is an unvalidated string and stays out.
+        What is given up is address-enumeration detail — `ip_address` still shows the
+        pattern from one host.
+        """
+        known = await self.users.get_by_email(email)
+        await self._recorder.record(
+            AuditEntry(
+                event_type=AuditEventType.AUTH_LOGIN_FAILED,
+                outcome="failure",
+                actor_user_id=known.id if known else None,
+                actor_email=known.email if known else None,
+                target_type="user" if known else None,
+                target_id=known.id if known else None,
+                ip_address=self._client_ip,
+                context={"unknownAccount": known is None},
+            )
+        )
 
     async def _authenticate_and_issue(
         self, email: str, password: str
@@ -165,6 +212,22 @@ class AuthService:
         await self.session.commit()
         return issued
 
+    async def _record_refresh_replayed(self, family_id: uuid.UUID, revoked_count: int) -> None:
+        """Record a genuine reuse of an already-rotated refresh token.
+
+        Only the two branches that revoke the whole family call this — the grace-
+        window sibling mint (D12) is a race between two tabs, not a replay, and does
+        not record.
+        """
+        await self._recorder.record(
+            AuditEntry(
+                event_type=AuditEventType.AUTH_REFRESH_REPLAYED,
+                outcome="failure",
+                ip_address=self._client_ip,
+                context={"familyId": str(family_id), "revokedCount": revoked_count},
+            )
+        )
+
     async def refresh(self, raw_token: str | None) -> tuple[AccessTokenResponse, str]:
         """Exchange a refresh token for a new pair, rotating it.
 
@@ -178,15 +241,17 @@ class AuthService:
             raise self._invalid_token(ErrorCode.TOKEN_EXPIRED)
 
         if token.revoked_at is not None:
-            await self.tokens.revoke_family(token.family_id, reason="replay")
+            revoked_count = await self.tokens.revoke_family(token.family_id, reason="replay")
             await self.session.commit()
+            await self._record_refresh_replayed(token.family_id, revoked_count)
             raise self._invalid_token(ErrorCode.REFRESH_TOKEN_REUSED)
 
         if token.used_at is not None:
             grace = timedelta(seconds=self.settings.refresh_rotation_grace_seconds)
             if datetime.now(UTC) - token.used_at > grace:
-                await self.tokens.revoke_family(token.family_id, reason="replay")
+                revoked_count = await self.tokens.revoke_family(token.family_id, reason="replay")
                 await self.session.commit()
+                await self._record_refresh_replayed(token.family_id, revoked_count)
                 raise self._invalid_token(ErrorCode.REFRESH_TOKEN_REUSED)
             # Inside the window: two tabs raced. Mint a sibling in the same family.
             user = await self.users.get(token.user_id)
@@ -220,6 +285,11 @@ class AuthService:
         if not verify_password(payload.current_password, user.password_hash):
             raise self._invalid_credentials()
 
+        # Captured before the change: `change_password` is what clears the flag, so
+        # reading it afterwards would record `False` for every call and the `forced`
+        # context key would be useless.
+        was_forced = user.must_change_password
+
         user.password_hash = self._validate_new_password(payload.new_password)
         user.must_change_password = False
         user.updated_at = datetime.now(UTC)
@@ -233,6 +303,15 @@ class AuthService:
             except_token_id=current.id if current else None,
         )
         await self.session.commit()
+        await self._recorder.record(
+            AuditEntry(
+                event_type=AuditEventType.AUTH_PASSWORD_CHANGED,
+                actor_user_id=user.id,
+                actor_email=user.email,
+                ip_address=self._client_ip,
+                context={"forced": was_forced},
+            )
+        )
         return UserResponse.model_validate(user)
 
     async def logout(self, raw_token: str | None) -> None:
@@ -243,11 +322,27 @@ class AuthService:
         if token is not None:
             await self.tokens.revoke_one(token, reason="logout")
             await self.session.commit()
+            await self._recorder.record(
+                AuditEntry(
+                    event_type=AuditEventType.AUTH_LOGOUT,
+                    actor_user_id=token.user_id,
+                    ip_address=self._client_ip,
+                    context={"scope": "session"},
+                )
+            )
 
     async def logout_all(self, user_id: uuid.UUID) -> None:
         """Revoke every refresh token the caller holds."""
         await self.tokens.revoke_all_for_user(user_id, reason="logout_all")
         await self.session.commit()
+        await self._recorder.record(
+            AuditEntry(
+                event_type=AuditEventType.AUTH_LOGOUT,
+                actor_user_id=user_id,
+                ip_address=self._client_ip,
+                context={"scope": "all"},
+            )
+        )
 
     async def current(self, user_id: uuid.UUID) -> UserResponse:
         """The caller's full account row, including fields identity does not carry."""
