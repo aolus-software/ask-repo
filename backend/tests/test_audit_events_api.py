@@ -4,8 +4,9 @@ import uuid
 from collections.abc import Iterable, Iterator
 
 import pytest
-from fastapi.routing import APIRoute, BaseRoute
+from fastapi.routing import APIRoute
 from httpx import AsyncClient
+from starlette.routing import BaseRoute
 
 from app.main import app
 from app.models.user import User
@@ -35,7 +36,7 @@ def test_the_router_serves_reads_only() -> None:
         method
         for route in _iter_api_routes(app.routes)
         if route.path.startswith("/audit-events")
-        for method in route.methods
+        for method in route.methods or set()
     }
 
     assert methods == {"GET"}

@@ -8,11 +8,30 @@ aimed at anyone's entries. An operator sets a window; nobody erases a row.
 
 import uuid
 from datetime import datetime
+from typing import Any, TypedDict, cast
 
-from sqlalchemy import Select, delete, func, or_, select
+from sqlalchemy import CursorResult, Select, delete, func, or_, select
 
 from app.models.audit import AuditEvent
 from app.repositories.base import BaseRepository
+
+
+class _PageFilters(TypedDict):
+    """Keyword shape shared by `_filtered`'s two callers in `page`.
+
+    A plain `dict[str, ...]` built from mixed-type values loses each field's own
+    type the moment it is unpacked back into keyword arguments, so `_filtered`
+    would see every argument as the union of all of them. This TypedDict keeps
+    the per-field types intact across the `**filters` unpack.
+    """
+
+    event_type: str | None
+    actor_user_id: uuid.UUID | None
+    project_id: uuid.UUID | None
+    outcome: str | None
+    occurred_from: datetime | None
+    occurred_to: datetime | None
+    search: str | None
 
 
 class AuditEventRepository(BaseRepository[AuditEvent]):
@@ -70,7 +89,7 @@ class AuditEventRepository(BaseRepository[AuditEvent]):
         descending: bool = True,
     ) -> tuple[list[AuditEvent], int]:
         """One page plus the total. `created_at` is the only ordering offered."""
-        filters = {
+        filters: _PageFilters = {
             "event_type": event_type,
             "actor_user_id": actor_user_id,
             "project_id": project_id,
@@ -99,4 +118,7 @@ class AuditEventRepository(BaseRepository[AuditEvent]):
         result = await self.session.execute(
             delete(AuditEvent).where(AuditEvent.created_at < cutoff)
         )
-        return result.rowcount or 0
+        # `execute` is typed as returning `Result`, which declares no `rowcount`; a
+        # bulk DELETE really returns a `CursorResult`. Same cast as
+        # `ProjectRepository.release` and its siblings.
+        return cast(CursorResult[Any], result).rowcount

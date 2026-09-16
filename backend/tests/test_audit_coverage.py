@@ -149,7 +149,7 @@ def _app_routes() -> set[tuple[str, str]]:
     """Every (method, path) the app serves, mutating methods and exports only."""
     found: set[tuple[str, str]] = set()
     for route in _iter_api_routes(app.routes):
-        for method in route.methods:
+        for method in route.methods or set():
             pair = (method, route.path)
             if method in MUTATING_METHODS or pair in EXPORT_ROUTES:
                 found.add(pair)

@@ -12,7 +12,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import Settings
-from app.core.audit import AuditEntry, AuditEventType, AuditRecorder
+from app.core.audit import AuditEntry, AuditEventType, AuditRecorder, ChangedValue
 from app.core.errors import AppError, ErrorCode
 from app.core.middleware import AuthenticatedUser
 from app.core.passwords import PasswordPolicyError, check_password, get_common_passwords
@@ -191,7 +191,7 @@ class UserService:
 
         await self.session.commit()
 
-        changed: dict[str, tuple[object, object]] = {}
+        changed: dict[str, tuple[ChangedValue, ChangedValue]] = {}
         if user.name != before_name:
             changed["name"] = (before_name, user.name)
         if user.email != before_email:

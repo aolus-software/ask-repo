@@ -14,6 +14,7 @@ from app.models.checklist import ChecklistItemStatus
 from app.models.user import User
 from tests.conftest import AuditRows, GrantMembership
 from tests.factories import create_checklist_item, create_checklist_module, create_user
+from tests.helpers import changed_field
 from tests.test_conversations_api import seed_ready_project
 
 PAT = "ghp_exampletokenvalue0123456789"
@@ -44,7 +45,7 @@ async def test_project_create_stores_the_host_not_the_credentialed_url(
     serialised = str(rows[0].details)
     assert PAT not in serialised
     assert "github.com/acme/private" not in serialised
-    assert rows[0].details["changed"]["repoUrlHost"]["after"] == "github.com"
+    assert changed_field(rows[0].details, "repoUrlHost")["after"] == "github.com"
     assert rows[0].details["patSupplied"] is True
 
 

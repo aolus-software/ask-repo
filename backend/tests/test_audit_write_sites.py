@@ -35,7 +35,7 @@ from tests.factories import (
     create_mock_data_record,
     create_project,
 )
-from tests.helpers import seed_indexed_paths
+from tests.helpers import changed_field, seed_indexed_paths
 
 
 def _add_operation(
@@ -199,7 +199,9 @@ async def test_refresh_replay_records_the_family_and_revoked_count(
     rows = await audit_rows(AuditEventType.AUTH_REFRESH_REPLAYED)
     assert len(rows) == 1
     assert rows[0].outcome == "failure"
-    assert rows[0].details["revokedCount"] >= 1
+    revoked_count = rows[0].details["revokedCount"]
+    assert isinstance(revoked_count, int)
+    assert revoked_count >= 1
     assert isinstance(rows[0].details["familyId"], str)
 
 
@@ -220,8 +222,8 @@ async def test_user_create_records_the_new_values_with_a_null_before(
     rows = await audit_rows(AuditEventType.USER_CREATED)
     assert len(rows) == 1
     assert rows[0].target_label == "new@example.com"
-    assert rows[0].details["changed"]["email"] == {"before": None, "after": "new@example.com"}
-    assert rows[0].details["changed"]["isAdmin"] == {"before": None, "after": False}
+    assert changed_field(rows[0].details, "email") == {"before": None, "after": "new@example.com"}
+    assert changed_field(rows[0].details, "isAdmin") == {"before": None, "after": False}
     assert rows[0].details["source"] == "api"
     # The password is nowhere in the row, in any form.
     assert "a-long-enough-password" not in str(rows[0].details)
@@ -310,7 +312,7 @@ async def test_project_delete_records_the_blast_radius(
     assert len(rows) == 1
     assert rows[0].target_label == project.name
     assert rows[0].project_id == project.id
-    assert rows[0].details["changed"]["name"] == {"before": project.name, "after": None}
+    assert changed_field(rows[0].details, "name") == {"before": project.name, "after": None}
     assert "conversationsDeleted" in rows[0].details
     assert "checklistModulesDeleted" in rows[0].details
 
@@ -366,7 +368,7 @@ async def test_membership_grant_targets_the_grantee_not_the_row(
     assert rows[0].target_id == user_b.id
     assert rows[0].target_label == user_b.email
     assert str(rows[0].project_id) == project_id
-    assert rows[0].details["changed"]["roleName"] == {"before": None, "after": "viewer"}
+    assert changed_field(rows[0].details, "roleName") == {"before": None, "after": "viewer"}
 
 
 async def test_membership_role_change_records_old_and_new_role_names(
@@ -390,7 +392,7 @@ async def test_membership_role_change_records_old_and_new_role_names(
     assert len(rows) == 1
     assert rows[0].target_type == "user"
     assert rows[0].target_id == user_b.id
-    assert rows[0].details["changed"]["roleName"] == {"before": "viewer", "after": "editor"}
+    assert changed_field(rows[0].details, "roleName") == {"before": "viewer", "after": "editor"}
 
 
 async def test_membership_revoke_records_the_role_it_removed(
@@ -411,7 +413,7 @@ async def test_membership_revoke_records_the_role_it_removed(
     rows = await audit_rows(AuditEventType.MEMBERSHIP_REVOKED)
     assert len(rows) == 1
     assert rows[0].target_id == user_b.id
-    assert rows[0].details["changed"]["roleName"] == {"before": "viewer", "after": None}
+    assert changed_field(rows[0].details, "roleName") == {"before": "viewer", "after": None}
 
 
 async def test_role_create_records_a_null_before(
@@ -425,8 +427,8 @@ async def test_role_create_records_a_null_before(
     rows = await audit_rows(AuditEventType.ROLE_CREATED)
     assert len(rows) == 1
     assert rows[0].project_id is None
-    assert rows[0].details["changed"]["name"] == {"before": None, "after": "QA Lead"}
-    assert rows[0].details["changed"]["permissions"] == {"before": None, "after": []}
+    assert changed_field(rows[0].details, "name") == {"before": None, "after": "QA Lead"}
+    assert changed_field(rows[0].details, "permissions") == {"before": None, "after": []}
 
 
 async def test_role_update_records_the_permission_set_before_and_after(
@@ -447,9 +449,12 @@ async def test_role_update_records_the_permission_set_before_and_after(
 
     rows = await audit_rows(AuditEventType.ROLE_UPDATED)
     assert len(rows) == 1
-    change = rows[0].details["changed"]["permissions"]
-    assert "project.delete" in change["after"]
-    assert "project.delete" not in change["before"]
+    change = changed_field(rows[0].details, "permissions")
+    after, before = change["after"], change["before"]
+    assert isinstance(after, list)
+    assert isinstance(before, list)
+    assert "project.delete" in after
+    assert "project.delete" not in before
     # A role is instance-wide; the assignment carries the project.
     assert rows[0].project_id is None
 
@@ -466,8 +471,8 @@ async def test_role_delete_records_the_permissions_it_held(
 
     rows = await audit_rows(AuditEventType.ROLE_DELETED)
     assert len(rows) == 1
-    assert rows[0].details["changed"]["name"] == {"before": "Temp Role", "after": None}
-    assert rows[0].details["changed"]["permissions"] == {
+    assert changed_field(rows[0].details, "name") == {"before": "Temp Role", "after": None}
+    assert changed_field(rows[0].details, "permissions") == {
         "before": ["project.read"],
         "after": None,
     }
@@ -506,8 +511,8 @@ async def test_checklist_module_create_records_name_and_source_path(
     assert len(rows) == 1
     assert rows[0].project_id == project.id
     assert rows[0].target_label == "Auth"
-    assert rows[0].details["changed"]["name"] == {"before": None, "after": "Auth"}
-    assert rows[0].details["changed"]["sourcePath"] == {"before": None, "after": "app/auth"}
+    assert changed_field(rows[0].details, "name") == {"before": None, "after": "Auth"}
+    assert changed_field(rows[0].details, "sourcePath") == {"before": None, "after": "app/auth"}
 
 
 async def test_checklist_module_rename_records_only_the_name(
@@ -552,8 +557,8 @@ async def test_checklist_module_delete_records_the_item_count(
 
     rows = await audit_rows(AuditEventType.CHECKLIST_MODULE_DELETED)
     assert len(rows) == 1
-    assert rows[0].details["changed"]["name"] == {"before": "Auth", "after": None}
-    assert rows[0].details["changed"]["sourcePath"] == {"before": "app/auth", "after": None}
+    assert changed_field(rows[0].details, "name") == {"before": "Auth", "after": None}
+    assert changed_field(rows[0].details, "sourcePath") == {"before": "app/auth", "after": None}
     # Read before the sweep ran -- the count that matters is what was actually lost.
     assert rows[0].details["itemCount"] == 2
 
@@ -603,8 +608,8 @@ async def test_checklist_item_create_records_manual_origin(
     rows = await audit_rows(AuditEventType.CHECKLIST_ITEM_CREATED)
     assert len(rows) == 1
     assert rows[0].details["origin"] == "manual"
-    assert rows[0].details["changed"]["feature"] == {"before": None, "after": "Login"}
-    assert rows[0].details["changed"]["testName"] == {
+    assert changed_field(rows[0].details, "feature") == {"before": None, "after": "Login"}
+    assert changed_field(rows[0].details, "testName") == {
         "before": None,
         "after": "Rejects a bad password",
     }
@@ -665,8 +670,8 @@ async def test_recording_a_result_is_its_own_event(
     edited = await audit_rows(AuditEventType.CHECKLIST_ITEM_UPDATED)
     assert len(recorded) == 1
     assert not edited
-    assert recorded[0].details["changed"]["status"] == {"before": "untested", "after": "pass"}
-    assert recorded[0].details["changed"]["currentResult"] == {
+    assert changed_field(recorded[0].details, "status") == {"before": "untested", "after": "pass"}
+    assert changed_field(recorded[0].details, "currentResult") == {
         "before": None,
         "after": "works as described",
     }
@@ -695,8 +700,8 @@ async def test_checklist_item_delete_records_a_recorded_result_as_lost(
     rows = await audit_rows(AuditEventType.CHECKLIST_ITEM_DELETED)
     assert len(rows) == 1
     assert rows[0].details["hadRecordedResult"] is True
-    assert rows[0].details["changed"]["feature"]["after"] is None
-    assert rows[0].details["changed"]["testName"]["after"] is None
+    assert changed_field(rows[0].details, "feature")["after"] is None
+    assert changed_field(rows[0].details, "testName")["after"] is None
 
 
 async def test_checklist_item_delete_of_an_untested_item_records_no_loss(

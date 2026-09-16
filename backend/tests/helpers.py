@@ -111,6 +111,22 @@ def checklist_module_service(
     )
 
 
+def changed_field(details: dict[str, object], field: str) -> dict[str, object]:
+    """The `{"before": ..., "after": ...}` pair the `changed` envelope records for `field`.
+
+    `AuditEvent.details` is `dict[str, object]`, because the JSONB column holds
+    whatever shape an event's `changed`/context keys need — a single index only
+    narrows one level, so `details["changed"][field]` is still `object` to the type
+    checker. Every audit test that wants a field's before/after pair goes through
+    this one narrowing instead of asserting the shape again at each call site.
+    """
+    changed = details["changed"]
+    assert isinstance(changed, dict)
+    entry = changed[field]
+    assert isinstance(entry, dict)
+    return entry
+
+
 def seed_indexed_paths(
     store: InMemoryVectorStore,
     project_id: uuid.UUID,

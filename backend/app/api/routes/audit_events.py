@@ -33,7 +33,7 @@ AuditServiceDep = Annotated[AuditService, Depends(get_audit_service)]
     response_model=PaginatedResponse[AuditEventSummary],
     status_code=status.HTTP_200_OK,
     summary="List audit events",
-    responses={code: ERROR_RESPONSES[code] for code in (400, 401, 403, 422)},
+    responses={code: ERROR_RESPONSES[code] for code in (401, 403, 422)},
 )
 async def list_audit_events(
     current_user: AdminUser,
