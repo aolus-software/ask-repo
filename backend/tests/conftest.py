@@ -19,7 +19,7 @@ import pytest
 import redis.asyncio as aioredis
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
-from sqlalchemy import text
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.config import Settings, get_settings
@@ -28,7 +28,7 @@ from app.core.security import create_access_token, hash_password
 from app.db.session import get_sessionmaker, reset_engine
 from app.ingestion.embedder import FakeEmbedder
 from app.ingestion.vector_store import InMemoryVectorStore
-from app.models import Base, User
+from app.models import AuditEvent, Base, User
 from app.queue.protocol import InMemoryIngestionQueue
 from app.rag.answerer import Answerer
 from app.rag.graph.state import Classification, EvidenceVerdict
@@ -39,6 +39,7 @@ from tests.fakes import ScriptedChatModel
 BACKEND_ROOT = Path(__file__).resolve().parent.parent
 TEST_DB_NAME = "askrepo_test"
 TEST_REDIS_DB = 15
+TEST_PASSWORD = "a-perfectly-fine-passphrase"
 
 
 class GrantMembership(Protocol):
@@ -47,6 +48,12 @@ class GrantMembership(Protocol):
     async def __call__(
         self, user_id: uuid.UUID, project_id: uuid.UUID, role: str = "owner"
     ) -> None: ...
+
+
+class AuditRows(Protocol):
+    """What the `audit_rows` fixture hands back."""
+
+    async def __call__(self, event_type: str | None = None) -> list[AuditEvent]: ...
 
 
 def _swap_database(url: str, name: str) -> str:
@@ -330,6 +337,24 @@ async def grant_membership(db_session: AsyncSession) -> GrantMembership:
     return _grant
 
 
+@pytest.fixture
+async def audit_rows(db_session: AsyncSession) -> AuditRows:
+    """Read back what the recorder wrote.
+
+    The recorder commits on its own session, so by the time a request has returned
+    the rows are visible to this one.
+    """
+
+    async def _rows(event_type: str | None = None) -> list[AuditEvent]:
+        statement = select(AuditEvent).order_by(AuditEvent.created_at)
+        if event_type is not None:
+            statement = statement.where(AuditEvent.event_type == event_type)
+        result = await db_session.execute(statement)
+        return list(result.scalars().all())
+
+    return _rows
+
+
 async def _create_user(db_session: AsyncSession, *, is_admin: bool) -> User:
     """A freshly created, ready-to-use account.
 
@@ -341,7 +366,7 @@ async def _create_user(db_session: AsyncSession, *, is_admin: bool) -> User:
         id=uuid.uuid4(),
         name="Dev",
         email=f"{uuid.uuid4().hex}@example.com",
-        password_hash=hash_password("a-perfectly-fine-passphrase", cost=4),
+        password_hash=hash_password(TEST_PASSWORD, cost=4),
         is_admin=is_admin,
         must_change_password=False,
     )
