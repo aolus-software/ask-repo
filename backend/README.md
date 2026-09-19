@@ -364,7 +364,7 @@ scope would not describe this read.
 
 | Method | Path | Auth | Description |
 | --- | --- | --- | --- |
-| `GET` | `/audit-events` | admin | A page of events, newest first. Filters: `eventType`, `actorUserId`, `projectId`, `outcome` (`success`/`failure`), `occurredFrom`, `occurredTo`, plus `page`/`limit`. `sort` accepts the literal `created_at` only — the one ordering the `created_at` index supports — with `sortDirection` defaulting to `desc` |
+| `GET` | `/audit-events` | admin | A page of events, newest first. Filters: `eventType`, `actorUserId`, `projectId`, `outcome` (`success`/`failure`), `occurredFrom`, `occurredTo`, `search`, plus `page`/`limit`. A bare `occurredTo` date (no time component) is inclusive of that whole day. `search` matches `actorEmail`/`targetLabel` by substring and `ipAddress` by prefix. `sort` accepts the literal `created_at` only — the one ordering the `created_at` index supports — with `sortDirection` defaulting to `desc` |
 | `GET` | `/audit-events/{id}` | admin | One event with its full `details` payload, `ipAddress`, and a `current` block saying whether the actor is still active and the target still exists. `404 AUDIT_EVENT_NOT_FOUND` |
 
 Every write and every export in the app records one of **37 event types** catalogued in

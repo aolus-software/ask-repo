@@ -43,4 +43,25 @@ describe("AuditChangeList", () => {
 
     expect(screen.getByText("project.delete")).toBeInTheDocument();
   });
+
+  it("renders an object value as structured JSON, not '[object Object]'", () => {
+    // `checklist_item.results_cleared` and `checklist.exported` carry a `filter`
+    // object naming exactly which rows were selected -- the only record of what a
+    // destructive bulk clear destroyed. A5: this used to fall back to
+    // `String(value)`, which prints `[object Object]`.
+    render(
+      <AuditChangeList
+        changed={{
+          filter: {
+            before: null,
+            after: { moduleId: "auth", status: "fail", source: "manual" },
+          },
+        }}
+      />,
+    );
+
+    expect(screen.queryByText("[object Object]")).not.toBeInTheDocument();
+    expect(screen.getByText(/"moduleId"/)).toBeInTheDocument();
+    expect(screen.getByText(/"auth"/)).toBeInTheDocument();
+  });
 });

@@ -64,6 +64,11 @@ class AuditEventListQuery(ListQuery):
     parameter of the route. Put a scalar beside it and the flattening stops, and every
     request fails with `{"request": "Field required"}` — naming nothing that appears
     in the signature.
+
+    `search` (inherited from `ListQuery`) covers `actor_email` and `target_label` as
+    a substring (`ILIKE %term%`) and `ip_address` as a prefix match (`ILIKE term%`).
+    The prefix restriction on the address is deliberate — it has no index of its own,
+    and an unbounded contains-scan there grows with the table.
     """
 
     event_type: str | None = None
@@ -71,6 +76,10 @@ class AuditEventListQuery(ListQuery):
     project_id: uuid.UUID | None = None
     outcome: Literal["success", "failure"] | None = None
     occurred_from: datetime | None = None
+    # A bare date (no time component, as `<input type="date">` submits) is treated as
+    # the *whole* day: the repository compares it against the start of the next day
+    # rather than `<=` the date itself, or a `to` of today would exclude every event
+    # actually recorded today. See `AuditEventRepository._filtered`.
     occurred_to: datetime | None = None
     # Narrowed from `ListQuery`'s free string: `created_at` is the only ordering this
     # table has a meaningful answer for.

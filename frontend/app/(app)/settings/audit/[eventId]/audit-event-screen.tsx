@@ -5,6 +5,7 @@ import { ArrowLeft } from "lucide-react";
 
 import {
   AuditChangeList,
+  AuditValue,
   type AuditChange,
 } from "@/components/audit/audit-change-list";
 import { DetailError } from "@/components/feedback/detail-error";
@@ -148,7 +149,7 @@ export function AuditEventScreen({ id }: { id: string }) {
               <dl className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 {contextEntries.map(([key, value]) => (
                   <Field key={key} label={key}>
-                    {typeof value === "boolean" ? String(value) : String(value ?? "—")}
+                    <AuditValue value={value} />
                   </Field>
                 ))}
               </dl>

@@ -7,7 +7,7 @@ aimed at anyone's entries. An operator sets a window; nobody erases a row.
 """
 
 import uuid
-from datetime import datetime
+from datetime import datetime, time, timedelta
 from typing import Any, TypedDict, cast
 
 from sqlalchemy import CursorResult, Select, delete, func, or_, select
@@ -63,13 +63,36 @@ class AuditEventRepository(BaseRepository[AuditEvent]):
         if occurred_from is not None:
             statement = statement.where(AuditEvent.created_at >= occurred_from)
         if occurred_to is not None:
-            statement = statement.where(AuditEvent.created_at <= occurred_to)
+            # `<input type="date">` on the filter screen submits a bare calendar day
+            # (`2026-09-16`), which pydantic parses as midnight. A `<=` comparison
+            # against midnight excludes every event actually recorded that day, which
+            # hides evidence on the one screen whose purpose is finding it. When the
+            # value carries no time component we treat it as the *whole* day and
+            # compare exclusively against the start of the next one instead.
+            #
+            # This is still an absolute-instant comparison against a value that was
+            # picked as the operator's local calendar day: `created_at` is UTC, and
+            # asyncpg accepts this naive datetime as UTC too, so an operator whose
+            # local day does not align with UTC is off by the difference between the
+            # two — a few hours, not a day. Fixing that needs the operator's timezone,
+            # which this endpoint is not given.
+            if occurred_to.time() == time.min:
+                statement = statement.where(AuditEvent.created_at < occurred_to + timedelta(days=1))
+            else:
+                statement = statement.where(AuditEvent.created_at <= occurred_to)
         if search:
             pattern = f"%{search}%"
             statement = statement.where(
                 or_(
                     AuditEvent.actor_email.ilike(pattern),
                     AuditEvent.target_label.ilike(pattern),
+                    # A contains-scan over `ip_address` too would grow with the
+                    # table, and an address is meaningfully searched by prefix or
+                    # exact match rather than substring — an operator pastes in
+                    # the address a failed login recorded, not a fragment of one.
+                    # `ip_address` has no index of its own, so this stays a prefix
+                    # match rather than an unbounded `%...%` scan.
+                    AuditEvent.ip_address.ilike(f"{search}%"),
                 )
             )
         return statement

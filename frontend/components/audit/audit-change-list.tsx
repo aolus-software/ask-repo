@@ -19,9 +19,21 @@ function humanizeField(key: string): string {
   return lower.charAt(0).toUpperCase() + lower.slice(1);
 }
 
-/** A list renders as its items, never as a joined string — `getByText` (and a human
- * skimming a permission diff) needs to find one item, not a substring of a sentence. */
-function ChangeValue({ value }: { value: unknown }) {
+/**
+ * Renders any value this app's audit payloads can carry: `null`/`undefined` as a
+ * muted em dash, a list as its items (never a joined string — `getByText`, and a
+ * human skimming a permission diff, needs to find one item, not a substring of a
+ * sentence), a plain object as structured JSON, and everything else as a string.
+ *
+ * Shared between the before/after pairs in `AuditChangeList` and the flat context
+ * block on the event detail screen (`audit-event-screen.tsx`) — both read from the
+ * same free-form `details` payload, and a `results_cleared` or `checklist.exported`
+ * event carries a `filter` object in its context describing exactly what was
+ * selected. Duplicating this per call site is how the two rendering paths drifted:
+ * the context block fell back to `String(value)`, which prints `[object Object]`
+ * for exactly that filter.
+ */
+export function AuditValue({ value }: { value: unknown }) {
   if (value === null || value === undefined) {
     return (
       <span className="text-muted-foreground italic" aria-label="none">
@@ -42,6 +54,14 @@ function ChangeValue({ value }: { value: unknown }) {
           </Badge>
         ))}
       </div>
+    );
+  }
+
+  if (typeof value === "object") {
+    return (
+      <pre className="bg-muted overflow-x-auto rounded-md p-2 text-xs">
+        {JSON.stringify(value, null, 2)}
+      </pre>
     );
   }
 
@@ -74,9 +94,9 @@ export function AuditChangeList({ changed }: { changed: Record<string, AuditChan
             {humanizeField(field)}
           </dt>
           <dd className="flex flex-wrap items-center gap-2 text-sm">
-            <ChangeValue value={before} />
+            <AuditValue value={before} />
             <ArrowRight className="text-muted-foreground size-3.5 shrink-0" />
-            <ChangeValue value={after} />
+            <AuditValue value={after} />
           </dd>
         </div>
       ))}
