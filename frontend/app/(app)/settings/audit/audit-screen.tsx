@@ -59,6 +59,9 @@ export function AuditScreen() {
         initialSearch={searchInput}
         placeholder="Search actor, target or address"
         onSearchChange={setSearch}
+        // Search plus four filters, so the row needs a fifth cell -- at the default
+        // four the dates wrap onto a line of their own.
+        columns={5}
         filters={
           <AuditFilters
             currentFilters={listParams}

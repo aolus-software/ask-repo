@@ -1,28 +1,38 @@
 "use client";
 
-import { AUDIT_EVENT_TYPES, auditEventLabel } from "@/lib/audit";
-import { Input } from "@/components/ui/input";
+import { useMemo } from "react";
+
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+  Combobox,
+  ComboboxContent,
+  ComboboxEmpty,
+  ComboboxInput,
+  ComboboxItem,
+  ComboboxList,
+} from "@/components/ui/combobox";
+import { Input } from "@/components/ui/input";
+import { AUDIT_EVENT_TYPES, auditEventLabel } from "@/lib/audit";
 import type { AuditEventListParams, AuditOutcome } from "@/lib/api/types";
 
 /**
- * "No filter" needs a real option value. An empty string is not one: a select whose
- * item value is `""` is indistinguishable from an unset select, and the libraries this
+ * "No filter" needs a real option value. An empty string is not one: a control whose
+ * item value is `""` is indistinguishable from an unset one, and the libraries this
  * component is built on treat the two differently. The sentinel never leaves this file
  * -- it is mapped back to `undefined` before the params are serialised.
  */
 const ANY = "any";
 
-const OUTCOME_LABELS: Record<AuditOutcome, string> = {
-  success: "Success",
-  failure: "Failure",
-};
+/**
+ * The combobox matches on the *object*, not on a string, so an option has to be a
+ * stable value both the list and the current selection can point at.
+ */
+type FilterOption = { value: string; label: string };
+
+const OUTCOME_OPTIONS: FilterOption[] = [
+  { value: ANY, label: "All outcomes" },
+  { value: "success", label: "Success" },
+  { value: "failure", label: "Failure" },
+];
 
 export function AuditFilters({
   currentFilters,
@@ -31,72 +41,102 @@ export function AuditFilters({
   currentFilters: Partial<AuditEventListParams>;
   onFiltersChange: (filters: Partial<AuditEventListParams>) => void;
 }) {
+  // 37 event types is past the point where a plain select is usable -- finding
+  // `checklist_item.results_cleared` means scrolling a menu that does not narrow.
+  // A combobox filters as you type, which is what makes the list a tool rather than
+  // an inventory.
+  const eventOptions = useMemo<FilterOption[]>(
+    () => [
+      { value: ANY, label: "All events" },
+      ...AUDIT_EVENT_TYPES.map((eventType) => ({
+        value: eventType,
+        label: auditEventLabel(eventType),
+      })),
+    ],
+    [],
+  );
+
+  const selectedEvent =
+    eventOptions.find((option) => option.value === (currentFilters.eventType ?? ANY)) ??
+    eventOptions[0];
+
+  const selectedOutcome =
+    OUTCOME_OPTIONS.find(
+      (option) => option.value === (currentFilters.outcome ?? ANY),
+    ) ?? OUTCOME_OPTIONS[0];
+
   return (
-    // The same grid `ListToolbar` uses for its own filter row (`docs/design.md` →
-    // Spacing). Rendered directly by the screen, so the row is declared here.
-    <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-4">
+    // A fragment, not a grid: these are dropped into `ListToolbar`'s own filter row
+    // (`docs/design.md` -> Spacing), so each control has to be a direct child of that
+    // grid to get a cell of its own. Wrapping them in a nested grid here puts all four
+    // inside a single cell, which collapses every control to a quarter of one column --
+    // wide enough for "All e..." and a clipped date picker.
+    <>
       <div>
-        <Select
-          value={currentFilters.eventType ?? ANY}
-          onValueChange={(value) =>
+        <Combobox
+          items={eventOptions}
+          value={selectedEvent}
+          onValueChange={(next: FilterOption | null) =>
             onFiltersChange({
               ...currentFilters,
-              eventType: value === ANY || value === null ? undefined : value,
+              eventType: !next || next.value === ANY ? undefined : next.value,
             })
           }
+          itemToStringLabel={(option: FilterOption) => option.label}
         >
-          <SelectTrigger className="w-full">
-            {/* Base UI renders the raw selected value, not the item's label, so
-                without this the trigger reads "any" or "project.deleted" instead of
-                the wording in the menu. */}
-            <SelectValue>
-              {(value: string) =>
-                value === ANY ? "All events" : auditEventLabel(value)
-              }
-            </SelectValue>
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value={ANY}>All events</SelectItem>
-            {AUDIT_EVENT_TYPES.map((eventType) => (
-              <SelectItem key={eventType} value={eventType}>
-                {auditEventLabel(eventType)}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+          <ComboboxInput
+            className="w-full"
+            placeholder="All events"
+            aria-label="Event type"
+          />
+          <ComboboxContent>
+            <ComboboxEmpty>No event type matches.</ComboboxEmpty>
+            <ComboboxList>
+              {(option: FilterOption) => (
+                <ComboboxItem key={option.value} value={option}>
+                  {option.label}
+                </ComboboxItem>
+              )}
+            </ComboboxList>
+          </ComboboxContent>
+        </Combobox>
       </div>
 
       <div>
-        <Select
-          value={currentFilters.outcome ?? ANY}
-          onValueChange={(value) =>
+        <Combobox
+          items={OUTCOME_OPTIONS}
+          value={selectedOutcome}
+          onValueChange={(next: FilterOption | null) =>
             onFiltersChange({
               ...currentFilters,
-              outcome: value === ANY ? undefined : (value as AuditOutcome),
+              outcome:
+                !next || next.value === ANY ? undefined : (next.value as AuditOutcome),
             })
           }
+          itemToStringLabel={(option: FilterOption) => option.label}
         >
-          <SelectTrigger className="w-full">
-            <SelectValue>
-              {(value: string) =>
-                value === ANY ? "All outcomes" : OUTCOME_LABELS[value as AuditOutcome]
-              }
-            </SelectValue>
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value={ANY}>All outcomes</SelectItem>
-            {Object.entries(OUTCOME_LABELS).map(([key, label]) => (
-              <SelectItem key={key} value={key}>
-                {label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+          <ComboboxInput
+            className="w-full"
+            placeholder="All outcomes"
+            aria-label="Outcome"
+          />
+          <ComboboxContent>
+            <ComboboxEmpty>No outcome matches.</ComboboxEmpty>
+            <ComboboxList>
+              {(option: FilterOption) => (
+                <ComboboxItem key={option.value} value={option}>
+                  {option.label}
+                </ComboboxItem>
+              )}
+            </ComboboxList>
+          </ComboboxContent>
+        </Combobox>
       </div>
 
       <div>
         <Input
           type="date"
+          className="w-full"
           value={currentFilters.occurredFrom?.slice(0, 10) ?? ""}
           onChange={(event) =>
             onFiltersChange({
@@ -111,6 +151,7 @@ export function AuditFilters({
       <div>
         <Input
           type="date"
+          className="w-full"
           value={currentFilters.occurredTo?.slice(0, 10) ?? ""}
           onChange={(event) =>
             onFiltersChange({
@@ -121,6 +162,6 @@ export function AuditFilters({
           aria-label="To date"
         />
       </div>
-    </div>
+    </>
   );
 }
