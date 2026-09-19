@@ -26,6 +26,12 @@ larger stat tiles as their own markup — see its resolution note. Every fix was
 `bun run typecheck`, `bun lint`, `bunx prettier --check`, `bun run build`, and the full
 `vitest` suite (124/124 passing) before being recorded here.
 
+**A second sweep ran on 2026-09-19** and its findings are appended below under
+"Sweep 2026-09-19", continuing the same section numbers without reusing any. It re-checked
+every resolved finding here and found none regressed. Its headline: four surfaces render a
+failed request as "there is nothing here", which is §U7.1's bug on three screens that landed
+after §U7.1 was fixed.
+
 **Severity:** 🔴 bug (shows a user something false, or blocks them) · 🟠 inconsistency / latent
 risk · 🟡 hygiene · 📄 doc.
 
@@ -1436,6 +1442,692 @@ Categories checked with nothing found, and what was checked:
   status-tone mappings (§U4.1 item 2) are intentional and carry their reasoning in place. The
   indeterminate progress bar at `project-detail-screen.tsx:77-82` is likewise deliberate: the API
   reports a phase, never a percentage, and the comment explains why inventing one would be worse.
+
+---
+
+# Sweep 2026-09-19
+
+**Scope:** every flow again, plus the two areas that did not exist on 2026-09-13 — the roles
+screens and the whole audit-trail area, including the filter row and detail dialog that landed
+hours before this sweep.
+
+**The sweep was read-only; a fix pass immediately after it was not.** Eighteen of this sweep's
+findings are marked `— ✅ RESOLVED 2026-09-19` with a note on each. **Still open:** §U4.4 (item
+result tones still mapped at the call site), §U5.7 (unmarked required fields on Add Member),
+§U8.6 (a disconnect styled as a failure on the two refinement chats), §U8.7 (the mock-data change
+set has no grouped overview), §U9.4 (the role matrix reaches Forbidden reactively), and §U10.8
+(the `pl-9` SUSPECT).
+
+**Ground truth unchanged:** [`design.md`](design.md), `.claude/rules/design-system.md`,
+`.claude/rules/forms.md`, `.claude/rules/navigation.md`, `frontend/app/globals.css`, and
+[`PRD.md`](PRD.md), which outranks them all.
+
+**Numbering continues the sections above and never reuses a number.** A finding from 2026-09-13
+that was found still resolved is not repeated here; where one has recurred in newly written code,
+the new occurrence is its own finding and says which earlier one it echoes.
+
+**No finding resolved on 2026-09-13 has regressed.** Every one was re-checked against the current
+source. §U7.1's fix holds on all five screens it was applied to; §U8.1–§U8.4 hold in all three
+streaming surfaces; §U5.1–§U5.6, §U6.1–§U6.3 and §U12.1–§U12.3 hold. What follows is new code, or
+old code the earlier sweep did not reach.
+
+## Top priorities
+
+1. **Four surfaces tell a user "there is nothing here" when a request has actually failed**
+   (§U7.4, §U7.5, §U7.6). This is one bug with three addresses, and it is the same bug §U7.1 fixed
+   in March — on five screens that all still hold. These three simply landed afterwards.
+2. **A menu item silently does nothing, whether it worked or not** (§U6.5), and it is not gated on
+   the permission it needs, so the most likely outcome is a refusal nobody sees.
+3. **An event's project id is unreadable** (§U10.6) on the one screen whose purpose is matching
+   exact values against another system.
+4. Everything else is consistency and documentation. Two of the findings (§U2.4, §U10.5) are
+   defects in code written during this session, noted as such.
+
+## §U2.4 The audit detail dialog hand-rolls a card instead of using `Card` — 🟡 — ✅ RESOLVED 2026-09-19
+
+> Fixed. The dialog uses the real `Card`, at the same padding as the route.
+>
+> Original finding follows.
+
+
+**Where:** `frontend/components/audit/audit-detail-dialog.tsx:79` versus
+`frontend/app/(app)/settings/audit/[eventId]/audit-event-screen.tsx:87`
+
+**What this is.** The audit detail body was deliberately extracted into
+`components/audit/audit-event-detail.tsx` so the route and the dialog render one implementation
+rather than two — its docstring says exactly that. `AuditEventCurrent` is the "As of now" block:
+live lookups fenced off from the recorded snapshot so a present-tense answer cannot be mistaken for
+part of the record.
+
+**Why this can happen.** The route wraps that block in the real `Card` component at `p-6`. The
+dialog wraps it in a bare `<div className="border-info/40 bg-info/5 rounded-xl border p-4">` — a
+`Card`-shaped div, with `Card`'s radius and border copied out as literal classes. The extraction's
+docstring justifies the *other* wrapper split (Cards on the route, stacked in the dialog, for
+`AuditEventFacts`) but says nothing about this one, so it is not a recorded decision.
+
+**What it costs.** Nothing visible today; the two render nearly identically. The cost arrives when
+`Card`'s tokens move — its radius, its ring, its surface — at which point the route updates and the
+dialog silently does not. That is §U2.1 and §U2.3's failure mode exactly, recurring in code written
+after those were fixed.
+
+**What we should do.** Use `Card` in the dialog too, and settle on one padding. Ten minutes.
+CONFIRMED.
+
+## §U3.4 The audit table's columns are ordered against the documented list skeleton — 🟠 — ✅ RESOLVED 2026-09-19
+
+> Fixed, per the owner's decision to follow the list skeleton: the audit table now
+> reads Event → Outcome → Actor → Target → Changed → Time → Actions. The comment
+> records that chronology is expressed by the default sort, not by column order.
+>
+> Original finding follows.
+
+
+**Where:** `frontend/components/audit/audit-table.tsx:22` (the comment stating the order) and
+`:38-46` (the header row), against [`design.md`](design.md) → Lists
+
+**What this is.** Every list screen in the app follows one column order: identity first, status
+second, timestamps last, actions in a right-aligned final column. `components/users/user-table.tsx`
+and `components/roles/role-table.tsx` both follow it.
+
+**Why this can happen.** The audit table renders Time → Event → Actor → Target → Outcome → Changed
+→ Actions. The timestamp is first rather than last and the status ("Outcome") is fourth rather than
+second. Since the two sibling admin tables follow the documented order, this is local drift rather
+than a project-wide reinterpretation.
+
+**What it costs.** No data is hidden or wrong. An operator moving between `/settings/audit` and
+`/settings/users` reads two tables of the same shape in a different order. The larger cost is that
+the next column added here has no convention to anchor to, because this table already departed from
+it.
+
+**What we should do.** There is a real argument the other way — an audit trail is a chronological
+record and "when" is arguably its identity — so this is a question for the owner rather than an
+obvious edit. If the answer is "follow the skeleton", reorder to Event → Outcome → Actor → Target →
+Changed → Time → Actions. If the answer is "time leads, deliberately", record that as a stated
+exception in [`design.md`](design.md) → Lists so the next table does not copy it blindly.
+CONFIRMED.
+
+## §U4.4 A third status domain picks its colours at the call site — 🟡
+
+**Where:** `frontend/components/checklist/item-grid.tsx:82-87`, against `frontend/lib/status.ts`
+
+**What this is.** `.claude/rules/design-system.md` §5 requires each status domain to map to a tone
+in exactly one module, so a badge, a table row and a detail header showing the same state cannot
+disagree. `lib/status.ts` owns the project mapping and `components/checklist/module-status-badge.tsx`
+owns the module mapping — the two §U4.1 consolidated.
+
+**Why this can happen.** A checklist item's result — `untested` / `pass` / `fail` / `blocked` — is a
+third domain, and its tone table is declared locally inside the grid component rather than beside
+the other two.
+
+**What it costs.** Nothing today: the vocabulary does not collide with the project or module words,
+so the rule's guarantee holds by coincidence rather than by construction. The cost is the next
+component needing this state's colour — a dashboard tile, a filter chip — which has nothing to
+import and will re-derive its own mapping, reopening the "badge colour decided four ways" problem
+§U4.1 closed once already.
+
+**What we should do.** Move the tone and label tables into `lib/status.ts` beside the module
+mapping and import them. An hour. CONFIRMED.
+
+## §U4.5 `text-destructive` is back in hand-written code — 🟡 — ✅ RESOLVED 2026-09-19
+
+> Fixed. Both sites use `text-danger`.
+>
+> Original finding follows.
+
+
+**Where:** `frontend/components/projects/member-table.tsx:94` and
+`frontend/components/checklist/change-set-panel.tsx:272`
+
+**What this is.** `globals.css` defines `destructive` as an alias of `danger` so CLI-generated
+components can keep saying `destructive` while hand-written code says `danger` — the split §U4.3
+established and fixed.
+
+**Why this can happen.** Both sites are hand-written and use the generated-code spelling.
+
+**What it costs.** Nothing visual; they resolve to the same colour. It costs the grep: someone
+auditing where this app shows danger colour searches `text-danger` and misses these two. That is
+the entire reason §U4.3 was filed.
+
+**What we should do.** Change both to `text-danger`. Five minutes. CONFIRMED.
+
+## §U5.7 The Add Member dialog does not mark its required fields — 🟠
+
+**Where:** `frontend/components/projects/add-member-dialog.tsx:100-101` and `:132-133`
+
+**What this is.** Required fields carry a trailing asterisk in `text-danger`. Every comparable
+dialog does it — `create-project-dialog.tsx`, `create-user-dialog.tsx`, and
+`create-module-dialog.tsx`, which includes the precedent for a required `Select`.
+
+**Why this can happen.** Neither the User nor the Role label carries the marker, though User is
+strictly required — `handleSubmit` returns early without it — and Role always carries a value.
+
+**What it costs.** The same cost §U5.2 named on the login screen: the app teaches a convention on
+one form and breaks it on the next, so the marker stops being information.
+
+**What we should do.** Add the asterisk span to both labels, following
+`create-module-dialog.tsx`'s required-`Select` precedent. Ten minutes. CONFIRMED.
+
+## §U5.8 The module edit dialog reopens with an abandoned draft — 🟠 — ✅ RESOLVED 2026-09-19
+
+> Fixed. Opening the dialog re-seeds both fields from the module, as
+> `item-grid`'s `startEditing` does.
+>
+> Original finding follows.
+
+
+**Where:** `frontend/components/checklist/module-row-actions.tsx:33-34`, against
+`frontend/components/checklist/item-grid.tsx:139-147`
+
+**What this is.** `forms.md` §6 requires an edit form to seed from the fetched record during
+render, keyed so that reopening on a different row re-seeds.
+
+**Why this can happen.** `editingName` and `editingPath` are seeded once by `useState` at first
+mount of the row and never re-synced. Opening the dialog only sets a boolean. The row component
+stays mounted as long as the list does, so the state survives a cancel. `item-grid.tsx`'s
+`startEditing()` does this correctly for the comparable case, re-seeding the draft from the row's
+current values every time Edit is clicked.
+
+**What it costs.** Open Edit, type a new name, press Cancel, reopen Edit on the same module: the
+dialog shows the abandoned text, not the module's saved name. A user can mistake their own
+discarded draft for the record's real value and submit it as a deliberate edit.
+
+**What we should do.** Re-seed both fields from the module when the dialog opens, mirroring
+`startEditing()`. Half an hour. CONFIRMED.
+
+## §U6.5 Generating from the module list's row menu reports nothing, and is not gated — 🔴 — ✅ RESOLVED 2026-09-19
+
+> Fixed. The row menu wires the same success and error toasts the module screen
+> uses, and the item is now disabled with a reason when the caller lacks
+> `generate.run` — the permission it always needed.
+>
+> Original finding follows.
+
+
+**Where:** `frontend/components/checklist/module-row-actions.tsx:112`, against
+`frontend/app/(app)/checklist/[moduleId]/module-screen.tsx:193-208`
+
+**What this is.** Generating a checklist is expensive work — it scrolls the whole index and runs a
+chat model — and it can legitimately refuse: a generation is already running, a pending change set
+is waiting, the index is mid-reindex, or the caller lacks the permission.
+
+**Why this can happen.** The row menu calls `generate.mutate()` with no `onSuccess` and no
+`onError`, and the hook itself only invalidates a query on success. The same mutation, from the
+module's own screen two files over, wires both a success and an error toast. The row-menu path was
+the one place it was skipped. Separately, the menu item is gated on the edit and delete permissions
+but not on the generate permission the page's own button checks — so a user without it sees an
+enabled control.
+
+**What it costs.** A click that failed looks exactly like a click that worked: the menu closes and
+nothing else happens. For the most likely failure — a user who lacks the permission — the backend
+correctly refuses and the refusal vanishes. The user waits for a result that is never coming.
+
+**What we should do.** Wire the same success and error toasts the module screen uses, and gate the
+item on the generate permission so it matches the page. Half an hour. CONFIRMED.
+
+## §U6.6 Deleting a test case confirms nothing — 🟠 — ✅ RESOLVED 2026-09-19
+
+> Fixed. Deleting a test case toasts on success.
+>
+> Original finding follows.
+
+
+**Where:** `frontend/components/checklist/item-grid.tsx:453-464`
+
+**What this is.** [`design.md`](design.md) → Feedback: a successful mutation ends in a brief toast.
+Every sibling delete does it — module, project, conversation, role, mock-data record.
+
+**Why this can happen.** The delete's `onSuccess` only closes the dialog. The error path is handled.
+
+**What it costs.** A tester deletes a test case and gets no confirmation. The row vanishing from a
+long, filtered grid is easy to miss, so the natural check is to look for the row — which is a worse
+experience than being told.
+
+**What we should do.** Add a success toast matching the siblings' voice. Ten minutes. CONFIRMED.
+
+## §U6.7 Toast voice is split down the middle — 🟡 needs a decision — ✅ RESOLVED 2026-09-19
+
+> Settled by the owner: **bare phrase is the house style.** All eleven
+> name-interpolated toasts were rewritten, so all thirty now read one way.
+>
+> Original finding follows.
+
+
+**Where:** 19 bare-phrase toasts and 11 name-interpolated ones. Bare: `module-screen.tsx:196`,
+`change-password-screen.tsx:27`, `conversation-rail.tsx:72`, `records-table.tsx:62`,
+`mock-data/change-set-panel.tsx:90,105`, `add-member-dialog.tsx:78`,
+`mock-data/generate-control.tsx:36`, `edit-user-dialog.tsx:40`, `item-grid.tsx:161,347`,
+`create-item-dialog.tsx:72`, `users/change-password-dialog.tsx:29`,
+`checklist/change-set-panel.tsx:121,136`, `create-module-dialog.tsx:79`,
+`module-row-actions.tsx:71`, `project-row-actions.tsx:120-122`, `module-screen.tsx:305-308`.
+Name-interpolated: `role-matrix-screen.tsx:90`, `member-table.tsx:70,134`,
+`project-row-actions.tsx:140`, `role-row-actions.tsx:77`, `create-project-dialog.tsx:48`,
+`create-user-dialog.tsx:30`, `create-role-dialog.tsx:37`, `user-row-actions.tsx:72`,
+`reset-password-dialog.tsx:30`, `module-row-actions.tsx:186`.
+
+**What this is.** Toasts are the most-seen copy in the app, and one voice for one kind of event is
+what stops a product reading as though several people assembled it.
+
+**Why this can happen.** §U6.4's fix on 2026-09-13 addressed the *explanatory two-sentence* toasts
+and rewrote them terse. The bare-versus-named split was never the part it settled, and it has grown
+since: at least six of the eleven named toasts are on roles, members and projects work that landed
+or was touched afterwards.
+
+**What it costs.** Low and cumulative. "Module updated" and "`${module.name}` deleted" fire from the
+same menu, one naming the thing and one not.
+
+**What we should do.** This is a decision, not a defect — neither voice is wrong, and the report
+deliberately does not pick one. Bare is the majority at 19 to 11. Once chosen, the minority is a
+mechanical rewrite of under an hour, and the choice belongs in [`design.md`](design.md) → Feedback
+so the next screen does not re-split it. CONFIRMED.
+
+## §U7.4 The Members table renders a failed request as an empty table — 🔴 — ✅ RESOLVED 2026-09-19
+
+> Fixed. The table branches on `isError` with `ListError` and a retry, and has an
+> empty state of its own.
+>
+> Original finding follows.
+
+
+**Where:** `frontend/components/projects/member-table.tsx:151-182`
+
+**What this is.** The Members tab on a project answers "who can reach this repository, and with
+what role". It is the screen an owner opens to check access.
+
+**Why this can happen.** The body branches on `query.isLoading` and otherwise maps
+`query.data ?? []`. There is no error branch anywhere in the file, and no empty state.
+
+**What it costs.** When `GET /projects/{id}/members` fails — a network blip, a `500`, a
+session-refresh race after the project query already succeeded — the tab renders its header row and
+no rows at all. That is visually indistinguishable from "this project has no members", which cannot
+legitimately happen: every project keeps at least one owner. An owner auditing access is told,
+silently and confidently, that access has been revoked from everyone.
+
+**What we should do.** Add the `isError` branch with `ListError` and a retry, ahead of the empty
+check, exactly as `/projects`, `/settings/users`, `/checklist` and the dashboard already do.
+Half an hour. CONFIRMED.
+
+## §U7.5 The conversation rail renders a failed request as "Nothing yet" — 🔴 — ✅ RESOLVED 2026-09-19
+
+> Fixed. The rail branches on `isError` ahead of the empty state, and the project
+> filter distinguishes a failed load from no match.
+>
+> Original finding follows.
+
+
+**Where:** `frontend/components/ask/conversation-rail.tsx:136-144` and `:216-234`; the project
+filter beside it at `:125-130` and `:195-197`
+
+**What this is.** The rail lists the caller's own conversations, on every `/ask` page load, in the
+sidebar and the mobile sheet.
+
+**Why this can happen.** `conversations = query.data?.items ?? []`. On a failure `data` is
+undefined and `isLoading` is false, so the empty branch renders. `query.isError` is never read
+anywhere in the file. The project filter has the same gap: its empty message says "No project
+matches" whether the list is genuinely empty or the request failed.
+
+**What it costs.** A user with a full history, who asked something two minutes ago, is told
+"Nothing yet. Pick a project and ask a question." That does not read as a transient failure — it
+reads as data loss. There is no retry affordance, and the detail view one component over
+(`conversation-screen.tsx:64-71`) handles the same class of failure correctly with `DetailError` and
+an explicit retry.
+
+**What we should do.** Branch `isError` ahead of the empty check and render the compact error the
+refinement chats' own message lists already use. Half an hour. CONFIRMED.
+
+## §U7.6 The Mock Data tab has a loading state and an error state for the wrong query — 🔴 — ✅ RESOLVED 2026-09-19
+
+> Fixed. `RecordsTable` is gated on the dataset query's own loading and error
+> states, which the screen-level gate never covered.
+>
+> Original finding follows.
+
+
+**Where:** `frontend/app/(app)/checklist/[moduleId]/module-screen.tsx:94,107,361,377,400-409` and
+`frontend/components/mock-data/records-table.tsx:87-101`
+
+**What this is.** The module screen gates correctly on its own query — `isLoading` and `error` are
+both handled before the tabs render at all. But the Mock Data tab fetches its dataset separately,
+from inside the already-rendered tab.
+
+**Why this can happen.** Every reference to that second query reads `mockData.data?.…`. Neither
+`mockData.isLoading` nor `mockData.isError` is read anywhere. `RecordsTable` takes only the records
+array and renders `EmptyState` whenever it is empty — which is also true before the fetch resolves,
+and also true when it fails.
+
+**What it costs.** Switching to the Mock Data tab on a module that *has* records shows "No mock data
+yet — Generate a batch, or ask for one by chat" until the fetch lands. If the fetch fails, that
+invitation to generate a batch stays up permanently, over a dataset that already exists. Acting on
+it is a wasted model run against work that was already done.
+
+**What we should do.** Gate `RecordsTable` on `mockData.isLoading` with a skeleton and
+`mockData.isError` with `ListError`, the shape `checklist-screen.tsx` already uses. Half an hour.
+CONFIRMED.
+
+**These three are one finding with three addresses.** §U7.1 established the pattern and fixed it on
+five screens, all of which still hold. These three surfaces landed afterwards and never received
+it. The useful conclusion is not "three bugs" but that the fix was never turned into something that
+propagates — see the note under §U7.1's resolution. A lint rule, a shared list-body component, or a
+test asserting every `useQuery` consumer reads `isError` would each have caught all three.
+
+## §U8.6 A dropped connection is a red failure on two surfaces and a grey note on the third — 🟠
+
+**Where:** `frontend/app/(app)/ask/[conversationId]/conversation-screen.tsx:151-155` versus
+`frontend/components/checklist/chat-panel.tsx:186-195,292-297` and
+`frontend/components/mock-data/chat-panel.tsx:155-161,256-261`
+
+**What this is.** All three surfaces are served by the same `Answerer`, and a client disconnect is a
+specific, benign server-side event: the shielded write in `finally` persists the partial answer with
+`finishReason: "disconnected"`. Nothing failed.
+
+**Why this can happen.** The Ask screen models three terminal states — done, error, and
+`interrupted` — and renders the third as a quiet line: "The connection dropped. What arrived above
+is kept." The two refinement chats model only two: their turn state has a single `errorMessage`, so
+the disconnect string is funnelled into the same destructive `Alert`, titled "The reply stopped",
+that a genuine mid-stream failure uses.
+
+**What it costs.** The same event is communicated at two different severities to two different
+audiences — and the alarming one is on the *shared* surfaces, where a checklist or dataset is
+published to everyone on the instance. A reviewer sees a red failure banner for something the
+product deliberately treats as fine, with the kept content sitting directly above it.
+
+**What we should do.** Give both refinement panels the same three-way terminal split the Ask screen
+has, and reserve the destructive `Alert` for real errors. Two hours. CONFIRMED.
+
+## §U8.7 The mock-data change set lost the grouping its twin has — 🟡
+
+**Where:** `frontend/components/mock-data/change-set-panel.tsx:145-171` versus
+`frontend/components/checklist/change-set-panel.tsx:158-171` and `:183-303`
+
+**What this is.** A change set is a list of `add` / `update` / `remove` operations a human ticks
+before applying. Both panels carry the same taxonomy — both files switch on the same `op` field.
+
+**Why this can happen.** The checklist panel shows a summary line ("3 added, 1 changed, 2 removed")
+and separates the operations into headed sections. The mock-data panel renders one flat divided
+list with no counts and no headings. §U8.3 unified these panels at the *row* level by extracting
+`OperationRow`; the list structure above the rows was not carried across.
+
+**What it costs.** The mock-data reviewer of a mixed change set gets no at-a-glance shape and no
+visual separation between kinds, on exactly the change sets where scanning matters. The checklist
+reviewer of the identical interaction gets both.
+
+**What we should do.** Decide once, and record it. Either factor the summary and grouping into a
+shared list wrapper both panels use, or state in a comment that mock data is deliberately flat —
+the way `mock-data/chat-panel.tsx` already documents its own deliberate divergences. Right now it
+is neither, which is what makes it drift rather than a choice. Two hours. CONFIRMED.
+
+## §U8.8 The two change-set panels disagree about card rhythm, and the checklist one is off-spec — 🟡 — ✅ RESOLVED 2026-09-19
+
+> Fixed. The checklist panel uses `space-y-4`, matching the documented rhythm and
+> its twin.
+>
+> Original finding follows.
+
+
+**Where:** `frontend/components/checklist/change-set-panel.tsx:173` (`space-y-6`) versus
+`frontend/components/mock-data/change-set-panel.tsx:135` (`space-y-4`), against
+[`design.md`](design.md) → Spacing, which names `space-y-4` as the vertical rhythm inside a card
+
+**What it costs.** Purely visual, and both values are on the documented interval scale. But the
+checklist panel's sections sit visibly further apart than its near-twin's, which is the opposite of
+what two panels built from one component should produce — and it is the non-conformant one.
+
+**What we should do.** Change the checklist panel to `space-y-4`, or, if the three-section layout
+genuinely needs the air, say so in a comment and record the exception in [`design.md`](design.md).
+Five minutes. CONFIRMED.
+
+## §U9.3 The navigation rule's route list is two whole sub-trees out of date — 📄 — ✅ RESOLVED 2026-09-19
+
+> Fixed. All four roles and audit routes are in `.claude/rules/navigation.md` §6.
+>
+> Original finding follows.
+
+
+**Where:** `.claude/rules/navigation.md` §6, against `frontend/app/(app)/settings/roles/page.tsx`,
+`settings/roles/[id]/page.tsx`, `settings/audit/page.tsx` and `settings/audit/[eventId]/page.tsx`
+
+**What this is.** §6 is the rule's canonical picture of the route shape the app is heading for.
+
+**Why this can happen.** It lists `/settings` and `/settings/users` and stops. Four admin routes
+have shipped since. §U9.2 already fixed one missing row in this same table on 2026-09-13, so this is
+the same gap recurring rather than a one-off. `CLAUDE.md`'s frontend list, by contrast, is complete
+and correct — it is only the rule that is stale.
+
+**What it costs.** Someone planning a new settings child reads the rule as ground truth and sees a
+picture missing the two most recent siblings, including the one whose column order they might have
+copied.
+
+**What we should do.** Add all four rows, mirroring `CLAUDE.md`. Ten minutes. CONFIRMED.
+
+## §U9.4 One admin screen reaches Forbidden reactively rather than immediately — 🟠
+
+**Where:** `frontend/app/(app)/settings/roles/[id]/role-matrix-screen.tsx:25-72`, against
+`roles-screen.tsx:35-36`, `users-screen.tsx:37-38`, `audit-screen.tsx:48-49` and
+`audit-event-screen.tsx:30-31`
+
+**What this is.** Every admin screen opens with a synchronous `if (!user.isAdmin) return
+<Forbidden />`, commented as mirroring the backend gate rather than replacing it — because hiding a
+sidebar item is not gating a route, and an operator can type a URL.
+
+**Why this can happen.** The role matrix screen has no such check. It fires both its queries
+unconditionally and only renders `Forbidden` if and when a query returns `403`.
+
+**What it costs.** Not a bypass: the backend enforces `require_admin` and the `403` branch exists,
+so the route does end up correctly forbidden. What a non-admin sees is a loading skeleton first —
+contentless, so nothing leaks — where every sibling screen shows Forbidden at once. The real cost is
+that this is the screen someone will copy as the template for the next admin detail page, and the
+invariant asserted everywhere else is not actually true here.
+
+**What we should do.** Add the same synchronous gate ahead of the loading branch. Ten minutes.
+CONFIRMED.
+
+## §U10.5 The documented filter-grid geometry is now only half true — 📄 — ✅ RESOLVED 2026-09-19
+
+> Fixed. `docs/design.md` → Spacing documents the five-cell variant and states that
+> filters are passed as sibling cells, never a nested grid — which is the mistake that
+> caused the clipped filter row in the first place.
+>
+> Original finding follows.
+
+
+**Where:** [`design.md`](design.md) → Spacing, against
+`frontend/components/layout/list-toolbar.tsx:13-16` and
+`frontend/app/(app)/settings/audit/audit-screen.tsx:64`
+
+**What this is.** [`design.md`](design.md) states one filter/toolbar geometry:
+`grid-cols-1 md:grid-cols-3 lg:grid-cols-4`.
+
+**Why this can happen.** `ListToolbar` grew a second five-cell layout for the audit screen, which
+carries a search box plus four filters. The change landed in commit `6d084bf` **during this
+session** and the document was not updated in the same change, which `.claude/rules/design-system.md`
+§6 requires.
+
+**What it costs.** Small today, since the two layouts agree at the `md` breakpoint. The cost is that
+the next person auditing whether a filter row is on-spec reads one fixed geometry and cannot
+distinguish the deliberate five-column screen from drift.
+
+**What we should do.** Add the five-column variant to [`design.md`](design.md) → Spacing, as "four
+cells by default, five when a screen carries four or more filters". Ten minutes. CONFIRMED.
+
+## §U10.6 A project id renders in the body face on the screen built for matching exact values — 🟡 — ✅ RESOLVED 2026-09-19
+
+> Fixed. The project id renders `font-mono`.
+>
+> Original finding follows.
+
+
+**Where:** `frontend/components/audit/audit-event-detail.tsx:63-65`, rendered by both
+`/settings/audit/[eventId]` and the detail dialog
+
+**What this is.** [`design.md`](design.md) → Typography puts `font-mono` on every file path, commit
+hash and identifier, and §U10.1 verified that holds for citations, repo URLs and module source
+paths.
+
+**Why this can happen.** The Project field renders a raw UUID through the generic `Field` helper,
+which sets no font. It is a new identifier field that the convention never reached.
+
+**What it costs.** An operator reading an audit row is usually there to match it against something
+else — a ticket, a log line, another screen. In the proportional body face a UUID does not
+distinguish `0` from `O` or `1` from `l`, which is the entire reason identifiers are mono
+everywhere else in the app.
+
+**What we should do.** Render the value `font-mono`, either at the call site or by giving `Field` a
+`mono` option the way `Stat` was extended in §U10.3. Fifteen minutes. CONFIRMED.
+
+## §U10.7 Two tab section headings are one size apart — 🟡 — ✅ RESOLVED 2026-09-19
+
+> Fixed. The Members heading is `text-xl`, matching the Mock Data tab.
+>
+> Original finding follows.
+
+
+**Where:** `frontend/app/(app)/projects/[id]/project-detail-screen.tsx:125` (`text-lg`) versus
+`frontend/app/(app)/checklist/[moduleId]/module-screen.tsx:332` (`text-xl`)
+
+**What this is.** Both are the same structure: a section heading inside a tab, with a description
+beside it and a primary action to its right. [`design.md`](design.md)'s type scale names `text-xl`
+for a card or section title; `text-lg` appears nowhere else in application code.
+
+**What it costs.** The Members tab's heading reads visibly smaller than the Mock Data tab's for no
+reason a user can discover.
+
+**What we should do.** Move the Members heading to `text-xl`, matching the scale and the precedent.
+Five minutes. CONFIRMED.
+
+## §U10.8 Two search inputs carry an off-scale padding — 🟡 SUSPECT
+
+**Where:** `frontend/components/layout/list-toolbar.tsx:51` and
+`frontend/components/ask/conversation-rail.tsx:168`, both `pl-9`
+
+**What this is.** Spacing comes from the documented intervals `1, 2, 3, 4, 6, 8, 12`. Nine is not
+among them.
+
+**Why this is SUSPECT rather than confirmed.** `pl-9` is the standard recipe for clearing a
+`left-3 size-4` icon, and the rule allows deviation "with a reason worth a comment". The reason is
+almost certainly that — but no comment says so, so a reader cannot tell a considered exception from
+an accident. What would settle it: whether any other value clears the icon cleanly.
+
+**What we should do.** Either add the one-line comment pointing at the icon it clears, or record
+icon-padded inputs as a carve-out in [`design.md`](design.md). Five minutes.
+
+## §U11.3 A third icon size has appeared in four places — 🟡 — ✅ RESOLVED 2026-09-19
+
+> Fixed. All four icons are `size-4`.
+>
+> Original finding follows.
+
+
+**Where:** `frontend/components/roles/role-badge.tsx:14` and
+`frontend/components/audit/audit-change-list.tsx:98` (both new), plus the pre-existing
+`frontend/components/form/password-field.tsx:92,94` and
+`frontend/components/checklist/path-picker.tsx:122`
+
+**What this is.** [`design.md`](design.md) → Icons gives exactly two sizes: `size-4` inline with
+text, `size-5` standalone.
+
+**Why this can happen.** `size-3.5` and `size-3` are neither. `role-badge.tsx`'s own docstring says
+it is modelled on `user-role-badge.tsx` — but that component carries no icon at all, so the figure
+was picked independently rather than copied from a precedent.
+
+**What it costs.** The lock beside a system role and the before/after arrow in the audit change list
+are slightly smaller than the app's two sanctioned sizes. Minor, but it is now a third size in four
+places, two of them added since the last sweep.
+
+**What we should do.** Move all four to `size-4`, or comment the cramped-row reason if one exists.
+Twenty minutes. CONFIRMED.
+
+## §U12.4 The component inventory documents an app without roles or audit — 📄 — ✅ RESOLVED 2026-09-19
+
+> Fixed. `docs/design.md`'s component inventory gains a Roles row and an Audit row.
+>
+> Original finding follows.
+
+
+**Where:** [`design.md`](design.md) → Component inventory, against `frontend/components/roles/` and
+`frontend/components/audit/`
+
+**What this is.** The inventory table lists which shadcn components each surface uses, so nobody
+runs `shadcn add` for something already installed.
+
+**Why this can happen.** It has rows for auth, the app shell, projects, Dev Knowledge, QA Checklist,
+the Mock Data tab, the refinement chats and lists — and none for the two surfaces that shipped
+since. Between them those directories use `alert`, `badge`, `button`, `card`, `checkbox`, `combobox`,
+`dialog`, `dropdown-menu`, `field`, `input`, `separator`, `skeleton` and `table`.
+
+**What it costs.** Someone consulting the inventory would not learn that `checkbox`, `combobox` and
+`separator` are already in use outside QA Checklist, or that a dialog and two tables exist on
+undocumented surfaces.
+
+**What we should do.** Add a Roles row and an Audit row. Fifteen minutes. CONFIRMED.
+
+## §U1.3 The "only `globals.css` may hold a raw colour" rule has an unrecorded exception — 📄 — ✅ RESOLVED 2026-09-19
+
+> Fixed. `.claude/rules/design-system.md` §2 now names `manifest.ts` as the one
+> exception and says why the browser needs literal values there.
+>
+> Original finding follows.
+
+
+**Where:** `.claude/rules/design-system.md` §2 and [`design.md`](design.md), against
+`frontend/app/manifest.ts:23-24`
+
+**What this is.** The rule states that `frontend/app/globals.css` is the only file permitted to
+contain a raw hex colour.
+
+**Why this can happen.** `manifest.ts` carries two — `theme_color` and `background_color` — and it
+legitimately must: the browser reads them to paint its own chrome before any stylesheet loads, so
+they cannot be tokens. The file's docstring says exactly this, and keeps the two values as literal
+mirrors of `--primary` and `--background`.
+
+**What it costs.** The code is right and the rule's sentence is now literally false of the
+repository. A future sweep either files a non-finding or, worse, "fixes" the manifest into something
+the browser cannot read.
+
+**What we should do.** Add a one-line carve-out to the rule naming `manifest.ts` and why. Ten
+minutes. CONFIRMED.
+
+## Verified correct in this sweep
+
+Recorded so the next sweep can tell "clean" from "not audited".
+
+- **Every token-discipline grep came back empty** across `frontend/app`, `frontend/components` and
+  `frontend/hooks` with `components/ui/` excluded: no raw hex or `rgb()`/`oklch()` outside
+  `globals.css` and the documented `manifest.ts`; no arbitrary `rounded-[…]`; no palette utility
+  (`zinc`/`slate`/`gray`/`neutral`/`stone`); no `bg-white` or `text-black`; no `text-white`; no
+  `font-bold`; no `asChild`; and no `dark:` colour utility — the only `dark:` uses are the theme
+  toggle's documented non-colour `dark:block`/`dark:hidden`.
+- **Layout geometry is intact as a set.** Navbar `h-16`, sidebar `top-16` and
+  `h-[calc(100vh-4rem)]`, content `mt-16 p-4 md:p-8`, `max-w-7xl` on the three list screens and
+  `max-w-3xl` on detail and form screens. All three `4rem` dependencies still agree.
+- **Navigation holds.** `lib/nav.ts` is the sole source of labels and hrefs; the sidebar is a thin
+  renderer over `visibleNavTree(user)`; `BreadcrumbSeparator` is a sibling of `BreadcrumbItem`
+  inside a `Fragment`; and there is no permission flash, because the layout resolves the user
+  server-side before any render.
+- **Route gating** is synchronous and commented on `/settings/users`, `/settings/roles`,
+  `/settings/audit` and `/settings/audit/[eventId]` — the one exception is §U9.4.
+- **The streaming surfaces are one feature, not three.** `components/ask/composer.tsx` is imported
+  unchanged by all four call sites; `PHASE_LABELS` lives in `lib/ask/phase-labels.ts` and is shared;
+  `components/ask/sources.tsx` self-hides on empty citations so no route needs special-casing; and
+  the server-computed `groundingWarnings` is passed straight through everywhere with no client-side
+  re-derivation — so a `conversational` or `out_of_scope` turn cannot acquire a false "nothing
+  matched" warning. All three render persisted history through one `MessageList`, so a reload after
+  a disconnect looks the same on every route.
+- **`components/ui/` is CLI-generated throughout.** Every file carries `data-slot` markup or a
+  `useRender` import except `sonner.tsx`, which wraps a third-party toaster rather than a Base UI
+  primitive and correctly has neither.
+- **The new audit work is otherwise sound.** The filter row's `ANY` sentinel never leaves its
+  module; the four filter controls carry `aria-label`s and are direct grid siblings; the detail
+  dialog guards its fetch through the hook's existing `enabled` check; and it reuses the extracted
+  detail body rather than re-implementing it — the two findings against it (§U2.4, §U10.5) are
+  about the wrapper and the doc, not the structure.
+- **Forms hold.** No `zod` or `react-hook-form` anywhere; no `max-w-*` at a call site; the password
+  policy is fetched from `GET /auth/password-policy` and never restated; the PAT field is never
+  seeded and never masked; the permission picker is correctly a `FormPage` and submits every
+  selected id rather than a diff; and edit forms seed during render.
+- **Destructive confirmations name what is lost** — project deletion says re-creating means a full
+  re-clone and re-embed, module deletion names the test cases, proposed changes and chat that go
+  with it, and clearing results names the exact count and that it resets rather than deletes.
+- **The `info` token is now in use**, at the audit screens' "As of now" block. §U1.2 reported it
+  unused; that is resolved by adoption rather than removal.
 
 ---
 
