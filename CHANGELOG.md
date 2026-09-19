@@ -54,6 +54,25 @@ and never the content.
 
 ### Fixed
 
+- **Light mode has elevation again.** `--muted` and `--accent` were `#f1f5f9` in light — the same
+  value as `--background` — so every surface drawn with `bg-muted` or `bg-accent` painted the page
+  colour over the page colour and simply did not appear, while dark mode rendered the identical
+  markup as panels. Both now sit one step down the ramp at `#e2e8f0`, mirroring dark, where
+  `muted` and `border` are likewise one value. What comes back in light: the question panel and
+  avatar on the Ask screen, fenced and inline code in an answer, the highlight on a cited source,
+  the selected conversation and row hovers in the conversation rail, loading skeletons, ghost and
+  outline button hovers, progress tracks, selected and hovered table rows, and the keyboard-focus
+  highlight in menus and comboboxes. `--sidebar-accent` moved with them so the nav's hover is not
+  the one weak highlight left in the UI. No component changed — every call site was already using
+  the right token.
+
+- **Secondary text in light mode now meets WCAG AA.** `--muted-foreground` was `#62748e`, which
+  read 4.35:1 on the page and 4.76:1 on a card — both under the 4.5:1 threshold for normal text,
+  and 3.86:1 on the darker `muted` surface above. It is now `#45556c`: 6.15–7.58 across page,
+  card and muted, the band dark mode was already in at 5.56–7.67. This darkens every timestamp,
+  helper line, placeholder and secondary paragraph in light mode — 112 call sites — which is the
+  visible half of the change.
+
 - **The per-caller login limit bounds a caller again, and the audit trail records one.** Every
   backend request leaves from the Next server, and the backend-for-frontend forwarded no
   `X-Forwarded-For`, so the per-address limit held one key for the whole instance: five logins a

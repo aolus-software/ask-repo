@@ -47,10 +47,24 @@
   --destructive: var(--danger);
   --destructive-foreground: var(--danger-foreground);
 
-  /* Neutrals */
-  --muted: #f1f5f9;
-  --muted-foreground: #62748e;
-  --accent: #f1f5f9;
+  /* Neutrals.
+
+     `muted` and `accent` are one step DOWN the ramp from `--background`, not equal to
+     it. Light elevation runs the opposite way from dark: `--card` is white *above* the
+     page, so an inset panel or a hover surface has to go darker to be seen at all.
+     Setting them to the page's own value is what made `bg-muted` and `bg-accent` paint
+     nothing in light mode while rendering as panels in dark. They land on `--border`'s
+     value, which mirrors dark, where `--muted` and `--border` are also one value. */
+  --muted: #e2e8f0;
+  /* One step down the ramp from the old `#62748e`, which fell below WCAG AA (4.5:1)
+     on every light surface it was used on — 4.35 on the page, and 3.86 once `--muted`
+     moved. This lands at 6.15-7.58 across page, card and muted, which is the band dark
+     mode's `#90a1b9` already sat in (5.56-7.67): the two themes now read the same
+     rather than light being the one that fails. Same value as `--sidebar-foreground`,
+     mirroring dark, where `--muted-foreground` and `--sidebar-foreground` are also one
+     value. */
+  --muted-foreground: #45556c;
+  --accent: #e2e8f0;
   --accent-foreground: #0f172a;
   --border: #e2e8f0;
   --input: #cad5e2;
@@ -61,7 +75,11 @@
   --sidebar-foreground: #45556c;
   --sidebar-primary: #615fff;
   --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: #f1f5f9;
+  /* Matched to `--accent` above. The sidebar sits on white rather than on the page, so
+     its hover was already visible at `#f1f5f9` — but leaving it there would make the
+     nav's hover the one weak highlight in a light UI where every other hover just got
+     a full step. Dark keeps the two equal for the same reason. */
+  --sidebar-accent: #e2e8f0;
   --sidebar-accent-foreground: #0f172a;
   --sidebar-border: #e2e8f0;
   --sidebar-ring: #615fff;

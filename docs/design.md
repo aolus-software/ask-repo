@@ -27,9 +27,9 @@ variable and never a hex value.
 | `danger` | `#fb2c36` | `#ff6467` | project `failed`, destructive action |
 | `info` | `#00b8db` | `#00d3f2` | neutral notice, and the one role badge (`UserRoleBadge`) |
 | `destructive` | → `danger` | → `danger` | alias so shadcn-generated components match |
-| `muted` | `#f1f5f9` | `#1d293d` | `bg-muted` — inset panels, table headers |
-| `muted-foreground` | `#62748e` | `#90a1b9` | secondary text, placeholders |
-| `accent` | `#f1f5f9` | `#1d293d` | hover surface |
+| `muted` | `#e2e8f0` | `#1d293d` | `bg-muted` — inset panels, table headers |
+| `muted-foreground` | `#45556c` | `#90a1b9` | secondary text, placeholders — WCAG AA on `background`, `card` and `muted` alike |
+| `accent` | `#e2e8f0` | `#1d293d` | hover surface |
 | `border` | `#e2e8f0` | `#1d293d` | every divider and card edge |
 | `input` | `#cad5e2` | `#45556c` | form control borders (darker than `border`) |
 | `ring` | `#615fff` | `#7c86ff` | focus ring |
@@ -39,6 +39,26 @@ variable and never a hex value.
 Each colour role has a paired `-foreground` giving the text colour that sits on it. `bg-primary`
 always takes `text-primary-foreground`, never `text-white` — white is wrong the moment a token
 changes.
+
+**Elevation runs in opposite directions in the two themes, and `muted`/`accent` follow the page,
+not the card.** In dark, `card` (`#0f172a`) is *lighter* than `background` (`#020617`) and
+`muted` is lighter again. In light, `card` is white and `background` is already below it, so an
+inset panel and a hover surface have to go one step *darker* than the page to be seen. They sit
+on `#e2e8f0` — `border`'s value, exactly as `muted` and `border` are one value in dark.
+
+Both pairs were set together, and the second is why: darkening `muted` puts secondary text on a
+darker surface, so `muted-foreground` had to move with it or the neutral `StatusBadge` — the one
+place text sits on `muted` — would have dropped further below WCAG AA. It was already under the
+4.5:1 threshold on every light surface at `#62748e`; at `#45556c` light reads 6.15–7.58 across
+page, card and muted, which is the band dark mode was already in at 5.56–7.67. **Check a palette
+change against both themes' numbers, not just the one you are editing** — light was the theme
+that failed here, and nothing in the build says so.
+
+Giving `muted` or `accent` the page's own value is the specific mistake to avoid: `bg-muted` on
+`bg-background` then paints nothing, and because most of the app is inside a `Card` the loss only
+shows on the few screens that are not — which is how it survives review. The Ask conversation
+screen is the one to check a palette change against, since it renders questions, code, sources
+and the conversation rail directly on `bg-background`.
 
 **Status colours are semantic.** A project's `status` maps to `success` / `warning` / `danger`,
 never to a hand-picked green. That mapping lives in one place so a badge, a row, and a detail
