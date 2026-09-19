@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import { endpoints } from "@/lib/api/endpoints";
 import { ACCESS_COOKIE, SESSION_COOKIE, cookieOptions } from "@/lib/auth/cookies";
+import { forwardedHeaders } from "@/lib/auth/forwarded";
 import { apiUrl } from "@/lib/auth/session";
 
 /**
@@ -13,6 +14,7 @@ import { apiUrl } from "@/lib/auth/session";
  */
 export async function POST(request: Request): Promise<Response> {
   const { all } = await readBody(request);
+  const forwarded = forwardedHeaders(request);
   const cookieHeader = request.headers.get("cookie") ?? "";
   const sessionCookie = readCookie(cookieHeader, SESSION_COOKIE);
   const accessToken = readCookie(cookieHeader, ACCESS_COOKIE);
@@ -21,13 +23,13 @@ export async function POST(request: Request): Promise<Response> {
     if (all && accessToken) {
       await fetch(`${apiUrl()}${endpoints.auth.logoutAll}`, {
         method: "POST",
-        headers: { authorization: `Bearer ${accessToken}` },
+        headers: { authorization: `Bearer ${accessToken}`, ...forwarded },
         cache: "no-store",
       });
     } else if (sessionCookie) {
       await fetch(`${apiUrl()}${endpoints.auth.logout}`, {
         method: "POST",
-        headers: { cookie: sessionCookie },
+        headers: { cookie: sessionCookie, ...forwarded },
         cache: "no-store",
       });
     }

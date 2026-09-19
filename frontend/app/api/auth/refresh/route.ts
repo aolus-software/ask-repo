@@ -7,6 +7,7 @@ import {
   accessCookieMaxAge,
   cookieOptions,
 } from "@/lib/auth/cookies";
+import { forwardedHeaders } from "@/lib/auth/forwarded";
 import { refreshSession } from "@/lib/auth/session";
 
 /**
@@ -19,7 +20,7 @@ export async function POST(request: Request): Promise<Response> {
   const sessionCookie = readCookie(request, SESSION_COOKIE);
   if (!sessionCookie) return unauthenticated();
 
-  const result = await refreshSession(sessionCookie);
+  const result = await refreshSession(sessionCookie, forwardedHeaders(request));
   if (!result) return unauthenticated();
 
   const response = new NextResponse(null, { status: 204 });

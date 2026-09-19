@@ -170,7 +170,7 @@ the reason stated above — that is what makes it append-only.
 | `actor_user_id`, `actor_email` | Who. **`NULL` means no authenticated actor** — a failed login against an address that matches no live user, or the `seed-admins` CLI. `actor_email` is a snapshot, not a join: `users.email` is unique only where not deleted, so resolving at read time would eventually attribute an old event to a new person |
 | `target_type`, `target_id`, `target_label` | What it was done to. `target_id` is deliberately **not** a foreign key — the row it points at may be gone, and an FK would either block the delete or cascade away the record of it. `target_label` is the core of the feature: a deleted project takes its name with it, so "who deleted it" is only answerable if this row already holds *what* was deleted |
 | `project_id` | Which project it happened under, where one applies |
-| `ip_address` | The caller's address, which is what still shows a brute-force pattern when the actor is `NULL` |
+| `ip_address` | The caller's address, which is what still shows a brute-force pattern when the actor is `NULL`. Resolved by `rate_limit.client_ip` — the same function the login limiter keys on, so the two cannot disagree — from the `X-Forwarded-For` the frontend relays, or the socket peer when `TRUSTED_PROXY_HOPS` is `0` |
 | `details` | The JSONB payload, capped at 8 KB |
 
 Four non-partial indexes — `created_at`, `actor_user_id`, `event_type`, `project_id`. None of

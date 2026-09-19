@@ -40,11 +40,22 @@ def _redact_email_from_key(key: str) -> str:
 def client_ip(request: Request, *, trusted_proxy_hops: int) -> str:
     """The caller's address, accounting for reverse proxies.
 
+    The **single** resolution of "who is calling" — `deps.get_client_ip` calls this
+    rather than keeping its own, so the limiter and the audit trail cannot disagree
+    about the same request.
+
     Counts from the **right** of `X-Forwarded-For`, discarding one entry per trusted
     hop. The header is client-controlled, so counting from the left would let anyone
     evade a per-IP limit by prepending a fake entry.
 
     `trusted_proxy_hops=0` ignores the header entirely and trusts the socket address.
+
+    The Next backend-for-frontend is a hop that **appends nothing**: it relays the
+    header its own reverse proxy set (`.claude/rules/frontend-bff.md`). So the count
+    stays "how many proxies append an entry" — one Caddy is still `1`, with Next in
+    between. Before it relayed the header at all, every request arrived with no
+    header and the socket address of the Next server, which made the per-caller limit
+    one instance-wide bucket.
     """
     peer = request.client.host if request.client else "unknown"
     if trusted_proxy_hops <= 0:

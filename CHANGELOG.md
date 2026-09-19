@@ -54,6 +54,21 @@ and never the content.
 
 ### Fixed
 
+- **The per-caller login limit bounds a caller again, and the audit trail records one.** Every
+  backend request leaves from the Next server, and the backend-for-frontend forwarded no
+  `X-Forwarded-For`, so the per-address limit held one key for the whole instance: five logins a
+  minute for everyone, counted on successes too, so the sixth colleague signing in within a
+  minute got `RATE_LIMITED` having done nothing wrong — and onboarding a batch of accounts drove
+  the same collapse on `POST /auth/change-password`. The security half was the mirror image: one
+  attacker had the whole instance's allowance to themselves. The BFF now relays the header its
+  own reverse proxy set, on every path that reaches the API. It appends nothing of its own, so
+  `TRUSTED_PROXY_HOPS` still counts only the proxies that append an entry — one Caddy is still
+  `1`, unchanged. Alongside it, `audit_events.ip_address` stopped being the proxy for every user:
+  the audit path took the direct peer while the limiter was `X-Forwarded-For`-aware, and both now
+  resolve the caller through the one implementation in `app/core/rate_limit.py`. That address is
+  what `docs/PRD.md` §3.4 leans on to keep an enumeration attempt visible as a pattern from one
+  host, given a failed login against an unknown address deliberately stores no email.
+
 - **A To date of today now finds today's events.** `<input type="date">` submits a bare calendar
   day, which parsed to midnight, so `occurredTo=<today>` excluded everything actually recorded that
   day — the obvious From=today/To=today search returned an empty page. A value with no time

@@ -181,6 +181,13 @@ why there is no mail provider anywhere in the stack. Admins create every other a
 correct when nothing sits in front of the API, and wrong the moment something does. Behind one
 Caddy, set `1`.
 
+Count the proxies that **append** an entry. The Next backend-for-frontend relays the header
+rather than adding to it (`.claude/rules/frontend-bff.md`), so it does not raise the count even
+though every request passes through it. In development nothing sits in front of Next, so no
+header exists to relay and `0` is both the default and the only correct value — which does mean
+the per-address limit is one bucket for a dev stack, as it has to be when there is no address
+to key on.
+
 ### Kafka — the ingestion job queue
 
 | Variable | Default | What it does |

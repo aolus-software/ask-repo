@@ -195,6 +195,20 @@ per minute for the entire organization, and because the limit is counted before 
 check, ordinary successful logins consume it too. A production boot with `0` is refused at
 startup for exactly this reason.
 
+**Next does not count as a hop, even though it is one.** Every backend request leaves from the
+Next server rather than from a browser, so the address the API resolves comes entirely from the
+header. The backend-for-frontend **relays** what Caddy set and appends nothing of its own — a
+route handler cannot see its own socket peer, so it has no address to append — which is why the
+count stays "how many proxies append an entry" and one Caddy is `1` rather than `2`. Relaying a
+header a browser can also set is safe only because the API counts from the right: an entry a
+client prepends is discarded along with everything left of the one Caddy appended.
+
+Put anything else in front of Caddy — a load balancer, a corporate reverse proxy, Cloudflare —
+and that is a proxy that appends, so raise the count to match. Get it too high and the API logs
+`X-Forwarded-For has N entries but M proxy hops are configured` and falls back to the socket
+address, which is the instance-wide bucket again; too low and callers can choose their own
+bucket by prepending an entry.
+
 If you do expose the API directly, it needs its own vhost, its origin in `CORS_ORIGINS`, and
 the hop count adjusted.
 

@@ -12,13 +12,13 @@ store, secret handling, the response contract, job and status handling, and code
 
 **This sweep was read-only** — `/audit-flow` changed no application code, and the only file it
 writes is this one. **A separate, explicitly requested fix pass on 2026-09-19 then resolved
-§9.1 and §9.5–§9.11.** Each resolved heading carries `— ✅ RESOLVED 2026-09-19` and a note saying
-what changed, with the original finding kept below it.
+§9.1 and §9.5–§9.11**, and **a second change the same day resolved §1.1 and §1.2** — the two that
+shared one cause and were tracked as
+[#40](https://github.com/aolus-software/ask-repo/issues/40). Each resolved heading carries
+`— ✅ RESOLVED 2026-09-19` and a note saying what changed, with the original finding kept below it.
 
-**Still open:** §1.1 and §1.2, tracked as [#40](https://github.com/aolus-software/ask-repo/issues/40)
-and deliberately left for their own change; §2.1 (the scoping test's narrow grep); and §9.2–§9.4
-(a dead error code and two duplicated guards), which are hygiene and were not in the fix pass's
-scope.
+**Still open:** §2.1 (the scoping test's narrow grep) and §9.2–§9.4 (a dead error code and two
+duplicated guards), which are hygiene and were not in either fix pass's scope.
 
 **Severity:** 🔴 bug (wrong behaviour reachable today) · 🟠 inconsistency / latent risk ·
 🟡 hygiene · 📄 doc.
@@ -40,11 +40,12 @@ Ordered security → data integrity → correctness → hygiene and doc. In the 
 2. **A contributor is told per-project roles and permissions are not built yet** (§9.9), in the
    file that exists to tell contributors what to work on. The feature shipped in phase 2.1 and is
    the single most detailed section of `CLAUDE.md`.
-3. **The whole instance shares five logins per minute** (§1.1), because every request reaches
-   the backend from the frontend server rather than from a browser, so the per-address limit has
-   one key for everybody. Six colleagues signing in within the same minute means the sixth is
-   refused. Found after the sweep proper, from a question about why the audit trail's address
-   column was empty (§1.2).
+3. **The whole instance shares five logins per minute** (§1.1) — ✅ resolved. Every request
+   reached the backend from the frontend server rather than from a browser, so the per-address
+   limit had one key for everybody and six colleagues signing in within the same minute meant the
+   sixth was refused. The frontend now relays the caller's address, and the audit trail resolves
+   it the same way (§1.2, also resolved). Found after the sweep proper, from a question about why
+   the audit trail's address column was empty.
 4. **Otherwise clean.** Read scoping, conversation privacy, SSRF defences, soft delete against
    the vector store, secret handling, the response contract and job handling were all swept and
    all came back clean. What was checked in each is recorded under its section, so
@@ -55,7 +56,7 @@ Ordered security → data integrity → correctness → hygiene and doc. In the 
 
 ---
 
-## §1 Access control — two findings, and the rest verified correct
+## §1 Access control — two findings, both since resolved, and the rest verified correct
 
 **What was checked.** `backend/app/core/access.py` in full; every mutating method in
 `project.py`, `checklist_module.py`, `checklist_item.py`, `mock_data_dataset.py`,
@@ -78,12 +79,26 @@ Ordered security → data integrity → correctness → hygiene and doc. In the 
   in. No route group in this branch introduces a new top-level prefix that should have been added
   to `GATE_EXEMPT_PREFIXES`.
 
-### §1.1 The login rate limiter is one shared bucket for the whole instance — 🔴 CONFIRMED
+### §1.1 The login rate limiter is one shared bucket for the whole instance — 🔴 CONFIRMED — ✅ RESOLVED 2026-09-19
 
-> **Tracked as [#40](https://github.com/aolus-software/ask-repo/issues/40).** Deliberately not
-> fixed in the pass that followed this sweep: the fix spans the backend-for-frontend, a config
-> default and `docs/deployment.md`, which is its own change rather than something folded into
-> phase 2.2.
+> **Fixed on `fix/forward-client-address-through-the-bff`**, closing
+> [#40](https://github.com/aolus-software/ask-repo/issues/40). The backend-for-frontend now
+> relays `X-Forwarded-For` on every path that reaches the API — the three `/api/auth/*` handlers,
+> `refreshSession`, and the API proxy, which relays it by not stripping it — through one helper,
+> `frontend/lib/auth/forwarded.ts`.
+>
+> **No config default changed, and that is the point.** The BFF relays the header rather than
+> appending to it, because a Next route handler cannot see its own socket peer and so has no
+> address of its own to add. `TRUSTED_PROXY_HOPS` therefore still counts the proxies that append
+> an entry: one Caddy is still `1`, the production default, with Next in between.
+> `docs/deployment.md` §4 and `docs/configuration.md` now say so, since "count your proxies" was
+> the sentence an operator would otherwise have read as `2`.
+>
+> The test the finding asked for is `backend/tests/test_client_address.py`: two addresses get two
+> budgets, one address still runs out, and a forged prepended entry buys nothing. The stopgap of
+> raising the limit was not taken.
+>
+> Original finding follows.
 
 **Where:** `backend/app/core/rate_limit.py:39-68` (`client_ip`), `backend/app/config.py:71`
 (`trusted_proxy_hops: int = 0`), `frontend/app/api/auth/login/route.ts:22-24`, and
@@ -152,11 +167,16 @@ which is the test whose absence let this through. The test needs the BFF in the 
 carrying the header; a backend-only test would have passed throughout, because the backend's own
 code is correct — it is the deployment shape around it that changed.
 
-### §1.2 The audit trail's only address column records the frontend, not the caller — 🟠 CONFIRMED
+### §1.2 The audit trail's only address column records the frontend, not the caller — 🟠 CONFIRMED — ✅ RESOLVED 2026-09-19
 
-> **Tracked as [#40](https://github.com/aolus-software/ask-repo/issues/40)**, alongside §1.1 —
-> they share one cause and the address fix has to land before this one can record anything
-> better.
+> **Fixed in the same change as §1.1**, which had to land first for there to be anything better
+> to record. `deps.get_client_ip` now calls `rate_limit.client_ip` instead of reading the direct
+> peer, so the limiter and the audit trail resolve one request the same way — the two answers to
+> "who is calling" are now one. It returns `None` rather than the resolver's `"unknown"`
+> sentinel, because the column is nullable and a literal is a value an operator would have to
+> learn to read as absence.
+>
+> Original finding follows.
 
 **Where:** `backend/app/api/deps.py:68-76` (`get_client_ip`), against
 `backend/app/core/rate_limit.py:39-68` (`client_ip`).

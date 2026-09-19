@@ -12,10 +12,10 @@ afterEach(() => {
   process.env.API_URL = ORIGINAL_API_URL;
 });
 
-function loginRequest(): Request {
+function loginRequest(headers: Record<string, string> = {}): Request {
   return new Request("http://localhost:3000/api/auth/login", {
     method: "POST",
-    headers: { "content-type": "application/json" },
+    headers: { "content-type": "application/json", ...headers },
     body: JSON.stringify({
       email: "dev@example.com",
       password: "correct horse battery",
@@ -109,5 +109,29 @@ describe("POST /api/auth/login", () => {
     const response = await POST(loginRequest());
     expect(response.status).toBe(401);
     expect(response.headers.getSetCookie()).toHaveLength(0);
+  });
+
+  it("forwards the caller's address so the per-IP limit bounds a caller", async () => {
+    // Without this the backend sees the Next server for everyone, and five logins a
+    // minute becomes the whole instance's allowance rather than one person's (#40).
+    const fetchMock = vi.fn(async () => backendOk());
+    vi.stubGlobal("fetch", fetchMock);
+
+    await POST(loginRequest({ "x-forwarded-for": "203.0.113.7" }));
+
+    const [, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    const headers = init.headers as Record<string, string>;
+    expect(headers["x-forwarded-for"]).toBe("203.0.113.7");
+  });
+
+  it("sends no address header when nothing in front of Next set one", async () => {
+    const fetchMock = vi.fn(async () => backendOk());
+    vi.stubGlobal("fetch", fetchMock);
+
+    await POST(loginRequest());
+
+    const [, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    const headers = init.headers as Record<string, string>;
+    expect(headers["x-forwarded-for"]).toBeUndefined();
   });
 });

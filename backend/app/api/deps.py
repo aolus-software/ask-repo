@@ -11,9 +11,11 @@ from typing import Annotated
 from fastapi import Depends, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import Settings, get_settings
 from app.core.audit import AuditRecorder
 from app.core.errors import AppError, ErrorCode
 from app.core.middleware import AuthContext, AuthenticatedUser
+from app.core.rate_limit import client_ip
 from app.db.session import get_session, get_sessionmaker
 
 
@@ -66,15 +68,24 @@ def get_audit_recorder() -> AuditRecorder:
     return AuditRecorder(get_sessionmaker())
 
 
-def get_client_ip(request: Request) -> str | None:
+def get_client_ip(
+    request: Request, settings: Annotated[Settings, Depends(get_settings)]
+) -> str | None:
     """The source host, for the auth events that record one.
 
-    This is the *direct peer*. Behind a reverse proxy it is the proxy unless uvicorn
-    runs with `--proxy-headers` and `--forwarded-allow-ips`, which `docs/deployment.md`
-    covers — a wrong address here is worse than none, so nothing parses
-    `X-Forwarded-For` by hand.
+    Resolved by `rate_limit.client_ip`, which is the **one** implementation of "who is
+    calling" in this codebase. Keeping a second, simpler one here is what put two
+    different answers in front of two readers: the limiter was `X-Forwarded-For`-aware
+    while this returned the direct peer, so behind the BFF every audit row recorded the
+    Next server. `docs/PRD.md` §3.4 leans on this value — a failed login against an
+    unknown address deliberately stores no email, and the address is the only thing
+    left that keeps an enumeration attempt visible as a pattern from one host.
+
+    `None` rather than `"unknown"` because the column is nullable and a literal is a
+    value an operator would have to learn to read as absence.
     """
-    return request.client.host if request.client else None
+    address = client_ip(request, trusted_proxy_hops=settings.trusted_proxy_hops)
+    return None if address == "unknown" else address
 
 
 CurrentUser = Annotated[AuthenticatedUser, Depends(get_current_user)]

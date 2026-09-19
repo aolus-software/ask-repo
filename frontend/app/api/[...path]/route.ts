@@ -7,6 +7,7 @@ import {
   accessCookieMaxAge,
   cookieOptions,
 } from "@/lib/auth/cookies";
+import { forwardedHeaders } from "@/lib/auth/forwarded";
 import { type RefreshResult, apiUrl, refreshSession } from "@/lib/auth/session";
 
 /**
@@ -21,7 +22,15 @@ interface RouteContext {
   params: Promise<{ path: string[] }>;
 }
 
-/** Hop-by-hop and identity headers that must not be replayed upstream. */
+/**
+ * Hop-by-hop and identity headers that must not be replayed upstream.
+ *
+ * `x-forwarded-for` is deliberately absent: the backend resolves the caller from it,
+ * and dropping it is what made the per-caller login limit one instance-wide bucket
+ * (issue #40). It is safe to relay even though a browser can set it, because the
+ * backend counts entries from the right and discards one per trusted hop — see
+ * `lib/auth/forwarded.ts`.
+ */
 const STRIPPED_REQUEST_HEADERS = new Set([
   "host",
   "connection",
@@ -52,7 +61,7 @@ async function handle(request: NextRequest, context: RouteContext): Promise<Resp
 
   if (!accessToken) {
     if (!sessionCookie) return unauthenticated();
-    refreshed = await refreshSession(sessionCookie);
+    refreshed = await refreshSession(sessionCookie, forwardedHeaders(request));
     if (!refreshed) return unauthenticated();
     accessToken = refreshed.accessToken;
   }
@@ -70,7 +79,7 @@ async function handle(request: NextRequest, context: RouteContext): Promise<Resp
   // makes a retry safe on the SSE route too — a half-read stream cannot be replayed,
   // so a retry sited any later would be a bug for that one endpoint.
   if (upstream.status === 401 && sessionCookie) {
-    refreshed = await refreshSession(sessionCookie);
+    refreshed = await refreshSession(sessionCookie, forwardedHeaders(request));
     if (!refreshed) return unauthenticated();
     upstream = await forward(request, target, refreshed.accessToken, body);
     if (upstream.status === 401) return unauthenticated();

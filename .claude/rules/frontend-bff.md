@@ -37,6 +37,28 @@ A new proxy path, or a handler outside `/api/auth/*` that sets a cookie, creates
 token can be written — which is exactly the surface this design exists to avoid. If a new browser
 capability needs to reach the backend, it goes through this one route, not a new one.
 
+## The caller's address is relayed, on every path that reaches the API
+
+The browser never talks to the backend, so the only thing that tells the API who is calling is
+`X-Forwarded-For`. Drop it and every request arrives from one socket address: the per-caller
+login limit becomes one instance-wide bucket of five attempts a minute, and `audit_events.ip_address`
+records the Next server for everyone (issue #40). Nothing errors — the failure is five colleagues
+signing in and the sixth being told to try again later.
+
+`forwardedHeaders` in `lib/auth/forwarded.ts` is the one place this is read. Every handler that
+calls the API passes it: the three `/api/auth/*` handlers, `refreshSession`, and the API proxy,
+which relays it by **not** listing it in `STRIPPED_REQUEST_HEADERS`.
+
+Two properties to keep:
+
+- **Relay, never rewrite.** Next cannot see its own socket peer from a route handler, so it has
+  no address to append — and appending nothing is what keeps `TRUSTED_PROXY_HOPS` meaning "how
+  many proxies append an entry". Adding an entry here would silently require every operator's
+  hop count to be one higher than the proxies they can count.
+- **Relaying a browser-settable header is safe only because of how the backend reads it.** It
+  counts from the right, discarding one entry per trusted hop, so a forged entry a client
+  prepends is discarded. Do not pair this with a backend that reads the leftmost entry.
+
 ## Refresh happens in two places, and that split is structural
 
 A Server Component cannot set a cookie, so a token refreshed during render could never be

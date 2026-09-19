@@ -464,6 +464,11 @@ the page.
 - **`app/api/[...path]/route.ts` is the one route the browser talks to.** It attaches the bearer,
   strips `set-cookie` from every backend response, and relays the body untouched. Only the three
   `/api/auth/*` handlers write cookies.
+- **The caller's address is relayed, not rewritten.** `lib/auth/forwarded.ts` passes
+  `X-Forwarded-For` through on every path that reaches the API, because the backend has no other
+  way to tell one caller from another — without it the per-caller login limit is one
+  instance-wide bucket. Next appends nothing, so `TRUSTED_PROXY_HOPS` still counts only the
+  proxies that do.
 - **Refresh happens in two places, and that split is structural.** A Server Component cannot set
   a cookie, so a token refreshed during render could never be persisted. Navigations refresh in
   `proxy.ts` — Next's request gate, called `middleware.ts` before Next 16 renamed the convention,

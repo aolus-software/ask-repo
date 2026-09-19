@@ -7,6 +7,7 @@ import {
   accessCookieMaxAge,
   cookieOptions,
 } from "@/lib/auth/cookies";
+import { forwardedHeaders } from "@/lib/auth/forwarded";
 import { refreshSession } from "@/lib/auth/session";
 
 /**
@@ -43,7 +44,7 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
 
   if (hasAccess) return NextResponse.next();
 
-  const refreshed = await refreshSession(sessionCookie);
+  const refreshed = await refreshSession(sessionCookie, forwardedHeaders(request));
   if (!refreshed) {
     const response = redirectToLogin(request);
     response.cookies.set(ACCESS_COOKIE, "", cookieOptions(0));

@@ -35,22 +35,33 @@ export function extractSessionCookie(response: Response): string | null {
  * The guard is PER PROCESS. With more than one frontend replica two refreshes can
  * still reach the backend, and it is the backend's 10-second grace window — not this
  * guard — that saves the session. Do not describe this as complete.
+ *
+ * `forwarded` carries the caller's address (`lib/auth/forwarded.ts`). A second caller
+ * joining an in-flight refresh joins it with the first one's address — the refresh
+ * route is not rate-limited per caller, so what this costs is the address on a replay
+ * audit event during the milliseconds two refreshes overlap, not a limit decision.
  */
 let inFlight: Promise<RefreshResult | null> | null = null;
 
-export function refreshSession(sessionCookie: string): Promise<RefreshResult | null> {
-  inFlight ??= performRefresh(sessionCookie).finally(() => {
+export function refreshSession(
+  sessionCookie: string,
+  forwarded: Record<string, string> = {},
+): Promise<RefreshResult | null> {
+  inFlight ??= performRefresh(sessionCookie, forwarded).finally(() => {
     inFlight = null;
   });
   return inFlight;
 }
 
-async function performRefresh(sessionCookie: string): Promise<RefreshResult | null> {
+async function performRefresh(
+  sessionCookie: string,
+  forwarded: Record<string, string>,
+): Promise<RefreshResult | null> {
   let response: Response;
   try {
     response = await fetch(`${apiUrl()}${endpoints.auth.refresh}`, {
       method: "POST",
-      headers: { cookie: sessionCookie },
+      headers: { cookie: sessionCookie, ...forwarded },
       cache: "no-store",
     });
   } catch {
