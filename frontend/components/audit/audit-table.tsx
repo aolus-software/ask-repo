@@ -1,9 +1,12 @@
 "use client";
 
 import Link from "next/link";
+import { useState } from "react";
 
+import { AuditDetailDialog } from "@/components/audit/audit-detail-dialog";
 import { StatusBadge } from "@/components/feedback/status-badge";
 import { TableSkeleton } from "@/components/feedback/table-skeleton";
+import { Button } from "@/components/ui/button";
 import {
   Table,
   TableBody,
@@ -16,7 +19,7 @@ import { auditEventLabel } from "@/lib/audit";
 import type { AuditEventSummary } from "@/lib/api/types";
 import { formatAbsolute, formatRelative } from "@/lib/dates";
 
-/** Column order: time, event, actor, target, outcome, changed fields. */
+/** Column order: time, event, actor, target, outcome, changed fields, actions. */
 export function AuditTable({
   events,
   isLoading,
@@ -24,6 +27,10 @@ export function AuditTable({
   events: AuditEventSummary[];
   isLoading: boolean;
 }) {
+  // `null` closes the dialog and is what stops it fetching, so one piece of state
+  // carries both which row is open and whether anything is open at all.
+  const [openEventId, setOpenEventId] = useState<string | null>(null);
+
   return (
     <div className="overflow-x-auto">
       <Table>
@@ -35,11 +42,12 @@ export function AuditTable({
             <TableHead>Target</TableHead>
             <TableHead>Outcome</TableHead>
             <TableHead>Changed</TableHead>
+            <TableHead className="text-right">Actions</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
           {isLoading ? (
-            <TableSkeleton columns={6} />
+            <TableSkeleton columns={7} />
           ) : (
             events.map((event) => (
               <TableRow key={event.id}>
@@ -84,11 +92,27 @@ export function AuditTable({
                     ? event.changedFields.join(", ")
                     : "—"}
                 </TableCell>
+                <TableCell className="text-right">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setOpenEventId(event.id)}
+                  >
+                    View
+                  </Button>
+                </TableCell>
               </TableRow>
             ))
           )}
         </TableBody>
       </Table>
+
+      <AuditDetailDialog
+        eventId={openEventId}
+        onOpenChange={(open) => {
+          if (!open) setOpenEventId(null);
+        }}
+      />
     </div>
   );
 }
