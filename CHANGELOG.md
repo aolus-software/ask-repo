@@ -47,6 +47,44 @@ and never the content.
   `/settings/audit/[eventId]` (one event, its before/after change list and its live `current`
   block).
 
+- **Read an audit event without leaving the list.** Each row on `/settings/audit` gains a **View**
+  action that opens the event in a dialog, keeping the filters and the scroll position.
+  `/settings/audit/[eventId]` remains, and remains the linkable one — a dialog has no URL to put in
+  a ticket.
+
+### Fixed
+
+- **A To date of today now finds today's events.** `<input type="date">` submits a bare calendar
+  day, which parsed to midnight, so `occurredTo=<today>` excluded everything actually recorded that
+  day — the obvious From=today/To=today search returned an empty page. A value with no time
+  component is now treated as the whole day. The remaining UTC-versus-local-day edge is documented
+  rather than papered over: fixing it needs the operator's timezone, which the endpoint is not
+  given.
+- **A bulk-operation filter no longer renders as `[object Object]`** on the event detail screen —
+  which is precisely the row an operator opens after a bulk result-clear erased recorded
+  observations.
+- **The audit filter row is usable.** All four controls and both date pickers were rendering
+  clipped to a few characters ("All e", "dd/"), because the filter row declared a grid of its own
+  inside a single cell of the toolbar's grid. Each control now gets its own cell, and the two
+  selects became searchable comboboxes — 37 event types is past the point where a menu that does
+  not narrow is usable.
+- **Applying a proposed removal to a QA checklist no longer fails with a server error.** The apply
+  had already committed, so the item really was deleted while the response reported failure.
+- **Four surfaces no longer report a failed request as "there is nothing here":** a project's
+  Members tab, the Ask conversation rail and its project filter, and the Mock Data tab. Each now
+  distinguishes loading, empty and failed, with a retry.
+- **Generating a checklist from the module list's row menu reports what happened.** It previously
+  succeeded or failed in silence, and was not gated on the generate permission — so a user without
+  it saw an enabled action whose refusal went nowhere.
+
+### Changed
+
+- **Success toasts use one voice.** Eleven that interpolated a name (`"askrepo deleted"`,
+  `"Password reset for ada@example.com"`) now read as bare phrases (`"Project deleted"`,
+  `"Password reset"`), matching the other nineteen.
+- **The audit table's columns follow the documented list order** — identity, status, then
+  timestamps — so it reads the same way as `/settings/users` and `/settings/roles`.
+
 ## [2.0.0] — 2026-09-16
 
 Per-project role-based access control (`docs/PRD.md` §2.1, phase 2.1). Projects are no longer

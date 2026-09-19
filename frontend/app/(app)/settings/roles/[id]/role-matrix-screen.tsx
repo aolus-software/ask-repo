@@ -87,7 +87,7 @@ export function RoleMatrixScreen({ id }: { id: string }) {
     event.preventDefault();
     mutation.mutate([...selected], {
       onSuccess: () => {
-        toast.success(`Permissions saved for ${role.name}`);
+        toast.success("Permissions saved");
         router.push("/settings/roles");
       },
     });

@@ -350,7 +350,7 @@ See [`CONTRIBUTING.md`](CONTRIBUTING.md). Bug reports and feature requests go th
 - [`docs/rag.md`](docs/rag.md) — clone → chunk → embed → retrieve → cite, end to end
 - [`docs/llm.md`](docs/llm.md) — providers, structured output, retries, and cost bounds
 - [`docs/langgraph.md`](docs/langgraph.md) — the answer graph and the streaming contract
-- [`docs/data.md`](docs/data.md) — the 13 tables, leases, soft delete, and what each store holds
+- [`docs/data.md`](docs/data.md) — the 17 tables, leases, soft delete, and what each store holds
 - [`docs/installation.md`](docs/installation.md) — step-by-step local setup, all three paths, and troubleshooting
 - [`docs/deployment.md`](docs/deployment.md) — running it for a team: production images, TLS, secrets, backups
 - [`docs/configuration.md`](docs/configuration.md) — every setting, what it does, and what to change before production
@@ -358,4 +358,4 @@ See [`CONTRIBUTING.md`](CONTRIBUTING.md). Bug reports and feature requests go th
 - [`backend/README.md`](backend/README.md) — API setup, routes, configuration
 - [`frontend/README.md`](frontend/README.md) — UI setup and scripts
 - [`CLAUDE.md`](CLAUDE.md) — architecture notes and the conventions that bite, for AI agents and humans alike
-- [`.claude/rules/`](.claude/rules) — twelve enforceable conventions (Python, persistence, API contract, ingestion, RAG, design system, forms, navigation)
+- [`.claude/rules/`](.claude/rules) — fourteen enforceable conventions (Python, persistence, API contract, ingestion, RAG, design system, forms, navigation)

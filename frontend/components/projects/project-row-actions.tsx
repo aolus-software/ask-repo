@@ -137,7 +137,7 @@ export function ProjectRowActions({
         onConfirm={() =>
           remove.mutate(undefined, {
             onSuccess: () => {
-              toast.success(`${project.name} deleted`);
+              toast.success("Project deleted");
               setConfirmingDelete(false);
             },
             onError: (error) => {

@@ -22,6 +22,7 @@ import { RefinementDrawer } from "@/components/checklist/refinement-drawer";
 import { StalenessBadge } from "@/components/checklist/staleness-badge";
 import { DetailError } from "@/components/feedback/detail-error";
 import { JobFailureAlert } from "@/components/feedback/job-failure-alert";
+import { ListError } from "@/components/feedback/list-error";
 import { NotFound } from "@/components/feedback/not-found";
 import { PageHeader } from "@/components/layout/page-header";
 import { GenerateMockDataControl } from "@/components/mock-data/generate-control";
@@ -404,11 +405,27 @@ export function ModuleScreen({ moduleId }: { moduleId: string }) {
             />
           ) : null}
 
-          <RecordsTable
-            moduleId={moduleId}
-            records={mockData.data?.records ?? []}
-            canEdit={canEditMockData}
-          />
+          {/* The dataset is its own request, fetched from inside an already-rendered
+              tab, so the screen-level gate above does not cover it. Without these two
+              branches `RecordsTable` renders "No mock data yet -- generate a batch"
+              while the fetch is still in flight, and keeps that invitation up
+              permanently if it fails -- over a dataset that already exists
+              (`docs/ui-audit-findings.md` §U7.6). */}
+          {mockData.isLoading ? (
+            <div className="space-y-2">
+              {Array.from({ length: 5 }, (_, index) => (
+                <Skeleton key={index} className="h-12 w-full" />
+              ))}
+            </div>
+          ) : mockData.isError ? (
+            <ListError error={mockData.error} onRetry={() => mockData.refetch()} />
+          ) : (
+            <RecordsTable
+              moduleId={moduleId}
+              records={mockData.data?.records ?? []}
+              canEdit={canEditMockData}
+            />
+          )}
         </TabsContent>
       </Tabs>
     </div>

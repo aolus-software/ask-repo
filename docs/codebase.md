@@ -102,7 +102,8 @@ def require_permission(user, project_id, permission) -> None:
 
 That discipline is what made per-project RBAC a change to one function's body rather than a
 rewrite: phase 2.1 replaced the `return ProjectScope.all()` that shipped in phase 1, added
-`require_permission` beside it, and touched none of the 15 call sites.
+`require_permission` beside it, and touched none of the 15 call sites it had at the time
+(there are 20 today).
 
 `ProjectScope` is an explicit dataclass rather than `list[UUID] | None`, because a `None`
 sentinel meaning "unrestricted" is fail-open — a bug that forgets to set it hands out
@@ -276,7 +277,7 @@ Run everything CI runs with `make check`: ruff, prettier, mypy, pytest, vitest.
 
 ## The rule files
 
-`.claude/rules/` holds 13 rule files that encode conventions this page only summarises —
+`.claude/rules/` holds 14 rule files that encode conventions this page only summarises —
 `router.md`, `persistence.md`, `response-api.md`, `rag.md`, `ingestion.md`, `design-system.md`,
 `forms.md`, `navigation.md`, `frontend-bff.md`, and others. They are written for coding agents
 but are the most precise statement of each convention, and worth reading before a change in the

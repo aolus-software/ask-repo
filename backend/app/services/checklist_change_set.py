@@ -292,6 +292,12 @@ class ChecklistChangeSetService:
 
         if operation.op == "remove":
             await self.items.soft_delete(item)
+            # TimestampMixin.updated_at has onupdate=func.now(), so SQLAlchemy updates
+            # it on the row. But the Python object doesn't populate the attribute until
+            # refresh, and `ChecklistItemResponse` requires it -- so serialising this
+            # returned item would lazy-load on a closed greenlet and 500 an apply that
+            # has already committed. Set it explicitly, as `mock_data_change_set` does.
+            item.updated_at = datetime.now(UTC)
             return item
 
         for key, value in (operation.changes or {}).items():

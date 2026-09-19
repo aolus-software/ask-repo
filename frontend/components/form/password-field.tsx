@@ -89,9 +89,9 @@ export function PasswordField({
               )}
             >
               {check.passed ? (
-                <Check className="size-3.5 shrink-0" />
+                <Check className="size-4 shrink-0" />
               ) : (
-                <X className="size-3.5 shrink-0" />
+                <X className="size-4 shrink-0" />
               )}
               {check.label}
             </li>

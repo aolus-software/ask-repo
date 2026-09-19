@@ -19,7 +19,13 @@ import { auditEventLabel } from "@/lib/audit";
 import type { AuditEventSummary } from "@/lib/api/types";
 import { formatAbsolute, formatRelative } from "@/lib/dates";
 
-/** Column order: time, event, actor, target, outcome, changed fields, actions. */
+/** Column order: event, outcome, actor, target, changed fields, time, actions.
+ *
+ * Identity first, status second, timestamps last, actions right-aligned -- the same
+ * order `/settings/users` and `/settings/roles` read in (`docs/design.md` -> Lists).
+ * Time led here until `docs/ui-audit-findings.md` §U3.4; a trail is chronological, but
+ * that is what the default sort expresses, not what the column order has to.
+ */
 export function AuditTable({
   events,
   isLoading,
@@ -36,12 +42,12 @@ export function AuditTable({
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead>Time</TableHead>
             <TableHead>Event</TableHead>
+            <TableHead>Outcome</TableHead>
             <TableHead>Actor</TableHead>
             <TableHead>Target</TableHead>
-            <TableHead>Outcome</TableHead>
             <TableHead>Changed</TableHead>
+            <TableHead>Time</TableHead>
             <TableHead className="text-right">Actions</TableHead>
           </TableRow>
         </TableHeader>
@@ -51,15 +57,6 @@ export function AuditTable({
           ) : (
             events.map((event) => (
               <TableRow key={event.id}>
-                <TableCell className="text-muted-foreground text-sm">
-                  <Link
-                    href={`/settings/audit/${event.id}`}
-                    className="hover:text-primary"
-                    title={formatAbsolute(event.createdAt)}
-                  >
-                    {formatRelative(event.createdAt)}
-                  </Link>
-                </TableCell>
                 <TableCell>
                   <Link href={`/settings/audit/${event.id}`}>
                     <StatusBadge
@@ -67,6 +64,12 @@ export function AuditTable({
                       label={auditEventLabel(event.eventType)}
                     />
                   </Link>
+                </TableCell>
+                <TableCell>
+                  <StatusBadge
+                    tone={event.outcome === "failure" ? "danger" : "success"}
+                    label={event.outcome === "failure" ? "Failure" : "Success"}
+                  />
                 </TableCell>
                 <TableCell className="text-sm">
                   {event.actorEmail ?? (
@@ -81,16 +84,19 @@ export function AuditTable({
                 <TableCell className="text-sm">
                   {event.targetLabel ?? event.targetType ?? "—"}
                 </TableCell>
-                <TableCell>
-                  <StatusBadge
-                    tone={event.outcome === "failure" ? "danger" : "success"}
-                    label={event.outcome === "failure" ? "Failure" : "Success"}
-                  />
-                </TableCell>
                 <TableCell className="text-muted-foreground text-sm">
                   {event.changedFields.length > 0
                     ? event.changedFields.join(", ")
                     : "—"}
+                </TableCell>
+                <TableCell className="text-muted-foreground text-sm">
+                  <Link
+                    href={`/settings/audit/${event.id}`}
+                    className="hover:text-primary"
+                    title={formatAbsolute(event.createdAt)}
+                  >
+                    {formatRelative(event.createdAt)}
+                  </Link>
                 </TableCell>
                 <TableCell className="text-right">
                   <Button

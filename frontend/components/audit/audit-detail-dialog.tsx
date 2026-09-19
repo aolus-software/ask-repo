@@ -7,6 +7,7 @@ import {
 import { DetailError } from "@/components/feedback/detail-error";
 import { StatusBadge } from "@/components/feedback/status-badge";
 import { SIZES } from "@/components/form/form-dialog";
+import { Card } from "@/components/ui/card";
 import {
   Dialog,
   DialogContent,
@@ -76,9 +77,12 @@ export function AuditDetailDialog({
           ) : event ? (
             <div className="space-y-6">
               <AuditEventFacts event={event} />
-              <div className="border-info/40 bg-info/5 rounded-xl border p-4">
+              {/* The real `Card`, not a Card-shaped div: a hand-copied radius and
+                  border stop tracking the token the moment `Card` is restyled
+                  (`docs/ui-audit-findings.md` §U2.4). */}
+              <Card className="border-info/40 bg-info/5 p-6">
                 <AuditEventCurrent event={event} />
-              </div>
+              </Card>
             </div>
           ) : null}
         </div>

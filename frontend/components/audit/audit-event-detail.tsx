@@ -61,7 +61,13 @@ export function AuditEventFacts({ event }: { event: AuditEventResponse }) {
           )}
         </Field>
         <Field label="Project">
-          {event.projectId ?? <span className="text-muted-foreground">—</span>}
+          {/* An identifier, so mono: an operator reads this to match it against another
+              system, and the body face does not separate 0 from O or 1 from l. */}
+          {event.projectId ? (
+            <span className="font-mono">{event.projectId}</span>
+          ) : (
+            <span className="text-muted-foreground">—</span>
+          )}
         </Field>
         <Field label="Outcome">
           {event.outcome === "failure" ? "Failure" : "Success"}

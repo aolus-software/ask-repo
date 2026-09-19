@@ -84,7 +84,16 @@ catalogue entry cannot exist unwritten, and a write site cannot invent a name.
 ## Never the secret, and never the content
 
 Two separate bans, from `docs/PRD.md` §9 and §2.5. An audit trail is by definition something an
-operator reads, so it is a destination on the `scrub` path, not an exception to it.
+operator reads, so it is subject to the same obligation as a log line or an error message.
+
+**What enforces that here is the allowlist, not `scrub`.** There is deliberately no `scrub` call in
+`app/core/audit.py` or in any recording service, and adding one would be defence at the wrong
+layer: `scrub` needs the secret in hand to replace it, and the recorder is handed plain scalars a
+service chose, never the clone URL or the token. A value can only reach `details` by being named in
+`CHANGED_FIELDS` or `CONTEXT_KEYS`, and `AuditEntry.details()` raises `ValueError` on a key that is
+not — so an accidental reintroduction fails loudly at the write rather than quietly in the row. The
+scrubbing that matters for secrets happens where the secret exists, on the clone path
+(`app/ingestion/cloner.py`, `pipeline.py`), before anything derived from it is passed along.
 
 **Never the secret.** No passwords, no tokens, no PATs, no clone URL with credentials embedded. A
 `repo_url` is stored **host-only**.
@@ -128,8 +137,8 @@ depend on when FastAPI closes the request's `AsyncExitStack`. On any `Exception`
 event at `WARNING` and returns.
 
 **It never raises.** That is what makes "an audit failure cannot fail a user's action" structural
-rather than a promise each of the ~37 call sites keeps. A login must not fail because a log write
-did.
+rather than a promise each of the 39 call sites keeps (38 in services, plus the `seed-admins`
+CLI). A login must not fail because a log write did.
 
 **The accepted consequence, and it is not to be quietly reframed as a guarantee:** an action that
 commits and then crashes before its audit write leaves no row, silently. The trail is a strong
@@ -183,7 +192,8 @@ and not only in the schema.
   `unknownAccount`, `source`, `format`, counts.
 - Keys are `camelCase` **as stored**, so `ApiModel` has nothing to translate on the way out and
   the stored bytes match the wire.
-- `details` is capped at 8 KB, and everything entering it passes `scrub`.
+- `details` is capped at 8 KB. Nothing entering it is scrubbed, and nothing needs to be: the
+  allowlist above is what bounds it, and a key nobody named cannot be written at all.
 
 An event whose whole meaning is its name carries no `changed` block at all —
 `auth.password.changed` and `user.password.reset` are the examples, and they have to be: both

@@ -74,7 +74,7 @@ export function RoleRowActions({ role }: { role: RoleResponse }) {
           onConfirm={() =>
             remove.mutate(undefined, {
               onSuccess: () => {
-                toast.success(`${role.name} deleted`);
+                toast.success("Role deleted");
                 setDeleting(false);
               },
             })

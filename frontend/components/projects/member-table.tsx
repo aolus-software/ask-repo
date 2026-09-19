@@ -1,10 +1,12 @@
 "use client";
 
-import { UserMinus } from "lucide-react";
+import { UserMinus, Users } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 
 import { ConfirmDialog } from "@/components/form/confirm-dialog";
+import { EmptyState } from "@/components/feedback/empty-state";
+import { ListError } from "@/components/feedback/list-error";
 import { TableSkeleton } from "@/components/feedback/table-skeleton";
 import { Button } from "@/components/ui/button";
 import {
@@ -67,7 +69,7 @@ function RoleCell({
           mutation.mutate(
             { role: value },
             {
-              onSuccess: () => toast.success(`${member.name}'s role is now ${value}`),
+              onSuccess: () => toast.success("Role changed"),
               onError: (error) => {
                 if (isApiError(error) && error.code === "LAST_OWNER") return;
                 toast.error(
@@ -91,7 +93,7 @@ function RoleCell({
         </SelectContent>
       </Select>
       {isLastOwner ? (
-        <p className="text-destructive text-xs">{mutation.error?.message}</p>
+        <p className="text-danger text-xs">{mutation.error?.message}</p>
       ) : null}
     </div>
   );
@@ -131,7 +133,7 @@ function RevokeAction({
         onConfirm={() =>
           mutation.mutate(undefined, {
             onSuccess: () => {
-              toast.success(`${member.name}'s access revoked`);
+              toast.success("Access revoked");
               setConfirming(false);
             },
           })
@@ -154,6 +156,25 @@ export function MemberTable({
   const canRevoke = can({ permissions }, PERMISSION.MEMBERSHIP_REVOKE);
   const members = query.data ?? [];
   const columns = canRevoke ? 5 : 4;
+
+  // A failed request and an empty result are different facts, and this table is where
+  // collapsing them is worst: every project keeps at least one owner, so "no rows" can
+  // only mean the request failed -- yet it reads as "access was revoked from everyone"
+  // to the person who opened this tab to check exactly that
+  // (`docs/ui-audit-findings.md` §U7.4).
+  if (query.isError) {
+    return <ListError error={query.error} onRetry={() => query.refetch()} />;
+  }
+
+  if (!query.isLoading && members.length === 0) {
+    return (
+      <EmptyState
+        icon={Users}
+        title="No members"
+        description="Nobody holds a membership on this project yet."
+      />
+    );
+  }
 
   return (
     <Table>

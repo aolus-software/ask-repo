@@ -26,7 +26,11 @@ radius in a component is a bug.
 - Wrong: `className="bg-[#615fff] rounded-[10px]"`
 - Right: `className="bg-primary rounded-md"`
 
-**`frontend/app/globals.css` is the only file permitted to contain a raw hex colour.**
+**`frontend/app/globals.css` is the only file permitted to contain a raw hex colour**, with one
+exception that cannot be otherwise: `frontend/app/manifest.ts`'s `theme_color` and
+`background_color`. The browser reads those to paint its own chrome before any stylesheet loads,
+so they cannot be tokens. They are kept as literal mirrors of `--primary` and `--background`, and
+the file says so — change one and you change both.
 
 Palette utilities count as raw values too. `bg-zinc-50`, `text-slate-600`, and `border-gray-200`
 name a colour rather than a role, so they do not change with the theme:

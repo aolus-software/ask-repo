@@ -127,7 +127,8 @@ for a non-member and `403 INSUFFICIENT_ROLE` for a member whose role is too low 
 
 This is the rule with the longest consequence, and phase 2.1 is the proof it paid for itself:
 per-project RBAC landed as a change to `resolve_project_scope`'s body plus `require_permission`
-beside it, with **zero diff at its 15 call sites**. `docs/PRD.md` §2 and §5.1 require that
+beside it, with **zero diff at the 15 call sites it had when phase 2.1 landed** (20 today --
+the figure is a record of that change, not a running count). `docs/PRD.md` §2 and §5.1 require that
 **read scoping happen in exactly one function**, and
 `backend/tests/test_scoping_is_single_point.py` enforces it as a grep.
 

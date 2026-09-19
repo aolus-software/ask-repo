@@ -95,7 +95,7 @@ export function AuditChangeList({ changed }: { changed: Record<string, AuditChan
           </dt>
           <dd className="flex flex-wrap items-center gap-2 text-sm">
             <AuditValue value={before} />
-            <ArrowRight className="text-muted-foreground size-3.5 shrink-0" />
+            <ArrowRight className="text-muted-foreground size-4 shrink-0" />
             <AuditValue value={after} />
           </dd>
         </div>

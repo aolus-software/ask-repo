@@ -69,7 +69,7 @@ export function UserRowActions({ user }: { user: UserResponse }) {
         onConfirm={() =>
           deactivate.mutate(undefined, {
             onSuccess: () => {
-              toast.success(`${user.name} deactivated`);
+              toast.success("Account deactivated");
               setDeactivating(false);
             },
           })

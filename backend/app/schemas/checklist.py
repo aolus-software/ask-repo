@@ -140,7 +140,7 @@ class ChecklistItemCreateRequest(ApiModel):
 
 
 class ChecklistItemUpdateRequest(ApiModel):
-    """Edit what a test expects. Gated on `created_by`/`is_admin` (spec 2.5).
+    """Edit what a test expects. Gated on `item.edit` (spec 2.5).
 
     `current_result` and `status` are absent on purpose: they are the ungated write,
     and putting them here would let the gate on this route be bypassed by whoever

@@ -122,7 +122,7 @@ export function ProjectDetailScreen({ id }: { id: string }) {
           <TabsContent value="members" className="space-y-4">
             <div className="flex items-center justify-between gap-4">
               <div>
-                <h2 className="text-lg font-semibold tracking-tight">Members</h2>
+                <h2 className="text-xl font-semibold tracking-tight">Members</h2>
                 <p className="text-muted-foreground text-sm">
                   Who can reach this project, and as what.
                 </p>

@@ -27,7 +27,7 @@ export function CreateUserDialog({
     event.preventDefault();
     mutation.mutate(values, {
       onSuccess: () => {
-        toast.success(`Account created for ${values.email}`);
+        toast.success("Account created");
         setValues(EMPTY);
         onOpenChange(false);
       },

@@ -170,7 +170,7 @@ export function ChangeSetPanel({
           {counts.added} added, {counts.updated} changed, {counts.removed} removed
         </p>
       </CardHeader>
-      <CardContent className="space-y-6">
+      <CardContent className="space-y-4">
         {skippedCount !== null ? (
           <Alert>
             <AlertDescription>
@@ -269,7 +269,7 @@ export function ChangeSetPanel({
 
         {removed.length > 0 ? (
           <div>
-            <h3 className="text-destructive text-sm font-medium">Removed</h3>
+            <h3 className="text-danger text-sm font-medium">Removed</h3>
             <Separator className="mt-2" />
             <div className="divide-y">
               {removed.map((operation) => {

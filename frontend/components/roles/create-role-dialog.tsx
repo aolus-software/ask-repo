@@ -34,7 +34,7 @@ export function CreateRoleDialog({
       { name: values.name, description: values.description || undefined },
       {
         onSuccess: (role) => {
-          toast.success(`Role "${role.name}" created`);
+          toast.success("Role created");
           setValues(EMPTY);
           onOpenChange(false);
           router.push(`/settings/roles/${role.id}`);
