@@ -11,8 +11,14 @@ incompatibly. Configuration defaults and internal module layout may change in a 
 
 ## [Unreleased]
 
+## [2.1.0] — 2026-09-19
+
 Append-only audit trail (`docs/PRD.md` §2.1, phase 2.2): who did what, never the secret involved
-and never the content.
+and never the content. Alongside it, two fixes to controls that were quietly not doing their job
+— the per-caller login limit, which had become one bucket for the whole instance, and light
+mode, which had been rendering without elevation. **Nothing here breaks the wire contract**: one
+`ErrorCode` was added and none renamed or removed, no route path changed, and no JSON field was
+dropped.
 
 ### Added
 
@@ -530,7 +536,8 @@ None of these is a defect. Each is a documented, deliberate scope decision:
 
 ---
 
-[Unreleased]: https://github.com/aolus-software/ask-repo/compare/v2.0.0...HEAD
+[Unreleased]: https://github.com/aolus-software/ask-repo/compare/v2.1.0...HEAD
+[2.1.0]: https://github.com/aolus-software/ask-repo/compare/v2.0.0...v2.1.0
 [2.0.0]: https://github.com/aolus-software/ask-repo/compare/v1.1.0...v2.0.0
 [1.1.0]: https://github.com/aolus-software/ask-repo/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/aolus-software/ask-repo/releases/tag/v1.0.0
