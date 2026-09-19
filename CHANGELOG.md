@@ -11,6 +11,80 @@ incompatibly. Configuration defaults and internal module layout may change in a 
 
 ## [Unreleased]
 
+Append-only audit trail (`docs/PRD.md` §2.1, phase 2.2): who did what, never the secret involved
+and never the content.
+
+### Added
+
+- **Two read routes, both admin-only.** `GET /audit-events` returns a page of events newest
+  first, filterable by `eventType`, `actorUserId`, `projectId`, `outcome`, `occurredFrom` and
+  `occurredTo`; `GET /audit-events/{id}` returns one with its full `details` payload, its
+  `ipAddress`, and a `current` block saying whether the actor is still active and the target
+  still exists. There is deliberately **no route that writes one** — that is how append-only
+  shows up on the wire rather than only in the schema. New `ErrorCode`: `AUDIT_EVENT_NOT_FOUND`.
+- **One Postgres table, `audit_events`** (migration `9d97a74a24fa`). It is the only table in the
+  app carrying neither the timestamp mixin nor the soft-delete mixin, and both omissions are the
+  mechanism: with no `deleted_at` there is no soft-delete path to reach these rows through, and
+  `updated_at` has no business on a row that is never updated. Every write and every export in
+  the app now records one of **37 event types** — auth, accounts, projects, memberships and
+  roles, checklist modules and items (including the destructive bulk result-clear), change-set
+  applies and discards, mock data, and the two exports. The `details` payload is an allowlist per
+  event type rather than a diff of changed columns, so a new column is invisible to the trail
+  until somebody names it.
+- **Conversation creation and deletion are audited as metadata — a user-visible change to what an
+  administrator can see.** `conversation.created` and `conversation.deleted` record the actor,
+  the project and the time. An administrator can therefore see that a colleague opened or deleted
+  a conversation against a given project, and when. **They still cannot see its title or any
+  message:** `targetLabel` is `NULL` for a conversation, the ask route is not audited at all, and
+  no administrator bypass was added anywhere under `/conversations` — every miss there is still
+  `404`. This is a deliberate, narrow amendment to the previously unqualified privacy statement
+  in `docs/PRD.md` §4.2, made and recorded in the same change.
+- **`AUDIT_RETENTION_DAYS`** (default `0`, meaning keep forever). A positive value is a window the
+  worker's existing 60-second reconcile tick enforces by hard-deleting rows older than it. The
+  single delete path takes a cutoff and nothing else — no actor filter, no event-type filter — so
+  an operator sets a window and nobody erases a row.
+- **Two admin screens**, `/settings/audit` (the filterable event list) and
+  `/settings/audit/[eventId]` (one event, its before/after change list and its live `current`
+  block).
+
+- **Read an audit event without leaving the list.** Each row on `/settings/audit` gains a **View**
+  action that opens the event in a dialog, keeping the filters and the scroll position.
+  `/settings/audit/[eventId]` remains, and remains the linkable one — a dialog has no URL to put in
+  a ticket.
+
+### Fixed
+
+- **A To date of today now finds today's events.** `<input type="date">` submits a bare calendar
+  day, which parsed to midnight, so `occurredTo=<today>` excluded everything actually recorded that
+  day — the obvious From=today/To=today search returned an empty page. A value with no time
+  component is now treated as the whole day. The remaining UTC-versus-local-day edge is documented
+  rather than papered over: fixing it needs the operator's timezone, which the endpoint is not
+  given.
+- **A bulk-operation filter no longer renders as `[object Object]`** on the event detail screen —
+  which is precisely the row an operator opens after a bulk result-clear erased recorded
+  observations.
+- **The audit filter row is usable.** All four controls and both date pickers were rendering
+  clipped to a few characters ("All e", "dd/"), because the filter row declared a grid of its own
+  inside a single cell of the toolbar's grid. Each control now gets its own cell, and the two
+  selects became searchable comboboxes — 37 event types is past the point where a menu that does
+  not narrow is usable.
+- **Applying a proposed removal to a QA checklist no longer fails with a server error.** The apply
+  had already committed, so the item really was deleted while the response reported failure.
+- **Four surfaces no longer report a failed request as "there is nothing here":** a project's
+  Members tab, the Ask conversation rail and its project filter, and the Mock Data tab. Each now
+  distinguishes loading, empty and failed, with a retry.
+- **Generating a checklist from the module list's row menu reports what happened.** It previously
+  succeeded or failed in silence, and was not gated on the generate permission — so a user without
+  it saw an enabled action whose refusal went nowhere.
+
+### Changed
+
+- **Success toasts use one voice.** Eleven that interpolated a name (`"askrepo deleted"`,
+  `"Password reset for ada@example.com"`) now read as bare phrases (`"Project deleted"`,
+  `"Password reset"`), matching the other nineteen.
+- **The audit table's columns follow the documented list order** — identity, status, then
+  timestamps — so it reads the same way as `/settings/users` and `/settings/roles`.
+
 ## [2.0.0] — 2026-09-16
 
 Per-project role-based access control (`docs/PRD.md` §2.1, phase 2.1). Projects are no longer

@@ -7,8 +7,10 @@ from fastapi import status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import Settings
+from app.core.audit import AuditRecorder
 from app.core.errors import AppError, ErrorCode
 from app.core.permissions import EDITOR_NAME, VIEWER_NAME
+from app.db.session import get_sessionmaker
 from app.models.checklist import (
     ChangeSetStatus,
     ChecklistItemKind,
@@ -55,7 +57,9 @@ async def test_apply_adds_items_marked_generated(
     )
     reviewer = await create_user(db_session)
     await grant_membership(reviewer.id, module.project_id, EDITOR_NAME)
-    service = ChecklistChangeSetService(db_session, Settings())
+    service = ChecklistChangeSetService(
+        db_session, Settings(), recorder=AuditRecorder(get_sessionmaker())
+    )
 
     result = await service.apply(
         change_set.id, ChangeSetApplyRequest(), actor=await authenticated(db_session, reviewer)
@@ -81,7 +85,9 @@ async def test_apply_is_selective_when_operation_ids_are_given(
         module_id=module.id,
         operations=[_add(keep, test_name="kept"), _add(drop, test_name="dropped")],
     )
-    service = ChecklistChangeSetService(db_session, Settings())
+    service = ChecklistChangeSetService(
+        db_session, Settings(), recorder=AuditRecorder(get_sessionmaker())
+    )
     reviewer = await create_user(db_session)
     await grant_membership(reviewer.id, module.project_id, EDITOR_NAME)
 
@@ -121,7 +127,9 @@ async def test_an_update_preserves_a_recorded_result(
             }
         ],
     )
-    service = ChecklistChangeSetService(db_session, Settings())
+    service = ChecklistChangeSetService(
+        db_session, Settings(), recorder=AuditRecorder(get_sessionmaker())
+    )
     reviewer = await create_user(db_session)
     await grant_membership(reviewer.id, module.project_id, EDITOR_NAME)
 
@@ -133,6 +141,58 @@ async def test_an_update_preserves_a_recorded_result(
     assert updated.expected_result == "401 INVALID_CREDENTIALS"
     assert updated.current_result == "Observed 400"
     assert updated.status is ChecklistItemStatus.FAIL
+
+
+async def test_remove_operation_soft_deletes_an_item_and_returns_it(
+    db_session: AsyncSession, grant_membership: GrantMembership
+) -> None:
+    """The successful-remove path, which nothing exercised before.
+
+    Both existing `remove` tests name an item id that does not resolve, so
+    `_apply_one` returns `None` before it ever reaches the line that hands the
+    removed item back for serialisation. That left a real defect invisible:
+    `ChecklistItemResponse` requires `updated_at`, and soft delete sets it through a
+    server-side `onupdate`, so the attribute is unpopulated on the Python object and
+    validating the response lazy-loads on a closed greenlet -- a 500 on an apply that
+    has already committed. `mock_data_change_set` had the same shape, fixed it, and
+    had the test that proves it; this is that test's counterpart.
+    """
+    module = await create_checklist_module(db_session)
+    item = await create_checklist_item(db_session, module_id=module.id, test_name="Doomed")
+    await db_session.commit()
+    removal = uuid.uuid4()
+    change_set = await create_checklist_change_set(
+        db_session,
+        module_id=module.id,
+        operations=[
+            {
+                "op": "remove",
+                "id": str(removal),
+                "itemId": str(item.id),
+                "rationale": "Superseded by the new login flow.",
+            }
+        ],
+    )
+    service = ChecklistChangeSetService(
+        db_session, Settings(), recorder=AuditRecorder(get_sessionmaker())
+    )
+    reviewer = await create_user(db_session)
+    await grant_membership(reviewer.id, module.project_id, EDITOR_NAME)
+
+    result = await service.apply(
+        change_set.id, ChangeSetApplyRequest(), actor=await authenticated(db_session, reviewer)
+    )
+
+    assert result.skipped_operation_ids == []
+    assert len(result.items) == 1
+    # Reading these two off the response is the point: both are what a lazy-load on a
+    # closed greenlet would have raised on instead of returning.
+    assert result.items[0].id == item.id
+    assert result.items[0].updated_at is not None
+    assert result.change_set.status is ChangeSetStatus.APPLIED
+
+    remaining = await ChecklistItemRepository(db_session).list_for_module(module_id=module.id)
+    assert [row.id for row in remaining] == []
 
 
 async def test_an_operation_naming_a_vanished_item_is_skipped_not_failed(
@@ -156,7 +216,9 @@ async def test_an_operation_naming_a_vanished_item_is_skipped_not_failed(
             _add(good_operation),
         ],
     )
-    service = ChecklistChangeSetService(db_session, Settings())
+    service = ChecklistChangeSetService(
+        db_session, Settings(), recorder=AuditRecorder(get_sessionmaker())
+    )
     reviewer = await create_user(db_session)
     await grant_membership(reviewer.id, module.project_id, EDITOR_NAME)
 
@@ -197,7 +259,9 @@ async def test_an_operation_with_an_unparseable_item_id_is_skipped_not_failed(
             _add(good_operation),
         ],
     )
-    service = ChecklistChangeSetService(db_session, Settings())
+    service = ChecklistChangeSetService(
+        db_session, Settings(), recorder=AuditRecorder(get_sessionmaker())
+    )
     reviewer = await create_user(db_session)
     await grant_membership(reviewer.id, module.project_id, EDITOR_NAME)
 
@@ -217,7 +281,9 @@ async def test_applying_an_already_resolved_set_is_409(
     change_set = await create_checklist_change_set(
         db_session, module_id=module.id, status=ChangeSetStatus.APPLIED
     )
-    service = ChecklistChangeSetService(db_session, Settings())
+    service = ChecklistChangeSetService(
+        db_session, Settings(), recorder=AuditRecorder(get_sessionmaker())
+    )
     reviewer = await create_user(db_session)
     await grant_membership(reviewer.id, module.project_id, EDITOR_NAME)
 
@@ -244,7 +310,9 @@ async def test_any_member_may_apply_because_reviewing_is_a_shared_act(
     )
     colleague = await create_user(db_session)
     await grant_membership(colleague.id, module.project_id, EDITOR_NAME)
-    service = ChecklistChangeSetService(db_session, Settings())
+    service = ChecklistChangeSetService(
+        db_session, Settings(), recorder=AuditRecorder(get_sessionmaker())
+    )
 
     result = await service.apply(
         change_set.id, ChangeSetApplyRequest(), actor=await authenticated(db_session, colleague)
@@ -264,7 +332,9 @@ async def test_apply_is_refused_for_a_viewer(
     )
     viewer = await create_user(db_session)
     await grant_membership(viewer.id, module.project_id, VIEWER_NAME)
-    service = ChecklistChangeSetService(db_session, Settings())
+    service = ChecklistChangeSetService(
+        db_session, Settings(), recorder=AuditRecorder(get_sessionmaker())
+    )
 
     with pytest.raises(AppError) as caught:
         await service.apply(
@@ -284,7 +354,9 @@ async def test_discard_is_refused_for_a_viewer(
     )
     viewer = await create_user(db_session)
     await grant_membership(viewer.id, module.project_id, VIEWER_NAME)
-    service = ChecklistChangeSetService(db_session, Settings())
+    service = ChecklistChangeSetService(
+        db_session, Settings(), recorder=AuditRecorder(get_sessionmaker())
+    )
 
     with pytest.raises(AppError) as caught:
         await service.discard(change_set.id, actor=await authenticated(db_session, viewer))
@@ -300,7 +372,9 @@ async def test_discard_writes_nothing_and_frees_the_module(
     change_set = await create_checklist_change_set(
         db_session, module_id=module.id, operations=[_add(uuid.uuid4())]
     )
-    service = ChecklistChangeSetService(db_session, Settings())
+    service = ChecklistChangeSetService(
+        db_session, Settings(), recorder=AuditRecorder(get_sessionmaker())
+    )
     reviewer = await create_user(db_session)
     await grant_membership(reviewer.id, module.project_id, EDITOR_NAME)
 
@@ -319,7 +393,9 @@ async def test_applying_moves_the_module_to_ready(
     change_set = await create_checklist_change_set(
         db_session, module_id=module.id, operations=[_add(uuid.uuid4())]
     )
-    service = ChecklistChangeSetService(db_session, Settings())
+    service = ChecklistChangeSetService(
+        db_session, Settings(), recorder=AuditRecorder(get_sessionmaker())
+    )
     reviewer = await create_user(db_session)
     await grant_membership(reviewer.id, module.project_id, EDITOR_NAME)
 
@@ -366,7 +442,9 @@ async def test_update_rejects_forbidden_fields_in_the_allowlist(
             }
         ],
     )
-    service = ChecklistChangeSetService(db_session, Settings())
+    service = ChecklistChangeSetService(
+        db_session, Settings(), recorder=AuditRecorder(get_sessionmaker())
+    )
     reviewer = await create_user(db_session)
     await grant_membership(reviewer.id, module.project_id, EDITOR_NAME)
 
@@ -412,7 +490,9 @@ async def test_an_operation_on_an_item_from_another_module_is_skipped(
             _add(good_operation),
         ],
     )
-    service = ChecklistChangeSetService(db_session, Settings())
+    service = ChecklistChangeSetService(
+        db_session, Settings(), recorder=AuditRecorder(get_sessionmaker())
+    )
     reviewer = await create_user(db_session)
     await grant_membership(reviewer.id, target_module.project_id, EDITOR_NAME)
 
@@ -457,7 +537,9 @@ async def test_apply_ignores_an_unrecognised_kind_in_an_update(
             }
         ],
     )
-    service = ChecklistChangeSetService(db_session, Settings())
+    service = ChecklistChangeSetService(
+        db_session, Settings(), recorder=AuditRecorder(get_sessionmaker())
+    )
     reviewer = await create_user(db_session)
     await grant_membership(reviewer.id, module.project_id, EDITOR_NAME)
 

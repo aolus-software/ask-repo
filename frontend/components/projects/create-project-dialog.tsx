@@ -42,10 +42,10 @@ export function CreateProjectDialog({
         pat: values.pat || undefined,
       },
       {
-        onSuccess: (project) => {
+        onSuccess: () => {
           // Closes on 201. The clone and index then run for minutes and progress
           // shows on the row — never hold a dialog open on a job (forms.md §10).
-          toast.success(`${project.name} queued for indexing`);
+          toast.success("Project queued for indexing");
           setValues(EMPTY);
           onOpenChange(false);
         },

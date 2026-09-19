@@ -11,7 +11,7 @@ Read [`architecture.md`](architecture.md) first for why there are four.
 
 | Store | Holds | Survives a restart? |
 | --- | --- | --- |
-| **Postgres** | 16 tables — every row the app owns | Yes, and it is the only thing you must back up besides the PAT key |
+| **Postgres** | 17 tables — every row the app owns | Yes, and it is the only thing you must back up besides the PAT key |
 | **Qdrant** | Code chunks as vectors, **with the chunk text in the payload** | Yes, but it is rebuildable by re-indexing |
 | **Redis** | Login rate-limit counters, and the per-user grant cache | No, and that is fine — a lost lockout resets, and a lost grant snapshot is re-read from Postgres |
 | **Kafka** | Job messages on 12 topics | Yes, but the reconcile sweep recovers anything lost |
@@ -28,8 +28,16 @@ copy is deleted after indexing, so there is no file to re-read at query time.
 
 ## The Postgres tables
 
-Sixteen tables in six groups. Every one of them except `refresh_tokens` and `messages` carries
-`created_at`, `updated_at` and `deleted_at`.
+Seventeen tables in seven groups. Every one of them except `refresh_tokens`, `messages` and
+`audit_events` carries `created_at`, `updated_at` and `deleted_at`.
+
+`audit_events` is the sharp exception, and **its omissions are the append-only mechanism rather
+than an oversight**. It carries `created_at` and neither of the other two. No `deleted_at`, so
+there is no soft-delete path to reach these rows through at all — `BaseRepository.active_select()`
+filters only when the model carries `SoftDeleteMixin`, so append-only stops being a convention
+every future repository method has to respect and becomes a property of the model. No
+`updated_at`, because a column recording a mutation has no business on a row that is never
+mutated. See [Audit](#audit).
 
 ```mermaid
 erDiagram
@@ -50,6 +58,8 @@ erDiagram
     checklist_modules ||--o{ mock_data_records : ""
     checklist_modules ||--o{ mock_data_change_sets : ""
     checklist_modules ||--o{ mock_data_messages : ""
+    users ||--o{ audit_events : "acted (nullable)"
+    projects ||--o{ audit_events : "scoped to (nullable)"
 ```
 
 ### Accounts
@@ -149,13 +159,76 @@ the checklist's four exactly, keyed by `checklist_module_id`. They are deliberat
 tables with their own status and lease**, so a mock-data generation failing does not mark the
 checklist failed, and one lease does not block the other.
 
+### Audit
+
+`audit_events` is one row per thing somebody did. It is the only table outside both mixins, for
+the reason stated above — that is what makes it append-only.
+
+| Column | Holds |
+| --- | --- |
+| `event_type`, `outcome` | The catalogue name (`project.deleted`, `auth.login.failed`, …) and `success` / `failure` |
+| `actor_user_id`, `actor_email` | Who. **`NULL` means no authenticated actor** — a failed login against an address that matches no live user, or the `seed-admins` CLI. `actor_email` is a snapshot, not a join: `users.email` is unique only where not deleted, so resolving at read time would eventually attribute an old event to a new person |
+| `target_type`, `target_id`, `target_label` | What it was done to. `target_id` is deliberately **not** a foreign key — the row it points at may be gone, and an FK would either block the delete or cascade away the record of it. `target_label` is the core of the feature: a deleted project takes its name with it, so "who deleted it" is only answerable if this row already holds *what* was deleted |
+| `project_id` | Which project it happened under, where one applies |
+| `ip_address` | The caller's address, which is what still shows a brute-force pattern when the actor is `NULL` |
+| `details` | The JSONB payload, capped at 8 KB |
+
+Four non-partial indexes — `created_at`, `actor_user_id`, `event_type`, `project_id`. None of
+them is partial because there is no `deleted_at` to filter, which is the one place this table
+diverges from every other group above.
+
+**The catalogue is a `StrEnum` in `app/core/audit.py`, not a table** — 37 event types across auth,
+accounts, projects, RBAC, checklist modules and items, change sets, mock data, exports and
+conversations. Existence lives in code for the reason `app/core/permissions.py` gives for the
+permission catalogue: if it lived in a table, deleting a row would orphan every write site that
+names it. Which operations must record one is a rule rather than a list —
+`.claude/rules/audit-trail.md`, enforced in both directions by
+`backend/tests/test_audit_coverage.py`.
+
+**Two things are never stored here**: the secret (no passwords, tokens or PATs — a `repo_url` is
+reduced to its host by `urlsplit().hostname`, which excludes the userinfo a PAT rides in) and the
+content (no prompt, no message, no source excerpt, and **`target_label` is `NULL` for a
+conversation**, because its title derives from the user's first question).
+
+**`details` is one envelope** for all 37 events:
+
+```json
+{
+  "changed": { "name": { "before": "billing-api", "after": null } },
+  "patSupplied": true
+}
+```
+
+`changed` holds only fields that actually changed — a create writes `"before": null` throughout, a
+delete writes `"after": null` — and **which fields may appear is an allowlist per event type**,
+never a diff of the model's dirty attributes. A generic differ would start writing `password_hash`
+and `encrypted_pat` the moment somebody adds a column; with the allowlist, a new column is
+invisible to the trail until someone names it, which is the correct failure direction. Flat keys
+beside `changed` carry immutable context that is not a change (`patSupplied`, `forced`,
+`unknownAccount`, `format`, counts). Keys are `camelCase` **as stored**, so the stored bytes match
+the wire.
+
+**One delete path, and it takes a cutoff and nothing else.**
+`AuditEventRepository.delete_older_than(cutoff)` is a hard delete driven by
+`AUDIT_RETENTION_DAYS` (default `0` — keep forever) from the worker's existing 60-second tick. No
+actor filter, no event-type filter: an operator sets a window, nobody erases a row. There is no
+`update` method and no route that writes — the router is `GET /audit-events` and
+`GET /audit-events/{id}`, admin-only, which is how append-only shows up on the wire and not only
+in the schema.
+
+The write itself happens **after the commit that made the change true**, on the recorder's own
+session, and `AuditRecorder.record` never raises — see
+[`architecture.md`](architecture.md#the-audit-write-path).
+
 ---
 
 ## Three storage rules
 
 ### 1. Postgres rows soft-delete; the matching Qdrant points hard-delete
 
-Every table carries `deleted_at` and every query filters `deleted_at IS NULL`. Vector points
+Every table that can be deleted from carries `deleted_at`, and every query filters
+`deleted_at IS NULL`. (`audit_events` is not one of them — nothing deletes an audit row except the
+retention cutoff, and that is a hard delete.) Vector points
 have no such column, and a query-time filter would be one forgotten call away from serving
 deleted content.
 
@@ -281,7 +354,7 @@ immediately, and the middleware reads that row from Postgres on every request to
 
 ## Migrations
 
-Alembic, in `backend/alembic/versions/` — 9 revisions. Run them with `make migrate` (or
+Alembic, in `backend/alembic/versions/` — 10 revisions. Run them with `make migrate` (or
 `uv run alembic upgrade head` from `backend/`). The production entrypoint chains
 `alembic upgrade head && python -m app.cli seed-admins && uvicorn …`, so a deploy migrates
 before it serves.

@@ -27,7 +27,7 @@ export function ResetPasswordDialog({
       { newPassword },
       {
         onSuccess: () => {
-          toast.success(`Password reset for ${user.email}`);
+          toast.success("Password reset");
           setNewPassword("");
           onOpenChange(false);
         },

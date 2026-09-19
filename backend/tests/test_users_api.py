@@ -13,11 +13,14 @@ from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
+from app.core.audit import AuditRecorder
 from app.core.errors import AppError
 from app.core.security import create_access_token, hash_password
+from app.db.session import get_sessionmaker
 from app.models import User
 from app.schemas.user import UserCreateRequest
 from app.services.user import UserService
+from tests.helpers import authenticated
 
 GOOD_PASSWORD = "a-perfectly-fine-passphrase"
 
@@ -128,8 +131,10 @@ async def test_a_racing_duplicate_email_is_409_not_500(db_session: AsyncSession)
     check-then-insert pre-check; the second commit hits the partial unique index and
     must still surface `409 EMAIL_ALREADY_EXISTS`, not a bare `500`.
     """
+    admin = await _make_user(db_session, is_admin=True)
     await _make_user(db_session, email="race@example.com")
-    service = UserService(db_session, get_settings())
+    recorder = AuditRecorder(get_sessionmaker())
+    service = UserService(db_session, get_settings(), recorder=recorder)
 
     async def _pretend_available(email: str) -> bool:
         """Simulate the pre-check having run before the colliding row existed."""
@@ -141,7 +146,8 @@ async def test_a_racing_duplicate_email_is_409_not_500(db_session: AsyncSession)
         await service.create(
             UserCreateRequest(
                 name="Racer", email="race@example.com", password=GOOD_PASSWORD, is_admin=False
-            )
+            ),
+            actor=await authenticated(db_session, admin),
         )
 
     assert caught.value.status_code == 409

@@ -458,7 +458,10 @@ export function ItemGrid({
         onConfirm={() => {
           if (!pendingDelete) return;
           deleteItem.mutate(pendingDelete.id, {
-            onSuccess: () => setPendingDelete(null),
+            onSuccess: () => {
+              toast.success("Test case deleted");
+              setPendingDelete(null);
+            },
             onError: (error) => reportFailure(error),
           });
         }}

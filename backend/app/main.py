@@ -9,6 +9,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.routes import (
+    audit_events,
     auth,
     checklist_change_sets,
     checklist_items,
@@ -155,6 +156,7 @@ def create_app() -> FastAPI:
     app.include_router(mock_data_datasets.router)
     app.include_router(mock_data_records.router)
     app.include_router(mock_data_change_sets.router)
+    app.include_router(audit_events.router)
 
     return app
 

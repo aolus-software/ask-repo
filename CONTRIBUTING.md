@@ -85,7 +85,7 @@ CHAT_MODEL=qwen2.5-coder:7b uv run pytest -m model
 Read [`tests/test_rag_model_integration.py`](backend/tests/test_rag_model_integration.py)
 before editing any prompt in `app/rag/prompts.py`. The rest of the suite drives a scripted
 fake, so it proves the graph's wiring and nothing whatsoever about the prompts: a classifier
-that sends every out-of-scope question down the wrong branch passes all 563 unit tests,
+that sends every out-of-scope question down the wrong branch passes the whole unit suite,
 because none of them asks a model anything. Two such failures have reached `main` and were caught
 by hand. The thresholds there are floors a regression would break through, not the scores
 observed — a probabilistic system cannot be asserted exactly, but it can be bounded.
@@ -123,8 +123,10 @@ short version:
   it; `404` when they shouldn't know it exists; `409` for valid-but-wrong-state; `429` for
   rate limits.
 - **Read scoping lives in one function.** Never filter projects inside a route handler.
-  Phase 2 swaps one access resolver for per-project RBAC; scattered filtering would make
-  that a rewrite.
+  Phase 2.1 swapped one access resolver's body for per-project RBAC and changed none of its
+  call sites; scattered filtering would have made that a rewrite. `app/core/access.py` is still
+  the only place a read is scoped, and `require_permission` beside it is the only place a
+  destructive operation is gated.
 - **Frontend colour goes through tokens.** Never a `dark:` colour utility and never a
   palette utility (`bg-zinc-50`) — use the semantic role (`bg-card`,
   `text-muted-foreground`). `frontend/app/globals.css` is the only file allowed a raw hex.
@@ -169,7 +171,6 @@ Not because they're bad ideas, but because they're out of scope — see PRD §2:
 
 - Multi-tenancy, or anything that makes one instance serve two organizations.
 - Public registration or social login.
-- Per-project roles and permissions — that's phase 2, and it wants a design first.
 - Model fine-tuning.
 - Automatic code changes written back to a repo. AskRepo reads and explains.
 - Large refactors bundled into a feature PR. Split them.

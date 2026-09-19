@@ -92,6 +92,10 @@ The shape AskRepo is heading for:
 /checklist/[moduleId]   the checklist grid, chat and review panel
 /settings               index route — redirects to its first reachable child
 /settings/users         admin only
+/settings/roles         admin only — the role list
+/settings/roles/[id]    admin only — one role's permission matrix
+/settings/audit         admin only — the audit trail
+/settings/audit/[eventId]  admin only — one recorded event
 ```
 
 Notes that bite:

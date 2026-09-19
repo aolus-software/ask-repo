@@ -7,8 +7,10 @@ from fastapi import status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import Settings
+from app.core.audit import AuditRecorder
 from app.core.errors import AppError, ErrorCode
 from app.core.permissions import EDITOR_NAME, VIEWER_NAME
+from app.db.session import get_sessionmaker
 from app.models.checklist import ChangeSetOrigin, ChangeSetStatus
 from app.models.mock_data import MockDataChangeSet, MockDataDataset, MockDataRecord
 from app.models.project import ProjectStatus
@@ -67,7 +69,9 @@ async def test_apply_add_creates_a_record(
 
     actor = await create_user(db_session)
     await grant_membership(actor.id, project.id, EDITOR_NAME)
-    service = MockDataChangeSetService(db_session, Settings())
+    service = MockDataChangeSetService(
+        db_session, Settings(), recorder=AuditRecorder(get_sessionmaker())
+    )
     result = await service.apply(
         change_set.id, MockDataChangeSetApplyRequest(), actor=await authenticated(db_session, actor)
     )
@@ -128,7 +132,9 @@ async def test_apply_update_merges_into_existing_fields(
 
     actor = await create_user(db_session)
     await grant_membership(actor.id, project.id, EDITOR_NAME)
-    service = MockDataChangeSetService(db_session, Settings())
+    service = MockDataChangeSetService(
+        db_session, Settings(), recorder=AuditRecorder(get_sessionmaker())
+    )
     result = await service.apply(
         change_set.id, MockDataChangeSetApplyRequest(), actor=await authenticated(db_session, actor)
     )
@@ -168,7 +174,9 @@ async def test_apply_twice_conflicts(
 
     actor = await create_user(db_session)
     await grant_membership(actor.id, project.id, EDITOR_NAME)
-    service = MockDataChangeSetService(db_session, Settings())
+    service = MockDataChangeSetService(
+        db_session, Settings(), recorder=AuditRecorder(get_sessionmaker())
+    )
     await service.apply(
         change_set.id, MockDataChangeSetApplyRequest(), actor=await authenticated(db_session, actor)
     )
@@ -231,7 +239,9 @@ async def test_apply_is_selective_when_operation_ids_are_given(
 
     actor = await create_user(db_session)
     await grant_membership(actor.id, project.id, EDITOR_NAME)
-    service = MockDataChangeSetService(db_session, Settings())
+    service = MockDataChangeSetService(
+        db_session, Settings(), recorder=AuditRecorder(get_sessionmaker())
+    )
     result = await service.apply(
         change_set.id,
         MockDataChangeSetApplyRequest(operation_ids=[keep]),
@@ -288,7 +298,9 @@ async def test_remove_operation_soft_deletes_a_record(
 
     actor = await create_user(db_session)
     await grant_membership(actor.id, project.id, EDITOR_NAME)
-    service = MockDataChangeSetService(db_session, Settings())
+    service = MockDataChangeSetService(
+        db_session, Settings(), recorder=AuditRecorder(get_sessionmaker())
+    )
     result = await service.apply(
         change_set.id, MockDataChangeSetApplyRequest(), actor=await authenticated(db_session, actor)
     )
@@ -358,7 +370,9 @@ async def test_cross_module_operation_is_skipped(
 
     actor = await create_user(db_session)
     await grant_membership(actor.id, project.id, EDITOR_NAME)
-    service = MockDataChangeSetService(db_session, Settings())
+    service = MockDataChangeSetService(
+        db_session, Settings(), recorder=AuditRecorder(get_sessionmaker())
+    )
     result = await service.apply(
         change_set.id, MockDataChangeSetApplyRequest(), actor=await authenticated(db_session, actor)
     )
@@ -404,7 +418,9 @@ async def test_apply_is_refused_for_a_viewer(
 
     viewer = await create_user(db_session)
     await grant_membership(viewer.id, project.id, VIEWER_NAME)
-    service = MockDataChangeSetService(db_session, Settings())
+    service = MockDataChangeSetService(
+        db_session, Settings(), recorder=AuditRecorder(get_sessionmaker())
+    )
 
     with pytest.raises(AppError) as caught:
         await service.apply(
@@ -440,7 +456,9 @@ async def test_discard_is_refused_for_a_viewer(
 
     viewer = await create_user(db_session)
     await grant_membership(viewer.id, project.id, VIEWER_NAME)
-    service = MockDataChangeSetService(db_session, Settings())
+    service = MockDataChangeSetService(
+        db_session, Settings(), recorder=AuditRecorder(get_sessionmaker())
+    )
 
     with pytest.raises(AppError) as caught:
         await service.discard(change_set.id, actor=await authenticated(db_session, viewer))
@@ -490,7 +508,9 @@ async def test_discard_writes_nothing_and_settles_dataset(
 
     actor = await create_user(db_session)
     await grant_membership(actor.id, project.id, EDITOR_NAME)
-    service = MockDataChangeSetService(db_session, Settings())
+    service = MockDataChangeSetService(
+        db_session, Settings(), recorder=AuditRecorder(get_sessionmaker())
+    )
     resolved = await service.discard(change_set.id, actor=await authenticated(db_session, actor))
 
     assert resolved.status == ChangeSetStatus.DISCARDED
@@ -505,7 +525,9 @@ async def test_discard_writes_nothing_and_settles_dataset(
 async def test_change_set_not_found_returns_404(db_session: AsyncSession) -> None:
     """A non-existent change set returns 404."""
     actor = await create_user(db_session)
-    service = MockDataChangeSetService(db_session, Settings())
+    service = MockDataChangeSetService(
+        db_session, Settings(), recorder=AuditRecorder(get_sessionmaker())
+    )
 
     with pytest.raises(AppError) as excinfo:
         await service.apply(
@@ -565,7 +587,9 @@ async def test_apply_preserves_the_order_the_model_proposed(
 
     actor = await create_user(db_session)
     await grant_membership(actor.id, project.id, EDITOR_NAME)
-    service = MockDataChangeSetService(db_session, Settings())
+    service = MockDataChangeSetService(
+        db_session, Settings(), recorder=AuditRecorder(get_sessionmaker())
+    )
     await service.apply(
         change_set.id, MockDataChangeSetApplyRequest(), actor=await authenticated(db_session, actor)
     )
@@ -622,7 +646,9 @@ async def test_apply_keeps_relative_order_of_a_ticked_subset(
 
     actor = await create_user(db_session)
     await grant_membership(actor.id, project.id, EDITOR_NAME)
-    service = MockDataChangeSetService(db_session, Settings())
+    service = MockDataChangeSetService(
+        db_session, Settings(), recorder=AuditRecorder(get_sessionmaker())
+    )
     await service.apply(
         change_set.id,
         MockDataChangeSetApplyRequest(operation_ids=[op_ids[0], op_ids[2]]),

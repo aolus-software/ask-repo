@@ -7,8 +7,10 @@ from fastapi import status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import Settings
+from app.core.audit import AuditRecorder
 from app.core.errors import AppError, ErrorCode
 from app.core.permissions import EDITOR_NAME, VIEWER_NAME
+from app.db.session import get_sessionmaker
 from app.models.checklist import ChecklistItemSource, ChecklistItemStatus
 from app.schemas.checklist import (
     ChecklistItemCreateRequest,
@@ -37,7 +39,9 @@ async def test_any_member_may_record_a_result(
     )
     tester = await create_user(db_session)
     await grant_membership(tester.id, module.project_id, VIEWER_NAME)
-    service = ChecklistItemService(db_session, Settings())
+    service = ChecklistItemService(
+        db_session, Settings(), recorder=AuditRecorder(get_sessionmaker())
+    )
 
     result = await service.set_result(
         item.id,
@@ -71,7 +75,9 @@ async def test_a_tester_cannot_rewrite_the_expectation(
     )
     tester = await create_user(db_session)
     await grant_membership(tester.id, module.project_id, VIEWER_NAME)
-    service = ChecklistItemService(db_session, Settings())
+    service = ChecklistItemService(
+        db_session, Settings(), recorder=AuditRecorder(get_sessionmaker())
+    )
 
     with pytest.raises(AppError) as caught:
         await service.update(
@@ -97,7 +103,9 @@ async def test_setting_a_result_back_to_untested_clears_the_reviewer(
         created_by=module.created_by,
         status=ChecklistItemStatus.PASS,
     )
-    service = ChecklistItemService(db_session, Settings())
+    service = ChecklistItemService(
+        db_session, Settings(), recorder=AuditRecorder(get_sessionmaker())
+    )
     tester = await create_user(db_session)
     await grant_membership(tester.id, module.project_id, VIEWER_NAME)
     await service.set_result(
@@ -129,7 +137,9 @@ async def test_a_manual_item_is_marked_manual_and_positioned_last(
         feature="Login",
         position=0,
     )
-    service = ChecklistItemService(db_session, Settings())
+    service = ChecklistItemService(
+        db_session, Settings(), recorder=AuditRecorder(get_sessionmaker())
+    )
     author = await create_user(db_session)
     await grant_membership(author.id, module.project_id, EDITOR_NAME)
 
@@ -165,7 +175,11 @@ async def test_export_refuses_above_the_cap(
             created_by=module.created_by,
             position=index,
         )
-    service = ChecklistItemService(db_session, Settings(checklist_export_max_rows=2))
+    service = ChecklistItemService(
+        db_session,
+        Settings(checklist_export_max_rows=2),
+        recorder=AuditRecorder(get_sessionmaker()),
+    )
     reader = await create_user(db_session)
     await grant_membership(reader.id, module.project_id, VIEWER_NAME)
 
@@ -192,7 +206,9 @@ async def test_export_applies_the_same_filters_and_ignores_pagination(
             position=index,
             status=ChecklistItemStatus.PASS if index else ChecklistItemStatus.FAIL,
         )
-    service = ChecklistItemService(db_session, Settings())
+    service = ChecklistItemService(
+        db_session, Settings(), recorder=AuditRecorder(get_sessionmaker())
+    )
     reader = await create_user(db_session)
     await grant_membership(reader.id, module.project_id, VIEWER_NAME)
 
@@ -227,7 +243,9 @@ async def test_update_changes_the_definition_and_leaves_the_result_alone(
         project_id=module.project_id,
         created_by=creator.id,
     )
-    service = ChecklistItemService(db_session, Settings())
+    service = ChecklistItemService(
+        db_session, Settings(), recorder=AuditRecorder(get_sessionmaker())
+    )
     # A genuine recorded observation, not the factory's default -- via `set_result`,
     # the only path that actually writes these columns.
     await service.set_result(
@@ -282,7 +300,9 @@ async def test_list_is_scoped_and_filters_within_the_scope(
     caller = await create_user(db_session)
     await grant_membership(caller.id, module.project_id, VIEWER_NAME)
     await grant_membership(caller.id, other_module.project_id, VIEWER_NAME)
-    service = ChecklistItemService(db_session, Settings())
+    service = ChecklistItemService(
+        db_session, Settings(), recorder=AuditRecorder(get_sessionmaker())
+    )
 
     unfiltered = await service.list(
         ChecklistItemListQuery(), actor=await authenticated(db_session, caller)
@@ -319,7 +339,9 @@ async def test_delete_is_gated_and_hides_the_item(
     stranger = await create_user(db_session)
     member = await create_user(db_session)
     await grant_membership(member.id, module.project_id, VIEWER_NAME)
-    service = ChecklistItemService(db_session, Settings())
+    service = ChecklistItemService(
+        db_session, Settings(), recorder=AuditRecorder(get_sessionmaker())
+    )
 
     with pytest.raises(AppError) as unseen:
         await service.delete(item.id, actor=await authenticated(db_session, stranger))
@@ -356,7 +378,9 @@ async def test_clear_results_is_open_to_a_member_who_did_not_create_the_checklis
         status=ChecklistItemStatus.PASS,
         current_result="200 OK",
     )
-    service = ChecklistItemService(db_session, Settings())
+    service = ChecklistItemService(
+        db_session, Settings(), recorder=AuditRecorder(get_sessionmaker())
+    )
     tester = await create_user(db_session)
     await grant_membership(tester.id, module.project_id, VIEWER_NAME)
 
@@ -376,7 +400,9 @@ async def test_clear_results_404s_on_a_module_outside_the_scope(
 ) -> None:
     """Bounded rather than gated: the request names one module and the module has to
     be readable, so nothing can widen the blast radius past it."""
-    service = ChecklistItemService(db_session, Settings())
+    service = ChecklistItemService(
+        db_session, Settings(), recorder=AuditRecorder(get_sessionmaker())
+    )
 
     with pytest.raises(AppError) as caught:
         await service.clear_results(

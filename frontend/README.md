@@ -7,7 +7,8 @@ Next.js UI for AskRepo — the codebase-aware assistant described in
 screens that exist are sign-in and the forced first-login password change, the dashboard,
 projects (list, detail, create, re-index, delete), Dev Knowledge with streamed answers, admin
 user management, admin role management (`/settings/roles` and the `/settings/roles/[id]`
-permission matrix), and the QA Checklist — the `/checklist` module list and the
+permission matrix), the admin audit trail (`/settings/audit` and the
+`/settings/audit/[eventId]` detail), and the QA Checklist — the `/checklist` module list and the
 `/checklist/[moduleId]` grid with chat and review panel, which also carries a Mock Data tab
 (generate, refine by chat, review the pending change set, export JSON/`.xlsx`) beside the
 checklist grid, no route of its own. The project detail page at `/projects/[id]` likewise
@@ -94,7 +95,8 @@ frontend/
 │   ├── (auth)/            # shell-less: /login, /change-password
 │   ├── (app)/             # the shell: dashboard, projects (/projects, /projects/[id]),
 │   │                      #   ask, checklist (/checklist, /checklist/[moduleId]),
-│   │                      #   settings (/settings/users, /settings/roles, /settings/roles/[id])
+│   │                      #   settings (/settings/users, /settings/roles, /settings/roles/[id],
+│   │                      #     /settings/audit, /settings/audit/[eventId])
 │   └── api/
 │       ├── [...path]/     # the API forwarding route the browser talks to
 │       └── auth/          # login, refresh, logout — the only cookie writers

@@ -21,6 +21,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.config import Settings
 from app.core import access
+from app.core.audit import AuditEntry, AuditEventType, AuditRecorder, ChangedValue
 from app.core.errors import AppError, ErrorCode
 from app.core.middleware import AuthenticatedUser
 from app.core.permissions import Permission
@@ -86,7 +87,12 @@ class ChecklistModuleService:
     """Module CRUD, plus the pre-flight that decides whether a generation may start."""
 
     def __init__(
-        self, session: AsyncSession, settings: Settings, *, indexed_paths: IndexedPathReader
+        self,
+        session: AsyncSession,
+        settings: Settings,
+        *,
+        indexed_paths: IndexedPathReader,
+        recorder: AuditRecorder,
     ) -> None:
         self.session = session
         self.settings = settings
@@ -94,6 +100,7 @@ class ChecklistModuleService:
         # list, and it is the same reader (and therefore the same cache) the path
         # picker browses -- two would disagree about the same repository.
         self.indexed_paths = indexed_paths
+        self._recorder = recorder
         self.modules = ChecklistModuleRepository(session)
         self.items = ChecklistItemRepository(session)
         self.change_sets = ChecklistChangeSetRepository(session)
@@ -163,6 +170,21 @@ class ChecklistModuleService:
             )
         )
         await self.session.commit()
+        await self._recorder.record(
+            AuditEntry(
+                event_type=AuditEventType.CHECKLIST_MODULE_CREATED,
+                actor_user_id=actor.id,
+                actor_email=actor.email,
+                target_type="checklist_module",
+                target_id=module.id,
+                target_label=module.name,
+                project_id=project.id,
+                changed={
+                    "name": (None, module.name),
+                    "sourcePath": (None, module.source_path),
+                },
+            )
+        )
         return (await self._summaries([module]))[0]
 
     async def update(
@@ -175,6 +197,10 @@ class ChecklistModuleService:
         """Rename or re-point a module. Gated on `module.edit`."""
         module = await self._require_readable(module_id, actor)
         access.require_permission(actor, module.project_id, Permission.MODULE_EDIT)
+        # Captured before either field is written, so the audit diff below compares
+        # against what the row actually held rather than the just-applied payload.
+        old_name = module.name
+        old_source_path = module.source_path
         if payload.name is not None:
             module.name = payload.name.strip()
         if payload.source_path is not None:
@@ -192,6 +218,25 @@ class ChecklistModuleService:
         # outside an awaited context.
         module.updated_at = datetime.now(UTC)
         await self.session.commit()
+
+        changed: dict[str, tuple[ChangedValue, ChangedValue]] = {}
+        if module.name != old_name:
+            changed["name"] = (old_name, module.name)
+        if module.source_path != old_source_path:
+            changed["sourcePath"] = (old_source_path, module.source_path)
+        if changed:
+            await self._recorder.record(
+                AuditEntry(
+                    event_type=AuditEventType.CHECKLIST_MODULE_UPDATED,
+                    actor_user_id=actor.id,
+                    actor_email=actor.email,
+                    target_type="checklist_module",
+                    target_id=module.id,
+                    target_label=module.name,
+                    project_id=module.project_id,
+                    changed=changed,
+                )
+            )
         return (await self._summaries([module]))[0]
 
     async def delete(self, module_id: uuid.UUID, *, actor: AuthenticatedUser) -> None:
@@ -201,7 +246,13 @@ class ChecklistModuleService:
         """
         module = await self._require_readable(module_id, actor)
         access.require_permission(actor, module.project_id, Permission.MODULE_DELETE)
-        await self.items.soft_delete_for_module(module_id)
+        # Captured before any sweep runs: `soft_delete` leaves the row's other columns
+        # alone, but naming the locals here keeps the audit write independent of what
+        # the ORM object still holds by the time it fires.
+        module_name = module.name
+        module_source_path = module.source_path
+        project_id = module.project_id
+        item_count = await self.items.soft_delete_for_module(module_id)
         await self.change_sets.soft_delete_for_module(module_id)
         await self.messages_repository.soft_delete_for_module(module_id)
         await self.mock_data_records.soft_delete_for_module(module_id)
@@ -210,6 +261,22 @@ class ChecklistModuleService:
         await self.mock_data_datasets.soft_delete_for_module(module_id)
         await self.modules.soft_delete(module)
         await self.session.commit()
+        await self._recorder.record(
+            AuditEntry(
+                event_type=AuditEventType.CHECKLIST_MODULE_DELETED,
+                actor_user_id=actor.id,
+                actor_email=actor.email,
+                target_type="checklist_module",
+                target_id=module_id,
+                target_label=module_name,
+                project_id=project_id,
+                changed={
+                    "name": (module_name, None),
+                    "sourcePath": (module_source_path, None),
+                },
+                context={"itemCount": item_count},
+            )
+        )
 
     async def request_generation(
         self, module_id: uuid.UUID, *, actor: AuthenticatedUser, queue: ChecklistQueue
@@ -248,6 +315,18 @@ class ChecklistModuleService:
         # explicit set, or `_summaries` below hits an unawaited lazy load.
         module.updated_at = datetime.now(UTC)
         await self.session.commit()
+        await self._recorder.record(
+            AuditEntry(
+                event_type=AuditEventType.CHECKLIST_MODULE_GENERATION_REQUESTED,
+                actor_user_id=actor.id,
+                actor_email=actor.email,
+                target_type="checklist_module",
+                target_id=module.id,
+                target_label=module.name,
+                project_id=project.id,
+                context={"indexedGeneration": project.active_generation},
+            )
+        )
 
         await queue.enqueue_checklist(
             ChecklistJobMessage(

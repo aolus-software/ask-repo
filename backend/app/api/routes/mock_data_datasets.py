@@ -15,7 +15,7 @@ from fastapi import APIRouter, Depends, Request, Response, status
 from fastapi.responses import StreamingResponse
 from langchain_core.language_models import BaseChatModel
 
-from app.api.deps import CurrentUser, SessionDep
+from app.api.deps import AuditRecorderDep, CurrentUser, SessionDep
 from app.api.routes.conversations import (
     SSE_HEADERS,
     AnswererFactory,
@@ -53,10 +53,12 @@ DEFAULT_GENERATION_REQUEST = MockDataGenerationRequest()
 
 
 def get_mock_data_dataset_service(
-    session: SessionDep, settings: Annotated[Settings, Depends(get_settings)]
+    session: SessionDep,
+    settings: Annotated[Settings, Depends(get_settings)],
+    recorder: AuditRecorderDep,
 ) -> MockDataDatasetService:
     """Provide the service with a request-scoped session."""
-    return MockDataDatasetService(session, settings)
+    return MockDataDatasetService(session, settings, recorder=recorder)
 
 
 def get_mock_data_queue(request: Request) -> MockDataQueue:

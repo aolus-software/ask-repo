@@ -1,6 +1,7 @@
 """ORM models. Importing this package registers every table on `Base.metadata`,
 which is what makes Alembic autogenerate able to see them."""
 
+from app.models.audit import AuditEvent
 from app.models.base import Base, SoftDeleteMixin, TimestampMixin
 from app.models.checklist import (
     ChangeSetOrigin,
@@ -27,6 +28,7 @@ from app.models.refresh_token import RefreshToken, RevokedReason
 from app.models.user import User
 
 __all__ = [
+    "AuditEvent",
     "Base",
     "ChangeSetOrigin",
     "ChangeSetStatus",

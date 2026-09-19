@@ -25,7 +25,7 @@ import {
   useUpdateChecklistModule,
 } from "@/hooks/use-checklist-mutations";
 import { useProject } from "@/hooks/use-projects";
-import { fieldError } from "@/lib/api/errors";
+import { fieldError, isApiError } from "@/lib/api/errors";
 import type { ChecklistModuleResponse } from "@/lib/api/types";
 import { PERMISSION, can } from "@/lib/can";
 
@@ -46,13 +46,21 @@ export function ModuleRowActions({ module }: { module: ChecklistModuleResponse }
     ? can(project.data, PERMISSION.MODULE_DELETE)
     : false;
 
-  const isGenerating = module.status === "generating" || !!module.pendingChangeSetId;
+  const canGenerate = project.data ? can(project.data, PERMISSION.GENERATE_RUN) : false;
+
+  // The same three reasons the module's own screen gives, in the same order. The
+  // permission is one of them: without it the menu offered an enabled Generate that
+  // the backend correctly refused, and the refusal went nowhere
+  // (`docs/ui-audit-findings.md` §U6.5).
   const generateDisabledReason =
     module.status === "generating"
       ? "Generation is already in progress"
       : module.pendingChangeSetId
         ? "Review pending changes before generating again"
-        : undefined;
+        : !canGenerate
+          ? "You do not have permission to generate this checklist"
+          : undefined;
+  const isGenerating = generateDisabledReason !== undefined;
 
   function handleEditSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -109,7 +117,19 @@ export function ModuleRowActions({ module }: { module: ChecklistModuleResponse }
               <TooltipContent>{generateDisabledReason}</TooltipContent>
             </Tooltip>
           ) : (
-            <DropdownMenuItem onClick={() => generate.mutate()}>
+            <DropdownMenuItem
+              onClick={() =>
+                generate.mutate(undefined, {
+                  onSuccess: () => toast.success("Generation started"),
+                  onError: (error) =>
+                    toast.error(
+                      isApiError(error)
+                        ? error.message
+                        : "That did not start. Try again.",
+                    ),
+                })
+              }
+            >
               <Play className="size-4" />
               Generate
             </DropdownMenuItem>
@@ -117,7 +137,18 @@ export function ModuleRowActions({ module }: { module: ChecklistModuleResponse }
 
           {canEditModule || canDeleteModule ? <DropdownMenuSeparator /> : null}
           {canEditModule ? (
-            <DropdownMenuItem onClick={() => setEditingDialog(true)}>
+            <DropdownMenuItem
+              onClick={() => {
+                // Re-seed from the module every time, the way `item-grid`'s
+                // `startEditing` does. `useState` seeds once at mount and the row stays
+                // mounted as long as the list does, so without this a cancelled edit
+                // comes back as the field's value and reads as the saved one
+                // (`docs/ui-audit-findings.md` §U5.8).
+                setEditingName(module.name);
+                setEditingPath(module.sourcePath);
+                setEditingDialog(true);
+              }}
+            >
               <Edit2 className="size-4" />
               Edit
             </DropdownMenuItem>
@@ -183,7 +214,7 @@ export function ModuleRowActions({ module }: { module: ChecklistModuleResponse }
         onConfirm={() =>
           remove.mutate(undefined, {
             onSuccess: () => {
-              toast.success(`${module.name} deleted`);
+              toast.success("Module deleted");
               setConfirmingDelete(false);
             },
           })

@@ -1,4 +1,5 @@
 import type {
+  AuditEventListParams,
   ChecklistItemListParams,
   ChecklistModuleListParams,
   ListParams,
@@ -64,5 +65,10 @@ export const keys = {
   permissionCatalogue: ["permissions", "catalogue"] as const,
   members: {
     forProject: (projectId: string) => ["members", projectId] as const,
+  },
+  auditEvents: {
+    all: ["audit-events"] as const,
+    list: (params: AuditEventListParams) => ["audit-events", "list", params] as const,
+    detail: (id: string) => ["audit-events", "detail", id] as const,
   },
 };

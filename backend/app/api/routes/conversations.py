@@ -15,7 +15,7 @@ from fastapi import APIRouter, Depends, Query, Request, Response, status
 from fastapi.responses import StreamingResponse
 from langchain_core.language_models import BaseChatModel
 
-from app.api.deps import CurrentUser, SessionDep
+from app.api.deps import AuditRecorderDep, CurrentUser, SessionDep
 from app.config import Settings, get_settings
 from app.db.session import get_sessionmaker
 from app.ingestion.embedder import Embedder
@@ -108,10 +108,12 @@ def get_answerer_factory(
 
 
 def get_conversation_service(
-    session: SessionDep, settings: Annotated[Settings, Depends(get_settings)]
+    session: SessionDep,
+    settings: Annotated[Settings, Depends(get_settings)],
+    recorder: AuditRecorderDep,
 ) -> ConversationService:
     """Provide the service with a request-scoped session."""
-    return ConversationService(session, settings)
+    return ConversationService(session, settings, recorder=recorder)
 
 
 ConversationServiceDep = Annotated[ConversationService, Depends(get_conversation_service)]

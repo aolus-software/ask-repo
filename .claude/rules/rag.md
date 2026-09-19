@@ -123,9 +123,8 @@ The assistant row is written **once**, at termination — not updated per token.
 ## Conversations are `404`-on-miss, with no admin bypass
 
 `is_admin` is not consulted anywhere under `/conversations`. It gates destructive operations on
-*shared* resources; conversations are not shared, and `docs/PRD.md` §4.2 states their privacy
-without qualification — an administrator who could read a colleague's conversation makes that
-sentence false.
+*shared* resources; conversations are not shared, and `docs/PRD.md` §4.2 states that no
+administrator can read a conversation, its title, or any message, through any route.
 
 Every miss is `404`, on all four routes including `DELETE`. A `403` confirms the conversation
 exists, which is the `403`/`404` distinction (`response-api.md`) running backwards.
@@ -133,6 +132,17 @@ exists, which is the `403`/`404` distinction (`response-api.md`) running backwar
 Ownership scoping goes through `resolve_conversation_owner` in `app/core/access.py`, beside
 `resolve_project_scope`. Sharing a conversation is out of scope *for v1*, which marks it as a
 change someone will eventually make — this is the one body they change.
+
+**The access rule above is unchanged; what changed is the audit trail.** `conversation.created`
+and `conversation.deleted` (`.claude/rules/audit-trail.md`) are audited events an administrator
+reads through `/audit-events`, not through `/conversations` — `is_admin` still gates nothing
+under this router, and every miss here is still `404`. Each event carries `actor_user_id`,
+`target_id` and `project_id`; `target_label` is `NULL`, always, because a conversation's title
+derives from the user's first question and the ban on storing a prompt applies to it verbatim.
+So an administrator can see that a colleague opened or deleted a conversation against a project,
+and when — never the title, and never a message. This is a deliberate, narrow amendment to
+`docs/PRD.md` §4.2, made in the same change that added it, not a contradiction to quietly work
+around.
 
 ## The pre-flight/stream split is structural
 

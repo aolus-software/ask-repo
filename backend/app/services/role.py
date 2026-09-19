@@ -12,8 +12,10 @@ from datetime import UTC, datetime
 from fastapi import status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.audit import AuditEntry, AuditEventType, AuditRecorder, ChangedValue
 from app.core.errors import AppError, ErrorCode
 from app.core.grant_cache import get_grant_cache
+from app.core.middleware import AuthenticatedUser
 from app.core.permissions import PERMISSION_GROUPS
 from app.models.membership import Role
 from app.repositories.role import RoleRepository
@@ -30,9 +32,10 @@ class RoleService:
     """Role CRUD. Admin-only at the route; no project scoping applies — roles are
     instance-wide definitions, not project-scoped resources."""
 
-    def __init__(self, session: AsyncSession) -> None:
+    def __init__(self, session: AsyncSession, *, recorder: AuditRecorder) -> None:
         self.session = session
         self._roles = RoleRepository(session)
+        self._recorder = recorder
 
     @staticmethod
     def catalogue() -> PermissionCatalogResponse:
@@ -55,7 +58,7 @@ class RoleService:
         """Every live role, system first."""
         return [await self._to_response(role) for role in await self._roles.list_all()]
 
-    async def create(self, payload: RoleCreateRequest) -> RoleResponse:
+    async def create(self, payload: RoleCreateRequest, *, actor: AuthenticatedUser) -> RoleResponse:
         """A custom role, with no permissions yet — the matrix page sets those."""
         if await self._roles.get_by_name(payload.name) is not None:
             raise AppError(
@@ -71,11 +74,36 @@ class RoleService:
         )
         self.session.add(role)
         await self.session.commit()
+        await self._recorder.record(
+            AuditEntry(
+                event_type=AuditEventType.ROLE_CREATED,
+                actor_user_id=actor.id,
+                actor_email=actor.email,
+                target_type="role",
+                target_id=role.id,
+                target_label=role.name,
+                changed={
+                    "name": (None, role.name),
+                    "description": (None, role.description),
+                    "permissions": (None, []),
+                },
+            )
+        )
         return await self._to_response(role)
 
-    async def update(self, role_id: uuid.UUID, payload: RoleUpdateRequest) -> RoleResponse:
+    async def update(
+        self, role_id: uuid.UUID, payload: RoleUpdateRequest, *, actor: AuthenticatedUser
+    ) -> RoleResponse:
         """Rename a custom role and/or replace its permission set."""
         role = await self._require_editable(role_id)
+
+        old_name = role.name
+        old_description = role.description
+        # Captured before `replace_permissions` writes the new rows: that call
+        # replaces `role_permissions` for this role, so reading afterwards would
+        # yield the new set for both sides of the diff and silently turn it into a
+        # no-op.
+        old_permissions = sorted(await self._roles.permissions_for(role.id))
 
         if payload.name is not None and payload.name != role.name:
             existing = await self._roles.get_by_name(payload.name)
@@ -93,9 +121,30 @@ class RoleService:
 
         await self.session.commit()
         await get_grant_cache().bump_epoch()
+
+        changed: dict[str, tuple[ChangedValue, ChangedValue]] = {}
+        if role.name != old_name:
+            changed["name"] = (old_name, role.name)
+        if role.description != old_description:
+            changed["description"] = (old_description, role.description)
+        new_permissions = sorted(await self._roles.permissions_for(role.id))
+        if new_permissions != old_permissions:
+            changed["permissions"] = (old_permissions, new_permissions)
+        if changed:
+            await self._recorder.record(
+                AuditEntry(
+                    event_type=AuditEventType.ROLE_UPDATED,
+                    actor_user_id=actor.id,
+                    actor_email=actor.email,
+                    target_type="role",
+                    target_id=role.id,
+                    target_label=role.name,
+                    changed=changed,
+                )
+            )
         return await self._to_response(role)
 
-    async def delete(self, role_id: uuid.UUID) -> None:
+    async def delete(self, role_id: uuid.UUID, *, actor: AuthenticatedUser) -> None:
         """Soft-delete a custom role that nobody holds."""
         role = await self._require_editable(role_id)
 
@@ -106,9 +155,25 @@ class RoleService:
                 "That role is still assigned on at least one project. Change those "
                 "memberships first.",
             )
+        permissions = sorted(await self._roles.permissions_for(role.id))
+        role_name = role.name
         role.deleted_at = datetime.now(UTC)
         await self.session.commit()
         await get_grant_cache().bump_epoch()
+        await self._recorder.record(
+            AuditEntry(
+                event_type=AuditEventType.ROLE_DELETED,
+                actor_user_id=actor.id,
+                actor_email=actor.email,
+                target_type="role",
+                target_id=role.id,
+                target_label=role_name,
+                changed={
+                    "name": (role_name, None),
+                    "permissions": (permissions, None),
+                },
+            )
+        )
 
     async def _require_editable(self, role_id: uuid.UUID) -> Role:
         """Load a role, refusing if it is a system role."""

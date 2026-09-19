@@ -24,7 +24,7 @@ Read these in order the first time. Roughly two hours end to end.
 | # | Page | Answers |
 | --- | --- | --- |
 | 1 | **[`architecture.md`](architecture.md)** | What runs where? Why is there a worker? Why four datastores? What happens, step by step, when someone asks a question or adds a repository? |
-| 2 | **[`data.md`](data.md)** | Where does everything get stored? What are the 13 tables and how do they relate? Why does a delete reach into Qdrant? What is a lease? |
+| 2 | **[`data.md`](data.md)** | Where does everything get stored? What are the 17 tables and how do they relate? Why does a delete reach into Qdrant? What is a lease? |
 | 3 | **[`rag.md`](rag.md)** | How does a repository become searchable? What is chunking, embedding, a vector? How is the right code found for a question, and how do we know the answer is grounded in it? |
 | 4 | **[`llm.md`](llm.md)** | Which model gets called, and how? How do we get structured data out of a model instead of prose? What stops a broken provider burning money or a retry ladder? |
 | 5 | **[`langgraph.md`](langgraph.md)** | Why a graph instead of a chain? How does the self-critique loop work? How does an answer stream to the browser, and how is it saved if the user closes the tab? |
@@ -37,7 +37,7 @@ Read these in order the first time. Roughly two hours end to end.
 | Page | Use it when |
 | --- | --- |
 | **[`installation.md`](installation.md)** | Setting up locally. Three paths — everything in Docker, datastores only in Docker, or no `make` at all — plus first login and troubleshooting |
-| **[`configuration.md`](configuration.md)** | Any question about a setting. All 71 backend settings, the frontend variable, and the Compose `.env`, each with what it does and what to change before production |
+| **[`configuration.md`](configuration.md)** | Any question about a setting. All 80 backend settings, the frontend variable, and the Compose `.env`, each with what it does and what to change before production |
 | **[`deployment.md`](deployment.md)** | Running it for a team. Production images, TLS with Caddy, secrets, first boot, backups |
 
 ---
@@ -48,7 +48,7 @@ Read these in order the first time. Roughly two hours end to end.
 | --- | --- |
 | **[`design.md`](design.md)** | Writing any UI. Tokens, typography, layout geometry, spacing, the component inventory |
 | **[`codebase.md`](codebase.md)** | Adding a route, a table, a setting, a screen, or a background job |
-| **[`../.claude/rules/`](../.claude/rules/)** | 13 rule files with the precise convention for each area — routers, persistence, RAG, ingestion, forms, navigation, the frontend BFF. Written for coding agents, but the most exact statement of each rule |
+| **[`../.claude/rules/`](../.claude/rules/)** | 14 rule files with the precise convention for each area — routers, persistence, RAG, ingestion, forms, navigation, the frontend BFF. Written for coding agents, but the most exact statement of each rule |
 
 ---
 
@@ -78,7 +78,7 @@ deduplication boundary" → `.claude/rules/ingestion.md`.
 
 ## Also worth knowing
 
-- **[`../backend/README.md`](../backend/README.md)** — the exhaustive route table (55 routes), the
+- **[`../backend/README.md`](../backend/README.md)** — the exhaustive route table (67 routes), the
   backend layout, and dev commands.
 - **[`../frontend/README.md`](../frontend/README.md)** — frontend scripts, env, and the BFF layout.
 - **[`../CLAUDE.md`](../CLAUDE.md)** — the invariants a coding agent must not break. It states
@@ -90,6 +90,10 @@ deduplication boundary" → `.claude/rules/ingestion.md`.
 - **[`ui-audit-findings.md`](ui-audit-findings.md)** — the standing record of frontend
   inconsistency, written by `/audit-ui`. Read-only findings (`U1`–`U12`); nothing in it has been
   fixed unless a heading says so.
+- **[`audit-findings.md`](audit-findings.md)** — the standing record of backend and architecture
+  findings, written by `/audit-flow`: access control, scoping, ingestion and SSRF, soft delete
+  against the vector store, secrets, the response contract, jobs, and code health. Read-only
+  findings (`§1`–`§9`); nothing in it has been fixed unless a heading says so.
 
 ---
 

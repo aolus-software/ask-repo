@@ -7,6 +7,7 @@ import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { toast } from "sonner";
 
 import { EmptyState } from "@/components/feedback/empty-state";
+import { ListError } from "@/components/feedback/list-error";
 import { ConfirmDialog } from "@/components/form/confirm-dialog";
 import { Button } from "@/components/ui/button";
 import {
@@ -193,7 +194,11 @@ function ConversationList({
           />
           <ComboboxContent>
             <ComboboxEmpty>
-              {projectsQuery.isLoading ? "Loading…" : "No project matches."}
+              {projectsQuery.isLoading
+                ? "Loading…"
+                : projectsQuery.isError
+                  ? "Could not load projects."
+                  : "No project matches."}
             </ComboboxEmpty>
             <ComboboxList>
               {(item: ProjectResponse) => (
@@ -219,6 +224,12 @@ function ConversationList({
               <Skeleton key={index} className="h-12 w-full" />
             ))}
           </div>
+        ) : query.isError ? (
+          /* Ahead of the empty state, never behind it: `data` is undefined on a
+             failure, so without this branch a dropped request tells someone with a
+             full history that they have none -- which reads as data loss rather than
+             a retryable error (`docs/ui-audit-findings.md` §U7.5). */
+          <ListError error={query.error} onRetry={() => query.refetch()} />
         ) : conversations.length === 0 ? (
           <EmptyState
             size="compact"

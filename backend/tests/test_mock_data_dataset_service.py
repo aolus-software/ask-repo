@@ -8,8 +8,10 @@ from fastapi import status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import Settings
+from app.core.audit import AuditRecorder
 from app.core.errors import AppError, ErrorCode
 from app.core.permissions import EDITOR_NAME, VIEWER_NAME
+from app.db.session import get_sessionmaker
 from app.models.checklist import ChangeSetOrigin, ChangeSetStatus
 from app.models.conversation import MessageRole
 from app.models.mock_data import MockDataChangeSet, MockDataDatasetStatus, MockDataMessage
@@ -36,7 +38,9 @@ async def test_get_returns_empty_summary_before_any_generation(
     project = await create_project(db_session)
     project.embedding_collection = "col"
     module = await create_checklist_module(db_session, project_id=project.id)
-    service = MockDataDatasetService(db_session, Settings())
+    service = MockDataDatasetService(
+        db_session, Settings(), recorder=AuditRecorder(get_sessionmaker())
+    )
     reader = await create_user(db_session)
     await grant_membership(reader.id, project.id, VIEWER_NAME)
 
@@ -55,7 +59,9 @@ async def test_request_generation_is_refused_for_a_viewer(
     project = await create_project(db_session)
     project.embedding_collection = "col"
     module = await create_checklist_module(db_session, project_id=project.id)
-    service = MockDataDatasetService(db_session, Settings())
+    service = MockDataDatasetService(
+        db_session, Settings(), recorder=AuditRecorder(get_sessionmaker())
+    )
     viewer = await create_user(db_session)
     await grant_membership(viewer.id, project.id, VIEWER_NAME)
 
@@ -78,7 +84,9 @@ async def test_request_generation_refuses_when_already_generating(
     project = await create_project(db_session)
     project.embedding_collection = "col"
     module = await create_checklist_module(db_session, project_id=project.id)
-    service = MockDataDatasetService(db_session, Settings())
+    service = MockDataDatasetService(
+        db_session, Settings(), recorder=AuditRecorder(get_sessionmaker())
+    )
     queue = InMemoryIngestionQueue()
     user = await create_user(db_session)
     await grant_membership(user.id, project.id, EDITOR_NAME)
@@ -107,7 +115,9 @@ async def test_request_generation_refuses_a_pending_change_set(
     project = await create_project(db_session)
     project.embedding_collection = "col"
     module = await create_checklist_module(db_session, project_id=project.id)
-    service = MockDataDatasetService(db_session, Settings())
+    service = MockDataDatasetService(
+        db_session, Settings(), recorder=AuditRecorder(get_sessionmaker())
+    )
     user = await create_user(db_session)
     await grant_membership(user.id, project.id, EDITOR_NAME)
     await service.datasets.get_or_create_for_module(module.id)
@@ -145,7 +155,9 @@ async def test_get_is_invisible_to_a_non_member(db_session: AsyncSession) -> Non
     project = await create_project(db_session)
     project.embedding_collection = "col"
     module = await create_checklist_module(db_session, project_id=project.id)
-    service = MockDataDatasetService(db_session, Settings())
+    service = MockDataDatasetService(
+        db_session, Settings(), recorder=AuditRecorder(get_sessionmaker())
+    )
     stranger = await create_user(db_session)
 
     with pytest.raises(AppError) as excinfo:
@@ -162,7 +174,9 @@ async def test_get_with_records_and_pending_change_set(
     project = await create_project(db_session)
     project.embedding_collection = "col"
     module = await create_checklist_module(db_session, project_id=project.id)
-    service = MockDataDatasetService(db_session, Settings())
+    service = MockDataDatasetService(
+        db_session, Settings(), recorder=AuditRecorder(get_sessionmaker())
+    )
     user = await create_user(db_session)
     await grant_membership(user.id, project.id, VIEWER_NAME)
 
@@ -204,7 +218,9 @@ async def test_get_stale_when_project_reindexed(
     project.embedding_collection = "col"
     project.active_generation = 3
     module = await create_checklist_module(db_session, project_id=project.id)
-    service = MockDataDatasetService(db_session, Settings())
+    service = MockDataDatasetService(
+        db_session, Settings(), recorder=AuditRecorder(get_sessionmaker())
+    )
 
     dataset = await service.datasets.get_or_create_for_module(module.id)
     dataset.indexed_generation = 2
@@ -224,7 +240,9 @@ async def test_change_sets_for_returns_newest_first(
     project = await create_project(db_session)
     project.embedding_collection = "col"
     module = await create_checklist_module(db_session, project_id=project.id)
-    service = MockDataDatasetService(db_session, Settings())
+    service = MockDataDatasetService(
+        db_session, Settings(), recorder=AuditRecorder(get_sessionmaker())
+    )
     user = await create_user(db_session)
     await grant_membership(user.id, project.id, VIEWER_NAME)
 
@@ -271,7 +289,9 @@ async def test_messages_are_readable_by_any_member(
     project = await create_project(db_session)
     project.embedding_collection = "col"
     module = await create_checklist_module(db_session, project_id=project.id)
-    service = MockDataDatasetService(db_session, Settings())
+    service = MockDataDatasetService(
+        db_session, Settings(), recorder=AuditRecorder(get_sessionmaker())
+    )
     creator = await create_user(db_session)
     reader = await create_user(db_session)
     await grant_membership(reader.id, project.id, VIEWER_NAME)
@@ -315,7 +335,9 @@ async def test_prepare_turn_creates_dataset_lazily(
     project.embedding_collection = "col"
     project.embedding_model = Settings().embedding_model
     module = await create_checklist_module(db_session, project_id=project.id)
-    service = MockDataDatasetService(db_session, Settings())
+    service = MockDataDatasetService(
+        db_session, Settings(), recorder=AuditRecorder(get_sessionmaker())
+    )
     user = await create_user(db_session)
     await grant_membership(user.id, project.id, EDITOR_NAME)
 
@@ -342,7 +364,9 @@ async def test_prepare_turn_creates_user_message(
     project.embedding_collection = "col"
     project.embedding_model = Settings().embedding_model
     module = await create_checklist_module(db_session, project_id=project.id)
-    service = MockDataDatasetService(db_session, Settings())
+    service = MockDataDatasetService(
+        db_session, Settings(), recorder=AuditRecorder(get_sessionmaker())
+    )
     user = await create_user(db_session)
     await grant_membership(user.id, project.id, EDITOR_NAME)
 
@@ -368,7 +392,9 @@ async def test_prepare_turn_mints_ids(
     project.embedding_collection = "col"
     project.embedding_model = Settings().embedding_model
     module = await create_checklist_module(db_session, project_id=project.id)
-    service = MockDataDatasetService(db_session, Settings())
+    service = MockDataDatasetService(
+        db_session, Settings(), recorder=AuditRecorder(get_sessionmaker())
+    )
     user = await create_user(db_session)
     await grant_membership(user.id, project.id, EDITOR_NAME)
 
@@ -392,7 +418,9 @@ async def test_prepare_turn_includes_existing_records(
     project.embedding_collection = "col"
     project.embedding_model = Settings().embedding_model
     module = await create_checklist_module(db_session, project_id=project.id)
-    service = MockDataDatasetService(db_session, Settings())
+    service = MockDataDatasetService(
+        db_session, Settings(), recorder=AuditRecorder(get_sessionmaker())
+    )
     user = await create_user(db_session)
     await grant_membership(user.id, project.id, EDITOR_NAME)
 
@@ -422,7 +450,9 @@ async def test_prepare_turn_refuses_when_project_not_ready(
     """prepare_turn requires project to be indexed and ready."""
     project = await create_project(db_session, status=ProjectStatus.CLONING)
     module = await create_checklist_module(db_session, project_id=project.id)
-    service = MockDataDatasetService(db_session, Settings())
+    service = MockDataDatasetService(
+        db_session, Settings(), recorder=AuditRecorder(get_sessionmaker())
+    )
     user = await create_user(db_session)
     await grant_membership(user.id, project.id, EDITOR_NAME)
 
@@ -443,7 +473,9 @@ async def test_prepare_turn_refuses_when_embedding_model_changed(
     project.embedding_collection = "col"
     project.embedding_model = "some-other-model"
     module = await create_checklist_module(db_session, project_id=project.id)
-    service = MockDataDatasetService(db_session, Settings())
+    service = MockDataDatasetService(
+        db_session, Settings(), recorder=AuditRecorder(get_sessionmaker())
+    )
     user = await create_user(db_session)
     await grant_membership(user.id, project.id, EDITOR_NAME)
 
@@ -471,7 +503,9 @@ async def test_prepare_turn_refuses_while_generating(
     project.embedding_collection = "col"
     project.embedding_model = Settings().embedding_model
     module = await create_checklist_module(db_session, project_id=project.id)
-    service = MockDataDatasetService(db_session, Settings())
+    service = MockDataDatasetService(
+        db_session, Settings(), recorder=AuditRecorder(get_sessionmaker())
+    )
     user = await create_user(db_session)
     await grant_membership(user.id, project.id, EDITOR_NAME)
 
@@ -498,7 +532,9 @@ async def test_request_generation_refuses_when_project_not_ready(
     """request_generation requires project to be indexed."""
     project = await create_project(db_session, status=ProjectStatus.CLONING)
     module = await create_checklist_module(db_session, project_id=project.id)
-    service = MockDataDatasetService(db_session, Settings())
+    service = MockDataDatasetService(
+        db_session, Settings(), recorder=AuditRecorder(get_sessionmaker())
+    )
     user = await create_user(db_session)
     await grant_membership(user.id, project.id, EDITOR_NAME)
 
@@ -533,7 +569,9 @@ async def test_prepare_turn_maps_history_from_prior_messages(
     project.embedding_collection = "col"
     project.embedding_model = Settings().embedding_model
     module = await create_checklist_module(db_session, project_id=project.id)
-    service = MockDataDatasetService(db_session, Settings())
+    service = MockDataDatasetService(
+        db_session, Settings(), recorder=AuditRecorder(get_sessionmaker())
+    )
     user = await create_user(db_session)
     await grant_membership(user.id, project.id, EDITOR_NAME)
 
@@ -571,7 +609,9 @@ async def test_prepare_turn_maps_history_from_prior_messages(
 
 async def test_get_404s_on_nonexistent_module(db_session: AsyncSession) -> None:
     """get raises 404 for a nonexistent module id."""
-    service = MockDataDatasetService(db_session, Settings())
+    service = MockDataDatasetService(
+        db_session, Settings(), recorder=AuditRecorder(get_sessionmaker())
+    )
     user = await create_user(db_session)
 
     with pytest.raises(AppError) as excinfo:
@@ -582,7 +622,9 @@ async def test_get_404s_on_nonexistent_module(db_session: AsyncSession) -> None:
 
 async def test_request_generation_404s_on_nonexistent_module(db_session: AsyncSession) -> None:
     """request_generation raises 404 for a nonexistent module id."""
-    service = MockDataDatasetService(db_session, Settings())
+    service = MockDataDatasetService(
+        db_session, Settings(), recorder=AuditRecorder(get_sessionmaker())
+    )
     user = await create_user(db_session)
 
     with pytest.raises(AppError) as excinfo:
@@ -598,7 +640,9 @@ async def test_request_generation_404s_on_nonexistent_module(db_session: AsyncSe
 
 async def test_messages_404s_on_nonexistent_module(db_session: AsyncSession) -> None:
     """messages raises 404 for a nonexistent module id."""
-    service = MockDataDatasetService(db_session, Settings())
+    service = MockDataDatasetService(
+        db_session, Settings(), recorder=AuditRecorder(get_sessionmaker())
+    )
     user = await create_user(db_session)
 
     with pytest.raises(AppError) as excinfo:
@@ -609,7 +653,9 @@ async def test_messages_404s_on_nonexistent_module(db_session: AsyncSession) -> 
 
 async def test_change_sets_for_404s_on_nonexistent_module(db_session: AsyncSession) -> None:
     """change_sets_for raises 404 for a nonexistent module id."""
-    service = MockDataDatasetService(db_session, Settings())
+    service = MockDataDatasetService(
+        db_session, Settings(), recorder=AuditRecorder(get_sessionmaker())
+    )
     user = await create_user(db_session)
 
     with pytest.raises(AppError) as excinfo:
@@ -620,7 +666,9 @@ async def test_change_sets_for_404s_on_nonexistent_module(db_session: AsyncSessi
 
 async def test_prepare_turn_404s_on_nonexistent_module(db_session: AsyncSession) -> None:
     """prepare_turn raises 404 for a nonexistent module id."""
-    service = MockDataDatasetService(db_session, Settings())
+    service = MockDataDatasetService(
+        db_session, Settings(), recorder=AuditRecorder(get_sessionmaker())
+    )
     user = await create_user(db_session)
 
     with pytest.raises(AppError) as excinfo:
@@ -645,7 +693,9 @@ async def test_mock_data_generation_is_refused_while_a_reindex_is_in_flight(
     project.reindex_in_progress = True
     module = await create_checklist_module(db_session, project_id=project.id)
     await db_session.commit()
-    service = MockDataDatasetService(db_session, Settings())
+    service = MockDataDatasetService(
+        db_session, Settings(), recorder=AuditRecorder(get_sessionmaker())
+    )
     queue = InMemoryIngestionQueue()
     user = await create_user(db_session)
     await grant_membership(user.id, project.id, EDITOR_NAME)

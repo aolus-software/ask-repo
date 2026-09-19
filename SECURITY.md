@@ -101,6 +101,26 @@ A few properties are your responsibility, not the code's:
   network boundary the instance otherwise relies on — this is not a new threat, since any
   user could already read the same content through the UI, but it is a new place the content
   can end up.
+- **Choose an audit retention window deliberately.** `AUDIT_RETENTION_DAYS` defaults to `0`,
+  which means *keep every audit row forever* — a safe default for a fresh instance, and not a
+  recommendation for every instance. The table's write rate is proportional to QA activity, not
+  to model calls: `checklist_item.result_recorded` fires once per test case a tester ticks, so an
+  active QA pass writes hundreds of rows in a day where logins and deletions alone would have
+  written a handful. Set a window if that history is not worth keeping indefinitely. What you
+  cannot do is remove one row: the single delete path takes a cutoff and nothing else — no actor
+  filter, no event-type filter — which is what keeps the trail append-only in the presence of a
+  prune. An operator sets a window; nobody erases an entry, including their own.
+- **The audit trail is something you will read, so it is on the scrub path rather than exempt
+  from it.** It records *that* an action happened and by whom, never the secret involved and
+  never the content: no passwords, tokens or PATs; a clone URL reduced to its host; and no
+  prompt, message, conversation title or source excerpt. Two mechanisms hold that rather than
+  care — the payload is an allowlist per event type (a new column on `users` or `projects` is
+  invisible to the trail until somebody names it), and a conversation's `targetLabel` is always
+  `NULL` because its title derives from the user's own question. Reads are admin-only and
+  instance-wide, so **an administrator can see that a colleague opened or deleted a conversation
+  against a project, and when — never its title and never a message.** That is a deliberate,
+  narrow amendment to conversation privacy, recorded in `docs/PRD.md` §4.2; no administrator
+  bypass exists on any route under `/conversations`.
 - **A generated expected result is model-derived and can be wrong.** The QA Checklist proposes
   test cases and expected results by reading indexed code; nothing verifies them against a
   running system. The human review gate — every proposal enters as a pending change set that

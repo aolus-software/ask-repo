@@ -15,7 +15,7 @@ from fastapi import APIRouter, Depends, Query, Request, Response, status
 from fastapi.responses import StreamingResponse
 from langchain_core.language_models import BaseChatModel
 
-from app.api.deps import CurrentUser, SessionDep
+from app.api.deps import AuditRecorderDep, CurrentUser, SessionDep
 from app.api.routes.conversations import (
     SSE_HEADERS,
     AnswererFactory,
@@ -53,13 +53,14 @@ def get_checklist_module_service(
     session: SessionDep,
     settings: Annotated[Settings, Depends(get_settings)],
     indexed_paths: Annotated[IndexedPathReader, Depends(get_indexed_path_reader)],
+    recorder: AuditRecorderDep,
 ) -> ChecklistModuleService:
     """Provide the service with a request-scoped session.
 
     The reader comes from the projects router so that refusing an unindexed
     `source_path` here and browsing the tree there share one cache.
     """
-    return ChecklistModuleService(session, settings, indexed_paths=indexed_paths)
+    return ChecklistModuleService(session, settings, indexed_paths=indexed_paths, recorder=recorder)
 
 
 def get_checklist_queue(request: Request) -> ChecklistQueue:

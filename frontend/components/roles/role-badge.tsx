@@ -11,7 +11,7 @@ export function RoleBadge({ name, isSystem }: { name: string; isSystem: boolean 
       {name}
       {isSystem ? (
         <Lock
-          className="text-muted-foreground size-3.5"
+          className="text-muted-foreground size-4"
           aria-label="Built-in role, cannot be edited"
         />
       ) : null}

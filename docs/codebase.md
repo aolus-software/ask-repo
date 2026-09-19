@@ -102,7 +102,8 @@ def require_permission(user, project_id, permission) -> None:
 
 That discipline is what made per-project RBAC a change to one function's body rather than a
 rewrite: phase 2.1 replaced the `return ProjectScope.all()` that shipped in phase 1, added
-`require_permission` beside it, and touched none of the 15 call sites.
+`require_permission` beside it, and touched none of the 15 call sites it had at the time
+(there are 20 today).
 
 `ProjectScope` is an explicit dataclass rather than `list[UUID] | None`, because a `None`
 sentinel meaning "unrestricted" is fail-open — a bug that forgets to set it hands out
@@ -138,16 +139,16 @@ backend/app/
 │
 ├── api/
 │   ├── deps.py        shared dependencies (CurrentUser, AdminUser, service factories)
-│   └── routes/        14 routers, 65 routes
+│   └── routes/        15 routers, 67 routes
 │
-├── core/              cross-cutting: access, crypto, errors, grant_cache, logging,
+├── core/              cross-cutting: access, audit, crypto, errors, grant_cache, logging,
 │                      middleware, passwords, permissions, rate_limit, repo_url,
 │                      role_seed, security
 ├── db/session.py      engine + sessionmaker
-├── models/            7 modules, 16 tables
-├── repositories/      14 repositories — the only place SQL is written
+├── models/            8 modules, 17 tables
+├── repositories/      15 repositories — the only place SQL is written
 ├── schemas/           request/response shapes, all on ApiModel
-├── services/          14 services — business rules and authorization,
+├── services/          15 services — business rules and authorization,
 │                      plus path_tree.py: pure tree shaping, no I/O
 │
 ├── ingestion/         cloner, walker, chunker, embedder/, vector_store, pipeline
@@ -276,7 +277,7 @@ Run everything CI runs with `make check`: ruff, prettier, mypy, pytest, vitest.
 
 ## The rule files
 
-`.claude/rules/` holds 13 rule files that encode conventions this page only summarises —
+`.claude/rules/` holds 14 rule files that encode conventions this page only summarises —
 `router.md`, `persistence.md`, `response-api.md`, `rag.md`, `ingestion.md`, `design-system.md`,
 `forms.md`, `navigation.md`, `frontend-bff.md`, and others. They are written for coding agents
 but are the most precise statement of each convention, and worth reading before a change in the

@@ -198,7 +198,41 @@ substitute, and there is deliberately no setting for it.
 
 **A reconcile sweep runs every 60 seconds.** Publishing to Kafka can fail after the row is
 already committed, and a worker can die holding a lease. The sweep re-publishes jobs that were
-never picked up and jobs whose lease expired. It runs for all three ladders.
+never picked up and jobs whose lease expired. It runs for all three ladders. The same tick also
+prunes dead refresh tokens and, when `AUDIT_RETENTION_DAYS` is set, audit rows past the window.
+
+---
+
+## The audit write path
+
+Every write and every export records a row in `audit_events` (`.claude/rules/audit-trail.md`).
+Three things about *where* that write happens are not inferable from any one file.
+
+**The service records it, after its own commit.** Not the route, and never before the commit: a
+row describing a write that rolled back is worse than no row. The call site captures the `before`
+scalars into locals before mutating and the `after` values before committing, then hands
+`AuditRecorder` a plain dict — nothing on the audit path holds an ORM reference, so the recorder
+cannot be made to re-read a row that is now soft-deleted or to hold one open past the request.
+
+**The recorder opens its own session** from the sessionmaker rather than reusing the
+request-scoped one, so the write does not depend on when FastAPI closes the request's
+`AsyncExitStack` — the same reasoning the streaming termination write uses
+([`langgraph.md`](langgraph.md)).
+
+**It never raises.** On any `Exception` it logs the whole event at `WARNING` and returns, which is
+what makes "an audit failure cannot fail a user's action" structural rather than a promise each
+call site keeps — a login must not fail because a log write did. The accepted consequence is
+stated rather than glossed: an action that commits and then crashes before its audit write leaves
+no row, silently. The trail is a strong record, not a complete one, and the `WARNING` is the
+fallback rather than the record.
+
+**The worker prunes but never records.** A finished or failed index has no actor — nobody did it,
+a job did — and `projects.status` and `projects.error` already hold the result. `NULL` actor is
+reserved for the two cases where a *human* acted without an authenticated identity: a failed login
+against an unknown address, and the `seed-admins` CLI.
+
+Reading it is two admin-only routes, `GET /audit-events` and `GET /audit-events/{id}`. There is no
+route that writes. What the rows hold is in [`data.md`](data.md#audit).
 
 ---
 
@@ -206,7 +240,7 @@ never picked up and jobs whose lease expired. It runs for all three ladders.
 
 **Configuration flows one way**: environment → `.env` → the defaults in `Settings`
 (`app/config.py`). `get_settings()` is `lru_cache`d and injected with `Depends`; nothing else
-reads `os.environ`. All 72 settings are documented in [`configuration.md`](configuration.md).
+reads `os.environ`. All 80 settings are documented in [`configuration.md`](configuration.md).
 
 **Identity is resolved once, in middleware.** `AuthContextMiddleware` decodes the bearer token,
 then — in a session of its own, opened and closed before the handler's session exists — loads

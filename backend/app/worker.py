@@ -11,6 +11,7 @@ topic, and a sweep that recovers jobs Kafka never received.
 import asyncio
 import logging
 import uuid
+from datetime import UTC, datetime, timedelta
 
 from langchain_core.language_models import BaseChatModel
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -42,6 +43,7 @@ from app.queue.topics import (
 )
 from app.rag.capability import probe_structured_output
 from app.rag.chat import build_chat_model
+from app.repositories.audit_event import AuditEventRepository
 from app.repositories.checklist_module import ChecklistModuleRepository
 from app.repositories.mock_data_dataset import MockDataDatasetRepository
 from app.repositories.project import ProjectRepository
@@ -152,10 +154,15 @@ async def reconcile_mock_data_once(
 
 
 async def reconcile_loop(
-    *, producer: TopicProducer, topic: str, checklist_topic: str, mock_data_topic: str
+    *,
+    producer: TopicProducer,
+    topic: str,
+    checklist_topic: str,
+    mock_data_topic: str,
+    settings: Settings,
 ) -> None:
     """The 60-second tick: recover lost jobs of all kinds and prune dead refresh
-    tokens.
+    tokens and audit events.
 
     `docs/PRD.md` §5.1 schedules the `refresh_tokens` cleanup for "M1, with the job
     scheduler". This loop is that scheduler.
@@ -179,9 +186,15 @@ async def reconcile_loop(
                     topic=mock_data_topic,
                 )
                 pruned = await RefreshTokenRepository(session).delete_expired_and_revoked()
+                pruned_events = 0
+                if settings.audit_retention_days > 0:
+                    cutoff = datetime.now(UTC) - timedelta(days=settings.audit_retention_days)
+                    pruned_events = await AuditEventRepository(session).delete_older_than(cutoff)
                 await session.commit()
                 if pruned:
                     logger.info("pruned %d dead refresh tokens", pruned)
+                if pruned_events:
+                    logger.info("pruned %d audit events past the retention window", pruned_events)
         except Exception:
             logger.exception("reconcile tick failed")
 
@@ -304,6 +317,7 @@ async def main() -> None:
                 topic=settings.kafka_ingest_topic,
                 checklist_topic=settings.kafka_checklist_topic,
                 mock_data_topic=settings.kafka_mock_data_topic,
+                settings=settings,
             )
         ),
         *[

@@ -221,6 +221,12 @@ class Settings(BaseSettings):
     # the database — a backup holding both is plaintext storage with extra steps.
     pat_encryption_key: str = PLACEHOLDER_PAT_KEY
 
+    # Audit trail retention — how long to keep records. 0 means keep forever. Default-off
+    # because this table's write rate is bounded by human action — logins, destructive
+    # operations and QA activity — not by Phase 2.5's 201 rows per generation, so a small
+    # instance never needs to lose history.
+    audit_retention_days: int = Field(default=0, ge=0)
+
     @model_validator(mode="after")
     def _reject_development_defaults_in_production(self) -> Self:
         """Fail fast rather than serve production traffic with a known signing key."""

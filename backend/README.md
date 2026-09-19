@@ -355,6 +355,25 @@ it fails rather than inventing fields when no schema-shaped code exists under th
 returns `409 EXPORT_TOO_LARGE` over that limit, the same reasoning
 `checklist_export_max_rows` already documents above.
 
+### Audit trail
+
+Append-only. Both routes are **reads**, and that is the point: there is no route that writes an
+audit row, which is how append-only shows up on the wire and not only in the schema. Both are
+admin-only and instance-wide — auth, account and export events span no project, so a per-project
+scope would not describe this read.
+
+| Method | Path | Auth | Description |
+| --- | --- | --- | --- |
+| `GET` | `/audit-events` | admin | A page of events, newest first. Filters: `eventType`, `actorUserId`, `projectId`, `outcome` (`success`/`failure`), `occurredFrom`, `occurredTo`, `search`, plus `page`/`limit`. A bare `occurredTo` date (no time component) is inclusive of that whole day. `search` matches `actorEmail`/`targetLabel` by substring and `ipAddress` by prefix. `sort` accepts the literal `created_at` only — the one ordering the `created_at` index supports — with `sortDirection` defaulting to `desc` |
+| `GET` | `/audit-events/{id}` | admin | One event with its full `details` payload, `ipAddress`, and a `current` block saying whether the actor is still active and the target still exists. `404 AUDIT_EVENT_NOT_FOUND` |
+
+Every write and every export in the app records one of **37 event types** catalogued in
+`app/core/audit.py`; which operations must is a rule (`.claude/rules/audit-trail.md`), enforced in
+both directions by `tests/test_audit_coverage.py`. The payload is an allowlist per event type,
+never a diff of dirty attributes, and it never carries a secret or any content — no message text,
+and `targetLabel` is `NULL` for a conversation. Retention is `AUDIT_RETENTION_DAYS` (default `0`,
+keep forever), pruned by the worker's existing 60-second tick.
+
 ## Layout
 
 ```
@@ -384,9 +403,11 @@ backend/
 │   │       ├── checklist_change_sets.py # apply + discard change sets
 │   │       ├── mock_data_datasets.py    # module-scoped mock data reads, generate, chat, export
 │   │       ├── mock_data_records.py     # DELETE /mock-data-records/{id}
-│   │       └── mock_data_change_sets.py # apply + discard mock-data change sets
+│   │       ├── mock_data_change_sets.py # apply + discard mock-data change sets
+│   │       └── audit_events.py # GET /audit-events, GET /audit-events/{id} (admin, reads only)
 │   ├── core/
 │   │   ├── access.py     # resolve_project_scope + require_permission — the only two
+│   │   ├── audit.py      # the 37-event catalogue, the per-event field allowlist, AuditRecorder
 │   │   ├── crypto.py     # SecretBox (PAT encryption at rest) + scrub
 │   │   ├── errors.py     # AppError, ErrorCode, exception handlers
 │   │   ├── grant_cache.py # Redis read-through cache for a user's project grants
@@ -484,6 +505,9 @@ The things worth knowing before you touch any of it:
   off, so there is one code path rather than two; `RAG_MAX_RETRIEVAL_ATTEMPTS` (default `2`)
   bounds how many times the grader may ask for a re-search before the answer is generated anyway
   and flagged `weak_evidence`.
+- **`AUDIT_RETENTION_DAYS` (default `0`) means keep every audit row forever.** A positive value
+  is a window the worker's reconcile tick enforces, and it is the only lever over that table —
+  the single delete path takes a cutoff and nothing else.
 
 ## Conventions
 

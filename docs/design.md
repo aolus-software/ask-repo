@@ -96,7 +96,7 @@ inside a card is `space-y-4`; between cards, `gap-6`.
 | Card padding | `p-6` (`p-4` compact, `p-8` roomy) |
 | Card header margin | `mb-4` |
 | Form field gap | `gap-1` within a field, `mb-4` between fields |
-| Filter/toolbar grid | `grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-4` |
+| Filter/toolbar grid | `grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-4` — four cells including the search box. A screen carrying four or more filters passes `columns={5}` to `ListToolbar` for `lg:grid-cols-5`; `/settings/audit` is the one that does. Filters are passed as sibling cells, never wrapped in a grid of their own, or they divide one cell between them |
 | Button group | `gap-2` |
 | Page section gap | `gap-6` |
 
@@ -115,6 +115,8 @@ add a row (and install it with `npx shadcn@latest add <name>`) when a new screen
 | QA Checklist | `table`, `textarea`, `tooltip`, `select`, `checkbox`, `alert`, `dropdown-menu`, `command`, `popover` |
 | Mock Data tab | `tabs` |
 | Both refinement chats | `sheet` — the drawer `RefinementDrawer` is built on |
+| Roles | `table`, `badge`, `checkbox`, `dialog`, `dropdown-menu`, `field`, `input`, `separator` |
+| Audit trail | `table`, `badge`, `combobox`, `dialog`, `card`, `separator`, `skeleton`, `alert` |
 | Lists (all) | `pagination`, `input-group` |
 
 `form` is deliberately absent: shadcn's `form` component wraps **react-hook-form**, which

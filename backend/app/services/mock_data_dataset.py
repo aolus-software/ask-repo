@@ -21,6 +21,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.config import Settings
 from app.core import access
+from app.core.audit import AuditEntry, AuditEventType, AuditRecorder
 from app.core.errors import AppError, ErrorCode
 from app.core.middleware import AuthenticatedUser
 from app.core.permissions import Permission
@@ -76,7 +77,9 @@ KEEP_ALIVE_SECONDS = 15.0
 class MockDataDatasetService:
     """Dataset reads, the generation trigger, and the pre-flight for the chat."""
 
-    def __init__(self, session: AsyncSession, settings: Settings) -> None:
+    def __init__(
+        self, session: AsyncSession, settings: Settings, *, recorder: AuditRecorder
+    ) -> None:
         self.session = session
         self.settings = settings
         self.datasets = MockDataDatasetRepository(session)
@@ -85,6 +88,7 @@ class MockDataDatasetService:
         self.messages_repository = MockDataMessageRepository(session)
         self.modules = ChecklistModuleRepository(session)
         self.projects = ProjectRepository(session)
+        self._recorder = recorder
 
     async def get(
         self, module_id: uuid.UUID, *, actor: AuthenticatedUser
@@ -161,6 +165,18 @@ class MockDataDatasetService:
             module_id,
             job_id,
         )
+        await self._recorder.record(
+            AuditEntry(
+                event_type=AuditEventType.MOCK_DATA_GENERATION_REQUESTED,
+                actor_user_id=actor.id,
+                actor_email=actor.email,
+                target_type="mock_data_dataset",
+                target_id=dataset.id,
+                target_label=module.name,
+                project_id=project.id,
+                context={"indexedGeneration": project.active_generation},
+            )
+        )
         records = await self.records.list_for_module(module_id)
         # No pending change set to report: the check above already refused this call
         # if one existed, and nothing between there and here can create one.
@@ -190,15 +206,46 @@ class MockDataDatasetService:
 
     async def export_json(self, module_id: uuid.UUID, *, actor: AuthenticatedUser) -> bytes:
         """Every applied record of one module, as a JSON array of field maps."""
-        await self._require_readable_module(module_id, actor)
+        module = await self._require_readable_module(module_id, actor)
         records = await self._records_within_cap(module_id)
-        return build_mock_data_json(records)
+        content = build_mock_data_json(records)
+        await self._record_export(module, actor=actor, format_="json", row_count=len(records))
+        return content
 
     async def export_xlsx(self, module_id: uuid.UUID, *, actor: AuthenticatedUser) -> bytes:
         """Every applied record of one module, as a spreadsheet."""
-        await self._require_readable_module(module_id, actor)
+        module = await self._require_readable_module(module_id, actor)
         records = await self._records_within_cap(module_id)
-        return build_mock_data_workbook(records)
+        content = build_mock_data_workbook(records)
+        await self._record_export(module, actor=actor, format_="xlsx", row_count=len(records))
+        return content
+
+    async def _record_export(
+        self,
+        module: ChecklistModule,
+        *,
+        actor: AuthenticatedUser,
+        format_: str,
+        row_count: int,
+    ) -> None:
+        """One event for both export routes, distinguished by `format`.
+
+        Called only after the bytes are built successfully -- an export that raised
+        (the row-cap refusal) took nothing out of the instance, so nothing is
+        recorded for it.
+        """
+        await self._recorder.record(
+            AuditEntry(
+                event_type=AuditEventType.MOCK_DATA_EXPORTED,
+                actor_user_id=actor.id,
+                actor_email=actor.email,
+                target_type="checklist_module",
+                target_id=module.id,
+                target_label=module.name,
+                project_id=module.project_id,
+                context={"format": format_, "rowCount": row_count},
+            )
+        )
 
     async def _records_within_cap(self, module_id: uuid.UUID) -> builtins.list[MockDataRecord]:
         """This module's records, or a `409` if there are more than the export cap allows."""
@@ -225,8 +272,25 @@ class MockDataDatasetService:
         # must 404, not 403 -- the same order `ChecklistItemService.delete` follows.
         module = await self._require_readable_module(record.checklist_module_id, actor)
         access.require_permission(actor, module.project_id, Permission.MOCKDATA_EDIT)
+        # Captured before the delete: `position` is what the row held, never its
+        # `fields` -- those are generated content and stay out of the trail.
+        record_id = record.id
+        record_position = record.position
+        project_id = module.project_id
         await self.records.soft_delete(record)
         await self.session.commit()
+        await self._recorder.record(
+            AuditEntry(
+                event_type=AuditEventType.MOCK_DATA_RECORD_DELETED,
+                actor_user_id=actor.id,
+                actor_email=actor.email,
+                target_type="mock_data_record",
+                target_id=record_id,
+                target_label=module.name,
+                project_id=project_id,
+                context={"position": record_position},
+            )
+        )
 
     async def prepare_turn(
         self,
