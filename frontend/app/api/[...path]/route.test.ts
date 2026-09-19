@@ -15,10 +15,15 @@ afterEach(() => {
   process.env.API_URL = ORIGINAL_API_URL;
 });
 
-function proxyRequest(url: string, cookie: string, method = "GET"): NextRequest {
+function proxyRequest(
+  url: string,
+  cookie: string,
+  method = "GET",
+  headers: Record<string, string> = {},
+): NextRequest {
   return new NextRequest(new URL(url, "http://localhost:3000"), {
     method,
-    headers: { cookie },
+    headers: { cookie, ...headers },
   });
 }
 
@@ -76,6 +81,33 @@ describe("the proxy", () => {
     const [url, init] = spy.mock.calls[0] as unknown as [string, RequestInit];
     expect(url).toBe("http://backend:8000/projects?page=2&search=api");
     expect((init.headers as Record<string, string>).authorization).toBe("Bearer jwt");
+  });
+
+  it("relays the caller's address to the backend and to the refresh call", async () => {
+    // Both matter: the backend resolves the audited source host from this header, and
+    // dropping it made every audit row read as the Next server (#40).
+    const spy = vi
+      .fn()
+      .mockResolvedValueOnce(unauthorized())
+      .mockResolvedValueOnce(refreshOk())
+      .mockResolvedValueOnce(jsonOk({ ok: true }));
+    vi.stubGlobal("fetch", spy);
+
+    await GET(
+      proxyRequest(
+        "/api/projects",
+        "askrepo_access=stale; askrepo_session=askrepo_refresh%3Dold",
+        "GET",
+        { "x-forwarded-for": "203.0.113.7" },
+      ),
+      context(["projects"]),
+    );
+
+    for (const call of spy.mock.calls as [string, RequestInit][]) {
+      expect((call[1].headers as Record<string, string>)["x-forwarded-for"]).toBe(
+        "203.0.113.7",
+      );
+    }
   });
 
   it("refreshes once and retries once on a 401", async () => {
