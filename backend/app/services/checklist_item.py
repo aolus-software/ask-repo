@@ -171,13 +171,18 @@ class ChecklistItemService:
         item.updated_at = datetime.now(UTC)
         await self.session.commit()
 
+        # `expectedResult` never appears here: it is model-authored prose derived
+        # from a private repository, and the content ban forbids storing it in a
+        # table with no project-deletion sweep. `expectedResultChanged` records that
+        # the expectation moved -- who changed it, and when -- without a second copy
+        # of the text (`.claude/rules/audit-trail.md`).
         changed: dict[str, tuple[ChangedValue, ChangedValue]] = {}
         if item.feature != old_feature:
             changed["feature"] = (old_feature, item.feature)
         if item.test_name != old_test_name:
             changed["testName"] = (old_test_name, item.test_name)
         if item.expected_result != old_expected_result:
-            changed["expectedResult"] = (old_expected_result, item.expected_result)
+            changed["expectedResultChanged"] = (False, True)
         if changed:
             await self._recorder.record(
                 AuditEntry(
@@ -232,11 +237,15 @@ class ChecklistItemService:
         # may not write, because they claim a human observation, and keeping the event
         # that legitimately writes them distinct is what makes "who recorded this
         # pass?" answerable without reading the payload of every update.
+        # `currentResult` is never stored: it is what a tester typed describing
+        # generated test content, and the content ban applies to it exactly like
+        # `expectedResult` above. `currentResultChanged` records that an observation
+        # was written without a second copy of the text.
         changed: dict[str, tuple[ChangedValue, ChangedValue]] = {}
         if item.status != old_status:
             changed["status"] = (old_status, item.status)
         if item.current_result != old_current_result:
-            changed["currentResult"] = (old_current_result, item.current_result)
+            changed["currentResultChanged"] = (False, True)
         if changed:
             await self._recorder.record(
                 AuditEntry(
@@ -284,9 +293,10 @@ class ChecklistItemService:
 
     async def export(self, query: ChecklistItemListQuery, *, actor: AuthenticatedUser) -> bytes:
         """The same filters as the list route, with pagination ignored (spec 7)."""
+        scope = access.resolve_project_scope(actor)
         cap = self.settings.checklist_export_max_rows
         rows = await self.items.list_all(
-            scope=access.resolve_project_scope(actor),
+            scope=scope,
             cap=cap,
             project_id=query.project_id,
             module_id=query.module_id,
@@ -311,13 +321,17 @@ class ChecklistItemService:
         # that takes a private repository's derived content out of the instance.
         # `filter` carries the query's filters, matching `clear_results` -- never
         # the rows themselves, which would put generated test content in the trail.
+        # `feature` is picked from generated content in the UI, so -- like
+        # `expectedResult` -- it stays out; `featureFilterApplied` says a feature
+        # filter narrowed the export without naming which one. `search` stays: it is
+        # the caller's own query intent, not a fact about the repository.
         filter_details: dict[str, str] = {}
         if query.project_id is not None:
             filter_details["projectId"] = str(query.project_id)
         if query.module_id is not None:
             filter_details["moduleId"] = str(query.module_id)
         if query.feature is not None:
-            filter_details["feature"] = query.feature
+            filter_details["featureFilterApplied"] = "true"
         if query.status is not None:
             filter_details["status"] = query.status.value
         if query.source is not None:
@@ -326,20 +340,48 @@ class ChecklistItemService:
             filter_details["kind"] = query.kind.value
         if query.search is not None:
             filter_details["search"] = query.search
-        # The filter may narrow by module rather than project directly, so fall
-        # back to what the matched rows actually belong to.
-        project_id = query.project_id or (rows[0].project_id if rows else None)
+
+        # The filter may narrow by module rather than project directly, so fall back
+        # to what the matched rows actually belong to -- but only when every matched
+        # row agrees. An unfiltered export can span every project in scope, and
+        # stamping whichever project sorts first on `rows[0]` would misattribute the
+        # row to one project out of many. `projectCount` keeps the row honest about
+        # what happened even when `project_id` is `None`.
+        distinct_project_ids = {row.project_id for row in rows}
+        if query.project_id is not None:
+            project_id: uuid.UUID | None = query.project_id
+        elif len(distinct_project_ids) == 1:
+            project_id = next(iter(distinct_project_ids))
+        else:
+            project_id = None
+
+        # A bulk export has no single target unless the query narrowed to exactly
+        # one module -- then the module's name is what makes the row legible, rather
+        # than the bare `checklist_item` type with nothing to point at.
+        target_type: str | None = None
+        target_id: uuid.UUID | None = None
+        target_label: str | None = None
+        if query.module_id is not None:
+            module = await self.modules.get_in_scope(query.module_id, scope=scope)
+            if module is not None:
+                target_type = "checklist_module"
+                target_id = module.id
+                target_label = module.name
+
         await self._recorder.record(
             AuditEntry(
                 event_type=AuditEventType.CHECKLIST_EXPORTED,
                 actor_user_id=actor.id,
                 actor_email=actor.email,
-                target_type="checklist_item",
+                target_type=target_type,
+                target_id=target_id,
+                target_label=target_label,
                 project_id=project_id,
                 context={
                     "format": "xlsx",
                     "rowCount": len(rows),
                     "filter": filter_details,
+                    "projectCount": len(distinct_project_ids),
                 },
             )
         )
@@ -392,9 +434,12 @@ class ChecklistItemService:
         # observations without deleting a single row. `filter` carries the query's
         # filters -- what was asked for -- never the rows it matched, since copying
         # those in would put generated test content in the trail (content ban).
+        # `feature` is picked from generated content in the UI, so it is dropped to a
+        # boolean like `export`'s filter; `search` stays because it is the caller's
+        # own query intent.
         filter_details: dict[str, str] = {"moduleId": str(payload.module_id)}
         if payload.feature is not None:
-            filter_details["feature"] = payload.feature
+            filter_details["featureFilterApplied"] = "true"
         if payload.status is not None:
             filter_details["status"] = payload.status.value
         if payload.source is not None:

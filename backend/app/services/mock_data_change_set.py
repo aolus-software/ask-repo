@@ -95,7 +95,9 @@ class MockDataChangeSetService:
     ) -> MockDataChangeSetApplyResponse:
         """Apply the named operations, in one transaction. Gated on `changeset.apply`
         against the module's project, matching `ChecklistChangeSetService.apply`."""
-        change_set, module_id, project_id = await self._require_pending(change_set_id, actor)
+        change_set, module_id, project_id, module_name = await self._require_pending(
+            change_set_id, actor
+        )
         access.require_permission(actor, project_id, Permission.CHANGESET_APPLY)
         wanted = set(payload.operation_ids) if payload.operation_ids is not None else None
 
@@ -139,6 +141,7 @@ class MockDataChangeSetService:
                 actor_email=actor.email,
                 target_type="mock_data_change_set",
                 target_id=change_set.id,
+                target_label=module_name,
                 project_id=project_id,
                 context={
                     "origin": origin,
@@ -165,7 +168,9 @@ class MockDataChangeSetService:
     ) -> MockDataChangeSetResponse:
         """Mark the change set discarded and write nothing else. Gated on
         `changeset.apply`, matching `apply`: a discard is also a review decision."""
-        change_set, module_id, project_id = await self._require_pending(change_set_id, actor)
+        change_set, module_id, project_id, module_name = await self._require_pending(
+            change_set_id, actor
+        )
         access.require_permission(actor, project_id, Permission.CHANGESET_APPLY)
         change_set.status = ChangeSetStatus.DISCARDED.value
         change_set.resolved_by = actor.id
@@ -182,6 +187,7 @@ class MockDataChangeSetService:
                 actor_email=actor.email,
                 target_type="mock_data_change_set",
                 target_id=change_set.id,
+                target_label=module_name,
                 project_id=project_id,
                 context={"origin": origin, "operationsProposed": operations_proposed},
             )
@@ -249,9 +255,9 @@ class MockDataChangeSetService:
 
     async def _require_pending(
         self, change_set_id: uuid.UUID, actor: AuthenticatedUser
-    ) -> tuple[MockDataChangeSet, uuid.UUID, uuid.UUID]:
-        """The change set, its module id, and its project id, if the caller may see
-        the module and the change set is pending."""
+    ) -> tuple[MockDataChangeSet, uuid.UUID, uuid.UUID, str]:
+        """The change set, its module id, its project id, and its module's name, if
+        the caller may see the module and the change set is pending."""
         change_set = await self.change_sets.get(change_set_id)
         module = (
             None
@@ -272,4 +278,4 @@ class MockDataChangeSetService:
                 ErrorCode.MOCK_DATA_CHANGE_SET_ALREADY_RESOLVED,
                 "That change set has already been applied or discarded.",
             )
-        return change_set, module.id, module.project_id
+        return change_set, module.id, module.project_id, module.name

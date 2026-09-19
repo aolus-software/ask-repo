@@ -172,6 +172,7 @@ class MockDataDatasetService:
                 actor_email=actor.email,
                 target_type="mock_data_dataset",
                 target_id=dataset.id,
+                target_label=module.name,
                 project_id=project.id,
                 context={"indexedGeneration": project.active_generation},
             )
@@ -240,6 +241,7 @@ class MockDataDatasetService:
                 actor_email=actor.email,
                 target_type="checklist_module",
                 target_id=module.id,
+                target_label=module.name,
                 project_id=module.project_id,
                 context={"format": format_, "rowCount": row_count},
             )
@@ -284,6 +286,7 @@ class MockDataDatasetService:
                 actor_email=actor.email,
                 target_type="mock_data_record",
                 target_id=record_id,
+                target_label=module.name,
                 project_id=project_id,
                 context={"position": record_position},
             )

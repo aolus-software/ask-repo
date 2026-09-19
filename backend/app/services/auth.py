@@ -5,6 +5,7 @@ cookie, so cookie attributes stay an HTTP concern and the service stays testable
 without a request.
 """
 
+import logging
 import uuid
 from datetime import UTC, datetime, timedelta
 
@@ -31,6 +32,8 @@ from app.repositories.refresh_token import RefreshTokenRepository
 from app.repositories.user import UserRepository
 from app.schemas.auth import AccessTokenResponse, ChangePasswordRequest
 from app.schemas.user import UserResponse
+
+logger = logging.getLogger(__name__)
 
 
 class AuthService:
@@ -165,8 +168,24 @@ class AuthService:
         adds nothing new; no match means it is an unvalidated string and stays out.
         What is given up is address-enumeration detail — `ip_address` still shows the
         pattern from one host.
+
+        This runs from inside `except Exception` in `login`, on the request-scoped
+        session. If the credential check failed for a database reason, that session
+        is already poisoned and this lookup would raise `PendingRollbackError`,
+        *replacing* the exception the caller is mid-handling with an audit-path
+        error. The lookup is wrapped rather than left to propagate: `known = None` is
+        the conservative default anyway, since it is exactly the "store no address"
+        branch below.
         """
-        known = await self.users.get_by_email(email)
+        try:
+            known = await self.users.get_by_email(email)
+        except Exception:
+            logger.warning(
+                "failed-login lookup could not run (session likely poisoned by the"
+                " original failure); recording as an unknown account",
+                exc_info=True,
+            )
+            known = None
         await self._recorder.record(
             AuditEntry(
                 event_type=AuditEventType.AUTH_LOGIN_FAILED,
@@ -212,17 +231,28 @@ class AuthService:
         await self.session.commit()
         return issued
 
-    async def _record_refresh_replayed(self, family_id: uuid.UUID, revoked_count: int) -> None:
+    async def _record_refresh_replayed(
+        self,
+        family_id: uuid.UUID,
+        revoked_count: int,
+        *,
+        actor_user_id: uuid.UUID,
+        actor_email: str | None,
+    ) -> None:
         """Record a genuine reuse of an already-rotated refresh token.
 
         Only the two branches that revoke the whole family call this — the grace-
         window sibling mint (D12) is a race between two tabs, not a replay, and does
-        not record.
+        not record. `actor_user_id` is the token's own `user_id`: a replayed refresh
+        token is a security signal, and whose account it happened on is the first
+        thing a responder needs, so it is not left to `context`.
         """
         await self._recorder.record(
             AuditEntry(
                 event_type=AuditEventType.AUTH_REFRESH_REPLAYED,
                 outcome="failure",
+                actor_user_id=actor_user_id,
+                actor_email=actor_email,
                 ip_address=self._client_ip,
                 context={"familyId": str(family_id), "revokedCount": revoked_count},
             )
@@ -243,7 +273,13 @@ class AuthService:
         if token.revoked_at is not None:
             revoked_count = await self.tokens.revoke_family(token.family_id, reason="replay")
             await self.session.commit()
-            await self._record_refresh_replayed(token.family_id, revoked_count)
+            replayed_user = await self.users.get(token.user_id)
+            await self._record_refresh_replayed(
+                token.family_id,
+                revoked_count,
+                actor_user_id=token.user_id,
+                actor_email=replayed_user.email if replayed_user is not None else None,
+            )
             raise self._invalid_token(ErrorCode.REFRESH_TOKEN_REUSED)
 
         if token.used_at is not None:
@@ -251,7 +287,13 @@ class AuthService:
             if datetime.now(UTC) - token.used_at > grace:
                 revoked_count = await self.tokens.revoke_family(token.family_id, reason="replay")
                 await self.session.commit()
-                await self._record_refresh_replayed(token.family_id, revoked_count)
+                replayed_user = await self.users.get(token.user_id)
+                await self._record_refresh_replayed(
+                    token.family_id,
+                    revoked_count,
+                    actor_user_id=token.user_id,
+                    actor_email=replayed_user.email if replayed_user is not None else None,
+                )
                 raise self._invalid_token(ErrorCode.REFRESH_TOKEN_REUSED)
             # Inside the window: two tabs raced. Mint a sibling in the same family.
             user = await self.users.get(token.user_id)

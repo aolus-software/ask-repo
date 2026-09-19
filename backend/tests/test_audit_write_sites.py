@@ -12,20 +12,26 @@ type checking that catches a fixture returning the wrong thing.
 
 import uuid
 from datetime import UTC, datetime, timedelta
+from typing import cast
 
 import pytest
+import redis.asyncio as aioredis
 from httpx import AsyncClient
 from sqlalchemy import text
+from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
-from app.core.audit import AuditEventType
+from app.core.audit import AuditEventType, AuditRecorder
 from app.core.permissions import EDITOR_NAME
+from app.core.rate_limit import LoginAttemptLimiter, RateLimiter
 from app.core.security import sha256_hex
+from app.db.session import get_sessionmaker
 from app.ingestion.vector_store import InMemoryVectorStore
 from app.models import User
 from app.models.checklist import ChecklistItemStatus
 from app.models.project import Project, ProjectStatus
+from app.services.auth import AuthService
 from tests.conftest import TEST_PASSWORD, AuditRows, GrantMembership
 from tests.factories import (
     create_checklist_change_set,
@@ -199,10 +205,64 @@ async def test_refresh_replay_records_the_family_and_revoked_count(
     rows = await audit_rows(AuditEventType.AUTH_REFRESH_REPLAYED)
     assert len(rows) == 1
     assert rows[0].outcome == "failure"
+    # A replayed refresh token is a security signal, and whose account it happened
+    # on is the first thing a responder needs -- it is not left to `context`.
+    assert rows[0].actor_user_id == authed_user.id
+    assert rows[0].actor_email == authed_user.email
     revoked_count = rows[0].details["revokedCount"]
     assert isinstance(revoked_count, int)
     assert revoked_count >= 1
     assert isinstance(rows[0].details["familyId"], str)
+
+
+async def test_failed_login_records_even_when_the_session_is_already_poisoned(
+    db_session: AsyncSession,
+    authed_user: User,
+    redis_client: aioredis.Redis,
+    audit_rows: AuditRows,
+) -> None:
+    """`_record_failed_login` used to run its own lookup on the request-scoped
+    session, from inside the `except Exception:` branch in `login`. If the
+    credential check itself failed for a database reason, that session is already in
+    a failed transaction, and the lookup would raise `PendingRollbackError` -- an
+    audit-path error *replacing* the caller's real exception, at the one call site
+    the design names as why recording lives in the service rather than the route.
+
+    The lookup is now wrapped so this cannot happen: the fallback ("no address
+    stored") is exactly the behaviour an unresolvable lookup should have anyway.
+    """
+    settings = get_settings()
+    limiter = LoginAttemptLimiter(RateLimiter(redis_client), settings)
+    service = AuthService(
+        db_session,
+        settings,
+        limiter,
+        recorder=AuditRecorder(get_sessionmaker()),
+        client_ip="203.0.113.1",
+    )
+
+    # Poison the session with a failing statement, and deliberately leave it
+    # un-rolled-back -- exactly the state a mid-transaction database error leaves
+    # `login`'s own session in.
+    with pytest.raises(DBAPIError):
+        await db_session.execute(text("SELECT * FROM no_such_table_at_all"))
+
+    with pytest.raises(Exception):  # noqa: B017 -- the poisoned session's own error
+        await service.login(authed_user.email, "irrelevant-password")
+
+    # The session is unusable until it is rolled back; do that before reading the
+    # row back, exactly as a real request's session teardown would.
+    await db_session.rollback()
+
+    rows = await audit_rows(AuditEventType.AUTH_LOGIN_FAILED)
+    assert len(rows) == 1
+    assert rows[0].outcome == "failure"
+    # The lookup itself failed against the poisoned session, so the conservative
+    # "unknown account" branch is what gets recorded -- never a raised exception
+    # from the audit path, and never the caller's real address either.
+    assert rows[0].actor_user_id is None
+    assert rows[0].actor_email is None
+    assert rows[0].details == {"unknownAccount": True}
 
 
 async def test_user_create_records_the_new_values_with_a_null_before(
@@ -237,7 +297,10 @@ async def test_user_update_records_only_what_changed(
 
     rows = await audit_rows(AuditEventType.USER_UPDATED)
     assert len(rows) == 1
-    # `email` did not change, so it is absent — `changed` is a diff, not a snapshot.
+    # `changed` is a diff, not a snapshot, so an unchanged field is absent. `email`
+    # is absent for a second reason since A9: `UserUpdateRequest` never carried it,
+    # so it is not writable through this route at all and was dropped from the
+    # allowlist rather than left as an untested case.
     assert rows[0].details["changed"] == {"isAdmin": {"before": False, "after": True}}
 
 
@@ -642,6 +705,41 @@ async def test_checklist_item_update_records_only_the_changed_fields(
     assert "expectedResult" not in rows[0].details["changed"]
 
 
+async def test_checklist_item_update_never_stores_the_expected_result_text(
+    authed_client: AsyncClient,
+    authed_user: User,
+    grant_membership: GrantMembership,
+    db_session: AsyncSession,
+    audit_rows: AuditRows,
+) -> None:
+    """`expectedResult` is model-authored prose derived from a private repository, and
+    `audit_events` has no project-deletion sweep -- so a copy of it would outlive the
+    project it described. Only a boolean flag may cross into the row."""
+    module = await create_checklist_module(db_session)
+    item = await create_checklist_item(
+        db_session, module_id=module.id, expected_result="Returns 401 Unauthorized"
+    )
+    await db_session.commit()
+    await grant_membership(authed_user.id, module.project_id, EDITOR_NAME)
+
+    response = await authed_client.patch(
+        f"/checklist-items/{item.id}",
+        json={"expectedResult": "Returns 403 Forbidden with a WWW-Authenticate header"},
+    )
+    assert response.status_code == 200
+
+    rows = await audit_rows(AuditEventType.CHECKLIST_ITEM_UPDATED)
+    assert len(rows) == 1
+    assert changed_field(rows[0].details, "expectedResultChanged") == {
+        "before": False,
+        "after": True,
+    }
+    assert "expectedResult" not in cast(dict[str, object], rows[0].details["changed"])
+    # Neither the old nor the new expectation text is anywhere in the row.
+    assert "401 Unauthorized" not in str(rows[0].details)
+    assert "403 Forbidden" not in str(rows[0].details)
+
+
 async def test_recording_a_result_is_its_own_event(
     authed_client: AsyncClient,
     authed_user: User,
@@ -655,6 +753,10 @@ async def test_recording_a_result_is_its_own_event(
     forbidden to write, because they claim a human observation. Keeping the event that
     legitimately writes them distinct is what makes "who recorded this pass?"
     answerable without reading the payload of every update.
+
+    `currentResult` itself never reaches the row: it is a tester's free-text
+    observation about generated test content, which the content ban forbids storing,
+    and `audit_events` has no project-deletion sweep to age it out.
     """
     module = await create_checklist_module(db_session)
     item = await create_checklist_item(db_session, module_id=module.id)
@@ -672,10 +774,12 @@ async def test_recording_a_result_is_its_own_event(
     assert len(recorded) == 1
     assert not edited
     assert changed_field(recorded[0].details, "status") == {"before": "untested", "after": "pass"}
-    assert changed_field(recorded[0].details, "currentResult") == {
-        "before": None,
-        "after": "works as described",
+    assert changed_field(recorded[0].details, "currentResultChanged") == {
+        "before": False,
+        "after": True,
     }
+    assert "currentResult" not in cast(dict[str, object], recorded[0].details["changed"])
+    assert "works as described" not in str(recorded[0].details)
 
 
 async def test_checklist_item_delete_records_a_recorded_result_as_lost(
@@ -761,6 +865,7 @@ async def test_apply_records_what_was_proposed_and_what_was_taken(
     assert len(rows) == 1
     assert rows[0].details["operationsProposed"] == len(change_set.operations)
     assert rows[0].details["operationsApplied"] == 1
+    assert rows[0].target_label == module.name
     assert "operations" not in rows[0].details
 
 
@@ -819,8 +924,97 @@ async def test_export_records_that_content_left_the_instance(
     assert rows[0].details["format"] == "xlsx"
     assert rows[0].details["rowCount"] == 2
     assert rows[0].details["filter"] == {"moduleId": str(module.id)}
+    # The query narrowed to exactly one module, so the row names it rather than
+    # showing a bare `checklist_item` with nothing to point at.
+    assert rows[0].target_label == module.name
+    assert rows[0].details["projectCount"] == 1
     assert "first" not in str(rows[0].details)
     assert "second" not in str(rows[0].details)
+
+
+async def test_export_spanning_multiple_projects_records_no_single_project(
+    authed_client: AsyncClient,
+    authed_user: User,
+    grant_membership: GrantMembership,
+    db_session: AsyncSession,
+    audit_rows: AuditRows,
+) -> None:
+    """An unfiltered export can span every project the caller can reach.
+
+    Stamping whichever row happens to sort first would misattribute the export to
+    one project out of many, so an export that matches more than one project records
+    no `project_id` at all -- `projectCount` says how many it actually spanned.
+    """
+    module_a = await create_checklist_module(db_session)
+    module_b = await create_checklist_module(db_session)
+    await create_checklist_item(db_session, module_id=module_a.id, test_name="first")
+    await create_checklist_item(db_session, module_id=module_b.id, test_name="second")
+    await db_session.commit()
+    await grant_membership(authed_user.id, module_a.project_id, EDITOR_NAME)
+    await grant_membership(authed_user.id, module_b.project_id, EDITOR_NAME)
+
+    response = await authed_client.get("/checklist-items/export")
+    assert response.status_code == 200
+
+    rows = await audit_rows(AuditEventType.CHECKLIST_EXPORTED)
+    assert len(rows) == 1
+    assert rows[0].project_id is None
+    assert rows[0].details["projectCount"] == 2
+    assert rows[0].target_type is None
+    assert rows[0].target_label is None
+
+
+async def test_a_feature_filter_is_recorded_as_a_flag_not_the_feature_name(
+    authed_client: AsyncClient,
+    authed_user: User,
+    grant_membership: GrantMembership,
+    db_session: AsyncSession,
+    audit_rows: AuditRows,
+) -> None:
+    """A14: a feature name is generated content, and both bulk routes drop it.
+
+    `feature` is picked off a model's output in the UI, so storing the caller's value
+    would put generated test content in the trail exactly as `expectedResult` would.
+    `featureFilterApplied` records that a feature narrowed the operation without
+    naming which one, so the filter stays legible and the content ban holds. `search`
+    is the caller's own words and deliberately stays -- the two are treated
+    differently on purpose, and nothing else asserts the difference.
+    """
+    feature = "Password reset flow"
+    module = await create_checklist_module(db_session)
+    await create_checklist_item(
+        db_session,
+        module_id=module.id,
+        feature=feature,
+        test_name="first",
+        status=ChecklistItemStatus.PASS,
+        current_result="It happened",
+    )
+    await db_session.commit()
+    await grant_membership(authed_user.id, module.project_id, EDITOR_NAME)
+
+    exported = await authed_client.get(
+        "/checklist-items/export",
+        params={"moduleId": str(module.id), "feature": feature},
+    )
+    assert exported.status_code == 200
+
+    cleared = await authed_client.post(
+        "/checklist-items/clear-results",
+        json={"moduleId": str(module.id), "feature": feature},
+    )
+    assert cleared.status_code == 200
+    assert cleared.json()["clearedCount"] == 1
+
+    export_rows = await audit_rows(AuditEventType.CHECKLIST_EXPORTED)
+    clear_rows = await audit_rows(AuditEventType.CHECKLIST_ITEM_RESULTS_CLEARED)
+    assert len(export_rows) == 1
+    assert len(clear_rows) == 1
+    for row in (export_rows[0], clear_rows[0]):
+        recorded_filter = cast(dict[str, str], row.details["filter"])
+        assert recorded_filter["featureFilterApplied"] == "true"
+        assert "feature" not in recorded_filter
+        assert feature not in str(row.details)
 
 
 def _mock_data_add_operation(
@@ -853,6 +1047,7 @@ async def test_mock_data_generation_requested_records_the_indexed_generation(
     rows = await audit_rows(AuditEventType.MOCK_DATA_GENERATION_REQUESTED)
     assert len(rows) == 1
     assert rows[0].project_id == project.id
+    assert rows[0].target_label == module.name
     assert rows[0].details == {"indexedGeneration": 1}
 
 
@@ -888,6 +1083,7 @@ async def test_both_mock_data_exports_record_their_format(
     assert rows[0].details["format"] == expected_format
     assert rows[0].details["rowCount"] == 2
     assert rows[0].project_id == module.project_id
+    assert rows[0].target_label == module.name
 
 
 async def test_mock_data_record_delete_records_its_position(
@@ -910,6 +1106,7 @@ async def test_mock_data_record_delete_records_its_position(
 
     rows = await audit_rows(AuditEventType.MOCK_DATA_RECORD_DELETED)
     assert len(rows) == 1
+    assert rows[0].target_label == module.name
     assert rows[0].details == {"position": record.position}
     assert "Ada Lovelace" not in str(rows[0].details)
 
@@ -945,6 +1142,7 @@ async def test_mock_data_apply_records_what_was_proposed_and_what_was_taken(
     assert len(rows) == 1
     assert rows[0].details["operationsProposed"] == len(change_set.operations)
     assert rows[0].details["operationsApplied"] == 1
+    assert rows[0].target_label == module.name
     assert "operations" not in rows[0].details
 
 
@@ -971,4 +1169,5 @@ async def test_mock_data_discard_records_what_was_proposed(
     assert len(rows) == 1
     assert rows[0].details["operationsProposed"] == 1
     assert rows[0].details["origin"] == change_set.origin
+    assert rows[0].target_label == module.name
     assert "operations" not in rows[0].details

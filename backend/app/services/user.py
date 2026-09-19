@@ -174,8 +174,9 @@ class UserService:
 
         # Captured before the payload is applied, so `changed` below is a diff of what
         # actually moved rather than a snapshot of the request or the row.
+        # `email` is never captured: `UserUpdateRequest` carries only `name` and
+        # `isAdmin`, so a before/after pair for it could never differ.
         before_name = user.name
-        before_email = user.email
         before_is_admin = user.is_admin
 
         if payload.name is not None:
@@ -194,8 +195,6 @@ class UserService:
         changed: dict[str, tuple[ChangedValue, ChangedValue]] = {}
         if user.name != before_name:
             changed["name"] = (before_name, user.name)
-        if user.email != before_email:
-            changed["email"] = (before_email, user.email)
         if user.is_admin != before_is_admin:
             changed["isAdmin"] = (before_is_admin, user.is_admin)
 

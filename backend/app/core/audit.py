@@ -96,7 +96,12 @@ class AuditEventType(StrEnum):
 # stored bytes match the wire.
 CHANGED_FIELDS: dict[AuditEventType, frozenset[str]] = {
     AuditEventType.USER_CREATED: frozenset({"name", "email", "isAdmin", "mustChangePassword"}),
-    AuditEventType.USER_UPDATED: frozenset({"name", "email", "isAdmin", "mustChangePassword"}),
+    # `email` and `mustChangePassword` are dropped here (never `mustChangePassword`,
+    # never `email`): `UserUpdateRequest` carries only `name` and `isAdmin`
+    # (`app/schemas/user.py`), so `PATCH /users/{id}` cannot write either. An
+    # allowlist entry with no producer reads as documentation and is wrong in the
+    # misleading direction (`.claude/rules/audit-trail.md`).
+    AuditEventType.USER_UPDATED: frozenset({"name", "isAdmin"}),
     AuditEventType.PROJECT_CREATED: frozenset({"name", "repoUrlHost", "branch"}),
     AuditEventType.PROJECT_DELETED: frozenset({"name", "repoUrlHost"}),
     AuditEventType.MEMBERSHIP_GRANTED: frozenset({"roleName"}),
@@ -109,10 +114,19 @@ CHANGED_FIELDS: dict[AuditEventType, frozenset[str]] = {
     AuditEventType.CHECKLIST_MODULE_UPDATED: frozenset({"name", "sourcePath"}),
     AuditEventType.CHECKLIST_MODULE_DELETED: frozenset({"name", "sourcePath"}),
     AuditEventType.CHECKLIST_ITEM_CREATED: frozenset({"feature", "testName"}),
+    # `expectedResult` never appears here: it is model-authored prose derived from a
+    # private repository, which the content ban forbids storing, and `audit_events`
+    # has no project-deletion sweep so it would outlive the project it described.
+    # `expectedResultChanged` records that the expectation moved without copying it.
+    # `position` is dropped too -- `update()` never writes it, only `create()`'s
+    # `next_position` call does, so the key had no producer.
     AuditEventType.CHECKLIST_ITEM_UPDATED: frozenset(
-        {"feature", "testName", "expectedResult", "position"}
+        {"feature", "testName", "expectedResultChanged"}
     ),
-    AuditEventType.CHECKLIST_ITEM_RESULT_RECORDED: frozenset({"status", "currentResult", "notes"}),
+    # `currentResult` and `notes` are dropped for the same reason: `currentResult` is
+    # a tester's free-text observation and `notes` is never written by `set_result`.
+    # `currentResultChanged` is the boolean substitute.
+    AuditEventType.CHECKLIST_ITEM_RESULT_RECORDED: frozenset({"status", "currentResultChanged"}),
     AuditEventType.CHECKLIST_ITEM_DELETED: frozenset({"feature", "testName"}),
 }
 
@@ -122,6 +136,9 @@ CONTEXT_KEYS: dict[AuditEventType, frozenset[str]] = {
     AuditEventType.AUTH_LOGIN_FAILED: frozenset({"unknownAccount"}),
     AuditEventType.AUTH_LOGOUT: frozenset({"scope"}),
     AuditEventType.AUTH_PASSWORD_CHANGED: frozenset({"forced"}),
+    # `actor_user_id`/`actor_email` (top-level `AuditEntry` fields, populated from
+    # `token.user_id`) name whose account was replayed against; `familyId` and
+    # `revokedCount` stay here as context.
     AuditEventType.AUTH_REFRESH_REPLAYED: frozenset({"familyId", "revokedCount"}),
     AuditEventType.USER_CREATED: frozenset({"source"}),
     AuditEventType.USER_PASSWORD_RESET: frozenset({"forced"}),
@@ -145,7 +162,10 @@ CONTEXT_KEYS: dict[AuditEventType, frozenset[str]] = {
         {"origin", "operationsProposed", "operationsApplied"}
     ),
     AuditEventType.CHECKLIST_CHANGE_SET_DISCARDED: frozenset({"origin", "operationsProposed"}),
-    AuditEventType.CHECKLIST_EXPORTED: frozenset({"format", "rowCount", "filter"}),
+    # `projectCount` names how many distinct projects the export spanned, for the
+    # turns `project_id` is `None` because the filter matched more than one -- see
+    # `ChecklistItemService.export`.
+    AuditEventType.CHECKLIST_EXPORTED: frozenset({"format", "rowCount", "filter", "projectCount"}),
     AuditEventType.MOCK_DATA_GENERATION_REQUESTED: frozenset({"indexedGeneration"}),
     AuditEventType.MOCK_DATA_CHANGE_SET_APPLIED: frozenset(
         {"origin", "operationsProposed", "operationsApplied"}
@@ -156,7 +176,13 @@ CONTEXT_KEYS: dict[AuditEventType, frozenset[str]] = {
     AuditEventType.CONVERSATION_DELETED: frozenset({"messageCount"}),
 }
 
-type ChangedValue = str | bool | int | float | list[str] | dict[str, str] | None
+type ChangedValue = str | bool | int | float | list[str] | None
+# `context` alone may also carry a flat string-to-string map (the `filter` key on a
+# bulk clear or export). `ChangedValue` stays scalars-and-lists-only: widening it to
+# accept a `dict` would let `changed={"foo": ({...}, {...})}` typecheck, and no
+# database column can store a dict-of-dicts -- the before/after renderer would print
+# it as `[object Object]`.
+type ContextValue = ChangedValue | dict[str, str]
 type Outcome = Literal["success", "failure"]
 
 
@@ -195,7 +221,7 @@ class AuditEntry:
     ip_address: str | None = None
     # field -> (before, after). A create passes `None` for before, a delete for after.
     changed: dict[str, tuple[ChangedValue, ChangedValue]] = field(default_factory=dict)
-    context: dict[str, ChangedValue] = field(default_factory=dict)
+    context: dict[str, ContextValue] = field(default_factory=dict)
 
     def details(self) -> dict[str, object]:
         """Build the stored payload, refusing anything the allowlist does not name.

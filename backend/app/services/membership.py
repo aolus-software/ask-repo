@@ -143,12 +143,18 @@ class MembershipService:
         old_role = await self._roles.get(membership.role_id)
         old_role_name = old_role.name if old_role is not None else None
 
+        # Loaded before the commit and re-checked, rather than an `assert` after it:
+        # a membership row implies the user existed when it was granted, but `assert`
+        # is stripped under `python -O` and, if the invariant were ever violated,
+        # would raise `AssertionError` for a write that had already succeeded.
+        user = await self._users.get(user_id)
+        if user is None:
+            raise AppError(status.HTTP_404_NOT_FOUND, ErrorCode.USER_NOT_FOUND, "User not found.")
+
         membership.role_id = role.id
         await self.session.commit()
         await get_grant_cache().invalidate_user(user_id)
 
-        user = await self._users.get(user_id)
-        assert user is not None
         await self._recorder.record(
             AuditEntry(
                 event_type=AuditEventType.MEMBERSHIP_ROLE_CHANGED,

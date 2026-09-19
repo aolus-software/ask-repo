@@ -195,6 +195,7 @@ class ChecklistChangeSetService:
                 actor_email=actor.email,
                 target_type="checklist_change_set",
                 target_id=change_set.id,
+                target_label=module.name,
                 project_id=module.project_id,
                 context={
                     "origin": origin,
@@ -239,6 +240,7 @@ class ChecklistChangeSetService:
                 actor_email=actor.email,
                 target_type="checklist_change_set",
                 target_id=change_set.id,
+                target_label=module.name,
                 project_id=module.project_id,
                 context={"origin": origin, "operationsProposed": operations_proposed},
             )
