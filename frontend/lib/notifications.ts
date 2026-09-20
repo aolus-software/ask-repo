@@ -50,12 +50,14 @@ const TITLES: Record<string, (d: Record<string, unknown>) => string> = {
   "project.reindex.failed": (d) => `${name(d, "projectName")} failed to reindex`,
   "checklist_change_set.pending": (d) =>
     `${name(d, "moduleName")} has a checklist change set waiting for review`,
-  "checklist_change_set.applied": (d) => `A checklist change set was applied to ${name(d, "moduleName")}`,
+  "checklist_change_set.applied": (d) =>
+    `A checklist change set was applied to ${name(d, "moduleName")}`,
   "checklist_change_set.discarded": (d) =>
     `A checklist change set for ${name(d, "moduleName")} was discarded`,
   "mock_data_change_set.pending": (d) =>
     `${name(d, "moduleName")} has a mock data change set waiting for review`,
-  "mock_data_change_set.applied": (d) => `A mock data change set was applied to ${name(d, "moduleName")}`,
+  "mock_data_change_set.applied": (d) =>
+    `A mock data change set was applied to ${name(d, "moduleName")}`,
   "mock_data_change_set.discarded": (d) =>
     `A mock data change set for ${name(d, "moduleName")} was discarded`,
   "membership.granted": (d) =>

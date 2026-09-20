@@ -142,6 +142,7 @@ sequenceDiagram
     W->>W: clone → walk → chunk → embed
     W->>Q: upsert under generation N+1
     W->>P: release: status = ready,<br/>active_generation = N+1
+    W->>P: fan out notifications (same transaction)
     W->>Q: delete generation N
     W->>W: delete the working copy from disk
 ```
@@ -167,6 +168,9 @@ matter:
 - **It writes a proposal, not rows.** Generation produces a *pending change set*; a human ticks
   which operations to accept and `POST /checklist-change-sets/{id}/apply` is the only code that
   writes `checklist_items`. See [`data.md`](data.md).
+- **It fans out a notification in the same transaction as the state change.** The change set row,
+  the module's move to `REVIEW`, and the `checklist_change_set.pending` notification either all
+  commit or none do. See [The notification fan-out path](#the-notification-fan-out-path).
 
 ---
 
@@ -233,6 +237,33 @@ against an unknown address, and the `seed-admins` CLI.
 
 Reading it is two admin-only routes, `GET /audit-events` and `GET /audit-events/{id}`. There is no
 route that writes. What the rows hold is in [`data.md`](data.md#audit).
+
+---
+
+## The notification fan-out path
+
+Nine call sites — the two ingestion outcomes, the two checklist and two mock-data generators,
+change-set apply and discard on both, and `MembershipService.grant` — raise a notification
+(`.claude/rules/notifications.md`). Where that write happens, relative to everything else, is the
+mirror image of the audit path above and for a reason worth stating rather than assuming.
+
+**`NotificationFanout` runs *inside* the same transaction as the change it describes**, and
+`flush`es rather than commits — the caller's own `commit()` covers both. Recipients resolve
+through `resolve_notification_recipients` in `app/core/access.py`, the event row and the
+per-recipient rows insert with `in_app_visible` snapshotted from `notification_preferences`, and
+if any of that fails the whole transaction rolls back with it: the status change and its
+announcement either both happen or neither does.
+
+That is the opposite ordering from `AuditRecorder`, and both are correct. An audit failure must
+not fail a user's action, so it runs after the commit, on its own session, and never raises. A
+lost notification **is** the feature failing — "the generation finished and nobody was told" is
+supposed to be unrepresentable — so it runs before the commit and is allowed to take the
+transaction down with it. The two systems share a catalogue-plus-allowlist shape and diverge here
+on purpose; do not "fix" one ordering to match the other.
+
+Reading it is the six routes under `/notifications` and `/notification-preferences`, all scoped
+to the caller's own rows with no administrative view. What the rows hold is in
+[`data.md`](data.md#notifications).
 
 ---
 

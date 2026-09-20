@@ -9,7 +9,10 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import { useNotificationPreferences, useUpdateNotificationPreferences } from "@/hooks/use-notifications";
+import {
+  useNotificationPreferences,
+  useUpdateNotificationPreferences,
+} from "@/hooks/use-notifications";
 import type { NotificationPreference } from "@/lib/api/types";
 import { notificationTitleForType } from "@/lib/notifications";
 
@@ -64,7 +67,7 @@ export function PreferencesScreen() {
           />
         ) : (
           <>
-            <div className="text-muted-foreground grid grid-cols-[1fr_auto_auto] items-center gap-6 border-b border-border px-4 py-2 text-xs font-medium">
+            <div className="text-muted-foreground border-border grid grid-cols-[1fr_auto_auto] items-center gap-6 border-b px-4 py-2 text-xs font-medium">
               <span>Event</span>
               <span>In app</span>
               <span>Email</span>
@@ -72,9 +75,12 @@ export function PreferencesScreen() {
             {items.map((item) => (
               <div
                 key={item.eventType}
-                className="grid grid-cols-[1fr_auto_auto] items-center gap-6 border-b border-border px-4 py-3 last:border-b-0"
+                className="border-border grid grid-cols-[1fr_auto_auto] items-center gap-6 border-b px-4 py-3 last:border-b-0"
               >
-                <Label htmlFor={`${item.eventType}-in-app`} className="text-foreground text-sm">
+                <Label
+                  htmlFor={`${item.eventType}-in-app`}
+                  className="text-foreground text-sm"
+                >
                   {notificationTitleForType(item.eventType)}
                 </Label>
                 <Switch

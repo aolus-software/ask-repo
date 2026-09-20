@@ -113,7 +113,8 @@ export function resolveBreadcrumbs(pathname: string, user: NavUser): Crumb[] {
   // before falling back to a raw id segment below.
   if (trail.length === 0) {
     for (const item of breadcrumbOnlyItems) {
-      if (pathname.startsWith(item.href)) trail.push({ href: item.href, label: item.title });
+      if (pathname.startsWith(item.href))
+        trail.push({ href: item.href, label: item.title });
     }
   }
 

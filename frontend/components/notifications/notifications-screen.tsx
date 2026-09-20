@@ -76,7 +76,14 @@ export function NotificationsScreen() {
               const key = changedKey(filters, listParams);
               if (key) {
                 const value = filters[key];
-                setParam(key, key === "unreadOnly" ? (value ? "true" : undefined) : (value as string | undefined));
+                setParam(
+                  key,
+                  key === "unreadOnly"
+                    ? value
+                      ? "true"
+                      : undefined
+                    : (value as string | undefined),
+                );
               }
             }}
           />

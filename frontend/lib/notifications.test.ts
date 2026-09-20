@@ -22,35 +22,57 @@ const base: NotificationSummary = {
 
 describe("notificationHref", () => {
   it("sends project events to the project", () => {
-    expect(notificationHref({ ...base, eventType: "project.ready" })).toBe("/projects/p1");
+    expect(notificationHref({ ...base, eventType: "project.ready" })).toBe(
+      "/projects/p1",
+    );
   });
 
   it("sends both change-set families to the module screen", () => {
-    const checklist = { ...base, eventType: "checklist_change_set.pending", targetType: "checklist_module", targetId: "m1" };
-    const mockData = { ...base, eventType: "mock_data_change_set.pending", targetType: "checklist_module", targetId: "m1" };
+    const checklist = {
+      ...base,
+      eventType: "checklist_change_set.pending",
+      targetType: "checklist_module",
+      targetId: "m1",
+    };
+    const mockData = {
+      ...base,
+      eventType: "mock_data_change_set.pending",
+      targetType: "checklist_module",
+      targetId: "m1",
+    };
     expect(notificationHref(checklist)).toBe("/checklist/m1");
     expect(notificationHref(mockData)).toBe("/checklist/m1");
   });
 
   it("falls back to the project when the target id is missing", () => {
-    expect(notificationHref({ ...base, eventType: "project.ready", targetId: null })).toBe("/projects/p1");
+    expect(
+      notificationHref({ ...base, eventType: "project.ready", targetId: null }),
+    ).toBe("/projects/p1");
   });
 });
 
 describe("notificationTitle", () => {
   it("names the project for an index outcome", () => {
-    const title = notificationTitle({ ...base, eventType: "project.ready", details: { projectName: "api" } });
+    const title = notificationTitle({
+      ...base,
+      eventType: "project.ready",
+      details: { projectName: "api" },
+    });
     expect(title).toContain("api");
   });
 
   it("renders an unknown event type without throwing", () => {
-    expect(() => notificationTitle({ ...base, eventType: "future.event" })).not.toThrow();
+    expect(() =>
+      notificationTitle({ ...base, eventType: "future.event" }),
+    ).not.toThrow();
   });
 });
 
 describe("notificationTitleForType", () => {
   it("labels the category, not one row", () => {
-    expect(notificationTitleForType("project.ready")).toBe("A project finished indexing");
+    expect(notificationTitleForType("project.ready")).toBe(
+      "A project finished indexing",
+    );
   });
 
   it("renders an unknown event type without throwing", () => {

@@ -65,7 +65,9 @@ export function NotificationFilters({
           <SelectTrigger className="w-full" aria-label="Filter by project">
             {/* Base UI renders the raw value, not the chosen item's label, so an
                 unset filter would read "any". Resolve it to the project's name. */}
-            <SelectValue>{(value: string) => projectLabel(value, projects)}</SelectValue>
+            <SelectValue>
+              {(value: string) => projectLabel(value, projects)}
+            </SelectValue>
           </SelectTrigger>
           <SelectContent>
             <SelectItem value={ANY}>{ALL_PROJECTS}</SelectItem>
@@ -115,7 +117,7 @@ export function NotificationFilters({
             })
           }
         />
-        <label htmlFor="unread-only" className="text-sm text-foreground">
+        <label htmlFor="unread-only" className="text-foreground text-sm">
           Unread only
         </label>
       </div>

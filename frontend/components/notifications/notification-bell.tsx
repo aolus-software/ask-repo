@@ -32,14 +32,14 @@ export function NotificationBell() {
       >
         <Bell className="size-4" />
         {unread > 0 && (
-          <span className="absolute -right-0.5 -top-0.5 flex min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-medium text-primary-foreground">
+          <span className="bg-primary text-primary-foreground absolute -top-0.5 -right-0.5 flex min-w-4 items-center justify-center rounded-full px-1 text-[10px] font-medium">
             {unread > 99 ? "99+" : unread}
           </span>
         )}
       </PopoverTrigger>
       <PopoverContent align="end" className="w-90 p-0">
-        <div className="flex items-center justify-between border-b border-border px-4 py-2">
-          <span className="text-sm font-medium text-foreground">Notifications</span>
+        <div className="border-border flex items-center justify-between border-b px-4 py-2">
+          <span className="text-foreground text-sm font-medium">Notifications</span>
           <Button
             variant="ghost"
             size="sm"
@@ -55,8 +55,8 @@ export function NotificationBell() {
             onRead={(id) => markRead.mutate(id)}
           />
         </ScrollArea>
-        <div className="border-t border-border px-4 py-2 text-center">
-          <Link href="/notifications" className="text-sm text-primary hover:underline">
+        <div className="border-border border-t px-4 py-2 text-center">
+          <Link href="/notifications" className="text-primary text-sm hover:underline">
             See all
           </Link>
         </div>

@@ -32,6 +32,7 @@ file outranks the one that went stale.
 | Providers, structured output, retry classification | [`docs/llm.md`](docs/llm.md) |
 | The answer graph and the SSE contract | [`docs/langgraph.md`](docs/langgraph.md) |
 | Every setting | [`docs/configuration.md`](docs/configuration.md) |
+| What gets notified, to whom, and the one setting | [`docs/notifications.md`](docs/notifications.md) |
 
 **All four datastores are read** — Postgres, Redis, Qdrant and Kafka. The worker reads a chat
 model as well as an embedder: checklist and mock-data generation each run a model in that
@@ -245,6 +246,18 @@ plain locals, never from an ORM object.
 `.claude/rules/audit-trail.md` owns what must be recorded and the two content bans. Adding a
 mutating route means adding an event in the same change.
 
+### A long job announces itself, and the announcement commits with the state it describes
+
+Mechanism: [`docs/notifications.md`](docs/notifications.md) and `.claude/rules/notifications.md`.
+
+A project reaching `ready` or `failed`, a checklist or mock-data change set going up for review
+or being applied or discarded, and a new membership grant each fan out to the members interested
+in hearing about it — resolved through the same `app/core/access.py` that decides who may see a
+project at all, never a second recipient list. The fan-out write happens **inside** the
+transaction that made the change true, ahead of the commit, which is the opposite ordering from
+`AuditRecorder` and is exactly as deliberate: a lost notification is the feature failing, where a
+lost audit row is an accepted, logged gap.
+
 ### Ingestion is fire-and-forget, and disk is scratch
 
 `POST /projects` returns immediately and the clone+index runs in the background. The cloned
@@ -398,7 +411,7 @@ route does not return, which is the one-error-shape rule failing silently rather
 
 ## Rules
 
-Fourteen rule files in `.claude/rules/`. Read the ones your change touches.
+Fifteen rule files in `.claude/rules/`. Read the ones your change touches.
 
 | Rule | Read it when |
 | --- | --- |
@@ -415,6 +428,7 @@ Fourteen rule files in `.claude/rules/`. Read the ones your change touches.
 | `navigation.md` | Sidebar, breadcrumbs, or adding a route |
 | `frontend-bff.md` | Any `proxy.ts`, the `app/api/[...path]` API proxy, `/api/auth/*`, or session/refresh code — cookies, the refresh split, SSE piping |
 | `audit-trail.md` | Any write or export in any service — what must record an audit event, the five exemptions, and the two content bans. **Adding a mutating route means adding an event in the same change** |
+| `notifications.md` | Anything under `app/core/notifications.py`, `app/services/notification_fanout.py`, or a fan-out call site — recipient resolution, the before-commit/after-commit straddle with audit, and the preference-snapshot rule |
 | `audit-findings.md` | Writing an audit report |
 
 Seven commands in `.claude/commands/`: `audit-flow.md` (read-only sweep, writes
@@ -444,6 +458,7 @@ App Router, React 19, Tailwind CSS 4 (CSS-first `@theme`, no `tailwind.config.js
 The routes that exist are `/login`, `/change-password`, `/` (dashboard),
 `/projects`, `/projects/[id]`, `/ask`, `/ask/[conversationId]`, `/settings/users`,
 `/settings/roles`, `/settings/roles/[id]`, `/settings/audit`, `/settings/audit/[eventId]`,
+`/notifications`, `/settings/notifications`,
 `/checklist`, and `/checklist/[moduleId]` — the last
 of which now carries a Mock Data tab beside the checklist grid, no new route of its own.
 `/projects/[id]` likewise carries a Members tab rather than a route. `/settings` itself is not a

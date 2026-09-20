@@ -23,9 +23,15 @@ class NotificationEventRepository(BaseRepository[NotificationEvent]):
 
     model = NotificationEvent
 
-    async def add(self, event: NotificationEvent) -> None:
-        """Stage one event. Flushed by the fan-out, committed by the caller."""
+    async def add(self, event: NotificationEvent) -> NotificationEvent:
+        """Stage one event. Flushed by the fan-out, committed by the caller.
+
+        Does not flush here, unlike `BaseRepository.add` — the fan-out flushes once
+        after staging every row for the event so the id is available to the
+        recipient rows without an extra round trip per insert.
+        """
         self.session.add(event)
+        return event
 
     async def delete_older_than(self, cutoff: datetime) -> int:
         """Hard-delete every event older than `cutoff`. Returns how many.
