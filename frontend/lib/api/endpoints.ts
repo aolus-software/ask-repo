@@ -3,6 +3,7 @@ import type {
   ChecklistItemListParams,
   ChecklistModuleListParams,
   ListParams,
+  NotificationListParams,
 } from "@/lib/api/types";
 
 /**
@@ -87,6 +88,13 @@ export const endpoints = {
   auditEvents: {
     list: "/audit-events",
     detail: (id: string) => `/audit-events/${id}`,
+  },
+  notifications: {
+    list: "/notifications",
+    unreadCount: "/notifications/unread-count",
+    markAllRead: "/notifications/mark-all-read",
+    markRead: (id: string) => `/notifications/${id}/read`,
+    preferences: "/notification-preferences",
   },
 } as const;
 
