@@ -8,10 +8,10 @@ trail has a hole nobody finds until the day it is needed.
 So this module asserts three things no per-event test can:
 
 1. **Every mutating route in the app is classified** — either it maps to an event, or
-   it is one of the four exemptions. A new route fails here until someone decides.
+   it is one of the five exemptions. A new route fails here until someone decides.
 2. **Every catalogue name is claimed by a route** (or by the CLI), so a name cannot
    exist unwritten.
-3. **Every exemption is one of the four the spec names**, so the escape hatch cannot
+3. **Every exemption is one of the five the rule names**, so the escape hatch cannot
    quietly widen.
 """
 
@@ -35,14 +35,21 @@ EXPORT_ROUTES = frozenset(
     }
 )
 
-# The four exemptions from spec §1.3. Each value is the reason, so a reader finds a
-# decision rather than what looks like an oversight.
+# The five exemptions from `.claude/rules/audit-trail.md`. Each value is the reason,
+# so a reader finds a decision rather than what looks like an oversight.
 READS = "ordinary read — the trail records what changed"
 PROPOSAL = "refinement-chat turn — a proposal is not a row; the apply is audited"
 CALL_LOG = "the ask route — PRD §2.5 keeps per-call records out of this table by name"
 NO_ACTOR = "ingestion outcome — no actor; projects.status holds the result"
+# Exemption 5. Declared here ahead of the routes it covers: `/notifications` and
+# `/notification-preferences` (Task 10) both write state that is private to one
+# user, describes no shared resource, and whose rate tracks attention rather than
+# change — see the rule for why that makes it a flooding risk. Neither route exists
+# on this branch yet, so this constant has no (method, path) entry in ROUTE_EVENTS
+# to attach to; Task 10 adds those entries pointing at this same reason.
+NOTIFICATION_STATE = "a user's own notification state — private, non-shared, attention-rate"
 
-VALID_EXEMPTIONS = frozenset({READS, PROPOSAL, CALL_LOG, NO_ACTOR})
+VALID_EXEMPTIONS = frozenset({READS, PROPOSAL, CALL_LOG, NO_ACTOR, NOTIFICATION_STATE})
 
 # (method, path) -> the event it records, or the reason it does not.
 # Every task from 4 to 11 moves entries from a reason to an AuditEventType.
@@ -185,7 +192,7 @@ def test_every_mutating_route_is_classified() -> None:
 
     This is the failure `.claude/rules/audit-trail.md` exists to cause. If you are
     reading it because your new route broke this test: add it to `ROUTE_EVENTS` with
-    an event, or with one of the four exemption reasons and a line in the rule.
+    an event, or with one of the five exemption reasons and a line in the rule.
     """
     unclassified = _app_routes() - set(ROUTE_EVENTS)
 
@@ -202,8 +209,8 @@ def test_the_classification_table_has_no_stale_entries() -> None:
     assert not stale, f"ROUTE_EVENTS names routes the app does not serve: {sorted(stale)}"
 
 
-def test_every_exemption_is_one_of_the_four() -> None:
-    """The escape hatch cannot widen without editing the spec and the rule.
+def test_every_exemption_is_one_of_the_five() -> None:
+    """The escape hatch cannot widen without editing the rule.
 
     `AuditEventType` is a `StrEnum`, so its members are themselves `str` instances --
     `isinstance(value, str)` alone would also match every classified event. The
