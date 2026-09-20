@@ -1,11 +1,13 @@
 import { describe, expect, it } from "vitest";
 
+import type { NotificationSummary } from "@/lib/api/types";
 import { NOTIFICATION_TYPES, notificationHref, notificationTitle } from "@/lib/notifications";
 
-const base = {
+const base: NotificationSummary = {
   id: "n1",
   createdAt: "2026-09-20T10:00:00Z",
   readAt: null,
+  eventType: "project.ready",
   projectId: "p1",
   targetType: "project",
   targetId: "p1",

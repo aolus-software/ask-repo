@@ -12,6 +12,8 @@
  * fields precisely so a renamed module reads correctly in a month-old notification.
  */
 
+import type { NotificationSummary } from "@/lib/api/types";
+
 export const NOTIFICATION_TYPES = [
   "project.ready",
   "project.failed",
@@ -26,18 +28,6 @@ export const NOTIFICATION_TYPES = [
   "membership.granted",
 ] as const;
 
-export type NotificationRow = {
-  id: string;
-  createdAt: string;
-  readAt: string | null;
-  eventType: string;
-  projectId: string;
-  targetType: string | null;
-  targetId: string | null;
-  actorUserId: string | null;
-  details: Record<string, unknown>;
-};
-
 /**
  * Where clicking this notification goes.
  *
@@ -46,7 +36,7 @@ export type NotificationRow = {
  * change set's own id names nothing anyone can navigate to. The backend already stores
  * the module id as `targetId` for exactly this reason.
  */
-export function notificationHref(n: NotificationRow): string {
+export function notificationHref(n: NotificationSummary): string {
   if (n.targetType === "checklist_module" && n.targetId) {
     return `/checklist/${n.targetId}`;
   }
@@ -73,7 +63,7 @@ const TITLES: Record<string, (d: Record<string, unknown>) => string> = {
 };
 
 /** A human sentence for one notification, falling back to the raw type. */
-export function notificationTitle(n: NotificationRow): string {
+export function notificationTitle(n: NotificationSummary): string {
   const render = TITLES[n.eventType];
   return render ? render(n.details) : n.eventType;
 }

@@ -5,6 +5,7 @@ import Link from "next/link";
 
 import { AccountMenu } from "@/components/layout/account-menu";
 import { ThemeToggle } from "@/components/layout/theme-toggle";
+import { NotificationBell } from "@/components/notifications/notification-bell";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 
 /** Fixed, h-16. That 4rem is load-bearing: the sidebar's top and height derive from it. */
@@ -31,6 +32,7 @@ export function AppNavbar() {
         AskRepo
       </Link>
       <div className="ml-auto flex items-center gap-2">
+        <NotificationBell />
         <ThemeToggle />
         <AccountMenu />
       </div>
