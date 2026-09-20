@@ -7,7 +7,7 @@ a new event type on-by-default for everybody with no data migration.
 
 import uuid
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert
 
 from app.models.notification import NotificationPreference
@@ -36,6 +36,10 @@ class NotificationPreferenceRepository(BaseRepository[NotificationPreference]):
         `ON CONFLICT` against `uq_notification_preferences_user_id_event_type`, so the
         settings form saving twice is one row per event type rather than a duplicate
         key error.
+
+        This is a Core statement, not an ORM flush, so `TimestampMixin`'s
+        `onupdate=func.now()` never fires on the conflict branch (`persistence.md`) —
+        `updated_at` is stamped explicitly here instead.
         """
         if not prefs:
             return
@@ -56,6 +60,7 @@ class NotificationPreferenceRepository(BaseRepository[NotificationPreference]):
                 set_={
                     "in_app": statement.excluded.in_app,
                     "email": statement.excluded.email,
+                    "updated_at": func.now(),
                 },
             )
         )

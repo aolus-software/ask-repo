@@ -168,6 +168,15 @@ class IngestionPipeline:
                 error=scrub(str(error), pat)[:MAX_RECORDED_ERROR_CHARS],
             )
             if released:
+                # `NotificationFanout` raises by design (`.claude/rules/notifications.md`
+                # rule 2) — a lost notification is meant to fail loudly. Here that design
+                # reads differently: we are already inside `except TerminalIngestionError`,
+                # so a raise from the fan-out would skip the `commit()` below and leave
+                # this worker still holding the lease, with no recorded error, until the
+                # reconcile sweep expires it and re-enqueues the job. That is only
+                # reachable on a database fault, at which point the transaction that
+                # would have carried the status commit was not going to succeed either —
+                # the reconcile sweep is the backstop, not a code change here.
                 await NotificationFanout(self.session).raise_event(
                     event_type=(
                         NotificationType.PROJECT_REINDEX_FAILED

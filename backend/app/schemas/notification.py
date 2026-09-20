@@ -6,9 +6,6 @@ and carries no diff, so there is nothing a detail view would show that the list 
 
 import uuid
 from datetime import datetime
-from typing import Literal
-
-from pydantic import Field
 
 from app.schemas.base import ApiModel
 from app.schemas.pagination import ListQuery
@@ -44,8 +41,10 @@ class NotificationListQuery(ListQuery):
     unread_only: bool = False
     project_id: uuid.UUID | None = None
     event_type: str | None = None
-    # `created_at` is the only ordering this list has a meaningful answer for.
-    sort: Literal["created_at"] | None = Field(default=None)
+    # No `sort` field: `created_at` is the only ordering this list has a meaningful
+    # answer for, so there is nothing for a field naming it to select between —
+    # `sort_direction` (inherited from `ListQuery`) is the only ordering choice this
+    # route offers, and it is honoured in `NotificationRepository.page`.
 
 
 class UnreadCountResponse(ApiModel):

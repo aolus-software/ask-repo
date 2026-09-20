@@ -105,10 +105,12 @@ class ChecklistGenerator:
         project = await self.projects.get(module.project_id)
         if project is None or not project.embedding_collection:
             raise TerminalIngestionError(f"project {module.project_id} has no index to enumerate")
-        # A local, not a lazy read inside the notification call below: `project.name`
-        # never changes, but reading it off the ORM object from inside the fan-out
-        # call would tie the notification to whatever state the object is in then.
+        # Locals, not a lazy read inside the notification call below: `project.name`
+        # and `module.name` never change, but reading them off the ORM objects from
+        # inside the fan-out call would tie the notification to whatever state those
+        # objects are in then.
         project_name = project.name
+        module_name = module.name
 
         renewal = asyncio.create_task(self._renew(module_id=module_id, worker_id=worker_id))
         try:
@@ -188,7 +190,7 @@ class ChecklistGenerator:
             target_id=module.id,
             details={
                 "projectName": project_name,
-                "moduleName": module.name,
+                "moduleName": module_name,
                 "operationCount": len(operations),
             },
         )

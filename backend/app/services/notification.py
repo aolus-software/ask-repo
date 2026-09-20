@@ -50,6 +50,7 @@ class NotificationService:
             unread_only=query.unread_only,
             project_id=query.project_id,
             event_type=query.event_type,
+            descending=query.sort_direction != "asc",
         )
         items = [
             NotificationSummary(

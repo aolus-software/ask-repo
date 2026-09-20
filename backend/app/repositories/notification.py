@@ -63,8 +63,13 @@ class NotificationRepository(BaseRepository[Notification]):
         unread_only: bool,
         project_id: uuid.UUID | None,
         event_type: str | None,
+        descending: bool = True,
     ) -> tuple[list[tuple[Notification, NotificationEvent]], int]:
-        """One page of the list, newest first, plus the unpaginated total."""
+        """One page of the list, plus the unpaginated total.
+
+        `descending=True` (the default, newest first) matches `NotificationListQuery`'s
+        default `sort_direction`, the same shape `AuditEventRepository.page` uses.
+        """
         statement = self._visible(user_id)
         if unread_only:
             statement = statement.where(Notification.read_at.is_(None))
@@ -73,11 +78,10 @@ class NotificationRepository(BaseRepository[Notification]):
         if event_type is not None:
             statement = statement.where(NotificationEvent.event_type == event_type)
 
+        order = Notification.created_at.desc() if descending else Notification.created_at.asc()
         total = await self.session.execute(select(func.count()).select_from(statement.subquery()))
         rows = await self.session.execute(
-            statement.order_by(Notification.created_at.desc())
-            .offset((page - 1) * limit)
-            .limit(limit)
+            statement.order_by(order).offset((page - 1) * limit).limit(limit)
         )
         return [(n, e) for n, e in rows.all()], total.scalar_one()
 

@@ -21,6 +21,11 @@ import { keys } from "@/lib/query/keys";
  * per-user notification stream is a different connection lifecycle with different
  * failure modes. `refetchIntervalInBackground: false` stops a tab left open overnight
  * from polling all night.
+ *
+ * `useNotifications` shares this interval (and the background rule) with
+ * `useUnreadNotificationCount` below: the bell mounts both queries with no `enabled`
+ * gate and no remount on popover open, so a mismatched interval would let the badge
+ * and the list drift out of step for as long as the tab stays open.
  */
 const POLL_INTERVAL_MS = 60_000;
 
@@ -44,6 +49,8 @@ export function useNotifications(params: NotificationListParams) {
       apiFetch<PaginatedResponse<NotificationSummary>>(
         `${endpoints.notifications.list}${notificationListQueryString(params)}`,
       ),
+    refetchInterval: POLL_INTERVAL_MS,
+    refetchIntervalInBackground: false,
   });
 }
 

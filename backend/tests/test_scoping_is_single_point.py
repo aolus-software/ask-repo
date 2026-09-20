@@ -35,6 +35,17 @@ ALLOWED_RECIPIENTS_FOR_CALLERS = {
 }
 
 
+# `Notification`/`NotificationEvent` rows carry the preference snapshot, the allowlisted
+# `details`, and the fan-out's atomicity with the state change they describe
+# (`.claude/rules/notifications.md`). A second construction site could write a row that
+# skips all three — the class definitions in `models/notification.py` are the only other
+# place these names legitimately appear.
+ALLOWED_NOTIFICATION_WRITERS = {
+    APP / "services" / "notification_fanout.py",
+    APP / "models" / "notification.py",
+}
+
+
 def _python_files() -> list[Path]:
     return [p for p in APP.rglob("*.py") if "__pycache__" not in p.parts]
 
@@ -65,6 +76,22 @@ def test_nothing_else_resolves_notification_recipients() -> None:
     ]
 
     assert offenders == [], f"recipients_for called outside the access core: {offenders}"
+
+
+def test_nothing_else_constructs_a_notification_row() -> None:
+    """`Notification(` and `NotificationEvent(` are constructed in exactly one place,
+    `app/services/notification_fanout.py`. A second call site would lose the preference
+    snapshot, the `details` allowlist, and the before-commit atomicity contract in one
+    move — see `.claude/rules/notifications.md`."""
+    pattern = re.compile(r"\bNotification(?:Event)?\(")
+    offenders = [
+        path.relative_to(APP)
+        for path in _python_files()
+        if path not in ALLOWED_NOTIFICATION_WRITERS
+        and pattern.search(path.read_text(encoding="utf-8"))
+    ]
+
+    assert offenders == [], f"Notification/NotificationEvent built outside fan-out: {offenders}"
 
 
 def test_no_module_compares_created_by_to_an_actor() -> None:

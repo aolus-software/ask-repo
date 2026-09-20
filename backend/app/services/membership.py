@@ -97,7 +97,13 @@ class MembershipService:
         )
         self.session.add(membership)
         project = await self._projects.get(project_id)
-        project_name = project.name if project is not None else ""
+        # `require_permission` above already resolved this project, so `None` is
+        # unreachable here in practice -- but the four change-set sites
+        # (`checklist_change_set.py`, `mock_data_change_set.py`) guard the same read
+        # and fall back to a name a human would recognise rather than an empty
+        # string, which the frontend would otherwise render as "Untitled"
+        # (`frontend/lib/notifications.ts`). Match that: fall back to the id.
+        project_name = project.name if project is not None else str(project_id)
 
         # Before the commit. `raise_direct`, not `raise_event`: the grantee was not a
         # member when the event was raised, so the permission map cannot find them.

@@ -37,7 +37,7 @@ function changedKey(
 }
 
 export function NotificationsScreen() {
-  const { params, searchInput, setSearch, setPage, setParam } = useListParams(
+  const { params, setPage, setParam } = useListParams(
     { limit: 25 },
     { extraParams: EXTRA_PARAMS },
   );
@@ -66,9 +66,7 @@ export function NotificationsScreen() {
       />
 
       <ListToolbar
-        initialSearch={searchInput}
-        placeholder="Search notifications"
-        onSearchChange={setSearch}
+        columns={3}
         filters={
           <NotificationFilters
             currentFilters={listParams}
@@ -98,10 +96,14 @@ export function NotificationsScreen() {
         ) : !query.isLoading && notifications.length === 0 ? (
           <EmptyState
             icon={Bell}
-            title={listParams.search ? "No notifications match" : "Nothing yet"}
+            title={
+              listParams.projectId || listParams.eventType || listParams.unreadOnly
+                ? "No notifications match"
+                : "Nothing yet"
+            }
             description={
-              listParams.search
-                ? "Try a different search or clear your filters."
+              listParams.projectId || listParams.eventType || listParams.unreadOnly
+                ? "Try clearing your filters."
                 : "Project and checklist events will appear here as they happen."
             }
           />

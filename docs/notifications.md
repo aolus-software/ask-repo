@@ -60,6 +60,18 @@ than soft-deleted so that reactivating the account restores exactly the access i
 notification for someone who cannot currently log in is an unread count nobody will ever clear,
 and reactivating them should not hand back a month of stale nudges.
 
+**A change set proposed by the refinement chat raises no `*.pending` event; only the background
+generators do.** `checklist_change_set.pending` and `mock_data_change_set.pending` are raised
+from `app/checklist/generator.py` and `app/mockdata/generator.py` alone — the refinement-chat
+halves of `ChecklistModuleService` and `MockDataDatasetService` write the same shape of pending
+change set and notify nobody. This is deliberate, not an omission: the chat is a synchronous
+conversation the person driving it is already looking at, so there is no "walked away and came
+back" gap for a notification to fill the way there is for a generation that ran for minutes in
+the background. The accepted asymmetry is that a generator's proposal reaches every member
+holding `changeset.apply`, while a chat's proposal reaches only whoever is at the keyboard —
+someone else with edit access will not learn a chat proposed something until they open the
+module themselves.
+
 ---
 
 ## Configuration
