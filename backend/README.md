@@ -374,6 +374,22 @@ never a diff of dirty attributes, and it never carries a secret or any content �
 and `targetLabel` is `NULL` for a conversation. Retention is `AUDIT_RETENTION_DAYS` (default `0`,
 keep forever), pruned by the worker's existing 60-second tick.
 
+### Notifications
+
+One caller's own rows, always — `is_admin` gates nothing here and there is no administrative
+view. Ownership resolves through `resolve_notification_owner`, so a notification belonging to
+someone else is `404 NOTIFICATION_NOT_FOUND`, never `403`. None of these writes records an audit
+event: exemption 5 in `.claude/rules/audit-trail.md`.
+
+| Method | Path | Auth | Description |
+| --- | --- | --- | --- |
+| `GET` | `/notifications` | any user | A page of the caller's own notifications, newest first. Filters: `unreadOnly`, `projectId`, `eventType`, plus `page`/`limit` |
+| `GET` | `/notifications/unread-count` | any user | `{ count }`, what the bell polls |
+| `POST` | `/notifications/mark-all-read` | any user | Marks every visible unread row read. Declared **before** `/{notification_id}/read` so the literal path wins the match |
+| `POST` | `/notifications/{id}/read` | any user | Marks one read. `404 NOTIFICATION_NOT_FOUND` for a row that does not exist or belongs to someone else |
+| `GET` | `/notification-preferences` | any user | Every event type in the catalogue, gaps filled in as on, plus `emailEnabled` (`false` until Phase 2.4) |
+| `PUT` | `/notification-preferences` | any user | Replaces the whole set. `400 UNKNOWN_EVENT_TYPE` for an event type the catalogue does not name |
+
 ## Layout
 
 ```
@@ -404,7 +420,9 @@ backend/
 │   │       ├── mock_data_datasets.py    # module-scoped mock data reads, generate, chat, export
 │   │       ├── mock_data_records.py     # DELETE /mock-data-records/{id}
 │   │       ├── mock_data_change_sets.py # apply + discard mock-data change sets
-│   │       └── audit_events.py # GET /audit-events, GET /audit-events/{id} (admin, reads only)
+│   │       ├── audit_events.py # GET /audit-events, GET /audit-events/{id} (admin, reads only)
+│   │       ├── notifications.py # /notifications list + unread-count + mark-read(-all)
+│   │       └── notification_preferences.py # GET/PUT /notification-preferences
 │   ├── core/
 │   │   ├── access.py     # resolve_project_scope + require_permission — the only two
 │   │   ├── audit.py      # the 37-event catalogue, the per-event field allowlist, AuditRecorder

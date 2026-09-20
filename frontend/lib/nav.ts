@@ -1,4 +1,5 @@
 import {
+  Bell,
   ClipboardCheck,
   FolderGit2,
   LayoutDashboard,
@@ -69,6 +70,19 @@ export function visibleNavTree(user: NavUser): VisibleNavItem[] {
   return tree;
 }
 
+/**
+ * Destinations reached from somewhere other than the sidebar that still need a
+ * breadcrumb naming them. `/notifications` belongs here rather than in `navItems`:
+ * its primary entry point is the bell's "See all" link
+ * (`components/notifications/notification-bell.tsx`), and folding it into `navItems`
+ * would also put it in `visibleNavTree` — and therefore in the sidebar, which
+ * `lib/nav.test.ts` pins at exactly five top-level destinations. Kept as its own list
+ * so a breadcrumb-only destination never has to earn a sidebar row it does not want.
+ */
+const breadcrumbOnlyItems: { title: string; href: string; icon: LucideIcon }[] = [
+  { title: "Notifications", href: "/notifications", icon: Bell },
+];
+
 export interface Crumb {
   href: string;
   label: string;
@@ -92,6 +106,15 @@ export function resolveBreadcrumbs(pathname: string, user: NavUser): Crumb[] {
     for (const child of item.children ?? []) {
       if (pathname.startsWith(child.href))
         trail.push({ href: child.href, label: child.title });
+    }
+  }
+
+  // No sidebar item claimed this path — check the breadcrumb-only destinations
+  // before falling back to a raw id segment below.
+  if (trail.length === 0) {
+    for (const item of breadcrumbOnlyItems) {
+      if (pathname.startsWith(item.href))
+        trail.push({ href: item.href, label: item.title });
     }
   }
 

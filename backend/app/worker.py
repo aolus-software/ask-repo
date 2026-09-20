@@ -46,6 +46,7 @@ from app.rag.chat import build_chat_model
 from app.repositories.audit_event import AuditEventRepository
 from app.repositories.checklist_module import ChecklistModuleRepository
 from app.repositories.mock_data_dataset import MockDataDatasetRepository
+from app.repositories.notification_event import NotificationEventRepository
 from app.repositories.project import ProjectRepository
 from app.repositories.refresh_token import RefreshTokenRepository
 
@@ -162,7 +163,7 @@ async def reconcile_loop(
     settings: Settings,
 ) -> None:
     """The 60-second tick: recover lost jobs of all kinds and prune dead refresh
-    tokens and audit events.
+    tokens, audit events, and notifications.
 
     `docs/PRD.md` §5.1 schedules the `refresh_tokens` cleanup for "M1, with the job
     scheduler". This loop is that scheduler.
@@ -190,11 +191,24 @@ async def reconcile_loop(
                 if settings.audit_retention_days > 0:
                     cutoff = datetime.now(UTC) - timedelta(days=settings.audit_retention_days)
                     pruned_events = await AuditEventRepository(session).delete_older_than(cutoff)
+                pruned_notifications = 0
+                if settings.notification_retention_days > 0:
+                    cutoff = datetime.now(UTC) - timedelta(
+                        days=settings.notification_retention_days
+                    )
+                    pruned_notifications = await NotificationEventRepository(
+                        session
+                    ).delete_older_than(cutoff)
                 await session.commit()
                 if pruned:
                     logger.info("pruned %d dead refresh tokens", pruned)
                 if pruned_events:
                     logger.info("pruned %d audit events past the retention window", pruned_events)
+                if pruned_notifications:
+                    logger.info(
+                        "pruned %d notification events past the retention window",
+                        pruned_notifications,
+                    )
         except Exception:
             logger.exception("reconcile tick failed")
 

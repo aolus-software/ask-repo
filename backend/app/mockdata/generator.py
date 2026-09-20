@@ -21,6 +21,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.checklist.source import ModuleSource, rebuild_files
 from app.config import Settings
+from app.core.notifications import NotificationType
 from app.db.session import get_sessionmaker
 from app.ingestion.errors import RetryableIngestionError, TerminalIngestionError
 from app.ingestion.vector_store import VectorStoreFactory
@@ -39,6 +40,7 @@ from app.repositories.mock_data_dataset import (
 )
 from app.repositories.mock_data_record import MockDataRecordRepository
 from app.repositories.project import ProjectRepository
+from app.services.notification_fanout import NotificationFanout
 
 logger = logging.getLogger(__name__)
 
@@ -111,6 +113,11 @@ class MockDataGenerator:
         project = await self.projects.get(module.project_id)
         if project is None or not project.embedding_collection:
             raise TerminalIngestionError(f"project {module.project_id} has no index to enumerate")
+        # Locals, not a lazy read inside the notification call below: `project.name`
+        # and `module.name` never change, but the fan-out should never be handed the
+        # ORM object.
+        project_name = project.name
+        module_name = module.name
 
         renewal = asyncio.create_task(self._renew(dataset_id=dataset_id, worker_id=worker_id))
         try:
@@ -180,6 +187,24 @@ class MockDataGenerator:
                 dataset_id,
             )
             return
+
+        # Before the commit, mirroring `ChecklistGenerator.run`: the change set and
+        # the notification of it are one transaction.
+        await NotificationFanout(self.session).raise_event(
+            event_type=NotificationType.MOCK_DATA_CHANGE_SET_PENDING,
+            project_id=module.project_id,
+            # No actor: a worker raised this.
+            actor_user_id=None,
+            # `mock_data_change_sets` keys directly to `checklist_modules.id`, so the
+            # module id is already in hand -- and the Mock Data tab lives at
+            # `/checklist/[moduleId]` rather than a route of its own.
+            target_id=module.id,
+            details={
+                "projectName": project_name,
+                "moduleName": module_name,
+                "operationCount": len(operations),
+            },
+        )
         await self.session.commit()
 
     async def _renew(self, *, dataset_id: uuid.UUID, worker_id: str) -> None:

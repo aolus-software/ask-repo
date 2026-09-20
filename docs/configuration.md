@@ -355,6 +355,14 @@ table — there is no other delete path.
 | --- | --- | --- |
 | `AUDIT_RETENTION_DAYS` | `0` | How many days of audit history to keep. **`0` means keep forever**, and that is the default on purpose: a fresh instance must not silently start discarding the one record whose purpose is being the record. A positive value is a window the worker's existing 60-second reconcile tick enforces, hard-deleting every row older than `now - N days` via `AuditEventRepository.delete_older_than(cutoff)`. That method **takes a cutoff and nothing else** — no actor filter, no event-type filter — so setting a window is all an operator can do to this table; nobody can aim a delete at a particular person's entries. Worth setting deliberately on a busy instance: the write rate is proportional to QA activity, since `checklist_item.result_recorded` fires once per test a tester ticks. |
 
+Phase 2.3 adds a second, unrelated retention window over `notification_events` — unrelated
+because a notification and an audit row answer different questions, and their defaults diverge
+on purpose:
+
+| Variable | Default | What it does |
+| --- | --- | --- |
+| `NOTIFICATION_RETENTION_DAYS` | `90` | How many days a notification stays before the same 60-second reconcile tick removes it, via `NotificationEventRepository.delete_older_than(cutoff)`. **Defaults to `90`, not `0`, and that is the deliberate opposite of `AUDIT_RETENTION_DAYS`'s default.** Audit keeps forever by default because a fresh instance must not silently discard the one record whose purpose is being the record; a notification is a nudge with a shelf life, not a record, and keep-forever would grow a table nobody reads past a week. `0` still means keep forever, for an operator who wants that. The prune ignores read state on purpose — it deletes a 90-day-old *unread* notification exactly as it deletes a read one, because an unread badge that can never reach zero is a badge people stop looking at. `notifications.event_id` is declared `ON DELETE CASCADE`, so deleting an event takes its per-recipient delivery rows with it in the same statement. |
+
 ---
 
 ## Values that fail silently

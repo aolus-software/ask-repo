@@ -139,16 +139,16 @@ backend/app/
 │
 ├── api/
 │   ├── deps.py        shared dependencies (CurrentUser, AdminUser, service factories)
-│   └── routes/        15 routers, 67 routes
+│   └── routes/        17 routers, 73 routes
 │
 ├── core/              cross-cutting: access, audit, crypto, errors, grant_cache, logging,
-│                      middleware, passwords, permissions, rate_limit, repo_url,
-│                      role_seed, security
+│                      middleware, notifications, passwords, permissions, rate_limit,
+│                      repo_url, role_seed, security
 ├── db/session.py      engine + sessionmaker
-├── models/            8 modules, 17 tables
-├── repositories/      15 repositories — the only place SQL is written
+├── models/            9 modules, 20 tables
+├── repositories/      18 repositories — the only place SQL is written
 ├── schemas/           request/response shapes, all on ApiModel
-├── services/          15 services — business rules and authorization,
+├── services/          17 services — business rules and authorization,
 │                      plus path_tree.py: pure tree shaping, no I/O
 │
 ├── ingestion/         cloner, walker, chunker, embedder/, vector_store, pipeline
@@ -277,9 +277,10 @@ Run everything CI runs with `make check`: ruff, prettier, mypy, pytest, vitest.
 
 ## The rule files
 
-`.claude/rules/` holds 14 rule files that encode conventions this page only summarises —
-`router.md`, `persistence.md`, `response-api.md`, `rag.md`, `ingestion.md`, `design-system.md`,
-`forms.md`, `navigation.md`, `frontend-bff.md`, and others. They are written for coding agents
+`.claude/rules/` holds 15 rule files that encode conventions this page only summarises —
+`router.md`, `persistence.md`, `response-api.md`, `rag.md`, `ingestion.md`, `notifications.md`,
+`design-system.md`, `forms.md`, `navigation.md`, `frontend-bff.md`, and others. They are written
+for coding agents
 but are the most precise statement of each convention, and worth reading before a change in the
 area they cover.
 

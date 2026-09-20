@@ -13,7 +13,7 @@ from collections.abc import Sequence
 
 from sqlalchemy import func, select
 
-from app.core.permissions import OWNER_NAME
+from app.core.permissions import OWNER_NAME, Permission
 from app.models.membership import ProjectMembership, Role, RolePermission
 from app.models.project import Project
 from app.models.user import User
@@ -61,6 +61,43 @@ class MembershipRepository(BaseRepository[ProjectMembership]):
             project_id: (role_name, frozenset(permissions))
             for project_id, (role_name, permissions) in collected.items()
         }
+
+    async def recipients_for(
+        self, project_id: uuid.UUID, permission: Permission
+    ) -> Sequence[uuid.UUID]:
+        """Every live user who holds `permission` on this project.
+
+        `load_grants`' two joins, flipped, plus a join to `users`. **Call this from
+        `app/core/access.py` and nowhere else** — `tests/test_scoping_is_single_point.py`
+        fails otherwise. It is unscoped by `ProjectScope` for the same reason the rest
+        of this repository is: it is what *produces* the scope, in this direction as
+        in the other.
+
+        The permission join is an **inner** join, unlike `load_grants`' outerjoin.
+        That outerjoin exists because a role with no permissions still grants access
+        to the project; the question here is who holds a *specific* permission, and a
+        role with none holds none.
+
+        Deactivated accounts are excluded via `users`. Phase 2.1 leaves memberships
+        intact on deactivation so reactivation restores exact access, which means a
+        membership row can exist for an account that cannot log in.
+        """
+        result = await self.session.execute(
+            select(ProjectMembership.user_id)
+            .join(Role, Role.id == ProjectMembership.role_id)
+            .join(RolePermission, RolePermission.role_id == Role.id)
+            .join(User, User.id == ProjectMembership.user_id)
+            .where(
+                ProjectMembership.project_id == project_id,
+                RolePermission.permission == permission.value,
+                ProjectMembership.deleted_at.is_(None),
+                Role.deleted_at.is_(None),
+                RolePermission.deleted_at.is_(None),
+                User.deleted_at.is_(None),
+            )
+            .distinct()
+        )
+        return list(result.scalars().all())
 
     async def get_for(self, user_id: uuid.UUID, project_id: uuid.UUID) -> ProjectMembership | None:
         """This user's live membership on this project, if any."""

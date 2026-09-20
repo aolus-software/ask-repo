@@ -20,6 +20,7 @@ from app.core import access
 from app.core.audit import AuditEntry, AuditEventType, AuditRecorder
 from app.core.errors import AppError, ErrorCode
 from app.core.middleware import AuthenticatedUser
+from app.core.notifications import NotificationType
 from app.core.permissions import Permission
 from app.models.checklist import ChangeSetOrigin, ChangeSetStatus
 from app.models.mock_data import MockDataChangeSet, MockDataDatasetStatus, MockDataRecord
@@ -27,6 +28,7 @@ from app.repositories.checklist_module import ChecklistModuleRepository
 from app.repositories.mock_data_change_set import MockDataChangeSetRepository
 from app.repositories.mock_data_dataset import MockDataDatasetRepository
 from app.repositories.mock_data_record import MockDataRecordRepository
+from app.repositories.project import ProjectRepository
 from app.schemas.mock_data import (
     MockDataChangeOperationPayload,
     MockDataChangeSetApplyRequest,
@@ -34,6 +36,7 @@ from app.schemas.mock_data import (
     MockDataChangeSetResponse,
     MockDataRecordResponse,
 )
+from app.services.notification_fanout import NotificationFanout
 
 logger = logging.getLogger(__name__)
 
@@ -84,6 +87,7 @@ class MockDataChangeSetService:
         self.records = MockDataRecordRepository(session)
         self.datasets = MockDataDatasetRepository(session)
         self.modules = ChecklistModuleRepository(session)
+        self.projects = ProjectRepository(session)
         self._recorder = recorder
 
     async def apply(
@@ -127,7 +131,25 @@ class MockDataChangeSetService:
         # audit row reflects what was actually proposed, independent of the commit.
         origin = change_set.origin
         operations_proposed = len(change_set.operations)
+        applied_count = len(touched)
+        project = await self.projects.get(project_id)
+        project_name = project.name if project is not None else module_name
         await self._settle_dataset(module_id)
+
+        # Before the commit. The audit record below goes *after* it, and both
+        # orderings are load-bearing: an audit failure must not fail the user's
+        # action, and a lost notification is the feature not working.
+        await NotificationFanout(self.session).raise_event(
+            event_type=NotificationType.MOCK_DATA_CHANGE_SET_APPLIED,
+            project_id=project_id,
+            actor_user_id=actor.id,
+            target_id=module_id,
+            details={
+                "projectName": project_name,
+                "moduleName": module_name,
+                "appliedCount": applied_count,
+            },
+        )
         await self.session.commit()
 
         # The gap between the two counts is the evidence a human reviewed rather than
@@ -178,7 +200,18 @@ class MockDataChangeSetService:
         change_set.updated_at = datetime.now(UTC)
         origin = change_set.origin
         operations_proposed = len(change_set.operations)
+        project = await self.projects.get(project_id)
+        project_name = project.name if project is not None else module_name
         await self._settle_dataset(module_id)
+
+        # Before the commit, matching `apply`.
+        await NotificationFanout(self.session).raise_event(
+            event_type=NotificationType.MOCK_DATA_CHANGE_SET_DISCARDED,
+            project_id=project_id,
+            actor_user_id=actor.id,
+            target_id=module_id,
+            details={"projectName": project_name, "moduleName": module_name},
+        )
         await self.session.commit()
         await self._recorder.record(
             AuditEntry(

@@ -3,6 +3,7 @@ import type {
   ChecklistItemListParams,
   ChecklistModuleListParams,
   ListParams,
+  NotificationListParams,
 } from "@/lib/api/types";
 
 /**
@@ -87,6 +88,13 @@ export const endpoints = {
   auditEvents: {
     list: "/audit-events",
     detail: (id: string) => `/audit-events/${id}`,
+  },
+  notifications: {
+    list: "/notifications",
+    unreadCount: "/notifications/unread-count",
+    markAllRead: "/notifications/mark-all-read",
+    markRead: (id: string) => `/notifications/${id}/read`,
+    preferences: "/notification-preferences",
   },
 } as const;
 
@@ -187,6 +195,21 @@ export function auditEventListQueryString(params: AuditEventListParams): string 
   if (params.outcome) search.set("outcome", params.outcome);
   if (params.occurredFrom) search.set("occurredFrom", params.occurredFrom);
   if (params.occurredTo) search.set("occurredTo", params.occurredTo);
+  const qs = search.toString();
+  return qs ? `?${qs}` : "";
+}
+
+/**
+ * `listQueryString` plus the notifications page's own filters. `unreadOnly` is set
+ * only when true — the URL never carries `unreadOnly=false`, so a truthy check here
+ * is enough regardless of whether the value arrived as a real boolean or as the
+ * string a URL search param round-trips through.
+ */
+export function notificationListQueryString(params: NotificationListParams): string {
+  const search = new URLSearchParams(listQueryString(params).replace(/^\?/, ""));
+  if (params.eventType) search.set("eventType", params.eventType);
+  if (params.projectId) search.set("projectId", params.projectId);
+  if (params.unreadOnly) search.set("unreadOnly", "true");
   const qs = search.toString();
   return qs ? `?${qs}` : "";
 }

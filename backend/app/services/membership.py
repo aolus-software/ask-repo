@@ -21,12 +21,15 @@ from app.core.audit import AuditEntry, AuditEventType, AuditRecorder
 from app.core.errors import AppError, ErrorCode
 from app.core.grant_cache import get_grant_cache
 from app.core.middleware import AuthenticatedUser
+from app.core.notifications import NotificationType
 from app.core.permissions import OWNER_NAME, Permission
 from app.models.membership import ProjectMembership
 from app.repositories.membership import MembershipRepository
+from app.repositories.project import ProjectRepository
 from app.repositories.role import RoleRepository
 from app.repositories.user import UserRepository
 from app.schemas.membership import MemberCreateRequest, MemberResponse, MemberUpdateRequest
+from app.services.notification_fanout import NotificationFanout
 
 
 class MembershipService:
@@ -37,6 +40,7 @@ class MembershipService:
         self._members = MembershipRepository(session)
         self._roles = RoleRepository(session)
         self._users = UserRepository(session)
+        self._projects = ProjectRepository(session)
         self._recorder = recorder
 
     async def list_members(
@@ -92,6 +96,25 @@ class MembershipService:
             granted_by=actor.id,
         )
         self.session.add(membership)
+        project = await self._projects.get(project_id)
+        # `require_permission` above already resolved this project, so `None` is
+        # unreachable here in practice -- but the four change-set sites
+        # (`checklist_change_set.py`, `mock_data_change_set.py`) guard the same read
+        # and fall back to a name a human would recognise rather than an empty
+        # string, which the frontend would otherwise render as "Untitled"
+        # (`frontend/lib/notifications.ts`). Match that: fall back to the id.
+        project_name = project.name if project is not None else str(project_id)
+
+        # Before the commit. `raise_direct`, not `raise_event`: the grantee was not a
+        # member when the event was raised, so the permission map cannot find them.
+        await NotificationFanout(self.session).raise_direct(
+            event_type=NotificationType.MEMBERSHIP_GRANTED,
+            recipient=user.id,
+            project_id=project_id,
+            actor_user_id=actor.id,
+            target_id=project_id,
+            details={"projectName": project_name, "roleName": role.name},
+        )
         await self.session.commit()
         await get_grant_cache().invalidate_user(user.id)
         await self._recorder.record(

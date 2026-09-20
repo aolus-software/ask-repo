@@ -3,6 +3,7 @@ import type {
   ChecklistItemListParams,
   ChecklistModuleListParams,
   ListParams,
+  NotificationListParams,
 } from "@/lib/api/types";
 
 /**
@@ -70,5 +71,12 @@ export const keys = {
     all: ["audit-events"] as const,
     list: (params: AuditEventListParams) => ["audit-events", "list", params] as const,
     detail: (id: string) => ["audit-events", "detail", id] as const,
+  },
+  notifications: {
+    all: ["notifications"] as const,
+    list: (params: NotificationListParams) =>
+      ["notifications", "list", params] as const,
+    unreadCount: () => ["notifications", "unread-count"] as const,
+    preferences: () => ["notifications", "preferences"] as const,
   },
 };

@@ -24,6 +24,7 @@ from fastapi import status
 from app.core.errors import AppError, ErrorCode
 from app.core.middleware import AuthenticatedUser
 from app.core.permissions import Permission
+from app.repositories.membership import MembershipRepository
 
 
 @dataclass(frozen=True, slots=True)
@@ -153,5 +154,56 @@ def resolve_conversation_owner(user: AuthenticatedUser) -> uuid.UUID:
     `docs/PRD.md` §4.2 lists sharing a conversation as out of scope *for v1*, which
     marks it as a change someone will eventually make. This is the one body they
     change.
+    """
+    return user.id
+
+
+async def resolve_notification_recipients(
+    memberships: MembershipRepository,
+    project_id: uuid.UUID,
+    permission: Permission,
+    *,
+    excluding: uuid.UUID | None,
+) -> frozenset[uuid.UUID]:
+    """Who hears about an event on this project.
+
+    `resolve_project_scope` answers "which projects may this caller read"; this
+    answers the same question from the other end — "which callers may read this
+    project, and hold the permission this event is about". `docs/PRD.md` §2.1 requires
+    it to resolve through membership rather than through a recipient list this feature
+    invents, and names the failure it is guarding: not an empty list, but a
+    notification naming a private repository to someone who was never given it.
+
+    **This is the file's first async function, and that is a real divergence rather
+    than an oversight.** The others are synchronous because the grants are already in
+    hand — `AuthContextMiddleware` loaded them for this request's user. There is no
+    equivalent here: the caller is frequently a worker with no request and no
+    `AuthenticatedUser`, asking about users it has never seen.
+
+    **An administrator with no membership is not a recipient.** `require_permission`
+    lets an admin pass every check, and mirroring that here would notify every admin
+    about every project on the instance. Permission to see a thing is not interest in
+    hearing about it; adding an `is_admin` branch for symmetry is the bug.
+
+    It takes the repository rather than a session so this module stays free of query
+    construction, exactly as it is today.
+    """
+    recipients = frozenset(await memberships.recipients_for(project_id, permission))
+    if excluding is None:
+        return recipients
+    return recipients - {excluding}
+
+
+def resolve_notification_owner(user: AuthenticatedUser) -> uuid.UUID:
+    """Whose notifications this caller may read: only their own.
+
+    Beside `resolve_conversation_owner` for the same reason it is beside
+    `resolve_project_scope` — so "whose rows are these" is decided in one file rather
+    than by a `user_id ==` filter in a service. `is_admin` is not consulted: there is
+    no administrative view of anyone's notifications, and nothing needs one, because
+    the underlying *actions* are already visible to an administrator through
+    `/audit-events` wherever they were audited.
+
+    This is the one body someone changes if notifications ever become shareable.
     """
     return user.id

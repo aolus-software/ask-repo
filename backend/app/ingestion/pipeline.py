@@ -19,6 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import Settings
 from app.core.crypto import SecretBox, scrub
+from app.core.notifications import NotificationType
 from app.core.repo_url import RepoUrlRejected, ValidatedRepoUrl, validate_repo_url
 from app.db.session import get_sessionmaker
 from app.ingestion.chunker import Chunk, Chunker, embedding_text
@@ -33,6 +34,7 @@ from app.repositories.project import (
     LEASE_SECONDS,
     ProjectRepository,
 )
+from app.services.notification_fanout import NotificationFanout
 
 logger = logging.getLogger(__name__)
 
@@ -73,6 +75,13 @@ class IngestionPipeline:
             return
 
         pat = None
+        # Captured up front for the same reason `superseded_generation` is captured
+        # below: `release` is an ORM-enabled bulk UPDATE that synchronises attributes
+        # in place, so reading `project.name` after it ran would still be safe here
+        # (name never changes), but reading `project.status` would not — so both
+        # facts the notification needs are taken as locals before any release call.
+        project_name = project.name
+        was_reindex = project.status == ProjectStatus.READY.value
         # Still None if we failed before the clone returned, i.e. before anything was
         # written under a generation at all.
         generation: int | None = None
@@ -118,6 +127,29 @@ class IngestionPipeline:
                 embedding_collection=self.store.collection,
                 embedding_model=self.embedder.model_id,
             )
+            if released:
+                # Guarded on `released` and that is the right guard for free: a lost
+                # lease or a project deleted mid-run announces nothing, and the
+                # existing `_discard_unclaimed_generation` branch below still runs.
+                #
+                # Before the commit, deliberately — the index and the notification of
+                # it are one transaction. `AuditRecorder` goes after a commit for the
+                # opposite reason; see `.claude/rules/notifications.md`.
+                await NotificationFanout(self.session).raise_event(
+                    event_type=(
+                        NotificationType.PROJECT_REINDEX_FINISHED
+                        if was_reindex
+                        else NotificationType.PROJECT_READY
+                    ),
+                    project_id=project_id,
+                    actor_user_id=None,
+                    target_id=project_id,
+                    details={
+                        "projectName": project_name,
+                        "fileCount": file_count,
+                        "chunkCount": chunk_count,
+                    },
+                )
             await self.session.commit()
 
             if not released:
@@ -135,6 +167,30 @@ class IngestionPipeline:
                 status=ProjectStatus.FAILED,
                 error=scrub(str(error), pat)[:MAX_RECORDED_ERROR_CHARS],
             )
+            if released:
+                # `NotificationFanout` raises by design (`.claude/rules/notifications.md`
+                # rule 2) — a lost notification is meant to fail loudly. Here that design
+                # reads differently: we are already inside `except TerminalIngestionError`,
+                # so a raise from the fan-out would skip the `commit()` below and leave
+                # this worker still holding the lease, with no recorded error, until the
+                # reconcile sweep expires it and re-enqueues the job. That is only
+                # reachable on a database fault, at which point the transaction that
+                # would have carried the status commit was not going to succeed either —
+                # the reconcile sweep is the backstop, not a code change here.
+                await NotificationFanout(self.session).raise_event(
+                    event_type=(
+                        NotificationType.PROJECT_REINDEX_FAILED
+                        if was_reindex
+                        else NotificationType.PROJECT_FAILED
+                    ),
+                    project_id=project_id,
+                    actor_user_id=None,
+                    target_id=project_id,
+                    # No error text: `Project.error` holds the scrubbed message and
+                    # the project screen renders it. A second copy of clone-derived
+                    # output buys nothing over a link.
+                    details={"projectName": project_name},
+                )
             await self.session.commit()
             if not released and generation is not None:
                 # A terminal failure can still land after some batches were written.

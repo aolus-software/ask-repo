@@ -21,6 +21,8 @@ from app.api.routes import (
     mock_data_change_sets,
     mock_data_datasets,
     mock_data_records,
+    notification_preferences,
+    notifications,
     projects,
     roles,
     users,
@@ -157,6 +159,8 @@ def create_app() -> FastAPI:
     app.include_router(mock_data_records.router)
     app.include_router(mock_data_change_sets.router)
     app.include_router(audit_events.router)
+    app.include_router(notifications.router)
+    app.include_router(notification_preferences.router)
 
     return app
 

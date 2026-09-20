@@ -19,6 +19,7 @@ from app.checklist.model_output import FileObservations, ProposedChangeSet
 from app.checklist.operations import stored_operation
 from app.checklist.source import ModuleFile, ModuleSource, rebuild_files
 from app.config import Settings
+from app.core.notifications import NotificationType
 from app.db.session import get_sessionmaker
 from app.ingestion.errors import RetryableIngestionError, TerminalIngestionError
 from app.ingestion.vector_store import VectorStoreFactory
@@ -42,6 +43,7 @@ from app.repositories.checklist_module import (
     ChecklistModuleRepository,
 )
 from app.repositories.project import ProjectRepository
+from app.services.notification_fanout import NotificationFanout
 
 logger = logging.getLogger(__name__)
 
@@ -103,6 +105,12 @@ class ChecklistGenerator:
         project = await self.projects.get(module.project_id)
         if project is None or not project.embedding_collection:
             raise TerminalIngestionError(f"project {module.project_id} has no index to enumerate")
+        # Locals, not a lazy read inside the notification call below: `project.name`
+        # and `module.name` never change, but reading them off the ORM objects from
+        # inside the fan-out call would tie the notification to whatever state those
+        # objects are in then.
+        project_name = project.name
+        module_name = module.name
 
         renewal = asyncio.create_task(self._renew(module_id=module_id, worker_id=worker_id))
         try:
@@ -165,6 +173,27 @@ class ChecklistGenerator:
                 module_id,
             )
             return
+
+        # Before the commit, deliberately -- the change set and the notification of
+        # it are one transaction. `AuditRecorder` would go after a commit for the
+        # opposite reason, but generation records no audit event at all (this run
+        # writes only a pending change set; a project record it against).
+        await NotificationFanout(self.session).raise_event(
+            event_type=NotificationType.CHECKLIST_CHANGE_SET_PENDING,
+            project_id=module.project_id,
+            # No actor: a worker raised this. `docs/PRD.md` §2.1's fourth audit
+            # exemption stated as a value -- nobody did it, a job did.
+            actor_user_id=None,
+            # The module, not the change set: the Mock Data tab and the checklist
+            # grid both live at `/checklist/[moduleId]`, and a change set's own id
+            # names nothing a recipient can navigate to.
+            target_id=module.id,
+            details={
+                "projectName": project_name,
+                "moduleName": module_name,
+                "operationCount": len(operations),
+            },
+        )
         await self.session.commit()
 
     async def _renew(self, *, module_id: uuid.UUID, worker_id: str) -> None:

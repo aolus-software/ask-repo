@@ -17,7 +17,7 @@ anywhere recorded who deleted it**.
 
 So the rule is not "log the interesting things". It is:
 
-> **Every write, and every export, records an audit event. No exceptions beyond the four named
+> **Every write, and every export, records an audit event. No exceptions beyond the five named
 > in this file.**
 
 This is written as a rule rather than a list because a list goes stale the moment someone adds a
@@ -45,7 +45,7 @@ egress as a category of its own. "It's only a GET" is not a reason to skip it.
 with a filter can erase a week of a tester's recorded observations without deleting a single row,
 and it is the only write in the app that destroys human-recorded work that way.
 
-## The four exemptions, and each one's reason
+## The five exemptions, and each one's reason
 
 Named here so a later reader finds a **decision** rather than what looks like an oversight. Do not
 "fix" these; changing one is a PRD change first.
@@ -66,6 +66,13 @@ Named here so a later reader finds a **decision** rather than what looks like an
    `projects.status` and `projects.error` already hold the result, and `NULL` actor is reserved for
    the two cases where a *human* acted without an authenticated identity: a failed login, and the
    `seed-admins` CLI.
+5. **A user's own notification state.** Marking a notification read, marking all read,
+   and changing notification preferences. Three reasons, and all three are needed: the
+   row is private to one user; it describes no shared resource and no change to one;
+   and its write rate is proportional to **attention** rather than to change. That last
+   one is what makes it a flooding risk rather than merely a low-value row — a bell
+   clicked forty times a day would bury `user.deactivated` under exactly the noise
+   §2.5 refuses for the ask route.
 
 ## Adding a mutating route means adding an event, in the same change
 
@@ -156,6 +163,11 @@ Two consequences at the call site:
 For `project.deleted` the full order is: capture label and counts → hard-delete the Qdrant points
 → commit the soft delete → record. `docs/data.md` requires the vector delete before the commit, so
 if Qdrant refuses, nothing commits and nothing is recorded — correct, because no deletion happened.
+
+**A notification is written *before* the commit at the same call sites, and both
+orderings are correct.** An audit failure must not fail a user's action, so the audit
+write goes after; a lost notification is the feature not working, so the fan-out goes
+before and shares the transaction. See `.claude/rules/notifications.md`.
 
 ## Append-only is structural, not a convention
 

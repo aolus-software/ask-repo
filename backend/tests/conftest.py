@@ -420,6 +420,31 @@ async def admin_user(db_session: AsyncSession) -> User:
 
 
 @pytest.fixture
+async def project_id(db_session: AsyncSession) -> uuid.UUID:
+    """A project a recipient-resolution test can grant membership on.
+
+    `grant_owner=False`: the tests granting membership here do so explicitly, and a
+    membership the factory added on its own would be an uncontrolled extra recipient.
+    """
+    from tests.factories import create_project
+
+    project = await create_project(db_session, grant_owner=False)
+    await db_session.commit()
+    return project.id
+
+
+@pytest.fixture
+async def other_project_id(db_session: AsyncSession) -> uuid.UUID:
+    """A second, distinct project — proves recipient resolution does not leak across
+    projects."""
+    from tests.factories import create_project
+
+    project = await create_project(db_session, grant_owner=False)
+    await db_session.commit()
+    return project.id
+
+
+@pytest.fixture
 async def authed_client(app_with_queue: FastAPI, authed_user: User) -> AsyncIterator[AsyncClient]:
     """An `AsyncClient` authenticated as a freshly created, ready-to-use user."""
     async for async_client in _client_for_user(app_with_queue, authed_user):
@@ -445,3 +470,55 @@ async def client_for_admin(app_with_queue: FastAPI, admin_user: User) -> AsyncIt
     """A distinct authenticated admin, who overrides the destructive gate."""
     async for async_client in _client_for_user(app_with_queue, admin_user):
         yield async_client
+
+
+@pytest.fixture
+async def other_users_notification_id(
+    db_session: AsyncSession, user_a: User, project_id: uuid.UUID
+) -> uuid.UUID:
+    """A notification that belongs to `user_a`, not to `authed_client`'s user.
+
+    Built through the real `NotificationFanout` rather than a hand-built row, so the
+    test exercises the actual write path. `membership.granted` is a `DIRECT_EVENTS`
+    member (`app/core/notifications.py`), so it takes a named recipient rather than
+    resolving one from project membership — the simplest event to raise for a single
+    named user with no membership setup required.
+    """
+    from app.core.notifications import NotificationType
+    from app.models.notification import Notification
+    from app.services.notification_fanout import NotificationFanout
+
+    await NotificationFanout(db_session).raise_direct(
+        event_type=NotificationType.MEMBERSHIP_GRANTED,
+        recipient=user_a.id,
+        project_id=project_id,
+        actor_user_id=None,
+        target_id=project_id,
+        details={"projectName": "api", "roleName": "viewer"},
+    )
+    await db_session.commit()
+    result = await db_session.execute(
+        select(Notification.id).where(Notification.user_id == user_a.id)
+    )
+    return result.scalar_one()
+
+
+@pytest.fixture
+async def two_unread_notifications(
+    db_session: AsyncSession, authed_user: User, project_id: uuid.UUID
+) -> None:
+    """Two unread rows for `authed_client`'s own user, via the real fan-out."""
+    from app.core.notifications import NotificationType
+    from app.services.notification_fanout import NotificationFanout
+
+    fanout = NotificationFanout(db_session)
+    for role_name in ("viewer", "editor"):
+        await fanout.raise_direct(
+            event_type=NotificationType.MEMBERSHIP_GRANTED,
+            recipient=authed_user.id,
+            project_id=project_id,
+            actor_user_id=None,
+            target_id=project_id,
+            details={"projectName": "api", "roleName": role_name},
+        )
+    await db_session.commit()

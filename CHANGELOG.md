@@ -11,6 +11,39 @@ incompatibly. Configuration defaults and internal module layout may change in a 
 
 ## [Unreleased]
 
+### Added
+
+- **Six notification routes** (`docs/PRD.md` §2.1, phase 2.3): `GET /notifications` (filterable
+  by `unreadOnly`, `projectId`, `eventType`), `GET /notifications/unread-count`,
+  `POST /notifications/mark-all-read`, `POST /notifications/{id}/read`,
+  `GET /notification-preferences`, and `PUT /notification-preferences`. Every route is scoped to
+  the caller's own rows only — there is no administrative view — so a notification belonging to
+  someone else is `404 NOTIFICATION_NOT_FOUND`, never `403`. Marking a notification read, marking
+  all read, and changing preferences do not record an audit event: they are a user's own
+  attention state, not a change to a shared resource. Two new `ErrorCode`s:
+  `NOTIFICATION_NOT_FOUND` and `UNKNOWN_EVENT_TYPE` (`400`, for a preference update naming an
+  event type the catalogue does not know).
+- **Three new tables** (`docs/PRD.md` §2.1, phase 2.3): `notification_events` (one row per
+  occurrence), `notifications` (one row per recipient, carrying read state, `ON DELETE CASCADE`
+  from its event), and `notification_preferences` (sparse, absence meaning on). Nine call sites —
+  ingestion success and failure, checklist and mock-data generation and change-set apply/discard,
+  and granting a membership — fan out a notification to the members who hold the permission the
+  event is about, resolved through the same `app/core/access.py` that already decides project
+  access, and never a second recipient list. `membership.granted` is a new, sixth event category:
+  the grantee is notified directly, since they were not yet a member when the event fired.
+- **`NOTIFICATION_RETENTION_DAYS`**, a new setting, default `90`. The worker's existing 60-second
+  tick prunes notifications past the window regardless of read state, the same way it already
+  prunes audit rows — but the default deliberately diverges from `AUDIT_RETENTION_DAYS`'s `0`: a
+  notification is a nudge with a shelf life, not the record audit is, and an unread badge that
+  can never reach zero is a badge people stop looking at.
+
+### Changed
+
+- **A fifth audit exemption** (`.claude/rules/audit-trail.md`): marking a notification read,
+  marking all read, and changing notification preferences do not record an audit event — that
+  state is private to one user, describes no shared resource, and is written at a rate
+  proportional to attention rather than to change.
+
 ## [2.1.0] — 2026-09-19
 
 Append-only audit trail (`docs/PRD.md` §2.1, phase 2.2): who did what, never the secret involved

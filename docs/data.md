@@ -11,7 +11,7 @@ Read [`architecture.md`](architecture.md) first for why there are four.
 
 | Store | Holds | Survives a restart? |
 | --- | --- | --- |
-| **Postgres** | 17 tables — every row the app owns | Yes, and it is the only thing you must back up besides the PAT key |
+| **Postgres** | 20 tables — every row the app owns | Yes, and it is the only thing you must back up besides the PAT key |
 | **Qdrant** | Code chunks as vectors, **with the chunk text in the payload** | Yes, but it is rebuildable by re-indexing |
 | **Redis** | Login rate-limit counters, and the per-user grant cache | No, and that is fine — a lost lockout resets, and a lost grant snapshot is re-read from Postgres |
 | **Kafka** | Job messages on 12 topics | Yes, but the reconcile sweep recovers anything lost |
@@ -28,8 +28,9 @@ copy is deleted after indexing, so there is no file to re-read at query time.
 
 ## The Postgres tables
 
-Seventeen tables in seven groups. Every one of them except `refresh_tokens`, `messages` and
-`audit_events` carries `created_at`, `updated_at` and `deleted_at`.
+Twenty tables in eight groups. Every one of them except `refresh_tokens`, `messages`,
+`audit_events`, `notification_events` and `notifications` carries `created_at`, `updated_at` and
+`deleted_at`.
 
 `audit_events` is the sharp exception, and **its omissions are the append-only mechanism rather
 than an oversight**. It carries `created_at` and neither of the other two. No `deleted_at`, so
@@ -38,6 +39,9 @@ filters only when the model carries `SoftDeleteMixin`, so append-only stops bein
 every future repository method has to respect and becomes a property of the model. No
 `updated_at`, because a column recording a mutation has no business on a row that is never
 mutated. See [Audit](#audit).
+
+`notification_events` and `notifications` carry neither mixin either, for two of the same three
+reasons — and deliberately **not** the third. See [Notifications](#notifications).
 
 ```mermaid
 erDiagram
@@ -60,6 +64,11 @@ erDiagram
     checklist_modules ||--o{ mock_data_messages : ""
     users ||--o{ audit_events : "acted (nullable)"
     projects ||--o{ audit_events : "scoped to (nullable)"
+    users ||--o{ notification_events : "acted (nullable)"
+    projects ||--o{ notification_events : "scoped to"
+    notification_events ||--o{ notifications : "delivered as (cascades)"
+    users ||--o{ notifications : "recipient"
+    users ||--o{ notification_preferences : "opts on"
 ```
 
 ### Accounts
@@ -219,6 +228,41 @@ in the schema.
 The write itself happens **after the commit that made the change true**, on the recorder's own
 session, and `AuditRecorder.record` never raises — see
 [`architecture.md`](architecture.md#the-audit-write-path).
+
+### Notifications
+
+Three tables. `docs/PRD.md` §2.1, Phase 2.3; mechanism in `.claude/rules/notifications.md`.
+
+| Table | One row per | Notes |
+| --- | --- | --- |
+| `notification_events` | occurrence | `event_type`, nullable `actor_user_id`, not-null `project_id`, nullable `target_type`/`target_id` (not an FK — same reasoning as `audit_events.target_id`), a per-event `details` JSONB allowlist |
+| `notifications` | `(event, recipient)` | `event_id` FK **`ON DELETE CASCADE`**, `user_id`, `in_app_visible` (the preference snapshot), `read_at`. `UNIQUE (event_id, user_id)` is the deduplication boundary |
+| `notification_preferences` | `(user, event_type)` a user has an opinion about | `in_app`, `email` — both default `true`. Sparse: **absence means on**, so a new event type is on for everybody with no backfill |
+
+`notification_events` carries neither `TimestampMixin` nor `SoftDeleteMixin`, for two of
+`audit_events`' three reasons and **not the third**: no `updated_at`, because an occurrence is
+never mutated; no `deleted_at`, because nobody soft-deletes a notification and
+`active_select()` would be filtering a column that is always `NULL`. **Unlike `audit_events`,
+this table is not append-only** — retention hard-deletes past `NOTIFICATION_RETENTION_DAYS`
+(default `90`), and the `ON DELETE CASCADE` on `notifications.event_id` takes each event's
+per-recipient rows with it in the same statement. `audit_events` is append-only because it is
+the record; a notification is a nudge with a shelf life, and claiming append-only for a table
+retention prunes every 60 seconds would be a guarantee this table does not hold.
+
+`notifications` carries no soft delete either: a user marks a row read, they do not delete it,
+and retention is the only remover — by age, never by request. A partial index on `user_id`
+`WHERE read_at IS NULL AND in_app_visible` is what the polled unread count reads; nothing else.
+
+`notification_preferences` is the one table of the three that **does** carry `TimestampMixin` (a
+preference is mutated) and does **not** carry `SoftDeleteMixin` (a preference is upserted, never
+deleted).
+
+Recipients resolve through `resolve_notification_recipients` in `app/core/access.py` — the same
+file that answers every other "who may see this" question — never a query built at a fan-out
+call site. The write itself happens **before** the commit that makes the underlying change true,
+the opposite ordering from the audit write above, because a lost notification is the feature not
+working rather than an accepted, logged gap. See `.claude/rules/notifications.md` and
+[`architecture.md`](architecture.md#the-notification-fan-out-path).
 
 ---
 
