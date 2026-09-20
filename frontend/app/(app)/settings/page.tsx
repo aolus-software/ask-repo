@@ -13,7 +13,13 @@ import { settingsNav } from "@/lib/settings-nav";
  * moment they had any reachable settings screen at all.
  */
 export default async function SettingsPage() {
-  const user = await serverFetch<UserResponse>(endpoints.auth.me);
+  let user: UserResponse;
+  try {
+    user = await serverFetch<UserResponse>(endpoints.auth.me);
+  } catch {
+    redirect("/login");
+  }
+
   const child = settingsNav.find((item) => !item.adminOnly || user.isAdmin);
   redirect(child?.href ?? "/");
 }
