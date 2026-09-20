@@ -227,6 +227,15 @@ class Settings(BaseSettings):
     # instance never needs to lose history.
     audit_retention_days: int = Field(default=0, ge=0)
 
+    # How long a notification stays before the worker's tick removes it. **Defaults to
+    # 90 rather than to `0`, and the divergence from `audit_retention_days` is
+    # deliberate.** Audit keeps forever by default because a fresh instance must not
+    # silently discard the one record whose purpose is being the record. A notification
+    # is a nudge, not a record: its value is measured in days, and keep-forever would
+    # grow a table nobody reads past a week. `0` still means keep forever, for an
+    # operator who wants it.
+    notification_retention_days: int = Field(default=90, ge=0)
+
     @model_validator(mode="after")
     def _reject_development_defaults_in_production(self) -> Self:
         """Fail fast rather than serve production traffic with a known signing key."""
