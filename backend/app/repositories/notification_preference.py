@@ -59,3 +59,22 @@ class NotificationPreferenceRepository(BaseRepository[NotificationPreference]):
                 },
             )
         )
+
+    async def muted_in_app(
+        self, event_type: str, user_ids: frozenset[uuid.UUID]
+    ) -> frozenset[uuid.UUID]:
+        """Which of these users have turned this event's in-app delivery off.
+
+        Asks which rows say `false`, not which say `true`, because preferences are
+        sparse and absence means on.
+        """
+        if not user_ids:
+            return frozenset()
+        result = await self.session.execute(
+            select(NotificationPreference.user_id).where(
+                NotificationPreference.user_id.in_(user_ids),
+                NotificationPreference.event_type == event_type,
+                NotificationPreference.in_app.is_(False),
+            )
+        )
+        return frozenset(result.scalars().all())
