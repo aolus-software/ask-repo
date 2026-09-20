@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { resolveBreadcrumbs, visibleNavTree } from "@/lib/nav";
+import { settingsNav } from "@/lib/settings-nav";
 
 const admin = { isAdmin: true };
 const member = { isAdmin: false };
@@ -16,12 +17,13 @@ describe("visibleNavTree", () => {
     ]);
   });
 
-  it("hides a group entirely when all of its children are unreachable", () => {
+  it("keeps a group visible when at least one child is reachable", () => {
     expect(visibleNavTree(member).map((i) => i.href)).toEqual([
       "/",
       "/projects",
       "/ask",
       "/checklist",
+      "/settings",
     ]);
   });
 
@@ -31,7 +33,22 @@ describe("visibleNavTree", () => {
       "/settings/users",
       "/settings/roles",
       "/settings/audit",
+      "/settings/notifications",
     ]);
+  });
+
+  it("resolves /settings to notifications for a non-admin", () => {
+    // Until now every settings child was admin-only, so a non-admin never reached the
+    // group at all. Notifications is the first child everyone can see, which changes
+    // what the group's index redirects to -- the kind of thing that works in every
+    // developer's admin session and is broken for everyone else.
+    const reachable = settingsNav.filter((child) => !child.adminOnly);
+    expect(reachable.map((c) => c.href)).toContain("/settings/notifications");
+  });
+
+  it("shows only notifications to a non-admin under settings", () => {
+    const settings = visibleNavTree(member).find((i) => i.href === "/settings");
+    expect(settings?.children?.map((c) => c.href)).toEqual(["/settings/notifications"]);
   });
 
   it("hides Roles from a non-admin", () => {
@@ -62,11 +79,9 @@ describe("visibleNavTree", () => {
       (item) => item.title === "Settings",
     );
 
-    // `settings` is `undefined` here, not a group with no matching child: every
-    // child of Settings is `adminOnly`, so a non-admin's tree hides the group
-    // entirely (`visibleNavTree` drops a group whose children all filter out).
-    // `?? false` makes that the same assertion either way, matching the `?? []`
-    // pattern the existing "hides Roles" test above already uses for this reason.
+    // `settings` is defined here, unlike before Notifications existed: a non-admin
+    // now has one reachable child (Notifications), so the group stays visible with
+    // just that child rather than being dropped entirely.
     expect(
       settings?.children?.some((child) => child.href === "/settings/audit") ?? false,
     ).toBe(false);

@@ -68,6 +68,33 @@ export function notificationTitle(n: NotificationSummary): string {
   return render ? render(n.details) : n.eventType;
 }
 
+/**
+ * A label for the *category* an event type belongs to, not for one row.
+ *
+ * Used on the preferences screen, where there is no `NotificationSummary` to pull a
+ * project or module name from -- only the bare `eventType` the backend's catalogue
+ * enumerates. Falls back to the raw type for the same reason `notificationTitle`
+ * does: a backend that ships a new event type must not blank this screen.
+ */
+const CATEGORY_TITLES: Record<string, string> = {
+  "project.ready": "A project finished indexing",
+  "project.failed": "A project failed to index",
+  "project.reindex.finished": "A project finished reindexing",
+  "project.reindex.failed": "A project failed to reindex",
+  "checklist_change_set.pending": "A checklist change set is waiting for review",
+  "checklist_change_set.applied": "A checklist change set was applied",
+  "checklist_change_set.discarded": "A checklist change set was discarded",
+  "mock_data_change_set.pending": "A mock data change set is waiting for review",
+  "mock_data_change_set.applied": "A mock data change set was applied",
+  "mock_data_change_set.discarded": "A mock data change set was discarded",
+  "membership.granted": "You were added to a project",
+};
+
+/** A human label for an event *type*, for the preferences screen's row headings. */
+export function notificationTitleForType(eventType: string): string {
+  return CATEGORY_TITLES[eventType] ?? eventType;
+}
+
 function name(details: Record<string, unknown>, key: string): string {
   const value = details[key];
   return typeof value === "string" && value ? value : "Untitled";

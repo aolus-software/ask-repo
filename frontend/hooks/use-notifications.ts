@@ -6,6 +6,8 @@ import { apiFetch } from "@/lib/api/client";
 import { endpoints, notificationListQueryString } from "@/lib/api/endpoints";
 import type {
   NotificationListParams,
+  NotificationPreference,
+  NotificationPreferencesResponse,
   PaginatedResponse,
   NotificationSummary,
   UnreadCountResponse,
@@ -64,5 +66,31 @@ export function useMarkAllNotificationsRead() {
   return useMutation({
     mutationFn: () => apiFetch(endpoints.notifications.markAllRead, { method: "POST" }),
     onSuccess: invalidate,
+  });
+}
+
+/** One row per event type in the catalogue, plus whether email delivery is live. */
+export function useNotificationPreferences() {
+  return useQuery({
+    queryKey: keys.notifications.preferences(),
+    queryFn: () =>
+      apiFetch<NotificationPreferencesResponse>(endpoints.notifications.preferences),
+  });
+}
+
+/**
+ * Replaces the whole preference list in one call -- there is no per-row endpoint, so
+ * the caller always sends every item back, changed or not.
+ */
+export function useUpdateNotificationPreferences() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (items: NotificationPreference[]) =>
+      apiFetch(endpoints.notifications.preferences, {
+        method: "PUT",
+        body: JSON.stringify({ items }),
+      }),
+    onSuccess: () =>
+      queryClient.invalidateQueries({ queryKey: keys.notifications.preferences() }),
   });
 }

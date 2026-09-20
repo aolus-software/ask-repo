@@ -1,7 +1,12 @@
 import { describe, expect, it } from "vitest";
 
 import type { NotificationSummary } from "@/lib/api/types";
-import { NOTIFICATION_TYPES, notificationHref, notificationTitle } from "@/lib/notifications";
+import {
+  NOTIFICATION_TYPES,
+  notificationHref,
+  notificationTitle,
+  notificationTitleForType,
+} from "@/lib/notifications";
 
 const base: NotificationSummary = {
   id: "n1",
@@ -40,6 +45,17 @@ describe("notificationTitle", () => {
 
   it("renders an unknown event type without throwing", () => {
     expect(() => notificationTitle({ ...base, eventType: "future.event" })).not.toThrow();
+  });
+});
+
+describe("notificationTitleForType", () => {
+  it("labels the category, not one row", () => {
+    expect(notificationTitleForType("project.ready")).toBe("A project finished indexing");
+  });
+
+  it("renders an unknown event type without throwing", () => {
+    expect(() => notificationTitleForType("future.event")).not.toThrow();
+    expect(notificationTitleForType("future.event")).toBe("future.event");
   });
 });
 
