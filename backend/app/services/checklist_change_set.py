@@ -24,6 +24,7 @@ from app.core import access
 from app.core.audit import AuditEntry, AuditEventType, AuditRecorder
 from app.core.errors import AppError, ErrorCode
 from app.core.middleware import AuthenticatedUser
+from app.core.notifications import NotificationType
 from app.core.permissions import Permission
 from app.models.checklist import (
     ChangeSetOrigin,
@@ -39,6 +40,7 @@ from app.models.checklist import (
 from app.repositories.checklist_change_set import ChecklistChangeSetRepository
 from app.repositories.checklist_item import ChecklistItemRepository
 from app.repositories.checklist_module import ChecklistModuleRepository
+from app.repositories.project import ProjectRepository
 from app.schemas.checklist import (
     ChangeOperationPayload,
     ChangeSetApplyRequest,
@@ -46,6 +48,7 @@ from app.schemas.checklist import (
     ChecklistChangeSetResponse,
     ChecklistItemResponse,
 )
+from app.services.notification_fanout import NotificationFanout
 
 logger = logging.getLogger(__name__)
 
@@ -129,6 +132,7 @@ class ChecklistChangeSetService:
         self.change_sets = ChecklistChangeSetRepository(session)
         self.items = ChecklistItemRepository(session)
         self.modules = ChecklistModuleRepository(session)
+        self.projects = ProjectRepository(session)
         self._recorder = recorder
 
     async def apply(
@@ -180,7 +184,28 @@ class ChecklistChangeSetService:
         # proposed, independent of anything the commit itself might touch.
         origin = change_set.origin
         operations_proposed = len(change_set.operations)
+        module_id = module.id
+        module_name = module.name
+        project_id = module.project_id
+        applied_count = len(touched)
+        project = await self.projects.get(project_id)
+        project_name = project.name if project is not None else module_name
         await self._settle_module(module)
+
+        # Before the commit. The audit record below goes *after* it, and both
+        # orderings are load-bearing: an audit failure must not fail the user's
+        # action, and a lost notification is the feature not working.
+        await NotificationFanout(self.session).raise_event(
+            event_type=NotificationType.CHECKLIST_CHANGE_SET_APPLIED,
+            project_id=project_id,
+            actor_user_id=actor.id,
+            target_id=module_id,
+            details={
+                "projectName": project_name,
+                "moduleName": module_name,
+                "appliedCount": applied_count,
+            },
+        )
         await self.session.commit()
 
         # The gap between the two counts is the evidence a human reviewed rather
@@ -231,7 +256,21 @@ class ChecklistChangeSetService:
         change_set.updated_at = datetime.now(UTC)
         origin = change_set.origin
         operations_proposed = len(change_set.operations)
+        module_id = module.id
+        module_name = module.name
+        project_id = module.project_id
+        project = await self.projects.get(project_id)
+        project_name = project.name if project is not None else module_name
         await self._settle_module(module)
+
+        # Before the commit, matching `apply`.
+        await NotificationFanout(self.session).raise_event(
+            event_type=NotificationType.CHECKLIST_CHANGE_SET_DISCARDED,
+            project_id=project_id,
+            actor_user_id=actor.id,
+            target_id=module_id,
+            details={"projectName": project_name, "moduleName": module_name},
+        )
         await self.session.commit()
         await self._recorder.record(
             AuditEntry(
