@@ -1,6 +1,5 @@
 "use client";
 
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Bell } from "lucide-react";
 import Link from "next/link";
 
@@ -8,54 +7,20 @@ import { NotificationList } from "@/components/notifications/notification-list";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { apiFetch } from "@/lib/api/client";
-import { endpoints, listQueryString } from "@/lib/api/endpoints";
-import type { PaginatedResponse, NotificationSummary, UnreadCountResponse } from "@/lib/api/types";
-import { keys } from "@/lib/query/keys";
+import {
+  useMarkAllNotificationsRead,
+  useMarkNotificationRead,
+  useNotifications,
+  useUnreadNotificationCount,
+} from "@/hooks/use-notifications";
 
-/**
- * Polls an integer, deliberately.
- *
- * `docs/PRD.md` §2.1: the SSE machinery is built for the lifetime of one answer, and a
- * per-user notification stream is a different connection lifecycle with different
- * failure modes. `refetchIntervalInBackground: false` stops a tab left open overnight
- * from polling all night.
- */
-const POLL_INTERVAL_MS = 60_000;
 const POPOVER_LIMIT = 8;
 
 export function NotificationBell() {
-  const queryClient = useQueryClient();
-
-  const count = useQuery({
-    queryKey: keys.notifications.unreadCount(),
-    queryFn: () => apiFetch<UnreadCountResponse>(endpoints.notifications.unreadCount),
-    refetchInterval: POLL_INTERVAL_MS,
-    refetchIntervalInBackground: false,
-  });
-
-  const listParams = { limit: POPOVER_LIMIT };
-  const recent = useQuery({
-    queryKey: keys.notifications.list(listParams),
-    queryFn: () =>
-      apiFetch<PaginatedResponse<NotificationSummary>>(
-        `${endpoints.notifications.list}${listQueryString(listParams)}`,
-      ),
-  });
-
-  const markRead = useMutation({
-    mutationFn: (id: string) => apiFetch(endpoints.notifications.markRead(id), { method: "POST" }),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: keys.notifications.all });
-    },
-  });
-
-  const markAllRead = useMutation({
-    mutationFn: () => apiFetch(endpoints.notifications.markAllRead, { method: "POST" }),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: keys.notifications.all });
-    },
-  });
+  const count = useUnreadNotificationCount();
+  const recent = useNotifications({ limit: POPOVER_LIMIT });
+  const markRead = useMarkNotificationRead();
+  const markAllRead = useMarkAllNotificationsRead();
 
   const unread = count.data?.count ?? 0;
 
