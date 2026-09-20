@@ -420,6 +420,31 @@ async def admin_user(db_session: AsyncSession) -> User:
 
 
 @pytest.fixture
+async def project_id(db_session: AsyncSession) -> uuid.UUID:
+    """A project a recipient-resolution test can grant membership on.
+
+    `grant_owner=False`: the tests granting membership here do so explicitly, and a
+    membership the factory added on its own would be an uncontrolled extra recipient.
+    """
+    from tests.factories import create_project
+
+    project = await create_project(db_session, grant_owner=False)
+    await db_session.commit()
+    return project.id
+
+
+@pytest.fixture
+async def other_project_id(db_session: AsyncSession) -> uuid.UUID:
+    """A second, distinct project — proves recipient resolution does not leak across
+    projects."""
+    from tests.factories import create_project
+
+    project = await create_project(db_session, grant_owner=False)
+    await db_session.commit()
+    return project.id
+
+
+@pytest.fixture
 async def authed_client(app_with_queue: FastAPI, authed_user: User) -> AsyncIterator[AsyncClient]:
     """An `AsyncClient` authenticated as a freshly created, ready-to-use user."""
     async for async_client in _client_for_user(app_with_queue, authed_user):

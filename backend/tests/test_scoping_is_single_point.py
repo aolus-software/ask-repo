@@ -25,6 +25,16 @@ ALLOWED_MEMBERSHIP_READERS = {
 }
 
 
+# `recipients_for` is `resolve_project_scope` read backwards: it answers "which users
+# may see this project", which is the same access decision from the other end.
+# `docs/PRD.md` §2.1 warns that recipient selection must not become a second access
+# resolver; this line is what makes that warning a build failure rather than prose.
+ALLOWED_RECIPIENTS_FOR_CALLERS = {
+    ACCESS,
+    APP / "repositories" / "membership.py",
+}
+
+
 def _python_files() -> list[Path]:
     return [p for p in APP.rglob("*.py") if "__pycache__" not in p.parts]
 
@@ -40,6 +50,21 @@ def test_nothing_else_queries_the_membership_table() -> None:
     ]
 
     assert offenders == [], f"membership read outside the access core: {offenders}"
+
+
+def test_nothing_else_resolves_notification_recipients() -> None:
+    """`recipients_for` answers the access question from the other end — see the
+    comment above `ALLOWED_RECIPIENTS_FOR_CALLERS`. A second caller would be a second
+    place that decides who may see a project, which is exactly what this suite exists
+    to prevent."""
+    offenders = [
+        path.relative_to(APP)
+        for path in _python_files()
+        if path not in ALLOWED_RECIPIENTS_FOR_CALLERS
+        and "recipients_for" in path.read_text(encoding="utf-8")
+    ]
+
+    assert offenders == [], f"recipients_for called outside the access core: {offenders}"
 
 
 def test_no_module_compares_created_by_to_an_actor() -> None:
