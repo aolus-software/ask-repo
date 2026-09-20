@@ -496,3 +496,41 @@ export interface AuditEventListParams extends ListParams {
   occurredFrom?: string;
   occurredTo?: string;
 }
+
+/** One notification as returned by GET /notifications. */
+export interface NotificationSummary {
+  id: string;
+  createdAt: string;
+  readAt: string | null;
+  eventType: string;
+  projectId: string;
+  targetType: string | null;
+  targetId: string | null;
+  actorUserId: string | null;
+  details: Record<string, unknown>;
+}
+
+/** One row of notification preferences. */
+export interface NotificationPreference {
+  eventType: string;
+  inApp: boolean;
+  email: boolean;
+}
+
+/** GET /notification-preferences response. */
+export interface NotificationPreferencesResponse {
+  items: NotificationPreference[];
+  emailEnabled: boolean;
+}
+
+/** GET /notifications/unread-count response. */
+export interface UnreadCountResponse {
+  count: number;
+}
+
+/** List params for notifications: type, project and unread-only filters. */
+export interface NotificationListParams extends ListParams {
+  eventType?: string;
+  projectId?: string;
+  unreadOnly?: boolean;
+}
