@@ -11,6 +11,19 @@ incompatibly. Configuration defaults and internal module layout may change in a 
 
 ## [Unreleased]
 
+### Added
+
+- **Six notification routes** (`docs/PRD.md` §2.1, phase 2.3): `GET /notifications` (filterable
+  by `unreadOnly`, `projectId`, `eventType`), `GET /notifications/unread-count`,
+  `POST /notifications/mark-all-read`, `POST /notifications/{id}/read`,
+  `GET /notification-preferences`, and `PUT /notification-preferences`. Every route is scoped to
+  the caller's own rows only — there is no administrative view — so a notification belonging to
+  someone else is `404 NOTIFICATION_NOT_FOUND`, never `403`. Marking a notification read, marking
+  all read, and changing preferences do not record an audit event: they are a user's own
+  attention state, not a change to a shared resource. Two new `ErrorCode`s:
+  `NOTIFICATION_NOT_FOUND` and `UNKNOWN_EVENT_TYPE` (`400`, for a preference update naming an
+  event type the catalogue does not know).
+
 ## [2.1.0] — 2026-09-19
 
 Append-only audit trail (`docs/PRD.md` §2.1, phase 2.2): who did what, never the secret involved
