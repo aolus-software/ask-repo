@@ -528,7 +528,9 @@ export interface UnreadCountResponse {
   count: number;
 }
 
-/** List params for notifications, with optional eventType filter. */
+/** List params for notifications: type, project and unread-only filters. */
 export interface NotificationListParams extends ListParams {
   eventType?: string;
+  projectId?: string;
+  unreadOnly?: boolean;
 }

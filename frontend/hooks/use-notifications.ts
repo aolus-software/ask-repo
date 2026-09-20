@@ -3,7 +3,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { apiFetch } from "@/lib/api/client";
-import { endpoints, listQueryString } from "@/lib/api/endpoints";
+import { endpoints, notificationListQueryString } from "@/lib/api/endpoints";
 import type {
   NotificationListParams,
   PaginatedResponse,
@@ -40,7 +40,7 @@ export function useNotifications(params: NotificationListParams) {
     queryKey: keys.notifications.list(params),
     queryFn: () =>
       apiFetch<PaginatedResponse<NotificationSummary>>(
-        `${endpoints.notifications.list}${listQueryString(params)}`,
+        `${endpoints.notifications.list}${notificationListQueryString(params)}`,
       ),
   });
 }

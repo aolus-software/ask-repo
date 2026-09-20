@@ -198,3 +198,18 @@ export function auditEventListQueryString(params: AuditEventListParams): string 
   const qs = search.toString();
   return qs ? `?${qs}` : "";
 }
+
+/**
+ * `listQueryString` plus the notifications page's own filters. `unreadOnly` is set
+ * only when true — the URL never carries `unreadOnly=false`, so a truthy check here
+ * is enough regardless of whether the value arrived as a real boolean or as the
+ * string a URL search param round-trips through.
+ */
+export function notificationListQueryString(params: NotificationListParams): string {
+  const search = new URLSearchParams(listQueryString(params).replace(/^\?/, ""));
+  if (params.eventType) search.set("eventType", params.eventType);
+  if (params.projectId) search.set("projectId", params.projectId);
+  if (params.unreadOnly) search.set("unreadOnly", "true");
+  const qs = search.toString();
+  return qs ? `?${qs}` : "";
+}
