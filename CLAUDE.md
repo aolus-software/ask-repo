@@ -375,10 +375,11 @@ rejection at connect time) is a security control, not input hygiene. See `docs/P
 
 ### Auth is admin-provisioned
 
-No public registration, no email verification, no self-service reset, and therefore no mail
-provider anywhere in the stack. An admin creates accounts; `must_change_password` forces a
-change on first login. Access tokens are stateless JWTs (15 min); refresh tokens are opaque,
-stored hashed so they can be revoked, and rotate on use.
+No public registration, no email verification. An admin creates accounts;
+`must_change_password` forces a change on first login. Access tokens are stateless JWTs
+(15 min); refresh tokens are opaque, stored hashed so they can be revoked, and rotate on use.
+An optional mail provider exists, off by default (`MAIL_ENABLED`), used for self-service
+password reset and notification email — see `.claude/rules/mail.md`.
 
 ### Identity is resolved once, in middleware
 

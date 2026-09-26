@@ -14,7 +14,7 @@ is what makes these rules rather than preferences.
 
 ## Nothing derived from an indexed repository leaves the network
 
-`app/mail/composer.py` composes every message that leaves the instance. The rule is **not**
+`app/mail/compose.py` composes every message that leaves the instance. The rule is **not**
 "check that every message is okay" — it is "accept no parameter that would allow one to leave
 the code". That is what the signature rules exist for.
 

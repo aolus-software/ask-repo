@@ -161,8 +161,8 @@ class NotificationPreference(TimestampMixin, Base):
     event_type: Mapped[str] = mapped_column(String(64), nullable=False)
 
     in_app: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
-    # Written now, honoured by nothing until Phase 2.4 adds a sender. Shipping the
-    # column here is what keeps 2.4 additive: it adds a sender, not a schema change,
+    # Read at fan-out time by Phase 2.4 to decide `notifications.email_state`. Shipping the
+    # column ahead of that is what kept 2.4 additive: it added a sender, not a schema change,
     # a settings screen and a mail path at once.
     email: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
 

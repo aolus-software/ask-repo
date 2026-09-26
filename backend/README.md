@@ -116,8 +116,8 @@ wired in yet**, even though all four datastores are now read elsewhere in the ap
 | `POST` | `/auth/logout` | refresh cookie | Log out of this device |
 | `POST` | `/auth/logout-all` | access token | Log out everywhere |
 | `GET` | `/auth/me` | access token | The current account |
-| `POST` | `/auth/password-reset/request` | none | Request a password reset link. Phase 2.4; returns `409 PASSWORD_RESET_UNAVAILABLE` if mail is not enabled |
-| `GET` | `/auth/password-reset/request-status` | none | Poll whether the reset email was sent (for the `/forgot-password` page) |
+| `GET` | `/auth/password-reset/availability` | none | `{enabled}` (`MAIL_ENABLED`), read by the login screen to show or hide "Forgot password?" |
+| `POST` | `/auth/password-reset/request` | none | Request a password reset link. Phase 2.4; answers `202` for every address; `409 PASSWORD_RESET_UNAVAILABLE` if mail is not enabled |
 | `POST` | `/auth/password-reset/confirm` | none | Confirm the reset with a token (fragment-only) and new password. `400 PASSWORD_RESET_TOKEN_INVALID` for any token problem |
 
 ### Users
@@ -390,7 +390,7 @@ event: exemption 5 in `.claude/rules/audit-trail.md`.
 | `GET` | `/notifications/unread-count` | any user | `{ count }`, what the bell polls |
 | `POST` | `/notifications/mark-all-read` | any user | Marks every visible unread row read. Declared **before** `/{notification_id}/read` so the literal path wins the match |
 | `POST` | `/notifications/{id}/read` | any user | Marks one read. `404 NOTIFICATION_NOT_FOUND` for a row that does not exist or belongs to someone else |
-| `GET` | `/notification-preferences` | any user | Every event type in the catalogue, gaps filled in as on, plus `emailEnabled` (`false` until Phase 2.4) |
+| `GET` | `/notification-preferences` | any user | Every event type in the catalogue, gaps filled in as on, plus `emailEnabled` (reflects `MAIL_ENABLED`) |
 | `PUT` | `/notification-preferences` | any user | Replaces the whole set. `400 UNKNOWN_EVENT_TYPE` for an event type the catalogue does not name |
 
 ## Layout

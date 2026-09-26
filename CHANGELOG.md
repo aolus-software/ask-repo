@@ -38,19 +38,20 @@ incompatibly. Configuration defaults and internal module layout may change in a 
   can never reach zero is a badge people stop looking at.
 
 - **Three self-service password reset routes** (`docs/PRD.md` §2.1, phase 2.4, optional and off by
-  default): `POST /auth/password-reset/request` (email requested, returns `409 PASSWORD_RESET_UNAVAILABLE`
-  if mail is not enabled), `GET /auth/password-reset/request-status` (poll whether the email was sent),
-  and `POST /auth/password-reset/confirm` (token in URL fragment, new password in body). Password
+  default): `GET /auth/password-reset/availability` (`{enabled}`, read by the login screen to show
+  or hide "Forgot password?"), `POST /auth/password-reset/request` (email requested, always
+  answers `202`; `409 PASSWORD_RESET_UNAVAILABLE` if mail is not enabled), and `POST
+  /auth/password-reset/confirm` (token in URL fragment, new password in body). Password
   policy is enforced by `validate_and_hash_new_password()` in `app/core/passwords.py`; a weak
-  password raises `400 WEAK_PASSWORD`. Tokens are hashed, single-use, and short-lived (10 minutes),
-  hard-deleted by the worker if expired or used more than 24 hours ago. New `ErrorCode`:
-  `PASSWORD_RESET_UNAVAILABLE` and `PASSWORD_RESET_TOKEN_INVALID`.
+  password raises `400 WEAK_PASSWORD`. Tokens are hashed, single-use, and short-lived (30 minutes
+  by default), hard-deleted by the worker if expired or used more than 24 hours ago. New
+  `ErrorCode`: `PASSWORD_RESET_UNAVAILABLE` and `PASSWORD_RESET_TOKEN_INVALID`.
 - **Email as a second transport of notifications** (`docs/PRD.md` §2.1, phase 2.4, optional and off by
   default): when `MAIL_ENABLED` is on, each notification row captures the recipient's `email`
-  preference snapshot at fan-out time (`email_state`: `pending`, `sent`, `failed`, `skipped`, or
-  `NULL`), and the mail loop drains by sending and updating rows. Subjects and bodies are fixed
-  strings per event type, never content derived from a repository. The `email` switch on
-  `/settings/notifications` is enabled only when mail is configured.
+  preference snapshot at fan-out time (`email_state`: `pending` or `NULL`), and the mail loop
+  drains pending rows, moving them to `sent`, `failed`, or `skipped` as delivery outcomes. Subjects
+  and bodies are fixed strings per event type, never content derived from a repository. The
+  `email` switch on `/settings/notifications` is enabled only when mail is configured.
 - **`MAIL_ENABLED` and SMTP settings**: when `MAIL_ENABLED` is `true`, password reset and
   notification email ship. Requires `SMTP_HOST`, `SMTP_PORT`, `SMTP_FROM`, and `SMTP_PASSWORD`;
   password reset also requires `APP_BASE_URL` for reset links. All default to off and empty,
@@ -59,10 +60,10 @@ incompatibly. Configuration defaults and internal module layout may change in a 
   Hard-deleted by the worker for expired tokens or those used more than 24 hours ago.
 - **Four columns on `notifications` table** (`email_state`, `email_attempts`, `email_claimed_until`, `email_sent_at`):
   the outbox and at-least-once delivery mechanism, added in Phase 2.3 but unused until Phase 2.4.
-- **Two new audit events** (`docs/PRD.md` §2.1, phase 2.4): `password_reset.requested` and
-  `password_reset.confirmed`, both with the user id as actor. One new audit exemption (the sixth):
-  email delivery attempts do not record an audit event — sending through SMTP is infrastructure,
-  not a user action.
+- **Two new audit events** (`docs/PRD.md` §2.1, phase 2.4): `auth.password_reset.requested` and
+  `auth.password_reset.completed`, both with the user id as actor. One new audit exemption (the
+  sixth): email delivery attempts do not record an audit event — sending through SMTP is a
+  transport of an event already recorded elsewhere, not a new user action.
 
 ### Changed
 

@@ -83,12 +83,16 @@ that column — there is no read-time join to `notification_preferences` on the 
 changing a preference later does not retroactively reveal or hide what already happened, which
 is what a person expects from a notification setting.
 
-**The same snapshot applies to email (Phase 2.4).** The `email_state` and `email_attempts` are
-written at the same moment as `in_app_visible`, off the same preference read at fan-out time.
-An `email_state` of `pending`, `sent`, `failed`, or `skipped` freezes what the user's email
-preference was when the event occurred — `in_app_visible: true/false` does for the in-app bell,
-`email_state: pending/skipped` does for the outbox. A user who changes their preference later
-affects only new events; existing rows remember what was decided when they were written.
+**The same snapshot applies to email (Phase 2.4), but only at fan-out.** At the moment
+`in_app_visible` is written, `email_state` is written too, off the same preference read: it is
+`'pending'` when mail is on and the recipient's email preference for this event is on, and
+`NULL` when email was never in play — mail off instance-wide, or the recipient's preference off.
+That is the whole snapshot; `email_attempts` is left at its default of `0`. What `email_state`
+becomes afterwards — `sent`, `failed`, or the outbox's own `skipped` — is a delivery outcome the
+mail loop writes later (`app/mail/outbox.py`), and says nothing about the preference: it is the
+same kind of after-the-fact state `in_app_visible` never carries, because the bell has no
+equivalent post-fan-out write. A user who changes their preference later affects only new
+events; existing rows remember what was decided when they were written.
 
 ## 5. An administrator with no membership receives nothing
 

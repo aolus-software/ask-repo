@@ -118,7 +118,7 @@ infrastructure, no egress.
   **The seven decisions this sub-phase made**, recorded here rather than left in the design spec:
 
   1. **A Postgres table, not a structured log stream** — queryable from the product, covered by the Postgres backup §9 already requires, and no new operator tooling. This closes the §8 question.
-  2. **The coverage obligation is a rule**, and it is wider than this bullet originally described: every create, update, delete, destructive bulk operation, change-set apply or discard, expensive-work request, export and authentication event. Five exemptions are named rather than left as gaps — ordinary reads, refinement-chat turns (the audited event is the `apply`), the ask route (§2.5 rules it out by name), ingestion outcomes (no actor exists; a job did it), and, since Phase 2.3, a user's own notification state (marking read, marking all read, changing preferences) — private to one user, describing no shared resource, and written at a rate proportional to attention rather than to change.
+  2. **The coverage obligation is a rule**, and it is wider than this bullet originally described: every create, update, delete, destructive bulk operation, change-set apply or discard, expensive-work request, export and authentication event. Six exemptions are named rather than left as gaps — ordinary reads, refinement-chat turns (the audited event is the `apply`), the ask route (§2.5 rules it out by name), ingestion outcomes (no actor exists; a job did it), a user's own notification state, since Phase 2.3 (marking read, marking all read, changing preferences) — private to one user, describing no shared resource, and written at a rate proportional to attention rather than to change — and, since Phase 2.4, email delivery (a transport of an event already recorded elsewhere, with no human actor and no new data change; the outcome lives on the row itself).
   3. **Reads are admin-only, instance-wide** (`GET /audit-events`, `GET /audit-events/{id}`). Auth, account and export events span no project, so a per-project scope does not describe this read — it is a read on a different axis, not a narrower project scope. If a per-project read is ever added it goes through `app/core/access.py` like everything else (§7).
   4. **The row is written after the commit that made the change true, best-effort.** `AuditRecorder` opens its own session from the sessionmaker and never raises, which is what makes "an audit failure cannot fail a user's action" structural rather than a promise every call site keeps. **The accepted gap, stated rather than glossed:** an action that commits and then crashes before its audit write leaves no row, silently. The `WARNING` in the log is the fallback, and the log is not the record — the trail is a strong record, not a complete one.
   5. **`details` is an allowlist per event, never a diff of dirty attributes.** A generic differ would start writing `password_hash` and `encrypted_pat` the moment someone adds a column. A new column is invisible to the trail until someone names it, and that is the correct failure direction.
@@ -170,7 +170,8 @@ What shipped:
   exists now, defaults `true`, and is read by nothing until Phase 2.4 adds a sender — the UI
   renders its switch disabled with a line saying email is not configured on this instance. Shipping
   it now is what keeps Phase 2.4 additive: it adds a sender, not a schema change, a settings screen
-  and a mail path all at once.
+  and a mail path all at once. (This is the Phase 2.3 record as it shipped; Phase 2.4 now reads
+  the column at fan-out, per its own section below.)
 - **A fifth audit exemption.** Marking a notification read, marking all read, and changing
   preferences do not record an audit event — see the Phase 2.2 exemption bullet above.
 
@@ -192,7 +193,7 @@ What shipped:
   failure for both password reset and notification email — they share the outbox, the sender,
   and the deliverability problem, and paying that cost once for two features is what makes the
   mail provider worth specifying rather than leaving it out forever.
-- **The composer is the enforcement.** `app/mail/composer.py` builds every message that leaves
+- **The composer is the enforcement.** `app/mail/compose.py` builds every message that leaves
   the instance. Subjects and bodies are fixed strings per event type — no templating, no
   parameters from the user, no content that could come from an indexed repository. A notification
   email carries an event type and a link, never a message, answer text, or proposal body. A
@@ -207,10 +208,12 @@ What shipped:
   for retry; on any other exception it moves to `failed`. The mail loop is a sibling of the
   reconcile loop in the worker, not a step inside it, so a broken mail service does not starve
   stranded-work recovery.
-- **Self-service password reset: three routes and one table.** `POST /auth/password-reset/request`
-  takes an email, `GET /auth/password-reset/request-status` polls whether the email was sent,
-  and `POST /auth/password-reset/confirm` takes the token (fragment-only, never in the URL
-  path or the body) and a new password. Rate limits apply per IP and per email. Password policy
+- **Self-service password reset: three routes and one table.** `GET /auth/password-reset/availability`
+  answers whether `MAIL_ENABLED` is on, which the login screen reads to show or hide "Forgot
+  password?"; `POST /auth/password-reset/request` takes an email and always answers `202`, so the
+  route cannot be used to learn which accounts exist; and `POST /auth/password-reset/confirm`
+  takes the token (fragment-only, never in the URL path or the body) and a new password. Rate
+  limits apply per IP and per email. Password policy
   is enforced by the shared `validate_and_hash_new_password()` in `app/core/passwords.py`; a weak
   password raises `400 WEAK_PASSWORD`. The `password_reset_tokens` table holds id, user id,
   hashed token, created/expires/used timestamps, and is hard-deleted by the worker for expired
@@ -225,8 +228,9 @@ What shipped:
 - **A sixth audit exemption.** Email delivery attempts do not record an audit event — the mail
   loop pushing bytes through an SMTP service is infrastructure, not a user action that changes
   data. `email_state`, `email_attempts`, and `email_sent_at` record the outcome on the row itself.
-- **Two new audit events.** `password_reset.requested` when a user asks for a reset link, and
-  `password_reset.confirmed` when they reset their password. Both carry the user id as the actor.
+- **Two new audit events.** `auth.password_reset.requested` when a user asks for a reset link, and
+  `auth.password_reset.completed` when they reset their password. Both carry the user id as the
+  actor.
 
 #### Phase 2.5 — The AI call log, and user feedback on model output
 
@@ -386,6 +390,8 @@ The field is `password_hash`, not `password`. The plaintext exists only in the r
 - As a user, I can log in and stay logged in across browser restarts without re-entering my password.
 - As a user, I can log out of one device, or out of every device at once.
 - As a user who forgot my password, I can ask an admin to reset it and log in with a new temporary one.
+- As a user who forgot my password, I can reset it myself by email when my instance has mail
+  turned on.
 - As an admin, I can deactivate someone who has left, immediately ending their sessions.
 
 **Acceptance criteria**
@@ -455,8 +461,15 @@ The field is `password_hash`, not `password`. The plaintext exists only in the r
   the API. Left at `0` with Caddy in front, every request appears to come from Caddy and the
   per-IP limit becomes a single instance-wide limit.
 - Passwords, tokens, and PATs are excluded from logs, tracebacks, and error responses.
+- **Self-service password reset is optional and off by default (Phase 2.4).** `GET
+  /auth/password-reset/availability` answers `{enabled: bool}` (`MAIL_ENABLED`). `POST
+  /auth/password-reset/request` answers `202` for every address, live, unknown, or deactivated,
+  and — when mail is on — emails a single-use, fragment-carried link. `POST
+  /auth/password-reset/confirm` answers `400 PASSWORD_RESET_TOKEN_INVALID` for any unusable
+  token (unknown, expired, used, or revoked) and ends every session on success. `POST
+  /auth/password-reset/request` answers `409 PASSWORD_RESET_UNAVAILABLE` when mail is off.
 
-**Out of scope for v1:** self-service registration, email verification, email-based password reset, OAuth/social login, 2FA/TOTP, per-project roles (phase 2), session-activity history.
+**Out of scope for v1:** self-service registration, email verification, OAuth/social login, 2FA/TOTP, per-project roles (phase 2), session-activity history.
 
 ---
 
@@ -907,7 +920,14 @@ costs, and why it sits where it does; the list here is the order and nothing els
 6. **Phase 2.1 — Per-project RBAC (shipped):** `roles`, `role_permissions` and `project_memberships`; three seeded system roles plus admin-defined custom ones; `resolve_project_scope`'s body swapped for a membership lookup and `require_permission` added beside it, replacing six inline `created_by` gates. A breaking status-code change (§4.1), a `409 LAST_OWNER` guard on deactivation (§8), a Redis-cached grant snapshot, and the membership/role/permission routes. No new infrastructure. Everything after it that asks "who may see this" resolves through it, and phase 3 is blocked on this sub-phase alone. See §2.1.
 7. **Phase 2.2 — Append-only audit trail (shipped):** who did what, never the secret involved. Directly after RBAC, because that is when "who granted whom access to what" first becomes a question with no answer. One `audit_events` table carrying neither timestamp nor soft-delete mixin, a 37-event catalogue with a per-event field allowlist, two admin-only read routes, `AUDIT_RETENTION_DAYS` pruned by the worker's existing tick, and two admin screens. Conversations are audited as metadata only — a narrow, recorded amendment to §4.2. See §2.1.
 8. **Phase 2.3 — Notifications, the record and in-app delivery (shipped):** three tables — `notification_events` (one row per occurrence), `notifications` (one row per recipient, carrying read state), `notification_preferences` (sparse, absence meaning on) — an eleven-member event catalogue, a fan-out at nine call sites resolving recipients through Phase 2.1's `resolve_project_scope`/`resolve_notification_recipients`, a polled unread count at 60 seconds and deliberately no socket, and `NOTIFICATION_RETENTION_DAYS` default `90` pruned by the worker's existing tick. See §2.1.
-9. **Phase 2.4 — The mail provider:** self-service password reset, plus the email transport of Phase 2.3's record. The instance's **first egress path** (§9) and the first phase-2 decision that changes §1's premise — paid once, for two features.
+9. **Phase 2.4 — The mail provider (shipped):** `MAIL_ENABLED`, off by default; three routes
+   (`GET /auth/password-reset/availability`, `POST /auth/password-reset/request`, `POST
+   /auth/password-reset/confirm`) over a new `password_reset_tokens` table; four email columns
+   on `notifications` (`email_state`, `email_attempts`, `email_claimed_until`, `email_sent_at`)
+   read by the worker's `mail_loop`, a sibling tick to `reconcile_loop`; a plain-text composer
+   that accepts an event type and a link and nothing derived from an indexed repository; and a
+   sixth audit exemption for email delivery. The instance's **first egress path** (§9) and the
+   first phase-2 decision that changes §1's premise — paid once, for two features.
 10. **Phase 2.5 — Measurement:** an AI call log on a **self-hosted Langfuse** recording tokens, timing, model and outcome per call, and user feedback on model output — a reason code an administrator reads in aggregate, never a prompt the model reads. Specified together because one says what a turn cost and the other whether it was worth it. Six more containers; a separate record from the audit trail, because one generation writes one audit row and up to 201 call rows.
 11. **Phase 2.6 — Answer quality:** the synthetic Q&A eval harness, then a per-user answer persona applied to private answers only and never to the shared checklist. Coupled, because an eval score is comparable only against a fixed prompt.
 12. **Phase 2.7 — Multi-language:** a translated interface and answers in the language the question was asked in, with the search query held to English so retrieval against English source code keeps working. Last, because without a non-English eval set from Phase 2.6 its quality is unmeasured rather than good.

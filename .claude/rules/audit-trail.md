@@ -35,7 +35,7 @@ nobody discovers until the day it is needed.
 | **Promote a proposal** | applying or discarding a checklist or mock-data change set | `<resource>.applied` / `.discarded` |
 | **Request expensive work** | reindex, checklist generation, mock-data generation | `<resource>.<action>.requested` |
 | **Move data out** | the checklist spreadsheet, mock data as JSON or spreadsheet | `<resource>.exported` |
-| **Authenticate** | login, **failed** login, logout, password change, admin reset, refresh replay, password reset request, password reset confirm | `auth.*` / `user.password.reset` / `password_reset.requested` / `password_reset.confirmed` |
+| **Authenticate** | login, **failed** login, logout, password change, admin reset, refresh replay, password reset request, password reset confirm | `auth.*` / `user.password.reset` / `auth.password_reset.requested` / `auth.password_reset.completed` |
 
 **An export is a write for this purpose even though it changes nothing.** It is the one action
 that takes a private repository's derived content out of the instance, and `docs/PRD.md` §9 treats
@@ -73,11 +73,14 @@ Named here so a later reader finds a **decision** rather than what looks like an
    one is what makes it a flooding risk rather than merely a low-value row — a bell
    clicked forty times a day would bury `user.deactivated` under exactly the noise
    §2.5 refuses for the ask route.
-6. **Email delivery attempts.** `POST /api/mail/outbox` is not audited (not a real route, but an
-   internal drainer), and neither are the row updates to `notifications.email_state`,
-   `email_attempts`, and `email_sent_at`. The audit trail records *human actions that change
-   data*; a mail loop pushing bytes through an SMTP service is infrastructure. Delivery success
-   or failure is recorded on the row itself and visible to operations through a table query, never
+6. **Email delivery attempts.** Sending a reset link or a notification email is a transport of an
+   event already recorded elsewhere — the notification event, or the `auth.password_reset.requested`
+   row — not a new action. No human performs the send: a FastAPI background task drains it for a
+   password reset, and the worker's `mail_loop` drains it for notification email. The audit trail
+   records *human actions that change data*; a mail loop pushing bytes through an SMTP service is
+   infrastructure, and auditing each send would write one row per recipient per event. Delivery
+   success or failure is recorded on the row itself — `notifications.email_state`/`email_sent_at`,
+   `password_reset_tokens.sent_at` — and visible to operations through a table query, never
    through the audit trail.
 
 ## Adding a mutating route means adding an event, in the same change
