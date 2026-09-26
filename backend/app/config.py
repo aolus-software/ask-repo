@@ -249,7 +249,7 @@ class Settings(BaseSettings):
     smtp_from: str = ""
     mail_app_name: str = "AskRepo"
     app_base_url: str = ""
-    password_reset_token_ttl_minutes: int = 30
+    password_reset_token_ttl_minutes: int = Field(default=30, ge=5)
     password_reset_rate_per_hour_ip: int = 10
     password_reset_rate_per_hour_email: int = 3
 

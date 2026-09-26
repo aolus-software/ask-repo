@@ -45,3 +45,8 @@ def test_the_smtp_password_never_prints() -> None:
     settings = Settings(**COMPLETE, smtp_password="hunter2-but-longer")
     assert "hunter2" not in repr(settings)
     assert settings.smtp_password.get_secret_value() == "hunter2-but-longer"
+
+
+def test_password_reset_token_ttl_below_minimum_is_refused() -> None:
+    with pytest.raises(ValidationError, match="greater than or equal to 5"):
+        Settings(password_reset_token_ttl_minutes=4)

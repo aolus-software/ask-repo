@@ -379,7 +379,7 @@ a fresh instance sends nothing out of the network.
 | `SMTP_FROM` | *empty* | Email address to send from, e.g. `askrepo@example.com`. Required when `MAIL_ENABLED=true` |
 | `MAIL_APP_NAME` | `AskRepo` | Display name in the `From` header of outbound mail, e.g. `From: AskRepo <askrepo@example.com>` |
 | `APP_BASE_URL` | *empty* | The URL users open in a browser to reach the app, e.g. `https://askrepo.example.com`. Required when `MAIL_ENABLED=true`. Must be an absolute `http://` or `https://` URL — not a relative path. Password reset links are built from this base |
-| `PASSWORD_RESET_TOKEN_TTL_MINUTES` | `30` | How long a password reset link remains valid after being mailed. `0` means valid forever |
+| `PASSWORD_RESET_TOKEN_TTL_MINUTES` | `30` | How long a password reset link remains valid after being mailed, in minutes. Minimum is 5 minutes |
 | `PASSWORD_RESET_RATE_PER_HOUR_IP` | `10` | Password reset requests allowed per hour from one IP address |
 | `PASSWORD_RESET_RATE_PER_HOUR_EMAIL` | `3` | Password reset requests allowed per hour against one account |
 
