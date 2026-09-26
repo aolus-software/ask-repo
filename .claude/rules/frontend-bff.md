@@ -31,8 +31,9 @@ not an error, just a silent, permanent "not authenticated."
 ## `app/api/[...path]/route.ts` is almost the only route the browser talks to
 
 It attaches the bearer token, strips `set-cookie` from every backend response before relaying it,
-and passes the body through untouched. **Only the three `/api/auth/*` handlers that write
-cookies — login, refresh, logout — do so; nothing else ever sets one.**
+and passes the body through untouched. **The cookie writers are the three `/api/auth/*` handlers
+(login, refresh, logout); this catch-all itself, on its refresh-and-retry path and in
+`unauthenticated()`; and `proxy.ts`, on a navigation refresh and a redirect to `/login`.**
 
 **Four public forwarding routes are a deliberate, narrow exception** to "one route the browser
 talks to", not a second design: `/api/auth/password-policy`, `/api/auth/password-reset/availability`,
@@ -41,7 +42,8 @@ calling `forwardPublic` in `lib/auth/public-forward.ts`. They exist because the 
 proxy answers `401` before forwarding when the browser holds no session cookie at all
 (spec §6.4), and a signed-out visitor on `/forgot-password` or `/reset-password` is exactly that
 caller. `forwardPublic` attaches no bearer, relays the caller's address and the status/body
-untouched, and — like every route except the three above — never sets a cookie. Any other
+untouched, and never sets a cookie — these four routes are the one part of this surface that
+writes none. Any other
 browser capability that needs to reach the backend without a session is a fifth entry in this
 same small list, made through `forwardPublic`, not a new one-off `fetch`.
 

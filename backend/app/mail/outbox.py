@@ -62,7 +62,7 @@ async def send_pending_once(
             # retrying it reproduces the same crash on every future drain. Failing the
             # row outright is what stops it climbing past MAX_EMAIL_ATTEMPTS while
             # never reaching mark_email, and lets the rest of the batch proceed
-            # instead of sitting leased for two minutes behind it.
+            # instead of sitting leased for CLAIM_LEASE (15 minutes) behind it.
             logger.exception(
                 "notification email %s (%s) raised outside MailSendError",
                 pending.notification_id,

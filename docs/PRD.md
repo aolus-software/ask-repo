@@ -188,11 +188,13 @@ What shipped:
 - **A mail provider is optional and off by default.** `MAIL_ENABLED` controls whether the feature
   exists. When off, password reset returns `409 PASSWORD_RESET_UNAVAILABLE`, and notification
   preferences show email controls disabled with a note. When on, the admin supplies an SMTP
-  host, a credential, a from-address, and (for password reset links) an `APP_BASE_URL` so the
-  reset link can be constructed outside the HTTP boundary. The provider is the single point of
-  failure for both password reset and notification email — they share the sender and the
-  deliverability problem, and paying that cost once for two features is what makes the mail
-  provider worth specifying rather than leaving it out forever. **They do not share the outbox**:
+  host, a from-address, and (for password reset links) an `APP_BASE_URL` so the reset link can
+  be constructed outside the HTTP boundary — a credential is optional, since an empty
+  `SMTP_USERNAME` means no AUTH and a relay with none is a legitimate internal setup. The
+  provider is the single point of failure for both password reset and notification email — they
+  share the sender and the deliverability problem, and paying that cost once for two features
+  is what makes the mail provider worth specifying rather than leaving it out forever. **They do
+  not share the outbox**:
   a reset email is sent once, directly, from a `BackgroundTasks` task after the response, and
   never enters the `notifications` table's claim-and-drain path notification email uses.
 - **The composer is the enforcement.** `app/mail/compose.py` builds every message that leaves
@@ -224,8 +226,9 @@ What shipped:
   body, which is the one place it has to travel to be spent. Rate limits apply per IP and per
   email. Password policy is enforced by the shared `validate_and_hash_new_password()` in
   `app/core/passwords.py`; a weak password raises `400 WEAK_PASSWORD`. The `password_reset_tokens`
-  table holds id, user id, hashed token, created/expires/used timestamps, and is hard-deleted by
-  the worker for expired or used-more-than-24-hours-ago rows. The token is single-use and
+  table holds id, user id, hashed token, `created_at`, `expires_at`, `used_at`, `revoked_at`, and
+  `sent_at`, and is hard-deleted by the worker for expired or used-more-than-24-hours-ago rows.
+  The token is single-use and
   short-lived by construction, never retried — on send failure nothing tells the requester at
   request time (the `202` was already sent before delivery is attempted); they simply see no
   email arrive and request another, which mints a fresh token and revokes the old one.
@@ -243,8 +246,9 @@ What shipped:
   loop pushing bytes through an SMTP service is infrastructure, not a user action that changes
   data. `email_state`, `email_attempts`, and `email_sent_at` record the outcome on the row itself.
 - **Two new audit events.** `auth.password_reset.requested` when a user asks for a reset link, and
-  `auth.password_reset.completed` when they reset their password. Both carry the user id as the
-  actor.
+  `auth.password_reset.completed` when they reset their password. `requested` carries the user id
+  as the actor when the address matches a live user, and `NULL` (with `{"unknownAccount": true}`)
+  otherwise; `completed` always carries the user, since it only fires once a valid token is spent.
 
 #### Phase 2.5 — The AI call log, and user feedback on model output
 

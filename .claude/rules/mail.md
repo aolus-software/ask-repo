@@ -50,9 +50,10 @@ not the audit trail (`.claude/rules/audit-trail.md` exemption 6), not a second c
   with `with_for_update()` so two concurrent confirms against the same token cannot both read it
   usable. `confirm` stamps `used_at` in the same transaction that changes the password.
 - **Sent once, from a `BackgroundTasks` task, after the response.** `request_password_reset`
-  answers `202` before the send is attempted, so a live account is not measurably slower to
-  respond than an unknown one at the HTTP layer — a live account still costs a few extra
-  database writes (revoking prior tokens, minting and storing the new one) before that `202`.
+  answers `202` before the send is attempted, which keeps the SMTP round-trip out of the
+  response timing. A live account still costs a few extra database writes (revoking prior
+  tokens, minting and storing the new one) before that `202` than an unknown address does — a
+  small, accepted timing difference.
   `deliver_password_reset` runs after the response and **never retries**: on a `MailSendError`
   it logs at `WARNING` with the token row's id — never the token itself — and returns. A user
   whose email did not arrive requests another, which mints a fresh token and revokes the old one.
@@ -104,7 +105,8 @@ ticks as siblings is what makes each failure profile independent of the other.
 
 Mechanism: `app/services/notification_fanout.py`, `.claude/rules/notifications.md` rules 1 and
 4. `NotificationFanout._write` writes `email_state` at the same moment it writes
-`in_app_visible` — off the same preference read, for the same resolved recipient set. It writes
+`in_app_visible`, for the same resolved recipient set — but off a separate preference lookup:
+`_muted_for` (`muted_in_app`) for the in-app column, `muted_email` for this one. It writes
 `'pending'` when mail is enabled and the recipient's email preference is on, and `NULL`
 otherwise (mail off, or the preference off) — there is no `'skipped'` value written at fan-out;
 `'skipped'` is a terminal outcome the outbox writes later, at send time, for a stale event or a

@@ -57,7 +57,7 @@ incompatibly. Configuration defaults and internal module layout may change in a 
   `SMTP_USERNAME`, and `SMTP_PASSWORD` stay optional, since a relay with no authentication is a
   legitimate internal setup. All default to off and empty, so no SMTP dependency exists if not
   enabled.
-- **`password_reset_tokens` table** (migration; Phase 2.4). Holds id, user id, hashed token, created/expires/used timestamps.
+- **`password_reset_tokens` table** (migration; Phase 2.4). Holds id, user id, hashed token, created/expires/used/revoked timestamps, and a sent-at timestamp.
   Hard-deleted by the worker for expired tokens or those used more than 24 hours ago.
 - **Four columns on `notifications` table** (`email_state`, `email_attempts`, `email_claimed_until`, `email_sent_at`,
   migration `c3f8a1d05e72`): the outbox and at-least-once delivery mechanism, added by this

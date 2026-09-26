@@ -8,8 +8,7 @@ import { apiUrl } from "@/lib/auth/session";
  * cookie, which is correct everywhere except the few routes a signed-out user needs:
  * the password-reset trio and the password policy its form reads. Those get their
  * own `app/api/auth/*` files calling this. It attaches no bearer, relays the status
- * and body untouched, and — like every route except login/refresh/logout — never
- * sets a cookie.
+ * and body untouched, and never sets a cookie.
  */
 export async function forwardPublic(request: Request, path: string): Promise<Response> {
   const hasBody = request.method !== "GET" && request.method !== "HEAD";

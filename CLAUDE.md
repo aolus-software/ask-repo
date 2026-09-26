@@ -479,9 +479,11 @@ the page.
   backend's `/auth` scope on purpose: `proxy.ts` runs at `/projects` and is only sent cookies
   whose path matches.
 - **`app/api/[...path]/route.ts` is almost the only route the browser talks to.** It attaches the
-  bearer, strips `set-cookie` from every backend response, and relays the body untouched. Only
-  the three `/api/auth/*` handlers that write cookies — login, refresh, logout — do so. Four
-  more `/api/auth/*` routes are a deliberate, narrow exception: `password-policy` and the
+  bearer, strips `set-cookie` from every backend response, and relays the body untouched. The
+  cookie writers are the three `/api/auth/*` handlers (login, refresh, logout), this catch-all
+  itself — on its refresh-and-retry path and in `unauthenticated()` — and `proxy.ts`, on a
+  navigation refresh and a redirect to `/login`. Four more `/api/auth/*` routes are a deliberate,
+  narrow exception: `password-policy` and the
   `password-reset/{availability,request,confirm}` trio each forward through
   `lib/auth/public-forward.ts` with no bearer and no cookie, because the catch-all proxy answers
   `401` before forwarding when the browser holds no session cookie, and a signed-out visitor on

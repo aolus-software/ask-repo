@@ -143,7 +143,7 @@ by making email optional and off by default.
 
 **A message carries an event type and a link, never content derived from an indexed repository.**
 No answer text, no proposal body, no snippet. `MAIL_ENABLED` also requires `APP_BASE_URL` to be
-set (e.g. `https://internal.org/askrepo`), so reset links and notification links can be
+set (e.g. `https://askrepo.internal`), so reset links and notification links can be
 constructed server-side.
 
 Full mechanism: `.claude/rules/mail.md` and `.claude/rules/notifications.md` rule 4.
