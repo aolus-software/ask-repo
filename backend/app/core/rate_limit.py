@@ -229,6 +229,39 @@ class LoginAttemptLimiter:
         await self.limiter.reset(self._key(email), window_seconds=3600)
 
 
+async def enforce_password_reset_ip_limit(
+    request: Request, limiter: RateLimiterDep, settings: SettingsDep
+) -> None:
+    """Per-IP limit on `POST /auth/password-reset/request`, counted per hour.
+
+    Fails open on a Redis error, like every limiter here. The accepted consequence
+    (spec §6.5): while Redis is down, a known address can be flooded with reset emails.
+    It cannot be taken over — each email carries a token only its recipient reads.
+    """
+    address = client_ip(request, trusted_proxy_hops=settings.trusted_proxy_hops)
+    await limiter.hit(
+        f"rl:pwreset:ip:{address}",
+        limit=settings.password_reset_rate_per_hour_ip,
+        window_seconds=3600,
+    )
+
+
+async def enforce_password_reset_email_limit(
+    email: str, limiter: RateLimiter, settings: Settings
+) -> None:
+    """Per-address limit, counted for **every** submitted address, live or not.
+
+    Counting only live accounts would make the `429` itself an existence oracle.
+    Called by the route with the parsed body, not as a dependency: the address is in
+    the body, and a dependency would parse it twice.
+    """
+    await limiter.hit(
+        f"rl:pwreset:email:{email.strip().lower()}",
+        limit=settings.password_reset_rate_per_hour_email,
+        window_seconds=3600,
+    )
+
+
 def get_login_attempt_limiter(
     limiter: RateLimiterDep, settings: SettingsDep
 ) -> LoginAttemptLimiter:

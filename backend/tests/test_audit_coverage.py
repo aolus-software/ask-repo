@@ -8,10 +8,10 @@ trail has a hole nobody finds until the day it is needed.
 So this module asserts three things no per-event test can:
 
 1. **Every mutating route in the app is classified** — either it maps to an event, or
-   it is one of the five exemptions. A new route fails here until someone decides.
+   it is one of the six exemptions. A new route fails here until someone decides.
 2. **Every catalogue name is claimed by a route** (or by the CLI), so a name cannot
    exist unwritten.
-3. **Every exemption is one of the five the rule names**, so the escape hatch cannot
+3. **Every exemption is one of the six the rule names**, so the escape hatch cannot
    quietly widen.
 """
 
@@ -35,7 +35,7 @@ EXPORT_ROUTES = frozenset(
     }
 )
 
-# The five exemptions from `.claude/rules/audit-trail.md`. Each value is the reason,
+# The six exemptions from `.claude/rules/audit-trail.md`. Each value is the reason,
 # so a reader finds a decision rather than what looks like an oversight.
 READS = "ordinary read — the trail records what changed"
 PROPOSAL = "refinement-chat turn — a proposal is not a row; the apply is audited"
@@ -48,8 +48,16 @@ NO_ACTOR = "ingestion outcome — no actor; projects.status holds the result"
 # on this branch yet, so this constant has no (method, path) entry in ROUTE_EVENTS
 # to attach to; Task 10 adds those entries pointing at this same reason.
 NOTIFICATION_STATE = "a user's own notification state — private, non-shared, attention-rate"
+# Exemption 6. Email delivery has no route — a background task or the worker sends it —
+# so no ROUTE_EVENTS entry points here. Declared so the rule's six exemptions and this
+# module's agree; see `.claude/rules/audit-trail.md`.
+EMAIL_DELIVERY = (
+    "email delivery — a transport of an already-recorded event; state columns are its record"
+)
 
-VALID_EXEMPTIONS = frozenset({READS, PROPOSAL, CALL_LOG, NO_ACTOR, NOTIFICATION_STATE})
+VALID_EXEMPTIONS = frozenset(
+    {READS, PROPOSAL, CALL_LOG, NO_ACTOR, NOTIFICATION_STATE, EMAIL_DELIVERY}
+)
 
 # (method, path) -> the event it records, or the reason it does not.
 # Every task from 4 to 11 moves entries from a reason to an AuditEventType.
@@ -60,6 +68,8 @@ ROUTE_EVENTS: dict[tuple[str, str], AuditEventType | str] = {
     ("POST", "/auth/logout-all"): AuditEventType.AUTH_LOGOUT,
     ("POST", "/auth/refresh"): AuditEventType.AUTH_REFRESH_REPLAYED,
     ("POST", "/auth/change-password"): AuditEventType.AUTH_PASSWORD_CHANGED,
+    ("POST", "/auth/password-reset/request"): AuditEventType.AUTH_PASSWORD_RESET_REQUESTED,
+    ("POST", "/auth/password-reset/confirm"): AuditEventType.AUTH_PASSWORD_RESET_COMPLETED,
     # --- Task 5: users ---
     ("POST", "/users"): AuditEventType.USER_CREATED,
     ("PATCH", "/users/{user_id}"): AuditEventType.USER_UPDATED,
@@ -215,6 +225,9 @@ def test_the_classification_table_has_no_stale_entries() -> None:
 
 def test_every_exemption_is_one_of_the_five() -> None:
     """The escape hatch cannot widen without editing the rule.
+
+    Named for the original five; a sixth (`EMAIL_DELIVERY`) was added alongside it in
+    the same rule change, so the name stays as-is rather than becoming churn.
 
     `AuditEventType` is a `StrEnum`, so its members are themselves `str` instances --
     `isinstance(value, str)` alone would also match every classified event. The
