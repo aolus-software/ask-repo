@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 
 import { EmptyState } from "@/components/feedback/empty-state";
@@ -16,11 +17,37 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { useActivity } from "@/hooks/use-profile";
+import { useActivity, useMemberships } from "@/hooks/use-profile";
+import type { ActivityEntry, MembershipSummary } from "@/lib/api/types";
 import { auditEventLabel } from "@/lib/audit";
 import { formatAbsolute, formatRelative } from "@/lib/dates";
 
 const PAGE_SIZE = 20;
+
+/**
+ * A conversation event always carries `targetLabel: null` — a conversation's title is
+ * never stored on the audit row (`.claude/rules/audit-trail.md`) — so it is
+ * identifiable only by `projectId`. Rendered as a link to the project when one is
+ * known, named from the caller's own memberships when that project is among them,
+ * and a bare "Project" label otherwise (a project the caller can still reach by id
+ * but is not a member of, or was removed from since).
+ */
+function targetCell(
+  item: ActivityEntry,
+  memberships: MembershipSummary[] | undefined,
+): React.ReactNode {
+  if (item.targetLabel) return item.targetLabel;
+  if (!item.projectId) return "—";
+  const name = memberships?.find((m) => m.projectId === item.projectId)?.projectName;
+  return (
+    <Link
+      href={`/projects/${item.projectId}`}
+      className="text-primary underline-offset-4 hover:underline"
+    >
+      {name ?? "Project"}
+    </Link>
+  );
+}
 
 /**
  * Your own rows from the audit trail. A failed sign-in against your account appears
@@ -29,6 +56,7 @@ const PAGE_SIZE = 20;
 export function ActivitySection() {
   const [page, setPage] = useState(1);
   const activity = useActivity({ page, limit: PAGE_SIZE });
+  const memberships = useMemberships();
   const items = activity.data?.items ?? [];
 
   return (
@@ -64,7 +92,9 @@ export function ActivitySection() {
                         label={item.outcome === "failure" ? "Failure" : "Success"}
                       />
                     </TableCell>
-                    <TableCell className="text-sm">{item.targetLabel ?? "—"}</TableCell>
+                    <TableCell className="text-sm">
+                      {targetCell(item, memberships.data)}
+                    </TableCell>
                     <TableCell className="text-sm">{item.ipAddress ?? "—"}</TableCell>
                     <TableCell className="text-sm" title={formatAbsolute(item.createdAt)}>
                       {formatRelative(item.createdAt)}

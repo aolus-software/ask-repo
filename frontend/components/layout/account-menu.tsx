@@ -15,6 +15,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useSession } from "@/hooks/use-session";
+import { signOut } from "@/lib/auth/sign-out";
 
 function initials(name: string): string {
   return name
@@ -31,20 +32,6 @@ function initials(name: string): string {
  */
 export function AccountMenu() {
   const user = useSession();
-
-  async function logout(all: boolean) {
-    await fetch("/api/auth/logout", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ all }),
-    });
-    // A hard reload, not router.push, and the lint rule is suppressed deliberately:
-    // router.push keeps the SPA alive, and with it the React Query cache holding the
-    // previous operator's projects and conversations. On a shared machine the next
-    // person would see that stale data flash before it refetched. A full load drops it.
-    // eslint-disable-next-line @next/next/no-location-assign-relative-destination -- clears the in-memory cache with the session
-    window.location.href = "/login";
-  }
 
   return (
     <DropdownMenu>
@@ -73,11 +60,11 @@ export function AccountMenu() {
           Profile
         </DropdownMenuItem>
         <DropdownMenuSeparator />
-        <DropdownMenuItem onClick={() => void logout(false)}>
+        <DropdownMenuItem onClick={() => void signOut(false)}>
           <LogOut className="size-4" />
           Log out
         </DropdownMenuItem>
-        <DropdownMenuItem onClick={() => void logout(true)}>
+        <DropdownMenuItem onClick={() => void signOut(true)}>
           <MonitorSmartphone className="size-4" />
           Log out everywhere
         </DropdownMenuItem>

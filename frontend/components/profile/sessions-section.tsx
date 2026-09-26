@@ -19,22 +19,9 @@ import {
 import { useRevokeSession, useSessions } from "@/hooks/use-profile";
 import { useSession } from "@/hooks/use-session";
 import type { SessionSummary } from "@/lib/api/types";
+import { signOut } from "@/lib/auth/sign-out";
 import { formatAbsolute, formatRelative } from "@/lib/dates";
 import { deviceLabel } from "@/lib/user-agent";
-
-/**
- * A hard load to `/login`, as the account menu does: it drops the React Query cache with
- * the session, so nothing of this operator survives into the next one on a shared machine.
- */
-async function signOut(all: boolean) {
-  await fetch("/api/auth/logout", {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ all }),
-  });
-  // eslint-disable-next-line @next/next/no-location-assign-relative-destination -- clears the in-memory cache with the session
-  window.location.assign("/login");
-}
 
 export function SessionsSection() {
   const user = useSession();

@@ -14,6 +14,7 @@ import { useChangePassword } from "@/hooks/use-change-password";
 import { useSession } from "@/hooks/use-session";
 import { apiFetch } from "@/lib/api/client";
 import { endpoints } from "@/lib/api/endpoints";
+import { isApiError } from "@/lib/api/errors";
 
 const EMPTY: ChangePasswordValues = { currentPassword: "", newPassword: "" };
 
@@ -21,7 +22,11 @@ const EMPTY: ChangePasswordValues = { currentPassword: "", newPassword: "" };
  * Change password in a page shell — the fields are the ones the forced first-login
  * screen uses (`forms.md` §2: a swap, not a rewrite). The reset link is the Phase 2.4
  * flow, sent to the caller's own address through the same public route the
- * forgot-password page uses; the confirmation is the same neutral sentence.
+ * forgot-password page uses; the confirmation is the same neutral sentence on success
+ * and on `429 RATE_LIMITED` alike, matching `forgot-password-screen.tsx` — the backend
+ * answers every address identically, so this screen must not tell the two apart. Any
+ * other failure (a `409` naming why reset is unavailable, a network error) shows its
+ * own message instead.
  */
 export function PasswordSection({ resetEnabled }: { resetEnabled: boolean }) {
   const user = useSession();
@@ -33,8 +38,16 @@ export function PasswordSection({ resetEnabled }: { resetEnabled: boolean }) {
         method: "POST",
         body: JSON.stringify({ email: user.email }),
       }),
-    onSettled: () =>
-      toast.success("If mail can reach you, a reset link is on its way."),
+    onSuccess: () => toast.success("If mail can reach you, a reset link is on its way."),
+    onError: (error) => {
+      if (isApiError(error) && error.code === "RATE_LIMITED") {
+        toast.success("If mail can reach you, a reset link is on its way.");
+        return;
+      }
+      toast.error(
+        isApiError(error) ? error.message : "Couldn't send a reset link. Try again.",
+      );
+    },
   });
 
   function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
