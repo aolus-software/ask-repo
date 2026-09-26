@@ -210,10 +210,18 @@ class NotificationRepository(BaseRepository[Notification]):
         ]
 
     async def mark_email(self, notification_id: uuid.UUID, state: EmailState) -> None:
-        """Record a terminal outcome: `sent`, `failed` or `skipped`."""
+        """Record a terminal outcome: `sent`, `failed` or `skipped`.
+
+        Guarded on `email_state == "pending"`: if this row's lease already expired and
+        a second drain reclaimed and sent it, that second send's `mark_email` must not
+        be allowed to overwrite the outcome this call is racing against. Without the
+        guard, the loser of the race can still win the write.
+        """
         values: dict[str, object] = {"email_state": state, "email_claimed_until": None}
         if state == "sent":
             values["email_sent_at"] = datetime.now(UTC)
         await self.session.execute(
-            update(Notification).where(Notification.id == notification_id).values(**values)
+            update(Notification)
+            .where(Notification.id == notification_id, Notification.email_state == "pending")
+            .values(**values)
         )

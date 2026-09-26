@@ -34,6 +34,17 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
   const { pathname } = request.nextUrl;
   const isPublicRoute = PUBLIC_ROUTES.has(pathname);
 
+  // /forgot-password and /reset-password must work for a visitor who is not signed
+  // in at all, which is the ordinary case, but also for one carrying a stale
+  // `askrepo_session` cookie with no access cookie: the refresh below would fail
+  // and bounce them to /login, silently dropping the reset link's #token fragment.
+  // These two routes therefore bypass the session/refresh logic entirely, whatever
+  // cookies are present. /login keeps its own handling below — a signed-in visitor
+  // is still sent to /.
+  if (pathname === "/forgot-password" || pathname === "/reset-password") {
+    return NextResponse.next();
+  }
+
   const sessionCookie = request.cookies.get(SESSION_COOKIE)?.value;
   const hasAccess = Boolean(request.cookies.get(ACCESS_COOKIE)?.value);
 

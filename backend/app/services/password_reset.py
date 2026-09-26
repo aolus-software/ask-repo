@@ -3,7 +3,11 @@
 Three properties hold here and nowhere else:
 
 - **No enumeration.** `request` answers the same for every address; the route sends
-  after the response so a live account is not measurably slower.
+  after the response, which removes the SMTP round-trip from the response timing. A
+  live account still does a few extra database writes (revoking prior tokens, minting
+  and storing the new one) before the `202` than an unknown address does — a small,
+  accepted timing difference, not the "not measurably slower" this docstring used to
+  claim.
 - **Only the hash is stored.** The raw token lives in memory from mint to send and is
   handed to `deliver_password_reset` as an argument. Nothing could rebuild it, so
   nothing retries it — a user whose email did not arrive requests another.

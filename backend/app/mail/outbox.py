@@ -27,7 +27,12 @@ logger = logging.getLogger(__name__)
 
 MAIL_INTERVAL_SECONDS = 60
 CLAIM_BATCH = 50
-CLAIM_LEASE = timedelta(minutes=2)
+# A batch of 50 rows against a 10-second SMTP timeout (`SEND_TIMEOUT_SECONDS`) can run
+# for over eight minutes in the worst case. Two worker replicas both drain on the same
+# 60-second tick, so a lease shorter than one batch's worst case lets a second replica
+# reclaim rows the first is still sending, and send them twice. 15 minutes covers that
+# batch with headroom without leaving a crashed worker's rows stranded for long.
+CLAIM_LEASE = timedelta(minutes=15)
 # No setting: no operator decision turns on it (spec §4.3).
 MAX_EMAIL_ATTEMPTS = 5
 # Turning mail off for a week and back on must not deliver a week of "Index finished".

@@ -8,6 +8,7 @@ import { useState } from "react";
 
 import { FormError } from "@/components/form/form-error";
 import { PasswordInput } from "@/components/form/password-input";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -105,6 +106,19 @@ export function LoginScreen({ resetEnabled }: { resetEnabled: boolean }) {
       </CardHeader>
       <CardContent>
         <form onSubmit={handleSubmit} noValidate>
+          {/*
+            The reset flow ends in a full navigation (every session is revoked, so
+            there is no client to keep a toast alive across it) — `?reset=1` carries
+            the outcome across that navigation instead. Rendered above `FormError`
+            since a login attempt on this same load can still fail.
+          */}
+          {searchParams.get("reset") === "1" ? (
+            <Alert variant="info" className="mb-4">
+              <AlertDescription>
+                Password changed. Sign in with your new password.
+              </AlertDescription>
+            </Alert>
+          ) : null}
           {/*
             INVALID_CREDENTIALS renders here, not on a field: the backend returns one
             uniform error for unknown-email and wrong-password, compared against a

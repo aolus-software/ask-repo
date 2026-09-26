@@ -34,14 +34,21 @@ class PasswordResetTokenRepository(BaseRepository[PasswordResetToken]):
         return cast(CursorResult[Any], result).rowcount
 
     async def get_usable_by_hash(self, token_hash: str) -> PasswordResetToken | None:
-        """The token, only if it can still be spent. Every other case is one `None`."""
+        """The token, only if it can still be spent. Every other case is one `None`.
+
+        `with_for_update()` locks the row for the rest of this transaction, so two
+        concurrent confirms racing on the same token serialise rather than both
+        reading it usable and both spending it.
+        """
         result = await self.session.execute(
-            select(PasswordResetToken).where(
+            select(PasswordResetToken)
+            .where(
                 PasswordResetToken.token_hash == token_hash,
                 PasswordResetToken.used_at.is_(None),
                 PasswordResetToken.revoked_at.is_(None),
                 PasswordResetToken.expires_at > datetime.now(UTC),
             )
+            .with_for_update()
         )
         return result.scalar_one_or_none()
 

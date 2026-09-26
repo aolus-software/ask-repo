@@ -221,6 +221,30 @@ async def test_an_unrecognised_event_type_fails_that_row_without_blocking_the_ba
     assert bad.email_state == "failed"
 
 
+async def test_a_sent_row_is_not_overwritten_by_a_later_mark_email(
+    db_session: AsyncSession,
+    authed_user: User,
+    project_id: uuid.UUID,
+) -> None:
+    """A row already marked `sent` cannot be reclaimed by a race's loser.
+
+    `mark_email` guards on `email_state == "pending"`, so a second call — as a second
+    worker's stale claim would produce — is a no-op rather than a downgrade to
+    `failed` over a row that already sent.
+    """
+    row = await _pending(db_session, authed_user, project_id)
+    repo = NotificationRepository(db_session)
+    await repo.mark_email(row.id, "sent")
+    await db_session.commit()
+
+    await repo.mark_email(row.id, "failed")
+    await db_session.commit()
+
+    await db_session.refresh(row)
+    assert row.email_state == "sent"
+    assert row.email_sent_at is not None
+
+
 def test_the_worker_starts_mail_loop_only_when_mail_is_on() -> None:
     """A structural check: `mail_loop` is appended under the switch, nowhere else."""
     import inspect
