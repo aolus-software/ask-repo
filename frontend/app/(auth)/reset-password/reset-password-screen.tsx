@@ -54,7 +54,8 @@ export function ResetPasswordScreen() {
 
   const invalid =
     token === null ||
-    (isApiError(mutation.error) && mutation.error.code === "PASSWORD_RESET_TOKEN_INVALID");
+    (isApiError(mutation.error) &&
+      mutation.error.code === "PASSWORD_RESET_TOKEN_INVALID");
 
   if (invalid) {
     return (

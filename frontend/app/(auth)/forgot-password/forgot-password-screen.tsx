@@ -37,7 +37,8 @@ export function ForgotPasswordScreen() {
   function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!email.trim()) return setLocalError("Enter your email address.");
-    if (!email.includes("@")) return setLocalError("That does not look like an email address.");
+    if (!email.includes("@"))
+      return setLocalError("That does not look like an email address.");
     setLocalError(undefined);
     mutation.mutate(email.trim().toLowerCase());
   }
@@ -47,10 +48,13 @@ export function ForgotPasswordScreen() {
       <div className="w-full max-w-sm space-y-4 text-center">
         <h1 className="text-xl font-semibold">Check your email</h1>
         <p className="text-muted-foreground text-sm">
-          If that account exists, a reset link is on its way. If it does not arrive within a
-          few minutes, request another.
+          If that account exists, a reset link is on its way. If it does not arrive
+          within a few minutes, request another.
         </p>
-        <Link href="/login" className="text-primary text-sm underline-offset-4 hover:underline">
+        <Link
+          href="/login"
+          className="text-primary text-sm underline-offset-4 hover:underline"
+        >
           Back to sign in
         </Link>
       </div>
@@ -58,7 +62,9 @@ export function ForgotPasswordScreen() {
   }
 
   const shownError =
-    isApiError(mutation.error) && mutation.error.code === "RATE_LIMITED" ? null : mutation.error;
+    isApiError(mutation.error) && mutation.error.code === "RATE_LIMITED"
+      ? null
+      : mutation.error;
 
   return (
     <div className="w-full">

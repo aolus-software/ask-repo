@@ -27,7 +27,10 @@ describe("ForgotPasswordScreen", () => {
       vi.fn(async () =>
         status === 202
           ? new Response(null, { status })
-          : Response.json({ detail: { code: "RATE_LIMITED", message: "slow" } }, { status }),
+          : Response.json(
+              { detail: { code: "RATE_LIMITED", message: "slow" } },
+              { status },
+            ),
       ),
     );
     renderScreen();
@@ -43,13 +46,20 @@ describe("ForgotPasswordScreen", () => {
       "fetch",
       vi.fn(async () =>
         Response.json(
-          { detail: { code: "PASSWORD_RESET_UNAVAILABLE", message: "Ask an administrator." } },
+          {
+            detail: {
+              code: "PASSWORD_RESET_UNAVAILABLE",
+              message: "Ask an administrator.",
+            },
+          },
           { status: 409 },
         ),
       ),
     );
     renderScreen();
     await submit("dev@example.com");
-    await waitFor(() => expect(screen.getByText(/ask an administrator/i)).toBeInTheDocument());
+    await waitFor(() =>
+      expect(screen.getByText(/ask an administrator/i)).toBeInTheDocument(),
+    );
   });
 });
