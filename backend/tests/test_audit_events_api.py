@@ -228,3 +228,26 @@ async def test_sort_rejects_anything_but_created_at(client_for_admin: AsyncClien
     response = await client_for_admin.get("/audit-events?sort=eventType")
 
     assert response.status_code == 422
+
+
+async def test_admin_sees_project_rows_they_hold_no_membership_on(
+    client_for_admin: AsyncClient, authed_client: AsyncClient, admin_user: User
+) -> None:
+    """The admin read is unrestricted and shows rows on any project. A non-admin
+    still gets 403 even when querying a project they are not a member of."""
+    # Create a project and an event; authed_client acts as a non-admin
+    created = await authed_client.post(
+        "/projects", json={"repoUrl": "https://github.com/acme/test.git"}
+    )
+    assert created.status_code == 201
+    project_id = created.json()["id"]
+
+    # Admin sees the event even without membership
+    response = await client_for_admin.get(f"/audit-events?projectId={project_id}")
+    assert response.status_code == 200
+    assert response.json()["totalCount"] >= 1
+
+    # Non-admin is still refused
+    response = await authed_client.get("/audit-events")
+    assert response.status_code == 403
+    assert response.json()["detail"]["code"] == "ADMIN_REQUIRED"

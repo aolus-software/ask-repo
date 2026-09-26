@@ -10,13 +10,15 @@ import uuid
 from fastapi import status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.access import memberships_for
+from app.core.access import memberships_for, resolve_project_scope
 from app.core.audit import AuditEntry, AuditEventType, AuditRecorder
 from app.core.errors import AppError, ErrorCode
 from app.core.middleware import AuthenticatedUser
+from app.repositories.audit_event import AuditEventRepository
 from app.repositories.project import ProjectRepository
 from app.repositories.refresh_token import RefreshTokenRepository
-from app.schemas.me import MembershipSummary, SessionResponse
+from app.schemas.me import ActivityEntry, MembershipSummary, SessionResponse
+from app.schemas.pagination import ListQuery, PaginatedResponse
 
 
 class MeService:
@@ -32,6 +34,7 @@ class MeService:
         self.session = session
         self.projects = ProjectRepository(session)
         self.tokens = RefreshTokenRepository(session)
+        self.audit = AuditEventRepository(session)
         self._recorder = recorder
         self._client_ip = client_ip
 
@@ -93,3 +96,33 @@ class MeService:
                 },
             )
         )
+
+    async def activity(
+        self, user: AuthenticatedUser, query: ListQuery
+    ) -> PaginatedResponse[ActivityEntry]:
+        """The caller's own audit rows, newest first.
+
+        Project-scoped rows are narrowed through `resolve_project_scope`, so a member
+        removed from a project stops seeing its name here. An administrator's scope is
+        unrestricted, so nothing is narrowed.
+        """
+        scope = resolve_project_scope(user)
+        rows, total = await self.audit.page(
+            limit=query.limit,
+            offset=(query.page - 1) * query.limit,
+            actor_user_id=user.id,
+            visible_project_ids=None if scope.unrestricted else scope.ids,
+        )
+        items = [
+            ActivityEntry(
+                id=row.id,
+                created_at=row.created_at,
+                event_type=row.event_type,
+                outcome=row.outcome,
+                target_label=row.target_label,
+                project_id=row.project_id,
+                ip_address=row.ip_address,
+            )
+            for row in rows
+        ]
+        return PaginatedResponse.build(items, page=query.page, limit=query.limit, total_count=total)

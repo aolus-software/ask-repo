@@ -27,3 +27,19 @@ class SessionResponse(ApiModel):
     last_active_at: datetime
     expires_at: datetime
     current: bool
+
+
+class ActivityEntry(ApiModel):
+    """One audit row the caller is the actor of.
+
+    Slimmer than the admin models on purpose: no `details`, no actor (always the
+    caller), and none of `AuditEventResponse`'s live lookups, which cost a query a row.
+    """
+
+    id: uuid.UUID
+    created_at: datetime
+    event_type: str
+    outcome: str
+    target_label: str | None
+    project_id: uuid.UUID | None
+    ip_address: str | None

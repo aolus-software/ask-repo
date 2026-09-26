@@ -9,11 +9,12 @@ people stays on `/users`.
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Query, status
 
 from app.api.deps import AuditRecorderDep, ClientIpDep, CurrentUser, SessionDep
 from app.schemas.errors import ERROR_RESPONSES
-from app.schemas.me import MembershipSummary, SessionResponse
+from app.schemas.me import ActivityEntry, MembershipSummary, SessionResponse
+from app.schemas.pagination import ListQuery, PaginatedResponse
 from app.services.me import MeService
 
 router = APIRouter(prefix="/me", tags=["Me"])
@@ -68,3 +69,18 @@ async def revoke_session(
     session_id: uuid.UUID, current_user: CurrentUser, service: MeServiceDep
 ) -> None:
     await service.revoke_session(current_user, session_id)
+
+
+@router.get(
+    "/activity",
+    response_model=PaginatedResponse[ActivityEntry],
+    status_code=status.HTTP_200_OK,
+    summary="What you have done, from the audit trail",
+    responses={code: ERROR_RESPONSES[code] for code in (401, 403, 422)},
+)
+async def list_activity(
+    current_user: CurrentUser,
+    service: MeServiceDep,
+    query: Annotated[ListQuery, Query()],
+) -> PaginatedResponse[ActivityEntry]:
+    return await service.activity(current_user, query)

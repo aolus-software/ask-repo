@@ -7,7 +7,7 @@ routes need a real refresh family and the `sid` claim that names it.
 """
 
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 from httpx import AsyncClient
 from sqlalchemy import text
@@ -16,7 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import get_settings
 from app.core.audit import AuditEventType
 from app.core.security import sha256_hex
-from app.models import User
+from app.models import AuditEvent, User
 from tests.conftest import TEST_PASSWORD, AuditRows, GrantMembership
 from tests.factories import create_project
 
@@ -229,3 +229,136 @@ async def test_an_unknown_session_is_not_found(client: AsyncClient, authed_user:
     response = await client.delete(f"/me/sessions/{uuid.uuid4()}", headers=_bearer(access))
 
     assert response.status_code == 404
+
+
+async def _audit(
+    session: AsyncSession,
+    *,
+    actor: uuid.UUID | None,
+    event_type: str,
+    project_id: uuid.UUID | None = None,
+    minutes_ago: int = 0,
+) -> None:
+    session.add(
+        AuditEvent(
+            id=uuid.uuid4(),
+            created_at=datetime.now(UTC) - timedelta(minutes=minutes_ago),
+            event_type=event_type,
+            outcome="success",
+            actor_user_id=actor,
+            project_id=project_id,
+            target_label="label",
+            ip_address="203.0.113.9",
+            details={},
+        )
+    )
+    await session.commit()
+
+
+async def test_activity_shows_only_the_callers_own_rows(
+    client: AsyncClient, db_session: AsyncSession, user_a: User, user_b: User
+) -> None:
+    access, _ = await _login(client, user_a.email)  # writes auth.login.succeeded for A
+    await _audit(db_session, actor=user_b.id, event_type="user.updated")
+
+    response = await client.get("/me/activity", headers=_bearer(access))
+
+    assert response.status_code == 200
+    body = response.json()
+    assert [item["eventType"] for item in body["items"]] == ["auth.login.succeeded"]
+    assert set(body["items"][0]) == {
+        "id",
+        "createdAt",
+        "eventType",
+        "outcome",
+        "targetLabel",
+        "projectId",
+        "ipAddress",
+    }
+    assert body["totalCount"] == 1
+
+
+async def test_activity_includes_failed_sign_ins_against_the_account(
+    client: AsyncClient, authed_user: User
+) -> None:
+    """Recorded with the account as actor, though someone else typed the password."""
+    await client.post(
+        "/auth/login", json={"email": authed_user.email, "password": "wrong-password-here"}
+    )
+    access, _ = await _login(client, authed_user.email)
+
+    response = await client.get("/me/activity", headers=_bearer(access))
+
+    assert "auth.login.failed" in [item["eventType"] for item in response.json()["items"]]
+
+
+async def test_activity_hides_rows_on_projects_the_caller_cannot_see(
+    client: AsyncClient,
+    db_session: AsyncSession,
+    authed_user: User,
+    grant_membership: GrantMembership,
+) -> None:
+    """A removed member stops seeing their own past rows there: the row carries the
+    project's name, and project existence is private."""
+    visible = await create_project(db_session, grant_owner=False)
+    hidden = await create_project(db_session, grant_owner=False)
+    await db_session.commit()
+    await grant_membership(authed_user.id, visible.id, "viewer")
+    await _audit(
+        db_session,
+        actor=authed_user.id,
+        event_type="project.created",
+        project_id=visible.id,
+        minutes_ago=3,
+    )
+    await _audit(
+        db_session,
+        actor=authed_user.id,
+        event_type="project.deleted",
+        project_id=hidden.id,
+        minutes_ago=2,
+    )
+    access, _ = await _login(client, authed_user.email)
+
+    response = await client.get("/me/activity", headers=_bearer(access))
+
+    types = [item["eventType"] for item in response.json()["items"]]
+    assert "project.created" in types
+    assert "project.deleted" not in types
+    assert "auth.login.succeeded" in types  # project-less rows always show
+
+
+async def test_an_admins_activity_is_not_narrowed(
+    client: AsyncClient, db_session: AsyncSession, admin_user: User
+) -> None:
+    project = await create_project(db_session, grant_owner=False)
+    await db_session.commit()
+    await _audit(
+        db_session,
+        actor=admin_user.id,
+        event_type="project.deleted",
+        project_id=project.id,
+        minutes_ago=1,
+    )
+    access, _ = await _login(client, admin_user.email)
+
+    response = await client.get("/me/activity", headers=_bearer(access))
+
+    assert "project.deleted" in [item["eventType"] for item in response.json()["items"]]
+
+
+async def test_activity_is_paged(
+    client: AsyncClient, db_session: AsyncSession, authed_user: User
+) -> None:
+    for minutes in range(3):
+        await _audit(
+            db_session, actor=authed_user.id, event_type="user.updated", minutes_ago=minutes + 10
+        )
+    access, _ = await _login(client, authed_user.email)
+
+    response = await client.get("/me/activity?limit=2&page=2", headers=_bearer(access))
+
+    body = response.json()
+    assert body["page"] == 2
+    assert body["totalCount"] == 4
+    assert len(body["items"]) == 2
