@@ -28,7 +28,7 @@ copy is deleted after indexing, so there is no file to re-read at query time.
 
 ## The Postgres tables
 
-Twenty tables in eight groups. Every one of them except `refresh_tokens`, `messages`,
+Twenty-one tables in eight groups. Every one of them except `refresh_tokens`, `password_reset_tokens`, `messages`,
 `audit_events`, `notification_events` and `notifications` carries `created_at`, `updated_at` and
 `deleted_at`.
 
@@ -46,6 +46,7 @@ reasons — and deliberately **not** the third. See [Notifications](#notificatio
 ```mermaid
 erDiagram
     users ||--o{ refresh_tokens : "issues"
+    users ||--o{ password_reset_tokens : "requests"
     users ||--o{ projects : "created_by"
     users ||--o{ conversations : "owns (private)"
     users ||--o{ project_memberships : "holds"
@@ -77,15 +78,22 @@ erDiagram
 | --- | --- |
 | `users` | `email` (partial unique index where not deleted), `password_hash`, `is_admin`, `must_change_password`, `last_login_at` |
 | `refresh_tokens` | `token_hash`, `family_id`, `issued_at`, `expires_at`, `used_at`, `revoked_at`, `revoked_reason` |
+| `password_reset_tokens` | `user_id`, `token_hash`, `created_at`, `expires_at`, `used_at` (hard-deleted if expired or used > 24h ago) |
 
 Refresh tokens are **opaque and stored hashed**, so they can be revoked and so the database
 never holds a usable credential. They **rotate on use**: `used_at` marks the spent one and
 `family_id` ties a chain together, which is what makes replay of an already-used token
 detectable. Access tokens are stateless JWTs (15 minutes) and are not stored at all.
 
-There is no public registration, no email verification and no self-service reset — an admin
-creates accounts, and `must_change_password` forces a change on first login. That is why there
-is **no mail provider anywhere in the stack**.
+Password reset tokens (Phase 2.4) are **also stored hashed and single-use**. The raw token
+never reaches Postgres — only a hashed version — and rides to the user in an email link
+fragment. `used_at` is stamped once the password is reset. Hard-deleted by the worker for
+expired tokens or those used more than 24 hours ago, which is what keeps password recovery
+resistant to token capture and replay.
+
+There is no public registration and no email verification. Admin-provisioned accounts carry
+`must_change_password` set, which forces a change on first login. Self-service password reset
+is optional (Phase 2.4, `MAIL_ENABLED`); when off, only admins can reset a password.
 
 ### Access
 
@@ -186,8 +194,8 @@ Four non-partial indexes — `created_at`, `actor_user_id`, `event_type`, `proje
 them is partial because there is no `deleted_at` to filter, which is the one place this table
 diverges from every other group above.
 
-**The catalogue is a `StrEnum` in `app/core/audit.py`, not a table** — 37 event types across auth,
-accounts, projects, RBAC, checklist modules and items, change sets, mock data, exports and
+**The catalogue is a `StrEnum` in `app/core/audit.py`, not a table** — 39 event types across auth,
+accounts, projects, RBAC, password reset, checklist modules and items, change sets, mock data, exports and
 conversations. Existence lives in code for the reason `app/core/permissions.py` gives for the
 permission catalogue: if it lived in a table, deleting a row would orphan every write site that
 names it. Which operations must record one is a rule rather than a list —
@@ -199,7 +207,7 @@ reduced to its host by `urlsplit().hostname`, which excludes the userinfo a PAT 
 content (no prompt, no message, no source excerpt, and **`target_label` is `NULL` for a
 conversation**, because its title derives from the user's first question).
 
-**`details` is one envelope** for all 37 events:
+**`details` is one envelope** for all 39 events:
 
 ```json
 {
@@ -271,10 +279,10 @@ working rather than an accepted, logged gap. See `.claude/rules/notifications.md
 ### 1. Postgres rows soft-delete; the matching Qdrant points hard-delete
 
 Every table that can be deleted from carries `deleted_at`, and every query filters
-`deleted_at IS NULL`. (`audit_events` is not one of them — nothing deletes an audit row except the
-retention cutoff, and that is a hard delete.) Vector points
-have no such column, and a query-time filter would be one forgotten call away from serving
-deleted content.
+`deleted_at IS NULL`. Two exceptions: `audit_events` (nothing deletes except the retention
+cutoff) and `password_reset_tokens` (tokens are hard-deleted by the worker when expired or used
+more than 24 hours ago). Vector points have no such column either, and a query-time filter would
+be one forgotten call away from serving deleted content.
 
 So deleting a project soft-deletes the row **and hard-deletes its points, in the same
 operation** — and the vector delete runs *before* the commit, so if Qdrant refuses, the row

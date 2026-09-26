@@ -81,7 +81,7 @@ repo and npm would resolve it afresh. `node_modules` in the runtime stage is a s
 production-only install, and `.next/cache` is dropped.
 
 No `API_URL` is needed at build time. Everything that talks to the API also reads cookies,
-which makes those routes dynamic; only `/login`, `/change-password` and `/_not-found` are
+which makes those routes dynamic; only `/login`, `/forgot-password`, `/reset-password`, `/change-password` and `/_not-found` are
 prerendered and none of them fetches anything.
 
 ---
@@ -101,12 +101,22 @@ key.
 | `PUBLIC_ORIGIN` | Your real https origin. Becomes `CORS_ORIGINS` |
 | `BOOTSTRAP_ADMIN_PASSWORD` | Required before first boot. No fallback exists anywhere |
 | `TRUSTED_PROXY_HOPS` | Defaults to `1` in the production file — correct for one Caddy. Count your proxies |
+| `MAIL_ENABLED` | When `true`, enables password reset and email notifications. Defaults to `false`. Requires `SMTP_HOST`, `SMTP_PORT`, `SMTP_FROM`, and `SMTP_PASSWORD` |
+| `SMTP_HOST` | SMTP relay host name (required if `MAIL_ENABLED` is `true`). Usually an internal mail server or cloud provider |
+| `SMTP_PORT` | SMTP relay port, typically `25`, `587`, or `465` |
+| `SMTP_FROM` | Sender address for all outbound mail (required if `MAIL_ENABLED` is `true`) |
+| `SMTP_PASSWORD` | SMTP relay credential (required if `MAIL_ENABLED` is `true`). Keep out of logs and version control |
+| `APP_BASE_URL` | Base URL for password reset links (required if `MAIL_ENABLED` is `true`). Example: `https://internal.org/askrepo`. Must include the scheme and protocol |
 
 **`PAT_ENCRYPTION_KEY` must be identical in the API and the worker.** The API encrypts a PAT
 when a project is created and the worker decrypts it to clone. The two share one `x-app-env`
 anchor precisely so they cannot drift. A mismatch is a clone that fails with a decryption
 error, not a startup error. Losing the key means every stored PAT must be re-entered by hand —
 it is not recoverable from the database, and that is the point.
+
+**If `MAIL_ENABLED` is true, `SMTP_PASSWORD` must be identical in the API and the worker,** and
+it must be kept out of any logs or backups. It is supplied only by the `.env` file at deploy
+time.
 
 Then check the box before you build anything:
 

@@ -116,6 +116,9 @@ wired in yet**, even though all four datastores are now read elsewhere in the ap
 | `POST` | `/auth/logout` | refresh cookie | Log out of this device |
 | `POST` | `/auth/logout-all` | access token | Log out everywhere |
 | `GET` | `/auth/me` | access token | The current account |
+| `POST` | `/auth/password-reset/request` | none | Request a password reset link. Phase 2.4; returns `409 PASSWORD_RESET_UNAVAILABLE` if mail is not enabled |
+| `GET` | `/auth/password-reset/request-status` | none | Poll whether the reset email was sent (for the `/forgot-password` page) |
+| `POST` | `/auth/password-reset/confirm` | none | Confirm the reset with a token (fragment-only) and new password. `400 PASSWORD_RESET_TOKEN_INVALID` for any token problem |
 
 ### Users
 

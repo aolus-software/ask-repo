@@ -2,7 +2,7 @@
 
 Everything under `app/core/audit.py`, plus every service that writes — `auth`, `user`, `project`,
 `membership`, `role`, `checklist_module`, `checklist_item`, `checklist_change_set`,
-`mock_data_dataset`, `mock_data_change_set`, `mock_data_record`, `conversation` — and the two
+`mock_data_dataset`, `mock_data_change_set`, `mock_data_record`, `conversation`, `password_reset` — and the two
 export paths. Read `persistence.md` and `router.md` alongside this — they own the table and the
 route; this file owns what must be recorded and what must never be.
 
@@ -17,7 +17,7 @@ anywhere recorded who deleted it**.
 
 So the rule is not "log the interesting things". It is:
 
-> **Every write, and every export, records an audit event. No exceptions beyond the five named
+> **Every write, and every export, records an audit event. No exceptions beyond the six named
 > in this file.**
 
 This is written as a rule rather than a list because a list goes stale the moment someone adds a
@@ -35,7 +35,7 @@ nobody discovers until the day it is needed.
 | **Promote a proposal** | applying or discarding a checklist or mock-data change set | `<resource>.applied` / `.discarded` |
 | **Request expensive work** | reindex, checklist generation, mock-data generation | `<resource>.<action>.requested` |
 | **Move data out** | the checklist spreadsheet, mock data as JSON or spreadsheet | `<resource>.exported` |
-| **Authenticate** | login, **failed** login, logout, password change, admin reset, refresh replay | `auth.*` / `user.password.reset` |
+| **Authenticate** | login, **failed** login, logout, password change, admin reset, refresh replay, password reset request, password reset confirm | `auth.*` / `user.password.reset` / `password_reset.requested` / `password_reset.confirmed` |
 
 **An export is a write for this purpose even though it changes nothing.** It is the one action
 that takes a private repository's derived content out of the instance, and `docs/PRD.md` §9 treats
@@ -45,7 +45,7 @@ egress as a category of its own. "It's only a GET" is not a reason to skip it.
 with a filter can erase a week of a tester's recorded observations without deleting a single row,
 and it is the only write in the app that destroys human-recorded work that way.
 
-## The five exemptions, and each one's reason
+## The six exemptions, and each one's reason
 
 Named here so a later reader finds a **decision** rather than what looks like an oversight. Do not
 "fix" these; changing one is a PRD change first.
@@ -73,6 +73,12 @@ Named here so a later reader finds a **decision** rather than what looks like an
    one is what makes it a flooding risk rather than merely a low-value row — a bell
    clicked forty times a day would bury `user.deactivated` under exactly the noise
    §2.5 refuses for the ask route.
+6. **Email delivery attempts.** `POST /api/mail/outbox` is not audited (not a real route, but an
+   internal drainer), and neither are the row updates to `notifications.email_state`,
+   `email_attempts`, and `email_sent_at`. The audit trail records *human actions that change
+   data*; a mail loop pushing bytes through an SMTP service is infrastructure. Delivery success
+   or failure is recorded on the row itself and visible to operations through a table query, never
+   through the audit trail.
 
 ## Adding a mutating route means adding an event, in the same change
 
@@ -144,7 +150,7 @@ depend on when FastAPI closes the request's `AsyncExitStack`. On any `Exception`
 event at `WARNING` and returns.
 
 **It never raises.** That is what makes "an audit failure cannot fail a user's action" structural
-rather than a promise each of the 39 call sites keeps (38 in services, plus the `seed-admins`
+rather than a promise each of the 41 call sites keeps (40 in services, plus the `seed-admins`
 CLI). A login must not fail because a log write did.
 
 **The accepted consequence, and it is not to be quietly reframed as a guarantee:** an action that

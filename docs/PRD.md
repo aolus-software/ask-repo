@@ -176,16 +176,57 @@ What shipped:
 
 #### Phase 2.4 — The mail provider: self-service password reset, and email delivery
 
-The instance's first egress path (§9), and the first decision in phase 2 that changes §1's
-premise. Two items share it — a reset link has to reach the user, and Phase 2.3's notification
-record has to leave the network to be useful to someone not currently looking at AskRepo — and
-the argument for specifying them together is that paying the provider's cost once for two
-features is a materially different trade from paying it for either alone. Email adds **no table
-and no read state**: it is a delivery attempt against the row Phase 2.3 defines, carrying an
-event type and a link and nothing derived from an indexed repository. Specifying it any other way
-is the divergence Phase 2.3's "one record, two transports" exists to prevent.
+**Built.** The instance's first egress path (§9), and the first decision in phase 2 that changes
+§1's premise. Depends on Phase 2.3; the notification record is the delivery target, and access
+through the same resolver that Phase 2.3 built keeps the design consistent. What **ships** is
+the mail provider, the password-reset flow, and email as the second transport of Phase 2.3's
+notification record, per *one record, two transports*.
 
-- **Self-service password reset.** A user who forgot their password recovers it without an admin, replacing the out-of-band flow in §4.0. **This is one of the two phase-2 items that add infrastructure**, and both add the same one: a reset link has to reach the user, so it needs a mail provider — an SMTP host, a credential, a from-address, and deliverability from an instance that is deliberately not internet-facing (§5). Phase 1 has no mail provider anywhere in the stack, and that absence is currently load-bearing: it is why there is no email verification, no invitation flow, and no queue of outbound messages to operate. Whoever specifies this decides whether the cost is worth it against simply keeping admin-driven reset. A single-use, short-lived, hashed reset token stored like a refresh token is the shape to reach for; emailing a password is not. **It is specified together with the email transport of Phase 2.3's notifications, in this same sub-phase** — they share the provider, the outbound queue, and the deliverability problem, and paying that cost once for two features is a materially different trade from paying it for either alone.
+What shipped:
+
+- **A mail provider is optional and off by default.** `MAIL_ENABLED` controls whether the feature
+  exists. When off, password reset returns `409 PASSWORD_RESET_UNAVAILABLE`, and notification
+  preferences show email controls disabled with a note. When on, the admin supplies an SMTP
+  host, a credential, a from-address, and (for password reset links) an `APP_BASE_URL` so the
+  reset link can be constructed outside the HTTP boundary. The provider is the single point of
+  failure for both password reset and notification email — they share the outbox, the sender,
+  and the deliverability problem, and paying that cost once for two features is what makes the
+  mail provider worth specifying rather than leaving it out forever.
+- **The composer is the enforcement.** `app/mail/composer.py` builds every message that leaves
+  the instance. Subjects and bodies are fixed strings per event type — no templating, no
+  parameters from the user, no content that could come from an indexed repository. A notification
+  email carries an event type and a link, never a message, answer text, or proposal body. A
+  password reset email carries only the link. The signature of each composer is the boundary; a
+  parameter added there is a decision to export what it would pass, which is `.claude/rules/mail.md`'s
+  job to gate.
+- **Plain text, at-least-once, claimed before send.** Every message is plain text, not HTML. The
+  outbox drains from `notifications.email_state` rows when `pending`; each row is claimed with
+  `SELECT ... FOR UPDATE SKIP LOCKED` before any network call, and delivery is idempotent — an
+  `email_sent_at` timestamp serves as both a record and an idempotency check. On success,
+  `email_state` moves to `sent`; on provider failure (`MailSendError`), it returns to `pending`
+  for retry; on any other exception it moves to `failed`. The mail loop is a sibling of the
+  reconcile loop in the worker, not a step inside it, so a broken mail service does not starve
+  stranded-work recovery.
+- **Self-service password reset: three routes and one table.** `POST /auth/password-reset/request`
+  takes an email, `GET /auth/password-reset/request-status` polls whether the email was sent,
+  and `POST /auth/password-reset/confirm` takes the token (fragment-only, never in the URL
+  path or the body) and a new password. Rate limits apply per IP and per email. Password policy
+  is enforced by the shared `validate_and_hash_new_password()` in `app/core/passwords.py`; a weak
+  password raises `400 WEAK_PASSWORD`. The `password_reset_tokens` table holds id, user id,
+  hashed token, created/expires/used timestamps, and is hard-deleted by the worker for expired
+  or used-more-than-24-hours-ago rows. The token is single-use and short-lived by construction,
+  never retried — on send failure the user is told at request time and must try again.
+- **Email is snapshotted at fan-out, not at delivery.** The same moment `in_app_visible` is
+  written to a notification row, `email_state`, `email_attempts`, and `email_claimed_until` are
+  also written — off the preference snapshot at fan-out time. `email_state` is `pending` when
+  the recipient has the email preference on, `skipped` when off, and `NULL` when email was never
+  in play. A user who changes their email preference later affects only new events; existing rows
+  remember what was decided when they were written.
+- **A sixth audit exemption.** Email delivery attempts do not record an audit event — the mail
+  loop pushing bytes through an SMTP service is infrastructure, not a user action that changes
+  data. `email_state`, `email_attempts`, and `email_sent_at` record the outcome on the row itself.
+- **Two new audit events.** `password_reset.requested` when a user asks for a reset link, and
+  `password_reset.confirmed` when they reset their password. Both carry the user id as the actor.
 
 #### Phase 2.5 — The AI call log, and user feedback on model output
 
@@ -928,10 +969,10 @@ because two of them turned out to be one defect and the shape is worth not repea
 - **~~Is the audit trail (§2.1) a Postgres table or a structured log stream?~~ Decided (Phase 2.2): a table.** `audit_events`, queryable from the product through two admin-only routes and two screens, covered by the Postgres backup §9 already requires, and adding no operator tooling. A stream would have been cheaper to retain and unreadable without something else to read it with, on an instance whose whole premise is that it runs on one box inside one network. Retention is `AUDIT_RETENTION_DAYS`, default `0` — keep forever — which is the answer the cheap-retention argument was really asking about.
 - Encryption key rotation for stored PATs — re-encrypt in place on rotation, or require re-entry?
 - GitHub webhook auto-reindex — not needed now; worth reconsidering in v2 if re-cloning per re-index becomes painful.
-- **Is the email half of notifications (§2.1) worth a mail provider, or is in-app enough? Sequenced, not resolved — and still open by design.** In-app costs a table and a polled count and adds no infrastructure and no egress path. Email costs an SMTP dependency, deliverability from a box that is deliberately unreachable, and the §9 egress question — and buys the one thing in-app cannot: reaching someone who is not currently looking at AskRepo, which is the entire point for a generation that takes twenty minutes. The split takes the answer this question already called defensible: in-app shipped at **Phase 2.3** — three tables, permission-narrowed recipients, a polled unread count, no socket — and email is specified at **Phase 2.4**. **In-app has now shipped and is in real use**, which is the evidence this split exists to gather: by the time Phase 2.4 is scoped, there is a basis for asking whether people actually miss things the bell did not surface. **This question is not closed by that evidence, and Phase 2.4 may still conclude that in-app was enough** — that remains a legitimate outcome rather than a failure to deliver the sub-phase; what Phase 2.4 may not do is pay for a mail provider without weighing it.
+- ~~**Is the email half of notifications (§2.1) worth a mail provider, or is in-app enough?** Decided (Phase 2.4): yes, with no requirement. Email is optional and off by default.~~ A mail provider buys reaching someone who is not currently looking at AskRepo, which matters for a generation that takes twenty minutes, and does not cost a schema change because Phase 2.3 already shipped both `notification_preferences.email` and the four email columns on `notifications`. In-app remains the default; email adds a sender path and a settings screen when an organization decides the cost is justified.
 - **Does the AI call log (§2.1) need per-call cost, or only per-call tokens?** (Owned by **Phase 2.5**.) Tokens are reported by the provider and are a fact; a cost figure needs a price table per provider and per model, which goes stale silently the moment a vendor changes it — and a wrong number shown next to a real invoice is worse than no number. Storing tokens and pricing them at read time keeps the stale part in one place, but it means the log alone cannot answer "what did last month cost" without that table. §2.1's choice of Langfuse narrows this rather than closing it: Langfuse maintains a price table, so the staleness moves to a dependency someone else updates instead of one this repository carries — which is better, not solved, since a self-hosted instance is only as current as the version an operator last pulled. Related: whether an instance running a local model logs at all, where the token counts are real but the spend is always zero.
 - **Does an administrator ever see the question behind a negative piece of feedback (§2.1)?** (Owned by **Phase 2.5**.) A reason code alone — *cited the wrong file*, *invented something* — tells an administrator which part of the system to look at and nothing about which repository or which colleague. Reading the turn itself is what makes a pattern diagnosable, and §4.2 and §7 both say that conversations are private and that an administrator is no exception. **Phase 2.2 narrowed that from "without qualification" to one recorded exception, and the exception is precisely the half that does not help here:** an administrator can see in the audit trail that a conversation was created or deleted — actor, project, when — and never its title (`target_label` is `NULL`, always) and never a message (the ask route is not audited at all, and no administrator bypass was added anywhere under `/conversations`). So the amendment covers existence metadata and this question is about content, which remains as unresolved as before. The two still cannot both be fully satisfied. The defensible positions are aggregate-only, or an explicit per-item opt-in where the person giving the feedback chooses to attach the turn — never an administrator-side toggle, which is the same sentence with the consent removed. Feedback on a checklist or mock-data change set does not have this problem at all, since §4.3 already publishes those to everyone.
-- **Immediate or digested, and who decides?** (Owned by **Phase 2.4**.) One email per finished index is fine for a team adding a project a week and unusable for a bulk import. A digest needs a schedule, a window, and somewhere to hold undelivered events, which is more machinery than the notification itself. Related: whether the *recipient* or the *operator* owns the preference, since a per-user opt-out is a column while an instance-wide policy is a setting.
+- ~~**Immediate or digested, and who decides?**~~ Decided (Phase 2.4): immediate, per event, and recipient-owned. One email per finished index, so a team adding a project a week sees one-per-week and a bulk import sees one-per-import. A digest would need a schedule, a window, and more machinery than the notification itself, and the data gathering from a per-user preference is clearer than an instance-wide policy. The preference is stored on `notification_preferences` and snapshotted onto each `notifications` row at fan-out, so the recipient owns it and changes made later affect only new events.
 
 ---
 
@@ -949,5 +990,5 @@ The instance is internal, which lowers the threat model but does not empty it. T
 - **Retention is an operator responsibility (Phase 2.2).** `AUDIT_RETENTION_DAYS` defaults to `0`, meaning keep forever, because a fresh instance must not silently start discarding the one record whose purpose is being the record. That default is a starting point, not a recommendation for every instance: the table's write rate is proportional to QA activity — `checklist_item.result_recorded` fires once per test a tester ticks — so an active instance should choose a window deliberately rather than inherit the default. The only delete path takes a cutoff and nothing else, so setting a window is the one lever; nobody can erase a row.
 - **Backups.** Restorable Postgres backups, with the PAT encryption key backed up **separately** from the database.
 - **A hosted answering model sends private source code out of the network (M4.5, §6).** This is the sharpest consequence of making the provider configurable, and it is a change to §1's premise rather than a detail of it: every question ships the retrieved excerpts — real code from a private repository, with file paths — to whichever provider `CHAT_BASE_URL` names. The prompt-injection note below still holds and is unaffected; what changes is the direction. Four things follow. The **API key** joins the PAT and the encryption key as a secret to manage, and unlike them it authorises spending. The provider's **retention and training policy** becomes part of this instance's security posture, which means it is a procurement question and not an engineering one — an aggregator that routes to an undisclosed downstream host cannot answer it at all. **A PAT is never in scope to send**, because only chunk text and paths reach a prompt, and that must stay true when a provider adapter is added. And the choice is per instance and reversible: a hosted answerer requires no re-index (§5), so an organization that decides against it switches back by changing configuration, which is the strongest argument for keeping the embedder local.
-- **Egress, if notifications ship (phase 2, §2.1).** Every mitigation above concerns something coming *in*. Email would be the first thing this instance sends *out*, and it leaves through a host outside the VPN that §5 puts everything else behind. What is at stake is not the message body alone: repository names, module names and file paths are inventory of the organization's private codebases, and they are held here *because* here is internal. The rule that follows is narrow enough to test — an outbound message carries an event type and a link, never content derived from an indexed repository — and it belongs in this section rather than in the feature's own, because the reviewer of a notifications change is the person most likely to add "a helpful preview of the answer" without noticing what it exports.
+- **Egress (Phase 2.4).** Email is the instance's first path out of the network. It leaves through a host outside the VPN that §5 puts everything else behind, and is optional and off by default — when on, the admin supplies an SMTP relay and the responsibility to keep the provider's retention policy within the organization's security posture. What is at stake is not the message body alone: repository names, module names and file paths are inventory of the organization's private codebases, and they are held here *because* here is internal. The outbound rule is narrow enough to test — a message carries an event type and a link, never content derived from an indexed repository (no answer text, no proposal body, no snippet) — and lives here rather than in the mail rules, because the reviewer of a notifications change is the person most likely to add "a helpful preview" without noticing what it exports. Password reset tokens are never stored in logs or the audit trail; only the hashed version lives in the table and the raw token rides in the email link fragment. `SMTP_PASSWORD` joins the PAT and the encryption key as a secret to manage.
 - **Not in the threat model:** malicious authenticated users, tenant isolation, and public internet exposure. If the instance is ever published, §4.0 needs self-service account flows and this section needs revisiting — that is a different document.

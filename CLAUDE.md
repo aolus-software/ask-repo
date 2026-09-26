@@ -237,7 +237,7 @@ nothing else, so it cannot be aimed at anyone's entries. Never add an `update` m
 a route that writes.
 
 **`AuditRecorder.record` opens its own session and never raises.** That is what makes "an audit
-failure cannot fail a user's action" structural rather than a promise each of the 39 call sites
+failure cannot fail a user's action" structural rather than a promise each of the 41 call sites
 keeps. The accepted consequence is not to be quietly reframed as a guarantee: an action that
 commits and then crashes before its audit write leaves no row, silently — the trail is a strong
 record, not a complete one. Services record **after** the commit that made the change true, from
@@ -411,7 +411,7 @@ route does not return, which is the one-error-shape rule failing silently rather
 
 ## Rules
 
-Fifteen rule files in `.claude/rules/`. Read the ones your change touches.
+Sixteen rule files in `.claude/rules/`. Read the ones your change touches.
 
 | Rule | Read it when |
 | --- | --- |
@@ -425,9 +425,10 @@ Fifteen rule files in `.claude/rules/`. Read the ones your change touches.
 | `rag.md` | Anything under `app/rag/`, the conversation service/routes, or the checklist's refinement chat — generation filters, grounding, the SSE contract, the shielded write |
 | `design-system.md` | Any `.tsx` or `.css` — tokens, shadcn, dark mode, spacing |
 | `forms.md` | Any form — dialog vs page, validation ownership, field composition |
+| `mail.md` | Anything under `app/mail/`, the password reset service, or the email half of notifications — composer signatures, subjects and body content, claiming before send, and delivery retries |
 | `navigation.md` | Sidebar, breadcrumbs, or adding a route |
 | `frontend-bff.md` | Any `proxy.ts`, the `app/api/[...path]` API proxy, `/api/auth/*`, or session/refresh code — cookies, the refresh split, SSE piping |
-| `audit-trail.md` | Any write or export in any service — what must record an audit event, the five exemptions, and the two content bans. **Adding a mutating route means adding an event in the same change** |
+| `audit-trail.md` | Any write or export in any service — what must record an audit event, the six exemptions, and the two content bans. **Adding a mutating route means adding an event in the same change** |
 | `notifications.md` | Anything under `app/core/notifications.py`, `app/services/notification_fanout.py`, or a fan-out call site — recipient resolution, the before-commit/after-commit straddle with audit, and the preference-snapshot rule |
 | `audit-findings.md` | Writing an audit report |
 
@@ -455,7 +456,7 @@ enforced there — if you add a convention, wire it into the config in the same 
 ## Frontend
 
 App Router, React 19, Tailwind CSS 4 (CSS-first `@theme`, no `tailwind.config.js` for tokens).
-The routes that exist are `/login`, `/change-password`, `/` (dashboard),
+The routes that exist are `/login`, `/forgot-password`, `/reset-password`, `/change-password`, `/` (dashboard),
 `/projects`, `/projects/[id]`, `/ask`, `/ask/[conversationId]`, `/settings/users`,
 `/settings/roles`, `/settings/roles/[id]`, `/settings/audit`, `/settings/audit/[eventId]`,
 `/notifications`, `/settings/notifications`,

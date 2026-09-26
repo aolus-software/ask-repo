@@ -37,12 +37,41 @@ incompatibly. Configuration defaults and internal module layout may change in a 
   notification is a nudge with a shelf life, not the record audit is, and an unread badge that
   can never reach zero is a badge people stop looking at.
 
+- **Three self-service password reset routes** (`docs/PRD.md` §2.1, phase 2.4, optional and off by
+  default): `POST /auth/password-reset/request` (email requested, returns `409 PASSWORD_RESET_UNAVAILABLE`
+  if mail is not enabled), `GET /auth/password-reset/request-status` (poll whether the email was sent),
+  and `POST /auth/password-reset/confirm` (token in URL fragment, new password in body). Password
+  policy is enforced by `validate_and_hash_new_password()` in `app/core/passwords.py`; a weak
+  password raises `400 WEAK_PASSWORD`. Tokens are hashed, single-use, and short-lived (10 minutes),
+  hard-deleted by the worker if expired or used more than 24 hours ago. New `ErrorCode`:
+  `PASSWORD_RESET_UNAVAILABLE` and `PASSWORD_RESET_TOKEN_INVALID`.
+- **Email as a second transport of notifications** (`docs/PRD.md` §2.1, phase 2.4, optional and off by
+  default): when `MAIL_ENABLED` is on, each notification row captures the recipient's `email`
+  preference snapshot at fan-out time (`email_state`: `pending`, `sent`, `failed`, `skipped`, or
+  `NULL`), and the mail loop drains by sending and updating rows. Subjects and bodies are fixed
+  strings per event type, never content derived from a repository. The `email` switch on
+  `/settings/notifications` is enabled only when mail is configured.
+- **`MAIL_ENABLED` and SMTP settings**: when `MAIL_ENABLED` is `true`, password reset and
+  notification email ship. Requires `SMTP_HOST`, `SMTP_PORT`, `SMTP_FROM`, and `SMTP_PASSWORD`;
+  password reset also requires `APP_BASE_URL` for reset links. All default to off and empty,
+  so no SMTP dependency exists if not enabled.
+- **`password_reset_tokens` table** (migration; Phase 2.4). Holds id, user id, hashed token, created/expires/used timestamps.
+  Hard-deleted by the worker for expired tokens or those used more than 24 hours ago.
+- **Four columns on `notifications` table** (`email_state`, `email_attempts`, `email_claimed_until`, `email_sent_at`):
+  the outbox and at-least-once delivery mechanism, added in Phase 2.3 but unused until Phase 2.4.
+- **Two new audit events** (`docs/PRD.md` §2.1, phase 2.4): `password_reset.requested` and
+  `password_reset.confirmed`, both with the user id as actor. One new audit exemption (the sixth):
+  email delivery attempts do not record an audit event — sending through SMTP is infrastructure,
+  not a user action.
+
 ### Changed
 
 - **A fifth audit exemption** (`.claude/rules/audit-trail.md`): marking a notification read,
   marking all read, and changing notification preferences do not record an audit event — that
   state is private to one user, describes no shared resource, and is written at a rate
   proportional to attention rather than to change.
+- **"No mail provider anywhere in the stack" is no longer true.** Phase 2.4 introduces an optional
+  mail provider (off by default); `docs/PRD.md` §1 and `CLAUDE.md` have been updated.
 
 ## [2.1.0] — 2026-09-19
 

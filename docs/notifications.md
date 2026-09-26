@@ -116,6 +116,34 @@ write time would leave nothing for email to send against.
 
 ---
 
+## Email delivery (Phase 2.4)
+
+Email is a second transport against the same notification record. When `MAIL_ENABLED` is on,
+every recipient's preference snapshot is written to the `notifications` row at fan-out time:
+`email_state` is `pending` when email is on, `skipped` when it is off, `NULL` when the
+recipient is deactivated or email has never been configured.
+
+The mail loop is a sibling worker tick that claims rows with `email_state = pending`, sends
+each one through an SMTP relay, and updates the row with the outcome — `sent` on success,
+`failed` on a non-retryable error, or back to `pending` on `MailSendError` for retry. Delivery
+is at-least-once: the claim is the deduplication boundary, and a duplicate attempt is idempotent
+because `email_sent_at` is stamped once and never updated again. The sent flag itself is the
+idempotency check.
+
+**Email buys one thing in-app cannot: reaching someone who is not currently looking at AskRepo.**
+A twenty-minute checklist generation is the whole point of a notification the author has walked
+away from. Whether the cost is worth it is an organizational decision; the instance answers it
+by making email optional and off by default.
+
+**A message carries an event type and a link, never content derived from an indexed repository.**
+No answer text, no proposal body, no snippet. `MAIL_ENABLED` also requires `APP_BASE_URL` to be
+set (e.g. `https://internal.org/askrepo`), so reset links and notification links can be
+constructed server-side.
+
+Full mechanism: `.claude/rules/mail.md` and `.claude/rules/notifications.md` rule 4.
+
+---
+
 ## Where the code is
 
 - The catalogue, the recipient map, the actor-exclusion set and the per-event `details` allowlist

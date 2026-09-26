@@ -166,8 +166,9 @@ Both accounts are created with `must_change_password` set, so the shared initial
 stops working the moment each admin logs in. Seeding is idempotent: an already-seeded
 instance boots regardless of whether the variable is still present.
 
-There is no public registration, no email verification, and no self-service reset — which is
-why there is no mail provider anywhere in the stack. Admins create every other account.
+There is no public registration and no email verification. Self-service password reset is optional
+(Phase 2.4, see Mail below); when off, only admins can reset a password. Admins create every other
+account, and both seeded admins are set to change their password on first login.
 
 ### Login rate limiting
 

@@ -51,9 +51,10 @@ Generating a checklist takes minutes too — it is one model call per file plus 
 can run inside a request.
 
 So `POST /projects` writes the row, publishes a job, and returns immediately. The worker
-(`app/worker.py`) is a separate process running three Kafka consumers plus a reconcile sweep.
-It is the only process that writes vectors, and it is the only process that runs a model for
-generation.
+(`app/worker.py`) is a separate process running three Kafka consumers, a reconcile sweep, and
+a mail loop (Phase 2.4). It is the only process that writes vectors, and it is the only process
+that runs a model for generation. The mail loop is a sibling of the reconcile sweep, both on
+60-second ticks, so a broken mail service does not starve stranded-job recovery.
 
 The API process also holds a chat model — the answer graph runs there, because answering is
 interactive and streams to the caller. **Ingestion does not use a chat model at all**; it uses
