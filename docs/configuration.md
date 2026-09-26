@@ -384,6 +384,11 @@ a fresh instance sends nothing out of the network.
 | `PASSWORD_RESET_RATE_PER_HOUR_IP` | `10` | Password reset requests allowed per hour from one IP address |
 | `PASSWORD_RESET_RATE_PER_HOUR_EMAIL` | `3` | Password reset requests allowed per hour against one account |
 
+**Under Docker Compose these twelve are set once, in `infra/.env`, with the same defaults as
+above** — they are in the shared `x-app-env` anchor in both `infra/docker-compose.yml` and
+`infra/docker-compose.prod.yml`, so the backend and the worker always receive identical values.
+See [`docs/deployment.md`](deployment.md) §2 for why that identity matters.
+
 ---
 
 ## Values that fail silently

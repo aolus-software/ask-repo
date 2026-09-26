@@ -83,10 +83,11 @@ production-only install, and `.next/cache` is dropped.
 No `API_URL` is needed at build time. Everything that talks to the API also reads cookies,
 which makes those routes dynamic. `/forgot-password`, `/reset-password`, `/change-password` and
 `/_not-found` are prerendered, and none of them fetches anything. **`/login` is not** among
-them, even though it fetches nothing itself: its page calls `serverFetch` (to check
-`GET /auth/password-reset/availability` and decide whether to show "Forgot password?"), and
-`serverFetch` reads the access cookie via `next/headers`' `cookies()` — which is what makes the
-route dynamic, the same as every route that reads a cookie for its own reasons.
+them: its page calls `serverFetch` to fetch `GET /auth/password-reset/availability` — server-side
+and cookie-free, since a signed-out visitor has no access cookie to send — and decide whether to
+show "Forgot password?". `serverFetch` still reads the access cookie via `next/headers`'
+`cookies()` on every call, which is what makes the route dynamic, the same as every route that
+reads a cookie for its own reasons.
 
 ---
 
@@ -113,12 +114,15 @@ key.
 | `APP_BASE_URL` | Base URL for password reset and notification links (required if `MAIL_ENABLED` is `true`). Must be an absolute origin with scheme, e.g. `https://askrepo.internal` — the app has no Next.js `basePath`, so a sub-path like `https://internal.org/askrepo` is not a case this needs to handle |
 
 **Every mail setting, including `MAIL_ENABLED` itself, must be identical on the API and the
-worker.** Both processes run notification fan-out (`NotificationFanout`, from
-`app/services/notification_fanout.py`), so a mismatch does not fail loudly — it means the API
-writes `email_state = 'pending'` for events it raises while the worker, which never reads it,
-writes `NULL` for the ones it raises (or the reverse), and the rows drain inconsistently
-depending on which process happened to cause the event. Compose's shared `x-app-env` anchor is
-what keeps the two from drifting.
+worker.** Both processes read `settings.mail_enabled` and pass it into `NotificationFanout`
+(`app/services/notification_fanout.py`) at construction — the API on the change-set and
+membership routes, the worker in `app/ingestion/pipeline.py`, `app/checklist/generator.py` and
+`app/mockdata/generator.py`, which also reads it in `app/worker.py` to decide whether to start
+`mail_loop`. A mismatch does not fail loudly: it means the process with `MAIL_ENABLED=true`
+snapshots `email_state = 'pending'` for the events it raises while the process with it `false`
+snapshots `NULL` for the ones it raises, and the rows drain inconsistently depending on which
+process happened to cause the event. Compose's shared `x-app-env` anchor is what keeps the two
+from drifting.
 
 **`PAT_ENCRYPTION_KEY` must be identical in the API and the worker.** The API encrypts a PAT
 when a project is created and the worker decrypts it to clone. The two share one `x-app-env`
