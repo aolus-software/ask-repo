@@ -59,6 +59,38 @@ describe("ResetPasswordScreen", () => {
     expect(window.location.pathname).toBe("/reset-password");
   });
 
+  it("keeps the form usable after the fragment strip, and submits the token it read", async () => {
+    window.history.replaceState(null, "", "/reset-password#token=abc");
+    renderScreen();
+
+    await screen.findByRole("button", { name: /set password/i });
+    await waitFor(() => expect(window.location.hash).toBe(""));
+
+    const user = userEvent.setup();
+    await user.type(screen.getByLabelText(/new password/i), "x");
+
+    expect(screen.getByRole("button", { name: /set password/i })).toBeInTheDocument();
+    expect(screen.queryByText(/missing its token/i)).not.toBeInTheDocument();
+
+    await user.type(
+      screen.getByLabelText(/new password/i),
+      "-perfectly-fine-passphrase",
+    );
+    await user.click(screen.getByRole("button", { name: /set password/i }));
+
+    await waitFor(() => {
+      const confirmCall = fetchMock.mock.calls.find(([input]) =>
+        String(input).includes("/auth/password-reset/confirm"),
+      );
+      expect(confirmCall).toBeDefined();
+    });
+    const confirmCall = fetchMock.mock.calls.find(([input]) =>
+      String(input).includes("/auth/password-reset/confirm"),
+    );
+    const body = JSON.parse(String(confirmCall?.[1]?.body));
+    expect(body.token).toBe("abc");
+  });
+
   it("logs out locally and sends the visitor to a login screen that carries the success message", async () => {
     window.history.replaceState(null, "", "/reset-password#token=abc");
     const originalLocation = window.location;

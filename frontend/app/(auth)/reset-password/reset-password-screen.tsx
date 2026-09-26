@@ -2,7 +2,7 @@
 
 import { useMutation } from "@tanstack/react-query";
 import Link from "next/link";
-import { useEffect, useState, useSyncExternalStore } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 
 import { FormPage } from "@/components/form/form-page";
 import { PasswordField } from "@/components/form/password-field";
@@ -28,9 +28,22 @@ function getServerTokenSnapshot(): string | null | undefined {
 }
 
 export function ResetPasswordScreen() {
+  // `useSyncExternalStore` calls this getter on every render to check for
+  // tearing, not only once — so it must not re-read `window.location.hash`
+  // each time. The effect below strips the fragment as soon as the token has
+  // been read, and re-reading afterward would find nothing there. The ref
+  // caches the one real read for the life of this component instance: the
+  // first post-hydration call computes it, and every call after returns the
+  // same cached value regardless of what the address bar holds by then.
+  const tokenCache = useRef<string | null | undefined>(undefined);
   const token = useSyncExternalStore(
     subscribeToToken,
-    () => readResetToken(window.location.hash),
+    () => {
+      if (tokenCache.current === undefined) {
+        tokenCache.current = readResetToken(window.location.hash);
+      }
+      return tokenCache.current;
+    },
     getServerTokenSnapshot,
   );
   const [newPassword, setNewPassword] = useState("");
