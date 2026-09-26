@@ -11,9 +11,9 @@ export interface ChangePasswordValues {
 }
 
 /**
- * Mounted inside FormPage on the forced route and inside FormDialog from the account
- * menu. Moving a form between shells is a swap, not a rewrite (`forms.md` §2) — this
- * is the case that rule exists for, and building it twice would be the visible failure.
+ * Mounted inside FormPage on the forced route and on the profile's Password section.
+ * Moving a form between shells is a swap, not a rewrite (`forms.md` §2) — this is the
+ * case that rule exists for, and building it twice would be the visible failure.
  */
 export function ChangePasswordFields({
   values,
