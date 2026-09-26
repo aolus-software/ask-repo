@@ -194,6 +194,33 @@ async def test_a_claimed_row_is_not_reclaimed_before_its_lease_expires(
     assert await repo.claim_pending_email(limit=50, lease=timedelta(minutes=2)) == []
 
 
+async def test_an_unrecognised_event_type_fails_that_row_without_blocking_the_batch(
+    db_session: AsyncSession,
+    sessionmaker: async_sessionmaker[AsyncSession],
+    authed_user: User,
+    user_a: User,
+    project_id: uuid.UUID,
+) -> None:
+    good = await _pending(db_session, authed_user, project_id)
+    bad = await _pending(db_session, user_a, project_id)
+    await db_session.execute(
+        update(NotificationEvent)
+        .where(NotificationEvent.id == bad.event_id)
+        .values(event_type="bogus.event")
+    )
+    await db_session.commit()
+    sender = RecordingMailSender()
+
+    assert (
+        await send_pending_once(sessionmaker=sessionmaker, sender=sender, settings=_mail_on()) == 1
+    )
+
+    await db_session.refresh(good)
+    await db_session.refresh(bad)
+    assert good.email_state == "sent"
+    assert bad.email_state == "failed"
+
+
 def test_the_worker_starts_mail_loop_only_when_mail_is_on() -> None:
     """A structural check: `mail_loop` is appended under the switch, nowhere else."""
     import inspect

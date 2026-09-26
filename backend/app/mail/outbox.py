@@ -49,7 +49,21 @@ async def send_pending_once(
 
     sent = 0
     for pending in claimed:
-        outcome = await _deliver(pending, sender=sender, settings=settings)
+        try:
+            outcome = await _deliver(pending, sender=sender, settings=settings)
+        except Exception:
+            # Anything that is not a MailSendError -- an unrecognised event_type, a
+            # bug inside compose_notification -- is deterministic, not a relay hiccup:
+            # retrying it reproduces the same crash on every future drain. Failing the
+            # row outright is what stops it climbing past MAX_EMAIL_ATTEMPTS while
+            # never reaching mark_email, and lets the rest of the batch proceed
+            # instead of sitting leased for two minutes behind it.
+            logger.exception(
+                "notification email %s (%s) raised outside MailSendError",
+                pending.notification_id,
+                pending.event_type,
+            )
+            outcome = "failed"
         if outcome is None:
             continue  # retryable: stays pending; the lease spaces the next attempt
         async with sessionmaker() as session:
