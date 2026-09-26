@@ -28,15 +28,43 @@ test, which is what makes a silent addition impossible.
 - **`compose_password_reset(*, raw_token, to, settings)`.** The reset link is the entire message.
   `raw_token` is handed in as an argument and lives nowhere else — see the token lifecycle below.
 
-## Subjects are fixed strings per event, bodies are plain text
+## Subjects are fixed strings per event; bodies are plain text plus a guarded HTML part
 
 `compose_subject` builds `"{message} | {MAIL_APP_NAME}"`, prefixed with `"[{APP_ENV}] "` in
 every environment except `production`, where the tag is omitted. There is no per-call
-templating: `MESSAGES` maps each `NotificationType` to one subject and one body sentence, and
-the reset email's subject is the same fixed string (`RESET_MESSAGE`) every time.
+templating for the subject: `MESSAGES` maps each `NotificationType` to one subject and one
+body sentence, and the reset email's subject is the same fixed string (`RESET_MESSAGE`) every
+time.
 
-Bodies are plain text (`EmailMessage.set_content`), never HTML. No styling, no rendering logic
-in the mailer — a reset link is a bare URL on its own line, `https://.../reset-password#token=…`.
+The plain-text body (`EmailMessage.set_content`) is still built first and is byte-identical to
+what it always was — a reset link is still a bare URL on its own line,
+`https://.../reset-password#token=…`. Every message now also carries an HTML alternative,
+`add_alternative(html, subtype="html")`, which `build_message` (`app/mail/sender.py`) only adds
+when `OutboundEmail.html` is set — an email with no `html` still sends as a single `text/plain`
+message. This amends the earlier "plain text only" decision
+(`docs/superpowers/specs/2026-09-26-phase-2.4-mail-design.md` §0.1 decision 6, §3.2), and the
+guards below are what makes the amendment safe rather than a quiet reopening of the egress
+question:
+
+- **No remote or embedded asset, ever.** The templates in `app/mail/templates/` contain no
+  `<img>`, no `url(...)`, no `<link>`, no `<script>`, and no web font — nothing an email client
+  could fetch, so the HTML part cannot become a tracking pixel or a second network call.
+- **Autoescape and `StrictUndefined` are the environment, not a per-call habit.** The Jinja2
+  `Environment` in `app/mail/compose.py` sets `autoescape=True` so no value can become
+  unescaped markup, and `undefined=StrictUndefined` so a template referencing a variable the
+  composer never passed fails the render instead of shipping a silently blank section.
+- **The HTML says exactly what the text says.** Each template is rendered from the same fixed
+  sentence and the same link the plain-text body already carries — the sentence, the link URL,
+  the settings URL or the reset TTL, and the app name. No template parameter carries `details`,
+  a project name, a module name, or a path.
+- **The composer's signature is still the enforcement.** Adding the HTML part changed no
+  parameter on `compose_notification` or `compose_password_reset` — `tests/test_mail_compose.py`
+  pins both signatures untouched, so the same rule ("no parameter that would allow content to
+  leave") governs the HTML exactly as it governs the text.
+- **Colours are fixed hex values from the light theme only.** `app/mail/templates/base.html`
+  names, in a comment, each hex value and the `frontend/app/globals.css` token it was copied
+  from, because an email client cannot resolve a CSS custom property or a Tailwind class. There
+  is no dark-mode email — an inbox has no `prefers-color-scheme` hook this mailer can reach.
 
 ## The raw reset token exists only in memory and in the email
 

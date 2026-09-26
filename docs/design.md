@@ -4,8 +4,18 @@ The reference `.claude/rules/design-system.md` points at. Palette values come fr
 [Fexend](https://github.com/fexend/fexend-html) design system; the token structure is
 semantic-role-per-token so dark mode is a change to one file.
 
-`frontend/app/globals.css` is the implementation and the **only** file in the repo permitted to
-contain a raw hex colour. This document and that file change together.
+`frontend/app/globals.css` is the implementation and the **only** file in the *frontend* permitted
+to contain a raw hex colour. This document and that file change together.
+
+**One exception, outside the frontend entirely.** `backend/app/mail/templates/` (`base.html`,
+`notification.html`, `password_reset.html`) also carries raw hex — an email client cannot
+resolve a CSS custom property or a Tailwind class, so every colour a mail template uses has to be
+a literal value inlined on the element it colors. Those hex values are copied from this file's
+**light**-theme tokens only (background, card, foreground, muted-foreground, border, primary,
+primary-foreground) — there is no dark-mode email, since an inbox gives this mailer no
+`prefers-color-scheme` hook to react to. `base.html` names each hex and the token it came from in
+a comment at the top of the file, so the two stay in sync by inspection rather than by memory.
+See `.claude/rules/mail.md`.
 
 ## Tokens
 

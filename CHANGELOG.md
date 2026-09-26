@@ -52,6 +52,15 @@ incompatibly. Configuration defaults and internal module layout may change in a 
   drains pending rows, moving them to `sent`, `failed`, or `skipped` as delivery outcomes. Subjects
   and bodies are fixed strings per event type, never content derived from a repository. The
   `email` switch on `/settings/notifications` is enabled only when mail is configured.
+- **Every email now carries an HTML part alongside the plain text** (`docs/PRD.md` §2.1, phase
+  2.4, amended after the phase's original design shipped): notification and password-reset
+  emails send as `multipart/alternative`, plain text first and byte-identical to before, with an
+  HTML alternative rendered by Jinja2 from inline-styled templates
+  (`backend/app/mail/templates/`) copied from the frontend's light-theme design tokens. The
+  templates load no remote or embedded asset, the render environment uses `autoescape` and
+  `StrictUndefined`, and `compose_notification`/`compose_password_reset` keep their pinned
+  signatures — the HTML carries only the same fixed sentence and link the text body already
+  has. New dependency: `jinja2`.
 - **`MAIL_ENABLED` and SMTP settings**: when `MAIL_ENABLED` is `true`, password reset and
   notification email ship. Requires `SMTP_HOST`, `SMTP_FROM`, and `APP_BASE_URL` — `SMTP_PORT`,
   `SMTP_USERNAME`, and `SMTP_PASSWORD` stay optional, since a relay with no authentication is a
