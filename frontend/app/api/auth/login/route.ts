@@ -9,6 +9,7 @@ import {
   cookieOptions,
 } from "@/lib/auth/cookies";
 import { forwardedHeaders } from "@/lib/auth/forwarded";
+import { userAgentHeader } from "@/lib/auth/user-agent-header";
 import { apiUrl, extractSessionCookie } from "@/lib/auth/session";
 
 /**
@@ -22,9 +23,13 @@ export async function POST(request: Request): Promise<Response> {
 
   const upstream = await fetch(`${apiUrl()}${endpoints.auth.login}`, {
     method: "POST",
-    // The caller's address goes with it: this route is rate-limited per caller, and
-    // without the header every login on the instance shares one bucket.
-    headers: { "content-type": "application/json", ...forwardedHeaders(request) },
+    // The caller's address and browser go with it: this route is rate-limited per caller,
+    // and the session records the device it started on.
+    headers: {
+      "content-type": "application/json",
+      ...forwardedHeaders(request),
+      ...userAgentHeader(request),
+    },
     body,
     cache: "no-store",
   });

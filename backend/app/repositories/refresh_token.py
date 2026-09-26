@@ -37,6 +37,8 @@ class RefreshTokenRepository(BaseRepository[RefreshToken]):
         family_id: uuid.UUID,
         token_hash: str,
         expires_at: datetime,
+        user_agent: str | None = None,
+        ip_address: str | None = None,
     ) -> RefreshToken:
         """Insert a token. A rotation successor reuses the parent's `family_id`."""
         token = RefreshToken(
@@ -46,6 +48,8 @@ class RefreshTokenRepository(BaseRepository[RefreshToken]):
             token_hash=token_hash,
             issued_at=datetime.now(UTC),
             expires_at=expires_at,
+            user_agent=user_agent,
+            ip_address=ip_address,
         )
         return await self.add(token)
 

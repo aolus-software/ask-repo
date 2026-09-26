@@ -10,7 +10,7 @@ without a request or response object.
 
 from typing import Annotated
 
-from fastapi import APIRouter, BackgroundTasks, Depends, Request, Response, status
+from fastapi import APIRouter, BackgroundTasks, Depends, Header, Request, Response, status
 
 from app.api.deps import AuditRecorderDep, ClientIpDep, CurrentUser, SessionDep
 from app.config import Settings, get_settings
@@ -63,6 +63,7 @@ def get_auth_service(
     attempts: LoginAttemptLimiterDep,
     recorder: AuditRecorderDep,
     client_ip: ClientIpDep,
+    user_agent: Annotated[str | None, Header()] = None,
 ) -> AuthService:
     """Provide the service with a request-scoped session.
 
@@ -70,9 +71,11 @@ def get_auth_service(
     keeps every handler down to one service call — see `.claude/rules/router.md`.
     Building a `LoginAttemptLimiter` does no I/O, so the routes that never touch it pay
     nothing for carrying it. The recorder and the client IP arrive the same way and for
-    the same reason.
+    the same reason. The user agent arrives the same way, and only `login` stores it.
     """
-    return AuthService(session, settings, attempts, recorder=recorder, client_ip=client_ip)
+    return AuthService(
+        session, settings, attempts, recorder=recorder, client_ip=client_ip, user_agent=user_agent
+    )
 
 
 AuthServiceDep = Annotated[AuthService, Depends(get_auth_service)]

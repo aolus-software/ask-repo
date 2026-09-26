@@ -54,3 +54,9 @@ class RefreshToken(Base):
     used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     revoked_reason: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    # The browser a session started on, captured at login and copied forward on every
+    # rotation — a refresh arrives from the Next server, not the browser. Shown to the
+    # user on their profile so they can tell one session from another. `ip_address`
+    # matches `audit_events.ip_address`: 45 characters fits any IPv6 textual form.
+    user_agent: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    ip_address: Mapped[str | None] = mapped_column(String(45), nullable=True)
