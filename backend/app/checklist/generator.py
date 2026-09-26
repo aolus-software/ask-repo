@@ -178,7 +178,7 @@ class ChecklistGenerator:
         # it are one transaction. `AuditRecorder` would go after a commit for the
         # opposite reason, but generation records no audit event at all (this run
         # writes only a pending change set; a project record it against).
-        await NotificationFanout(self.session).raise_event(
+        await NotificationFanout(self.session, mail_enabled=self.settings.mail_enabled).raise_event(
             event_type=NotificationType.CHECKLIST_CHANGE_SET_PENDING,
             project_id=module.project_id,
             # No actor: a worker raised this. `docs/PRD.md` §2.1's fourth audit

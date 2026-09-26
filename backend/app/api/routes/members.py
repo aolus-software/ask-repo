@@ -10,15 +10,17 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, status
 
-from app.api.deps import AuditRecorderDep, CurrentUser, SessionDep
+from app.api.deps import AuditRecorderDep, CurrentUser, SessionDep, SettingsDep
 from app.schemas.membership import MemberCreateRequest, MemberResponse, MemberUpdateRequest
 from app.services.membership import MembershipService
 
 router = APIRouter(prefix="/projects", tags=["members"])
 
 
-def _service(session: SessionDep, recorder: AuditRecorderDep) -> MembershipService:
-    return MembershipService(session, recorder=recorder)
+def _service(
+    session: SessionDep, settings: SettingsDep, recorder: AuditRecorderDep
+) -> MembershipService:
+    return MembershipService(session, settings, recorder=recorder)
 
 
 ServiceDep = Annotated[MembershipService, Depends(_service)]

@@ -41,7 +41,7 @@ export function AuditFilters({
   currentFilters: Partial<AuditEventListParams>;
   onFiltersChange: (filters: Partial<AuditEventListParams>) => void;
 }) {
-  // 37 event types is past the point where a plain select is usable -- finding
+  // 39 event types is past the point where a plain select is usable -- finding
   // `checklist_item.results_cleared` means scrolling a menu that does not narrow.
   // A combobox filters as you type, which is what makes the list a tool rather than
   // an inventory.

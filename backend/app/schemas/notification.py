@@ -71,8 +71,9 @@ class NotificationPreferencesResponse(ApiModel):
     """Every event type, with gaps filled in.
 
     Stored rows are sparse and absence means on, so this endpoint materialises the
-    defaults rather than making the client know the rule. `email_enabled` is `False`
-    until Phase 2.4 ships a sender, and is what greys the email column out.
+    defaults rather than making the client know the rule. `email_enabled` is
+    `MAIL_ENABLED` — off until an operator configures a mail provider, and what greys
+    the email column out until they do.
     """
 
     items: list[NotificationPreferenceItem]

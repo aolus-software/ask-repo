@@ -18,6 +18,9 @@ export const endpoints = {
     logoutAll: "/auth/logout-all",
     changePassword: "/auth/change-password",
     passwordPolicy: "/auth/password-policy",
+    passwordResetAvailability: "/auth/password-reset/availability",
+    passwordResetRequest: "/auth/password-reset/request",
+    passwordResetConfirm: "/auth/password-reset/confirm",
     me: "/auth/me",
   },
   users: {

@@ -14,7 +14,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query, status
 
-from app.api.deps import CurrentUser, SessionDep
+from app.api.deps import CurrentUser, SessionDep, SettingsDep
 from app.schemas.errors import ERROR_RESPONSES
 from app.schemas.notification import (
     MarkAllReadResponse,
@@ -28,9 +28,9 @@ from app.services.notification import NotificationService
 router = APIRouter(prefix="/notifications", tags=["Notifications"])
 
 
-def get_notification_service(session: SessionDep) -> NotificationService:
+def get_notification_service(session: SessionDep, settings: SettingsDep) -> NotificationService:
     """Provide the service with a request-scoped session."""
-    return NotificationService(session)
+    return NotificationService(session, settings)
 
 
 NotificationServiceDep = Annotated[NotificationService, Depends(get_notification_service)]

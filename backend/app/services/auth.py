@@ -15,7 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import Settings
 from app.core.audit import AuditEntry, AuditEventType, AuditRecorder
 from app.core.errors import AppError, ErrorCode
-from app.core.passwords import PasswordPolicyError, check_password, get_common_passwords
+from app.core.passwords import validate_and_hash_new_password
 from app.core.rate_limit import LoginAttemptLimiter
 from app.core.security import (
     create_access_token,
@@ -68,20 +68,6 @@ class AuthService:
 
     def _invalid_token(self, code: ErrorCode = ErrorCode.INVALID_TOKEN) -> AppError:
         return AppError(status.HTTP_401_UNAUTHORIZED, code, "Session is no longer valid.")
-
-    def _validate_new_password(self, password: str) -> str:
-        try:
-            check_password(
-                password,
-                min_length=self.settings.password_min_length,
-                max_bytes=self.settings.password_max_bytes,
-                common=get_common_passwords(),
-            )
-        except PasswordPolicyError as error:
-            raise AppError(
-                status.HTTP_400_BAD_REQUEST, ErrorCode.WEAK_PASSWORD, error.reason
-            ) from error
-        return hash_password(password, cost=self.settings.bcrypt_cost)
 
     async def _issue(
         self,
@@ -332,7 +318,7 @@ class AuthService:
         # context key would be useless.
         was_forced = user.must_change_password
 
-        user.password_hash = self._validate_new_password(payload.new_password)
+        user.password_hash = validate_and_hash_new_password(payload.new_password, self.settings)
         user.must_change_password = False
         user.updated_at = datetime.now(UTC)
 

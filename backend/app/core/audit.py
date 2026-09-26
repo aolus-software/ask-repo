@@ -46,6 +46,8 @@ class AuditEventType(StrEnum):
     AUTH_LOGOUT = "auth.logout"
     AUTH_PASSWORD_CHANGED = "auth.password.changed"
     AUTH_REFRESH_REPLAYED = "auth.refresh.replayed"
+    AUTH_PASSWORD_RESET_REQUESTED = "auth.password_reset.requested"
+    AUTH_PASSWORD_RESET_COMPLETED = "auth.password_reset.completed"
     # --- accounts -----------------------------------------------------------
     USER_CREATED = "user.created"
     USER_UPDATED = "user.updated"
@@ -140,6 +142,10 @@ CONTEXT_KEYS: dict[AuditEventType, frozenset[str]] = {
     # `token.user_id`) name whose account was replayed against; `familyId` and
     # `revokedCount` stay here as context.
     AuditEventType.AUTH_REFRESH_REPLAYED: frozenset({"familyId", "revokedCount"}),
+    # Follows `auth.login.failed`: the address is stored only when it matches a live
+    # user, because people paste passwords into email fields.
+    AuditEventType.AUTH_PASSWORD_RESET_REQUESTED: frozenset({"unknownAccount"}),
+    AuditEventType.AUTH_PASSWORD_RESET_COMPLETED: frozenset({"revokedCount"}),
     AuditEventType.USER_CREATED: frozenset({"source"}),
     AuditEventType.USER_PASSWORD_RESET: frozenset({"forced"}),
     AuditEventType.PROJECT_CREATED: frozenset({"patSupplied"}),

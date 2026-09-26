@@ -116,6 +116,40 @@ write time would leave nothing for email to send against.
 
 ---
 
+## Email delivery (Phase 2.4)
+
+Email is a second transport against the same notification record. When `MAIL_ENABLED` is on,
+every recipient's preference snapshot is written to the `notifications` row at fan-out time:
+`email_state` is `pending` when the recipient's email preference is also on, and `NULL`
+otherwise — mail off, the preference off, or email never configured all collapse to the same
+`NULL`. There is no `'skipped'` value written at fan-out.
+
+The mail loop is a sibling worker tick that claims rows with `email_state = pending` under a
+15-minute lease, sends each one through an SMTP relay, and updates the row with the outcome:
+`sent` on success, `failed` on a non-retryable error (or the fifth retryable attempt), back to
+`pending` on a retryable `MailSendError` for a later attempt, or `skipped` — written at send
+time, not at fan-out — for an event more than 24 hours old or a recipient deactivated by then.
+**Delivery is at-least-once, not idempotent.** The claim's lease is what stops two workers
+sending the same row *at the same time*; it does not stop a crashed drain's row being sent again
+once the lease expires, and the outbox does not deduplicate across that gap. `mark_email` writes
+only a row still `email_state = 'pending'`, which stops the *loser* of a claim race from
+overwriting an outcome the winner already recorded — that is a narrower guarantee than
+idempotent delivery, not a restatement of it.
+
+**Email buys one thing in-app cannot: reaching someone who is not currently looking at AskRepo.**
+A twenty-minute checklist generation is the whole point of a notification the author has walked
+away from. Whether the cost is worth it is an organizational decision; the instance answers it
+by making email optional and off by default.
+
+**A message carries an event type and a link, never content derived from an indexed repository.**
+No answer text, no proposal body, no snippet. `MAIL_ENABLED` also requires `APP_BASE_URL` to be
+set (e.g. `https://askrepo.internal`), so reset links and notification links can be
+constructed server-side.
+
+Full mechanism: `.claude/rules/mail.md` and `.claude/rules/notifications.md` rule 4.
+
+---
+
 ## Where the code is
 
 - The catalogue, the recipient map, the actor-exclusion set and the per-event `details` allowlist

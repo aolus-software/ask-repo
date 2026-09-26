@@ -51,6 +51,22 @@ x-app-env: &app-env
   # CHAT_BASE_URL to `http://ollama:11434` in infra/.env.
   EMBEDDING_BASE_URL: ${EMBEDDING_BASE_URL:-http://host.docker.internal:11434}
   EMBEDDING_API_KEY: ${EMBEDDING_API_KEY:-}
+  # Shared, not API-only: the API sends password-reset email and the worker runs
+  # notification fan-out for ingestion and generation and its own `mail_loop`. A
+  # MAIL_ENABLED that differs between them would queue email for some events and not
+  # others, so both need the same switch and the same SMTP values.
+  MAIL_ENABLED: ${MAIL_ENABLED:-false}
+  SMTP_HOST: ${SMTP_HOST:-}
+  SMTP_PORT: ${SMTP_PORT:-587}
+  SMTP_SECURITY: ${SMTP_SECURITY:-starttls}
+  SMTP_USERNAME: ${SMTP_USERNAME:-}
+  SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+  SMTP_FROM: ${SMTP_FROM:-}
+  MAIL_APP_NAME: ${MAIL_APP_NAME:-AskRepo}
+  APP_BASE_URL: ${APP_BASE_URL:-}
+  PASSWORD_RESET_TOKEN_TTL_MINUTES: ${PASSWORD_RESET_TOKEN_TTL_MINUTES:-30}
+  PASSWORD_RESET_RATE_PER_HOUR_IP: ${PASSWORD_RESET_RATE_PER_HOUR_IP:-10}
+  PASSWORD_RESET_RATE_PER_HOUR_EMAIL: ${PASSWORD_RESET_RATE_PER_HOUR_EMAIL:-3}
 
 services:
   postgres:

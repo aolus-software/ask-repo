@@ -6,13 +6,30 @@ its own.
 """
 
 import uuid
-from datetime import UTC, datetime
+from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta
 from typing import cast
 
-from sqlalchemy import CursorResult, Select, func, select, update
+from sqlalchemy import CursorResult, Select, func, or_, select, update
 
-from app.models.notification import Notification, NotificationEvent
+from app.models import User
+from app.models.notification import EmailState, Notification, NotificationEvent
 from app.repositories.base import BaseRepository
+
+
+@dataclass(frozen=True)
+class PendingEmail:
+    """One claimed delivery, with just what the composer and the skip rules need."""
+
+    notification_id: uuid.UUID
+    attempts: int
+    event_type: str
+    target_type: str | None
+    target_id: uuid.UUID | None
+    project_id: uuid.UUID
+    event_created_at: datetime
+    to: str
+    recipient_deactivated: bool
 
 
 class NotificationRepository(BaseRepository[Notification]):
@@ -127,3 +144,84 @@ class NotificationRepository(BaseRepository[Notification]):
             .values(read_at=datetime.now(UTC))
         )
         return cast(CursorResult[object], result).rowcount
+
+    async def claim_pending_email(self, *, limit: int, lease: timedelta) -> list[PendingEmail]:
+        """Lease up to `limit` pending rows, so no other drain sends them meanwhile.
+
+        `SKIP LOCKED` lets two drains run side by side without waiting on each other;
+        the lease is what stops a crashed drain's rows being lost — they come back when
+        it expires. The caller commits, so the lease is visible before any send.
+        """
+        now = datetime.now(UTC)
+        candidates = (
+            select(Notification.id)
+            .where(
+                Notification.email_state == "pending",
+                or_(
+                    Notification.email_claimed_until.is_(None),
+                    Notification.email_claimed_until < now,
+                ),
+            )
+            .order_by(Notification.created_at)
+            .limit(limit)
+            .with_for_update(skip_locked=True)
+        )
+        claimed = await self.session.execute(
+            update(Notification)
+            .where(Notification.id.in_(candidates))
+            .values(
+                email_claimed_until=now + lease,
+                email_attempts=Notification.email_attempts + 1,
+            )
+            .returning(Notification.id)
+        )
+        ids = list(claimed.scalars().all())
+        if not ids:
+            return []
+        rows = await self.session.execute(
+            select(
+                Notification.id,
+                Notification.email_attempts,
+                NotificationEvent.event_type,
+                NotificationEvent.target_type,
+                NotificationEvent.target_id,
+                NotificationEvent.project_id,
+                NotificationEvent.created_at,
+                User.email,
+                User.deleted_at,
+            )
+            .join(NotificationEvent, NotificationEvent.id == Notification.event_id)
+            .join(User, User.id == Notification.user_id)
+            .where(Notification.id.in_(ids))
+        )
+        return [
+            PendingEmail(
+                notification_id=row[0],
+                attempts=row[1],
+                event_type=row[2],
+                target_type=row[3],
+                target_id=row[4],
+                project_id=row[5],
+                event_created_at=row[6],
+                to=row[7],
+                recipient_deactivated=row[8] is not None,
+            )
+            for row in rows.all()
+        ]
+
+    async def mark_email(self, notification_id: uuid.UUID, state: EmailState) -> None:
+        """Record a terminal outcome: `sent`, `failed` or `skipped`.
+
+        Guarded on `email_state == "pending"`: if this row's lease already expired and
+        a second drain reclaimed and sent it, that second send's `mark_email` must not
+        be allowed to overwrite the outcome this call is racing against. Without the
+        guard, the loser of the race can still win the write.
+        """
+        values: dict[str, object] = {"email_state": state, "email_claimed_until": None}
+        if state == "sent":
+            values["email_sent_at"] = datetime.now(UTC)
+        await self.session.execute(
+            update(Notification)
+            .where(Notification.id == notification_id, Notification.email_state == "pending")
+            .values(**values)
+        )

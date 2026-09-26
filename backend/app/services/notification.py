@@ -10,6 +10,7 @@ import uuid
 from fastapi import status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import Settings
 from app.core.access import resolve_notification_owner
 from app.core.errors import AppError, ErrorCode
 from app.core.middleware import AuthenticatedUser
@@ -25,16 +26,13 @@ from app.schemas.notification import (
 )
 from app.schemas.pagination import PaginatedResponse
 
-# Phase 2.4 flips this when a mail provider exists. Until then the preference screen
-# renders the email column disabled rather than offering a switch that does nothing.
-EMAIL_TRANSPORT_ENABLED = False
-
 
 class NotificationService:
     """Reads and read-state writes for one caller's notifications."""
 
-    def __init__(self, session: AsyncSession) -> None:
+    def __init__(self, session: AsyncSession, settings: Settings) -> None:
         self.session = session
+        self._settings = settings
         self._notifications = NotificationRepository(session)
         self._preferences = NotificationPreferenceRepository(session)
 
@@ -104,7 +102,9 @@ class NotificationService:
             )
             for event in NotificationType
         ]
-        return NotificationPreferencesResponse(items=items, email_enabled=EMAIL_TRANSPORT_ENABLED)
+        return NotificationPreferencesResponse(
+            items=items, email_enabled=self._settings.mail_enabled
+        )
 
     async def update_preferences(
         self, user: AuthenticatedUser, payload: NotificationPreferencesUpdate

@@ -5,8 +5,10 @@ The `404`-not-`403` case is the one that matters: a `403` would confirm a row ex
 
 import uuid
 
+from fastapi import FastAPI
 from httpx import AsyncClient
 
+from app.config import get_settings
 from app.core.notifications import NotificationType
 
 
@@ -47,6 +49,25 @@ async def test_preferences_materialise_every_event_type(authed_client: AsyncClie
         event.value for event in NotificationType
     }
     assert body["emailEnabled"] is False
+
+
+async def test_preferences_report_email_enabled_when_mail_is_on(
+    app_with_queue: FastAPI, authed_client: AsyncClient
+) -> None:
+    settings = get_settings().model_copy(
+        update={
+            "mail_enabled": True,
+            "smtp_host": "relay.internal",
+            "smtp_from": "askrepo@example.com",
+            "app_base_url": "https://askrepo.internal",
+        }
+    )
+    app_with_queue.dependency_overrides[get_settings] = lambda: settings
+    try:
+        response = await authed_client.get("/notification-preferences")
+    finally:
+        app_with_queue.dependency_overrides.pop(get_settings, None)
+    assert response.json()["emailEnabled"] is True
 
 
 async def test_put_preferences_round_trips(authed_client: AsyncClient) -> None:

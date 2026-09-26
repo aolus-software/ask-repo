@@ -87,6 +87,10 @@ A few properties are your responsibility, not the code's:
   change before letting anyone else in.
 - **Back up the PAT encryption key separately from the database.** Backing them up together
   means one stolen backup yields both the ciphertext and the key.
+- **If mail is enabled (Phase 2.4), set `SMTP_PASSWORD` securely.** When `MAIL_ENABLED` is on,
+  `SMTP_PASSWORD` joins the PAT encryption key and the secret key as a secret to manage. Keep
+  it out of logs, version control, and backup dumps — the operator supplies it at deploy time
+  only, separate from the database.
 - **Scope PATs narrowly.** Read-only, single repository. Because projects are shared
   instance-wide in phase 1, a PAT added to a project effectively grants every user on the
   instance the ability to ask questions about that repository's contents.

@@ -24,6 +24,8 @@ from app.ingestion.chunker import LanguageAwareChunker
 from app.ingestion.embedder import build_embedder, probe_dimensions
 from app.ingestion.pipeline import IngestionPipeline
 from app.ingestion.vector_store import QdrantVectorStore, build_store_factory, collection_name
+from app.mail.outbox import mail_loop
+from app.mail.sender import SmtpMailSender
 from app.mockdata.generator import MockDataGenerator
 from app.queue.checklist import ChecklistConsumer
 from app.queue.consumer import IngestionConsumer
@@ -47,6 +49,7 @@ from app.repositories.audit_event import AuditEventRepository
 from app.repositories.checklist_module import ChecklistModuleRepository
 from app.repositories.mock_data_dataset import MockDataDatasetRepository
 from app.repositories.notification_event import NotificationEventRepository
+from app.repositories.password_reset_token import PasswordResetTokenRepository
 from app.repositories.project import ProjectRepository
 from app.repositories.refresh_token import RefreshTokenRepository
 
@@ -163,7 +166,7 @@ async def reconcile_loop(
     settings: Settings,
 ) -> None:
     """The 60-second tick: recover lost jobs of all kinds and prune dead refresh
-    tokens, audit events, and notifications.
+    tokens, dead password reset tokens, audit events, and notifications.
 
     `docs/PRD.md` §5.1 schedules the `refresh_tokens` cleanup for "M1, with the job
     scheduler". This loop is that scheduler.
@@ -187,6 +190,7 @@ async def reconcile_loop(
                     topic=mock_data_topic,
                 )
                 pruned = await RefreshTokenRepository(session).delete_expired_and_revoked()
+                pruned_resets = await PasswordResetTokenRepository(session).delete_dead()
                 pruned_events = 0
                 if settings.audit_retention_days > 0:
                     cutoff = datetime.now(UTC) - timedelta(days=settings.audit_retention_days)
@@ -202,6 +206,8 @@ async def reconcile_loop(
                 await session.commit()
                 if pruned:
                     logger.info("pruned %d dead refresh tokens", pruned)
+                if pruned_resets:
+                    logger.info("pruned %d dead password reset tokens", pruned_resets)
                 if pruned_events:
                     logger.info("pruned %d audit events past the retention window", pruned_events)
                 if pruned_notifications:
@@ -371,6 +377,13 @@ async def main() -> None:
             for topic, _ in MOCK_DATA_RETRY_TOPICS
         ],
     ]
+
+    if settings.mail_enabled:
+        # A sibling task, never a step in reconcile_loop: a slow relay must not delay
+        # job recovery (spec §4.2). Not started at all when mail is off.
+        tasks.append(
+            asyncio.create_task(mail_loop(sender=SmtpMailSender(settings), settings=settings))
+        )
 
     try:
         await asyncio.gather(*tasks)

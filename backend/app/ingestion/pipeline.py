@@ -135,7 +135,9 @@ class IngestionPipeline:
                 # Before the commit, deliberately — the index and the notification of
                 # it are one transaction. `AuditRecorder` goes after a commit for the
                 # opposite reason; see `.claude/rules/notifications.md`.
-                await NotificationFanout(self.session).raise_event(
+                await NotificationFanout(
+                    self.session, mail_enabled=self.settings.mail_enabled
+                ).raise_event(
                     event_type=(
                         NotificationType.PROJECT_REINDEX_FINISHED
                         if was_reindex
@@ -177,7 +179,9 @@ class IngestionPipeline:
                 # reachable on a database fault, at which point the transaction that
                 # would have carried the status commit was not going to succeed either —
                 # the reconcile sweep is the backstop, not a code change here.
-                await NotificationFanout(self.session).raise_event(
+                await NotificationFanout(
+                    self.session, mail_enabled=self.settings.mail_enabled
+                ).raise_event(
                     event_type=(
                         NotificationType.PROJECT_REINDEX_FAILED
                         if was_reindex

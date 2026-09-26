@@ -4,7 +4,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Any, Literal, Self
 
-from pydantic import Field, model_validator
+from pydantic import Field, SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 PLACEHOLDER_SECRET_KEY = "dev-insecure-change-me"
@@ -236,6 +236,23 @@ class Settings(BaseSettings):
     # operator who wants it.
     notification_retention_days: int = Field(default=90, ge=0)
 
+    # --- Mail (Phase 2.4) ---------------------------------------------------------
+    # The one switch for all egress. Off by default: a fresh instance sends nothing out
+    # of the network, which is the posture docs/PRD.md §9 describes. See
+    # docs/configuration.md for what each field means.
+    mail_enabled: bool = False
+    smtp_host: str = ""
+    smtp_port: int = 587
+    smtp_security: Literal["starttls", "tls", "none"] = "starttls"
+    smtp_username: str = ""
+    smtp_password: SecretStr = SecretStr("")
+    smtp_from: str = ""
+    mail_app_name: str = "AskRepo"
+    app_base_url: str = ""
+    password_reset_token_ttl_minutes: int = Field(default=30, ge=5)
+    password_reset_rate_per_hour_ip: int = 10
+    password_reset_rate_per_hour_email: int = 3
+
     @model_validator(mode="after")
     def _reject_development_defaults_in_production(self) -> Self:
         """Fail fast rather than serve production traffic with a known signing key."""
@@ -259,6 +276,22 @@ class Settings(BaseSettings):
                 "Generate: python -c 'from cryptography.fernet import Fernet; "
                 "print(Fernet.generate_key().decode())'"
             )
+        return self
+
+    @model_validator(mode="after")
+    def _validate_mail_configuration(self) -> Self:
+        """Fail fast when MAIL_ENABLED=true but required fields are missing.
+
+        Configuration only — there is deliberately no SMTP connectivity probe, so a
+        relay down for maintenance cannot stop the instance booting (spec §2).
+        """
+        if not self.mail_enabled:
+            return self
+        for name in ("smtp_host", "smtp_from", "app_base_url"):
+            if not getattr(self, name).strip():
+                raise ValueError(f"{name.upper()} must be set when MAIL_ENABLED=true")
+        if not self.app_base_url.startswith(("https://", "http://")):
+            raise ValueError("APP_BASE_URL must be an absolute http(s) URL")
         return self
 
 

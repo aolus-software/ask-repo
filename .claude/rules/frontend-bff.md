@@ -28,14 +28,38 @@ runs at `/projects` and every other app route, and is only sent cookies whose pa
 either cookie to `/auth` here would make `proxy.ts` unable to read it on any other route —
 not an error, just a silent, permanent "not authenticated."
 
-## `app/api/[...path]/route.ts` is the one route the browser talks to
+## `app/api/[...path]/route.ts` is almost the only route the browser talks to
 
 It attaches the bearer token, strips `set-cookie` from every backend response before relaying it,
-and passes the body through untouched. **Only the three `/api/auth/*` handlers write cookies.**
+and passes the body through untouched. **The cookie writers are the three `/api/auth/*` handlers
+(login, refresh, logout); this catch-all itself, on its refresh-and-retry path and in
+`unauthenticated()`; and `proxy.ts`, on a navigation refresh and a redirect to `/login`.**
+
+**Four public forwarding routes are a deliberate, narrow exception** to "one route the browser
+talks to", not a second design: `/api/auth/password-policy`, `/api/auth/password-reset/availability`,
+`/api/auth/password-reset/request`, and `/api/auth/password-reset/confirm`, each a thin handler
+calling `forwardPublic` in `lib/auth/public-forward.ts`. They exist because the catch-all API
+proxy answers `401` before forwarding when the browser holds no session cookie at all
+(spec §6.4), and a signed-out visitor on `/forgot-password` or `/reset-password` is exactly that
+caller. `forwardPublic` attaches no bearer, relays the caller's address and the status/body
+untouched, and never sets a cookie — these four routes are the one part of this surface that
+writes none. Any other
+browser capability that needs to reach the backend without a session is a fifth entry in this
+same small list, made through `forwardPublic`, not a new one-off `fetch`.
 
 A new proxy path, or a handler outside `/api/auth/*` that sets a cookie, creates a second place a
-token can be written — which is exactly the surface this design exists to avoid. If a new browser
-capability needs to reach the backend, it goes through this one route, not a new one.
+token can be written — which is exactly the surface this design exists to avoid.
+
+## `proxy.ts` has its own public paths, and they are not the same list
+
+`proxy.ts`'s `PUBLIC_ROUTES` (`/login`, `/forgot-password`, `/reset-password`) is a *page* gate:
+which pages a signed-out visitor may render at all, before any API call happens. It answers a
+different question from the four routes above, which are an *API* gate: which backend calls a
+signed-out visitor's already-rendered page may still make. The two lists overlap in intent — a
+visitor reaching `/reset-password` needs both the page allowed through `proxy.ts` and its form's
+calls allowed through the public-forward routes — but are not one list kept in two places:
+`proxy.ts` never inspects a path under `/api/`, and `public-forward.ts` never inspects a page
+route.
 
 ## The caller's address is relayed, on every path that reaches the API
 
@@ -46,8 +70,9 @@ records the Next server for everyone (issue #40). Nothing errors — the failure
 signing in and the sixth being told to try again later.
 
 `forwardedHeaders` in `lib/auth/forwarded.ts` is the one place this is read. Every handler that
-calls the API passes it: the three `/api/auth/*` handlers, `refreshSession`, and the API proxy,
-which relays it by **not** listing it in `STRIPPED_REQUEST_HEADERS`.
+calls the API passes it: the three cookie-writing `/api/auth/*` handlers, the four public
+forwarding routes (via `forwardPublic`), `refreshSession`, and the API proxy, which relays it by
+**not** listing it in `STRIPPED_REQUEST_HEADERS`.
 
 Two properties to keep:
 

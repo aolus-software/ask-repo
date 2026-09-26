@@ -237,7 +237,7 @@ nothing else, so it cannot be aimed at anyone's entries. Never add an `update` m
 a route that writes.
 
 **`AuditRecorder.record` opens its own session and never raises.** That is what makes "an audit
-failure cannot fail a user's action" structural rather than a promise each of the 39 call sites
+failure cannot fail a user's action" structural rather than a promise each of the 41 call sites
 keeps. The accepted consequence is not to be quietly reframed as a guarantee: an action that
 commits and then crashes before its audit write leaves no row, silently — the trail is a strong
 record, not a complete one. Services record **after** the commit that made the change true, from
@@ -375,10 +375,11 @@ rejection at connect time) is a security control, not input hygiene. See `docs/P
 
 ### Auth is admin-provisioned
 
-No public registration, no email verification, no self-service reset, and therefore no mail
-provider anywhere in the stack. An admin creates accounts; `must_change_password` forces a
-change on first login. Access tokens are stateless JWTs (15 min); refresh tokens are opaque,
-stored hashed so they can be revoked, and rotate on use.
+No public registration, no email verification. An admin creates accounts;
+`must_change_password` forces a change on first login. Access tokens are stateless JWTs
+(15 min); refresh tokens are opaque, stored hashed so they can be revoked, and rotate on use.
+An optional mail provider exists, off by default (`MAIL_ENABLED`), used for self-service
+password reset and notification email — see `.claude/rules/mail.md`.
 
 ### Identity is resolved once, in middleware
 
@@ -411,7 +412,7 @@ route does not return, which is the one-error-shape rule failing silently rather
 
 ## Rules
 
-Fifteen rule files in `.claude/rules/`. Read the ones your change touches.
+Sixteen rule files in `.claude/rules/`. Read the ones your change touches.
 
 | Rule | Read it when |
 | --- | --- |
@@ -425,9 +426,10 @@ Fifteen rule files in `.claude/rules/`. Read the ones your change touches.
 | `rag.md` | Anything under `app/rag/`, the conversation service/routes, or the checklist's refinement chat — generation filters, grounding, the SSE contract, the shielded write |
 | `design-system.md` | Any `.tsx` or `.css` — tokens, shadcn, dark mode, spacing |
 | `forms.md` | Any form — dialog vs page, validation ownership, field composition |
+| `mail.md` | Anything under `app/mail/`, the password reset service, or the email half of notifications — composer signatures, subjects and body content, claiming before send, and delivery retries |
 | `navigation.md` | Sidebar, breadcrumbs, or adding a route |
 | `frontend-bff.md` | Any `proxy.ts`, the `app/api/[...path]` API proxy, `/api/auth/*`, or session/refresh code — cookies, the refresh split, SSE piping |
-| `audit-trail.md` | Any write or export in any service — what must record an audit event, the five exemptions, and the two content bans. **Adding a mutating route means adding an event in the same change** |
+| `audit-trail.md` | Any write or export in any service — what must record an audit event, the six exemptions, and the two content bans. **Adding a mutating route means adding an event in the same change** |
 | `notifications.md` | Anything under `app/core/notifications.py`, `app/services/notification_fanout.py`, or a fan-out call site — recipient resolution, the before-commit/after-commit straddle with audit, and the preference-snapshot rule |
 | `audit-findings.md` | Writing an audit report |
 
@@ -455,7 +457,7 @@ enforced there — if you add a convention, wire it into the config in the same 
 ## Frontend
 
 App Router, React 19, Tailwind CSS 4 (CSS-first `@theme`, no `tailwind.config.js` for tokens).
-The routes that exist are `/login`, `/change-password`, `/` (dashboard),
+The routes that exist are `/login`, `/forgot-password`, `/reset-password`, `/change-password`, `/` (dashboard),
 `/projects`, `/projects/[id]`, `/ask`, `/ask/[conversationId]`, `/settings/users`,
 `/settings/roles`, `/settings/roles/[id]`, `/settings/audit`, `/settings/audit/[eventId]`,
 `/notifications`, `/settings/notifications`,
@@ -476,9 +478,18 @@ the page.
   because `REFRESH_COOKIE_NAME` is operator-configurable). The `Path=/` differs from the
   backend's `/auth` scope on purpose: `proxy.ts` runs at `/projects` and is only sent cookies
   whose path matches.
-- **`app/api/[...path]/route.ts` is the one route the browser talks to.** It attaches the bearer,
-  strips `set-cookie` from every backend response, and relays the body untouched. Only the three
-  `/api/auth/*` handlers write cookies.
+- **`app/api/[...path]/route.ts` is almost the only route the browser talks to.** It attaches the
+  bearer, strips `set-cookie` from every backend response, and relays the body untouched. The
+  cookie writers are the three `/api/auth/*` handlers (login, refresh, logout), this catch-all
+  itself — on its refresh-and-retry path and in `unauthenticated()` — and `proxy.ts`, on a
+  navigation refresh and a redirect to `/login`. Four more `/api/auth/*` routes are a deliberate,
+  narrow exception: `password-policy` and the
+  `password-reset/{availability,request,confirm}` trio each forward through
+  `lib/auth/public-forward.ts` with no bearer and no cookie, because the catch-all proxy answers
+  `401` before forwarding when the browser holds no session cookie, and a signed-out visitor on
+  `/forgot-password` or `/reset-password` holds none (spec §6.4). `proxy.ts` has its own,
+  separate public-page list (`/login`, `/forgot-password`, `/reset-password`) — a page gate,
+  not the same list as these four API routes.
 - **The caller's address is relayed, not rewritten.** `lib/auth/forwarded.ts` passes
   `X-Forwarded-For` through on every path that reaches the API, because the backend has no other
   way to tell one caller from another — without it the per-caller login limit is one

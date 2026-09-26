@@ -16,6 +16,7 @@ from datetime import UTC, datetime
 from fastapi import status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import Settings
 from app.core import access
 from app.core.audit import AuditEntry, AuditEventType, AuditRecorder
 from app.core.errors import AppError, ErrorCode
@@ -35,8 +36,11 @@ from app.services.notification_fanout import NotificationFanout
 class MembershipService:
     """Project membership. One service call per route."""
 
-    def __init__(self, session: AsyncSession, *, recorder: AuditRecorder) -> None:
+    def __init__(
+        self, session: AsyncSession, settings: Settings, *, recorder: AuditRecorder
+    ) -> None:
         self.session = session
+        self.settings = settings
         self._members = MembershipRepository(session)
         self._roles = RoleRepository(session)
         self._users = UserRepository(session)
@@ -107,7 +111,9 @@ class MembershipService:
 
         # Before the commit. `raise_direct`, not `raise_event`: the grantee was not a
         # member when the event was raised, so the permission map cannot find them.
-        await NotificationFanout(self.session).raise_direct(
+        await NotificationFanout(
+            self.session, mail_enabled=self.settings.mail_enabled
+        ).raise_direct(
             event_type=NotificationType.MEMBERSHIP_GRANTED,
             recipient=user.id,
             project_id=project_id,

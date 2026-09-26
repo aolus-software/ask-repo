@@ -166,8 +166,9 @@ Both accounts are created with `must_change_password` set, so the shared initial
 stops working the moment each admin logs in. Seeding is idempotent: an already-seeded
 instance boots regardless of whether the variable is still present.
 
-There is no public registration, no email verification, and no self-service reset — which is
-why there is no mail provider anywhere in the stack. Admins create every other account.
+There is no public registration and no email verification. Self-service password reset is optional
+(Phase 2.4, see Mail below); when off, only admins can reset a password. Admins create every other
+account, and both seeded admins are set to change their password on first login.
 
 ### Login rate limiting
 
@@ -362,6 +363,31 @@ on purpose:
 | Variable | Default | What it does |
 | --- | --- | --- |
 | `NOTIFICATION_RETENTION_DAYS` | `90` | How many days a notification stays before the same 60-second reconcile tick removes it, via `NotificationEventRepository.delete_older_than(cutoff)`. **Defaults to `90`, not `0`, and that is the deliberate opposite of `AUDIT_RETENTION_DAYS`'s default.** Audit keeps forever by default because a fresh instance must not silently discard the one record whose purpose is being the record; a notification is a nudge with a shelf life, not a record, and keep-forever would grow a table nobody reads past a week. `0` still means keep forever, for an operator who wants that. The prune ignores read state on purpose — it deletes a 90-day-old *unread* notification exactly as it deletes a read one, because an unread badge that can never reach zero is a badge people stop looking at. `notifications.event_id` is declared `ON DELETE CASCADE`, so deleting an event takes its per-recipient delivery rows with it in the same statement. |
+
+### Mail
+
+Phase 2.4 (`docs/PRD.md` §2.1). These configure the outbound mail sender. Off by default —
+a fresh instance sends nothing out of the network.
+
+| Variable | Default | What it does |
+| --- | --- | --- |
+| `MAIL_ENABLED` | `false` | **The one egress switch.** Disables all outbound mail. When `true`, `SMTP_HOST`, `SMTP_FROM`, and `APP_BASE_URL` become required and non-empty — the startup validator in `app/config.py` checks exactly these three — or the instance refuses to boot. No SMTP connectivity probe runs at startup — a relay down for maintenance does not prevent booting |
+| `SMTP_HOST` | *empty* | Hostname or IP of the SMTP relay. Required when `MAIL_ENABLED=true` |
+| `SMTP_PORT` | `587` | Port to connect to |
+| `SMTP_SECURITY` | `starttls` | `starttls` to upgrade the connection, `tls` for implicit TLS on the port, or `none` for plaintext. `none` is a deliberate choice for internal relays; it sends in the clear and is not a defect to fix quietly |
+| `SMTP_USERNAME` | *empty* | Username for the relay. Optional: empty means the connection is made with no `AUTH` step at all, not a bad-credentials failure |
+| `SMTP_PASSWORD` | *empty* | Password for the relay — stored plaintext, like every other secret. (A secret is only secret if something keeps it; the .env file is a secret if it is git-ignored.) Optional, like `SMTP_USERNAME`: **not** required when `MAIL_ENABLED=true` — a relay with no authentication is a legitimate internal setup, and the two are read together (`username or None`, `password or None`) |
+| `SMTP_FROM` | *empty* | Email address to send from, e.g. `askrepo@example.com`. Required when `MAIL_ENABLED=true`. This is the literal `From` header value — there is no display name prepended to it |
+| `MAIL_APP_NAME` | `AskRepo` | Appears only in the subject line, as `... | {MAIL_APP_NAME}` — it is not part of the `From` header, which is `SMTP_FROM` exactly as configured |
+| `APP_BASE_URL` | *empty* | The URL users open in a browser to reach the app, e.g. `https://askrepo.example.com`. Required when `MAIL_ENABLED=true`. Must be an absolute `http://` or `https://` URL — not a relative path. Password reset links are built from this base |
+| `PASSWORD_RESET_TOKEN_TTL_MINUTES` | `30` | How long a password reset link remains valid after being mailed, in minutes. Minimum is 5 minutes |
+| `PASSWORD_RESET_RATE_PER_HOUR_IP` | `10` | Password reset requests allowed per hour from one IP address |
+| `PASSWORD_RESET_RATE_PER_HOUR_EMAIL` | `3` | Password reset requests allowed per hour against one account |
+
+**Under Docker Compose these twelve are set once, in `infra/.env`, with the same defaults as
+above** — they are in the shared `x-app-env` anchor in both `infra/docker-compose.yml` and
+`infra/docker-compose.prod.yml`, so the backend and the worker always receive identical values.
+See [`docs/deployment.md`](deployment.md) §2 for why that identity matters.
 
 ---
 

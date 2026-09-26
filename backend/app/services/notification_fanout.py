@@ -5,6 +5,13 @@ change that caused them are one transaction, owned by the caller. That is approa
 in `docs/superpowers/specs/2026-09-20-phase-2.3-notifications-design.md` §5.1, and it
 is why *"the generation finished and nobody was told"* is unrepresentable.
 
+**Phase 2.4's email decision is snapshotted here too, onto `email_state`.** The
+caller passes `mail_enabled` from its own settings at construction; `_write` then asks
+`muted_email` the same sparse, absence-means-on question `_muted_for` asks for
+in-app, and stamps each recipient's row `"pending"` or leaves it `NULL`. Nothing else
+resolves a second recipient list for email — it is the same `recipients` this class
+already computed.
+
 **It is called before the commit; `AuditRecorder.record` is called after it.** The two
 orderings look inconsistent at the same call site and both are correct: an audit
 failure must not fail a user's action, and a lost notification is the feature not
@@ -40,8 +47,11 @@ from app.repositories.notification_preference import NotificationPreferenceRepos
 class NotificationFanout:
     """Raise one event and write a row for each of its recipients."""
 
-    def __init__(self, session: AsyncSession) -> None:
+    def __init__(self, session: AsyncSession, *, mail_enabled: bool = False) -> None:
         self.session = session
+        # Read once, at construction, from the caller's settings — the email decision
+        # is a snapshot of this moment, like the in-app preference (spec §5.1).
+        self._mail_enabled = mail_enabled
         self._memberships = MembershipRepository(session)
         self._events = NotificationEventRepository(session)
         self._notifications = NotificationRepository(session)
@@ -132,6 +142,11 @@ class NotificationFanout:
 
         if recipients:
             muted = await self._muted_for(event_type, recipients)
+            no_email = (
+                await self._preferences.muted_email(event_type.value, recipients)
+                if self._mail_enabled
+                else recipients
+            )
             await self._notifications.add_all(
                 [
                     Notification(
@@ -139,6 +154,7 @@ class NotificationFanout:
                         event_id=event.id,
                         user_id=user_id,
                         in_app_visible=user_id not in muted,
+                        email_state=None if user_id in no_email else "pending",
                     )
                     for user_id in sorted(recipients)
                 ]

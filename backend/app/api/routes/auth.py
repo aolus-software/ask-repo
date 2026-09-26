@@ -10,16 +10,21 @@ without a request or response object.
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Request, Response, status
+from fastapi import APIRouter, BackgroundTasks, Depends, Request, Response, status
 
 from app.api.deps import AuditRecorderDep, ClientIpDep, CurrentUser, SessionDep
 from app.config import Settings, get_settings
 from app.core.errors import AppError, ErrorCode
 from app.core.rate_limit import (
     LoginAttemptLimiterDep,
+    RateLimiterDep,
     enforce_login_ip_limit,
     enforce_password_change_ip_limit,
+    enforce_password_reset_email_limit,
+    enforce_password_reset_ip_limit,
 )
+from app.db.session import get_sessionmaker
+from app.mail.sender import MailSenderDep
 from app.schemas.auth import (
     AccessTokenResponse,
     ChangePasswordRequest,
@@ -27,8 +32,14 @@ from app.schemas.auth import (
     PasswordPolicyResponse,
 )
 from app.schemas.errors import ERROR_RESPONSES
+from app.schemas.password_reset import (
+    PasswordResetAvailability,
+    PasswordResetConfirm,
+    PasswordResetRequest,
+)
 from app.schemas.user import UserResponse
 from app.services.auth import AuthService
+from app.services.password_reset import PasswordResetService, deliver_password_reset
 
 router = APIRouter(prefix="/auth", tags=["Auth"])
 
@@ -201,6 +212,78 @@ async def change_password(
 ) -> UserResponse:
     refresh_token = _read_refresh_cookie(request, settings)
     return await service.change_password(current_user.id, payload, refresh_token)
+
+
+def get_password_reset_service(
+    session: SessionDep,
+    settings: SettingsDep,
+    recorder: AuditRecorderDep,
+    client_ip: ClientIpDep,
+) -> PasswordResetService:
+    return PasswordResetService(session, settings, recorder=recorder, client_ip=client_ip)
+
+
+PasswordResetServiceDep = Annotated[PasswordResetService, Depends(get_password_reset_service)]
+
+
+@router.get(
+    "/password-reset/availability",
+    response_model=PasswordResetAvailability,
+    summary="Whether self-service password reset is available",
+    description="`MAIL_ENABLED`, as a boolean the login screen reads to show its link.",
+)
+async def password_reset_availability(settings: SettingsDep) -> PasswordResetAvailability:
+    return PasswordResetAvailability(enabled=settings.mail_enabled)
+
+
+@router.post(
+    "/password-reset/request",
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="Email a password-reset link",
+    description=(
+        "Answers `202` with an empty body for every address — live, unknown or "
+        "deactivated — so the route cannot be used to learn which accounts exist. The "
+        "email is sent after the response, once, and never retried."
+    ),
+    dependencies=[Depends(enforce_password_reset_ip_limit)],
+    responses={code: ERROR_RESPONSES[code] for code in (409, 422, 429)},
+)
+async def request_password_reset(
+    payload: PasswordResetRequest,
+    background: BackgroundTasks,
+    service: PasswordResetServiceDep,
+    sender: MailSenderDep,
+    limiter: RateLimiterDep,
+    settings: SettingsDep,
+) -> Response:
+    if settings.mail_enabled:
+        await enforce_password_reset_email_limit(payload.email, limiter, settings)
+    pending = await service.request(payload)
+    if pending is not None:
+        background.add_task(
+            deliver_password_reset,
+            pending,
+            sender=sender,
+            settings=settings,
+            sessionmaker=get_sessionmaker(),
+        )
+    return Response(status_code=status.HTTP_202_ACCEPTED)
+
+
+@router.post(
+    "/password-reset/confirm",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Set a new password with a reset token",
+    description=(
+        "Every unusable token — unknown, expired, used or revoked — is the same "
+        "`400 PASSWORD_RESET_TOKEN_INVALID`. Success ends every session."
+    ),
+    responses={code: ERROR_RESPONSES[code] for code in (400, 422)},
+)
+async def confirm_password_reset(
+    payload: PasswordResetConfirm, service: PasswordResetServiceDep
+) -> None:
+    await service.confirm(payload)
 
 
 @router.post(

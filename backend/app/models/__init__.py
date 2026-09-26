@@ -24,6 +24,7 @@ from app.models.mock_data import (
     MockDataRecord,
 )
 from app.models.notification import Notification, NotificationEvent, NotificationPreference
+from app.models.password_reset_token import PasswordResetToken
 from app.models.project import Project, ProjectStatus
 from app.models.refresh_token import RefreshToken, RevokedReason
 from app.models.user import User
@@ -52,6 +53,7 @@ __all__ = [
     "Notification",
     "NotificationEvent",
     "NotificationPreference",
+    "PasswordResetToken",
     "Project",
     "ProjectMembership",
     "ProjectStatus",

@@ -4,7 +4,7 @@ Everything under `app/core/notifications.py`, `app/services/notification_fanout.
 `app/services/notification.py`, the nine fan-out call sites in `app/ingestion/pipeline.py`,
 `app/checklist/generator.py`, `app/mockdata/generator.py`,
 `app/services/checklist_change_set.py`, `app/services/mock_data_change_set.py` and
-`app/services/membership.py`, and the routes under `app/api/routes/notifications.py` and
+`app/services/membership.py`, the email half of `app/mail/`, and the routes under `app/api/routes/notifications.py` and
 `app/api/routes/notification_preferences.py`. Read `audit-trail.md` alongside this — the two
 systems share a shape (a catalogue, an allowlist, a per-event decision about who and what) and
 diverge on purpose in exactly the places called out below.
@@ -82,6 +82,18 @@ copied onto it as `in_app_visible` at fan-out time. The unread count and the lis
 that column — there is no read-time join to `notification_preferences` on the polled path — and
 changing a preference later does not retroactively reveal or hide what already happened, which
 is what a person expects from a notification setting.
+
+**The same snapshot applies to email (Phase 2.4), but only at fan-out.** At the moment
+`in_app_visible` is written, `email_state` is written too, off a separate preference lookup made
+at the same moment (`_muted_for` for in-app, `muted_email` for email): it is
+`'pending'` when mail is on and the recipient's email preference for this event is on, and
+`NULL` when email was never in play — mail off instance-wide, or the recipient's preference off.
+That is the whole snapshot; `email_attempts` is left at its default of `0`. What `email_state`
+becomes afterwards — `sent`, `failed`, or the outbox's own `skipped` — is a delivery outcome the
+mail loop writes later (`app/mail/outbox.py`), and says nothing about the preference: it is the
+same kind of after-the-fact state `in_app_visible` never carries, because the bell has no
+equivalent post-fan-out write. A user who changes their preference later affects only new
+events; existing rows remember what was decided when they were written.
 
 ## 5. An administrator with no membership receives nothing
 

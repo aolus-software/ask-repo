@@ -4,7 +4,8 @@ Next.js UI for AskRepo — the codebase-aware assistant described in
 [`docs/PRD.md`](../docs/PRD.md).
 
 **Milestone progress is recorded in [`docs/PRD.md`](../docs/PRD.md) §6 and nowhere else.** The
-screens that exist are sign-in and the forced first-login password change, the dashboard,
+screens that exist are sign-in, self-service password reset (`/forgot-password`, `/reset-password`,
+Phase 2.4), and the forced first-login password change, the dashboard,
 projects (list, detail, create, re-index, delete), Dev Knowledge with streamed answers, admin
 user management, admin role management (`/settings/roles` and the `/settings/roles/[id]`
 permission matrix), the admin audit trail (`/settings/audit` and the
@@ -14,8 +15,8 @@ permission matrix), the admin audit trail (`/settings/audit` and the
 checklist grid, no route of its own. The project detail page at `/projects/[id]` likewise
 carries a **Members** tab — grant, change role, revoke — as a tab, not a route of its own.
 Notifications add `/notifications` (a paginated list, filterable by project/type/unread) and
-`/settings/notifications` (per-event in-app and email switches, the email switch disabled until
-Phase 2.4) — the bell itself lives in the app shell's navbar, not a route.
+`/settings/notifications` (per-event in-app and email switches; the email switch is enabled only
+when `MAIL_ENABLED` is true on the instance) — the bell itself lives in the app shell's navbar, not a route.
 
 **Controls are hidden from what the server said, never from a client-side rule.** Each project
 response carries the caller's own `role` and effective `permissions`, and the UI hides what

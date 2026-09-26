@@ -37,12 +37,57 @@ incompatibly. Configuration defaults and internal module layout may change in a 
   notification is a nudge with a shelf life, not the record audit is, and an unread badge that
   can never reach zero is a badge people stop looking at.
 
+- **Three self-service password reset routes** (`docs/PRD.md` §2.1, phase 2.4, optional and off by
+  default): `GET /auth/password-reset/availability` (`{enabled}`, read by the login screen to show
+  or hide "Forgot password?"), `POST /auth/password-reset/request` (email requested, always
+  answers `202`; `409 PASSWORD_RESET_UNAVAILABLE` if mail is not enabled), and `POST
+  /auth/password-reset/confirm` (token in URL fragment, new password in body). Password
+  policy is enforced by `validate_and_hash_new_password()` in `app/core/passwords.py`; a weak
+  password raises `400 WEAK_PASSWORD`. Tokens are hashed, single-use, and short-lived (30 minutes
+  by default), hard-deleted by the worker if expired or used more than 24 hours ago. New
+  `ErrorCode`: `PASSWORD_RESET_UNAVAILABLE` and `PASSWORD_RESET_TOKEN_INVALID`.
+- **Email as a second transport of notifications** (`docs/PRD.md` §2.1, phase 2.4, optional and off by
+  default): when `MAIL_ENABLED` is on, each notification row captures the recipient's `email`
+  preference snapshot at fan-out time (`email_state`: `pending` or `NULL`), and the mail loop
+  drains pending rows, moving them to `sent`, `failed`, or `skipped` as delivery outcomes. Subjects
+  and bodies are fixed strings per event type, never content derived from a repository. The
+  `email` switch on `/settings/notifications` is enabled only when mail is configured.
+- **Every email now carries an HTML part alongside the plain text** (`docs/PRD.md` §2.1, phase
+  2.4, amended after the phase's original design shipped): notification and password-reset
+  emails send as `multipart/alternative`, plain text first and byte-identical to before, with an
+  HTML alternative rendered by Jinja2 from inline-styled templates
+  (`backend/app/mail/templates/`) copied from the frontend's light-theme design tokens. The
+  templates load no remote or embedded asset, the render environment uses `autoescape` and
+  `StrictUndefined`, and `compose_notification`/`compose_password_reset` keep their pinned
+  signatures — the HTML carries only the same fixed sentence and link the text body already
+  has. New dependency: `jinja2`.
+- **`MAIL_ENABLED` and SMTP settings**: when `MAIL_ENABLED` is `true`, password reset and
+  notification email ship. Requires `SMTP_HOST`, `SMTP_FROM`, and `APP_BASE_URL` — `SMTP_PORT`,
+  `SMTP_USERNAME`, and `SMTP_PASSWORD` stay optional, since a relay with no authentication is a
+  legitimate internal setup. All default to off and empty, so no SMTP dependency exists if not
+  enabled.
+- **`password_reset_tokens` table** (migration; Phase 2.4). Holds id, user id, hashed token, created/expires/used/revoked timestamps, and a sent-at timestamp.
+  Hard-deleted by the worker for expired tokens or those used more than 24 hours ago.
+- **Four columns on `notifications` table** (`email_state`, `email_attempts`, `email_claimed_until`, `email_sent_at`,
+  migration `c3f8a1d05e72`): the outbox and at-least-once delivery mechanism, added by this
+  phase. Phase 2.3 had shipped only the `notification_preferences.email` preference column.
+- **Two new audit events** (`docs/PRD.md` §2.1, phase 2.4): `auth.password_reset.requested` and
+  `auth.password_reset.completed`. `requested` carries the matched user as actor when the
+  submitted address belongs to one, and a `NULL` actor with `unknownAccount: true` in `details`
+  otherwise — the same pattern `auth.login.failed` already uses, so a submitted address that
+  matches nobody is never attributed to a real account. `completed` always carries the user id:
+  reaching it required a valid, unexpired, unused token. One new audit exemption (the sixth):
+  email delivery attempts do not record an audit event — sending through SMTP is a transport of
+  an event already recorded elsewhere, not a new user action.
+
 ### Changed
 
 - **A fifth audit exemption** (`.claude/rules/audit-trail.md`): marking a notification read,
   marking all read, and changing notification preferences do not record an audit event — that
   state is private to one user, describes no shared resource, and is written at a rate
   proportional to attention rather than to change.
+- **"No mail provider anywhere in the stack" is no longer true.** Phase 2.4 introduces an optional
+  mail provider (off by default); `docs/PRD.md` §1 and `CLAUDE.md` have been updated.
 
 ## [2.1.0] — 2026-09-19
 

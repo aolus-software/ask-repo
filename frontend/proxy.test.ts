@@ -100,6 +100,19 @@ describe("the proxy gate", () => {
     expect(response.headers.getSetCookie().join("\n")).toContain("askrepo_session=;");
   });
 
+  it("lets a reset-password visitor through even with a stale session cookie", async () => {
+    // A session cookie with no access cookie would otherwise trigger a refresh,
+    // which fails against a stale cookie and redirects to /login — losing the
+    // reset link's #token fragment along the way.
+    const response = await proxy(request("/reset-password", SESSION));
+    expect(response.headers.get("location")).toBeNull();
+  });
+
+  it("lets a forgot-password visitor through even with a stale session cookie", async () => {
+    const response = await proxy(request("/forgot-password", SESSION));
+    expect(response.headers.get("location")).toBeNull();
+  });
+
   it("does not include a next param when the target is the dashboard", async () => {
     const response = await proxy(request("/"));
     const location = new URL(

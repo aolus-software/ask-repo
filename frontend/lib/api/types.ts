@@ -57,7 +57,9 @@ export type ErrorCode =
   | "ROLE_NAME_EXISTS"
   | "LAST_OWNER"
   | "MEMBERSHIP_NOT_FOUND"
-  | "MEMBERSHIP_EXISTS";
+  | "MEMBERSHIP_EXISTS"
+  | "PASSWORD_RESET_UNAVAILABLE"
+  | "PASSWORD_RESET_TOKEN_INVALID";
 
 /** The one error shape the whole API uses (`docs/PRD.md` §5.1). */
 export interface ErrorEnvelope {
