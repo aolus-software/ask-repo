@@ -9,13 +9,24 @@ response cookie and nowhere else.
 
 import uuid
 from datetime import UTC, datetime
-from typing import Any, cast
+from typing import Any, NamedTuple, cast
 
-from sqlalchemy import delete, or_, update
+from sqlalchemy import delete, func, or_, select, update
 from sqlalchemy.engine import CursorResult
 
 from app.models.refresh_token import RefreshToken, RevokedReason
 from app.repositories.base import BaseRepository
+
+
+class SessionRow(NamedTuple):
+    """One live sign-in, aggregated over its rotation chain."""
+
+    family_id: uuid.UUID
+    user_agent: str | None
+    ip_address: str | None
+    started_at: datetime
+    last_active_at: datetime
+    expires_at: datetime
 
 
 class RefreshTokenRepository(BaseRepository[RefreshToken]):
@@ -111,6 +122,65 @@ class RefreshTokenRepository(BaseRepository[RefreshToken]):
             statement.values(revoked_at=datetime.now(UTC), revoked_reason=reason)
         )
         return cast(CursorResult[Any], result).rowcount
+
+    async def live_families_for(self, user_id: uuid.UUID) -> list[SessionRow]:
+        """The user's live sessions, most recently active first.
+
+        A family is live while its chain head — an unused, unrevoked, unexpired token —
+        exists. `revoked_at` alone is not the test: `mark_used` leaves a rotated
+        token's `revoked_at` unset, and `logout` revokes only the presented token, so a
+        signed-out family still holds unrevoked ancestors. The head also carries the
+        freshest `issued_at` (the last refresh) and the session's device, copied forward
+        from login.
+        """
+        now = datetime.now(UTC)
+        started = (
+            select(
+                RefreshToken.family_id,
+                func.min(RefreshToken.issued_at).label("started_at"),
+            )
+            .where(RefreshToken.user_id == user_id)
+            .group_by(RefreshToken.family_id)
+            .subquery()
+        )
+        statement = (
+            select(
+                RefreshToken.family_id,
+                RefreshToken.user_agent,
+                RefreshToken.ip_address,
+                started.c.started_at,
+                RefreshToken.issued_at,
+                RefreshToken.expires_at,
+            )
+            .join(started, started.c.family_id == RefreshToken.family_id)
+            .where(
+                RefreshToken.user_id == user_id,
+                RefreshToken.revoked_at.is_(None),
+                RefreshToken.used_at.is_(None),
+                RefreshToken.expires_at > now,
+            )
+            .order_by(RefreshToken.issued_at.desc())
+        )
+        rows = (await self.session.execute(statement)).all()
+        # Inside the rotation grace window a family can briefly hold two heads (D12).
+        # Keep the newest: rows arrive newest first, so the first seen wins.
+        seen: dict[uuid.UUID, SessionRow] = {}
+        for family_id, user_agent, ip_address, started_at, issued_at, expires_at in rows:
+            seen.setdefault(
+                family_id,
+                SessionRow(family_id, user_agent, ip_address, started_at, issued_at, expires_at),
+            )
+        return list(seen.values())
+
+    async def family_belongs_to(self, family_id: uuid.UUID, user_id: uuid.UUID) -> bool:
+        """Whether this family is one of this user's. One answer for "not yours" and
+        "does not exist", so the caller cannot tell them apart."""
+        result = await self.session.execute(
+            select(RefreshToken.id)
+            .where(RefreshToken.family_id == family_id, RefreshToken.user_id == user_id)
+            .limit(1)
+        )
+        return result.scalar_one_or_none() is not None
 
     async def delete_expired_and_revoked(self) -> int:
         """Hard-delete dead refresh tokens. Returns how many went.

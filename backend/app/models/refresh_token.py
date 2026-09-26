@@ -27,6 +27,7 @@ RevokedReason = Literal[
     "admin_reset",
     "user_deactivated",
     "password_reset",
+    "user_revoked",
 ]
 
 

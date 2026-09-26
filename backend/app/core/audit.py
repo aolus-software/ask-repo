@@ -48,6 +48,7 @@ class AuditEventType(StrEnum):
     AUTH_REFRESH_REPLAYED = "auth.refresh.replayed"
     AUTH_PASSWORD_RESET_REQUESTED = "auth.password_reset.requested"
     AUTH_PASSWORD_RESET_COMPLETED = "auth.password_reset.completed"
+    AUTH_SESSION_REVOKED = "auth.session.revoked"
     # --- accounts -----------------------------------------------------------
     USER_CREATED = "user.created"
     USER_UPDATED = "user.updated"
@@ -146,6 +147,10 @@ CONTEXT_KEYS: dict[AuditEventType, frozenset[str]] = {
     # user, because people paste passwords into email fields.
     AuditEventType.AUTH_PASSWORD_RESET_REQUESTED: frozenset({"unknownAccount"}),
     AuditEventType.AUTH_PASSWORD_RESET_COMPLETED: frozenset({"revokedCount"}),
+    # A user ending one of their own sessions from the profile. `current` separates
+    # "signed this device out" from "signed another device out" — the second is the one
+    # worth a responder's attention. No `changed` block: the event is its name.
+    AuditEventType.AUTH_SESSION_REVOKED: frozenset({"familyId", "current", "revokedCount"}),
     AuditEventType.USER_CREATED: frozenset({"source"}),
     AuditEventType.USER_PASSWORD_RESET: frozenset({"forced"}),
     AuditEventType.PROJECT_CREATED: frozenset({"patSupplied"}),

@@ -125,6 +125,8 @@ wired in yet**, even though all four datastores are now read elsewhere in the ap
 | Method | Path | Auth | Description |
 | --- | --- | --- | --- |
 | `GET` | `/me/memberships` | access token | The projects you are a member of, and your role on each |
+| `GET` | `/me/sessions` | access token | Your live sign-ins, the one making the request marked `current` |
+| `DELETE` | `/me/sessions/{sessionId}` | access token | Sign one of your sessions out; `404 SESSION_NOT_FOUND` for another user's |
 
 ### Users
 

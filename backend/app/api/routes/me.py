@@ -6,21 +6,25 @@ route takes a user id — there is no `/me/{id}`, and an administrator's view of
 people stays on `/users`.
 """
 
+import uuid
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, status
 
-from app.api.deps import CurrentUser, SessionDep
+from app.api.deps import AuditRecorderDep, ClientIpDep, CurrentUser, SessionDep
 from app.schemas.errors import ERROR_RESPONSES
-from app.schemas.me import MembershipSummary
+from app.schemas.me import MembershipSummary, SessionResponse
 from app.services.me import MeService
 
 router = APIRouter(prefix="/me", tags=["Me"])
 
 
-def get_me_service(session: SessionDep) -> MeService:
-    """Provide the service with a request-scoped session."""
-    return MeService(session)
+def get_me_service(
+    session: SessionDep, recorder: AuditRecorderDep, client_ip: ClientIpDep
+) -> MeService:
+    """Provide the service with a request-scoped session, the recorder and the caller's
+    address — only `revoke_session` uses the last two."""
+    return MeService(session, recorder=recorder, client_ip=client_ip)
 
 
 MeServiceDep = Annotated[MeService, Depends(get_me_service)]
@@ -37,3 +41,30 @@ async def list_memberships(
     current_user: CurrentUser, service: MeServiceDep
 ) -> list[MembershipSummary]:
     return await service.memberships(current_user)
+
+
+@router.get(
+    "/sessions",
+    response_model=list[SessionResponse],
+    status_code=status.HTTP_200_OK,
+    summary="Your signed-in sessions",
+    responses={code: ERROR_RESPONSES[code] for code in (401, 403)},
+)
+async def list_sessions(current_user: CurrentUser, service: MeServiceDep) -> list[SessionResponse]:
+    return await service.sessions(current_user)
+
+
+@router.delete(
+    "/sessions/{session_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Sign one of your sessions out",
+    description=(
+        "Its refresh token stops working at once; an access token it already holds "
+        "keeps working until it expires, at most the access-token lifetime."
+    ),
+    responses={code: ERROR_RESPONSES[code] for code in (401, 403, 404, 422)},
+)
+async def revoke_session(
+    session_id: uuid.UUID, current_user: CurrentUser, service: MeServiceDep
+) -> None:
+    await service.revoke_session(current_user, session_id)
