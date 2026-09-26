@@ -237,8 +237,8 @@ nothing else, so it cannot be aimed at anyone's entries. Never add an `update` m
 a route that writes.
 
 **`AuditRecorder.record` opens its own session and never raises.** That is what makes "an audit
-failure cannot fail a user's action" structural rather than a promise each of the 41 call sites
-keeps. The accepted consequence is not to be quietly reframed as a guarantee: an action that
+failure cannot fail a user's action" structural rather than a promise each of the 42 call sites
+keeps (41 in services, plus the `seed-admins` CLI). The accepted consequence is not to be quietly reframed as a guarantee: an action that
 commits and then crashes before its audit write leaves no row, silently — the trail is a strong
 record, not a complete one. Services record **after** the commit that made the change true, from
 plain locals, never from an ORM object.

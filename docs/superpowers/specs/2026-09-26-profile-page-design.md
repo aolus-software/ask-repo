@@ -324,7 +324,7 @@ them. Each section is its own component under `components/profile/`.
 
 - The current row: the same hard reload to `/login` the menu uses, so the React Query cache
   is dropped with the session.
-- Any other row: a confirm dialog — "It may stay signed in for up to 15 minutes." — then the
+- Any other row: a confirm dialog — "It can't refresh again, but it may stay signed in until its current access token expires — 15 minutes by default." — then the
   sessions query is invalidated.
 
 **Event labels.** `auditEventLabel` in `lib/audit.ts` is already shared and derives a label

@@ -153,7 +153,7 @@ depend on when FastAPI closes the request's `AsyncExitStack`. On any `Exception`
 event at `WARNING` and returns.
 
 **It never raises.** That is what makes "an audit failure cannot fail a user's action" structural
-rather than a promise each of the 41 call sites keeps (40 in services, plus the `seed-admins`
+rather than a promise each of the 42 call sites keeps (41 in services, plus the `seed-admins`
 CLI). A login must not fail because a log write did.
 
 **The accepted consequence, and it is not to be quietly reframed as a guarantee:** an action that

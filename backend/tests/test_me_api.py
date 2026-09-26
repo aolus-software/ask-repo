@@ -185,7 +185,7 @@ async def test_revoking_a_session_ends_it(
     assert row.actor_user_id == authed_user.id
     assert row.details["familyId"] == other["id"]
     assert row.details["current"] is False
-    assert row.details["revokedCount"] >= 1
+    assert row.details["revokedCount"] == 1
 
 
 async def test_revoking_the_current_session_is_allowed(

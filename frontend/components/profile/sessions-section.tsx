@@ -116,7 +116,7 @@ export function SessionsSection() {
         open={pending !== null}
         onOpenChange={(open) => !open && setPending(null)}
         title="Sign this session out?"
-        description="It can't refresh again. It may stay signed in for up to 15 minutes, until its current access expires."
+        description="It can't refresh again, but it may stay signed in until its current access token expires — 15 minutes by default."
         confirmLabel="Sign it out"
         isPending={revoke.isPending}
         error={revoke.error}

@@ -166,7 +166,7 @@ async def test_session_revoked_records_the_family_and_whether_it_was_current(
     assert row.outcome == "success"
     assert row.details["familyId"] == current["id"]
     assert row.details["current"] is True
-    assert row.details["revokedCount"] >= 1
+    assert row.details["revokedCount"] == 1
 
 
 async def test_password_change_records_no_password(
