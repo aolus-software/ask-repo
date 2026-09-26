@@ -20,6 +20,9 @@ export function useChangePassword() {
         method: "POST",
         body: JSON.stringify(input),
       }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: keys.me }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: keys.me });
+      void queryClient.invalidateQueries({ queryKey: keys.profile.sessions });
+    },
   });
 }

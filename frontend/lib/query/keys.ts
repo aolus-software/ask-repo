@@ -14,6 +14,12 @@ import type {
 export const keys = {
   me: ["me"] as const,
   passwordPolicy: ["password-policy"] as const,
+  profile: {
+    all: ["profile"] as const,
+    memberships: ["profile", "memberships"] as const,
+    sessions: ["profile", "sessions"] as const,
+    activity: (params: ListParams) => ["profile", "activity", params] as const,
+  },
   projects: {
     all: ["projects"] as const,
     list: (params: ListParams) => ["projects", "list", params] as const,
