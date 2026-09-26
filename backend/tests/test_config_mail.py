@@ -1,11 +1,13 @@
 """Mail settings: off by default, and refused when switched on half-configured."""
 
+from typing import Any
+
 import pytest
-from pydantic import ValidationError
+from pydantic import SecretStr, ValidationError
 
 from app.config import Settings
 
-COMPLETE = {
+COMPLETE: dict[str, Any] = {
     "mail_enabled": True,
     "smtp_host": "relay.internal",
     "smtp_from": "askrepo@example.com",
@@ -42,7 +44,7 @@ def test_half_configuration_is_fine_while_mail_is_off() -> None:
 
 
 def test_the_smtp_password_never_prints() -> None:
-    settings = Settings(**COMPLETE, smtp_password="hunter2-but-longer")
+    settings = Settings(**COMPLETE, smtp_password=SecretStr("hunter2-but-longer"))
     assert "hunter2" not in repr(settings)
     assert settings.smtp_password.get_secret_value() == "hunter2-but-longer"
 

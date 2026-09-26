@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.config import Settings, get_settings
 from app.core.audit import AuditEventType, AuditRecorder
-from app.core.errors import AppError
+from app.core.errors import AppError, ErrorCode
 from app.core.security import generate_opaque_token, hash_password, sha256_hex, verify_password
 from app.mail.recording import RecordingMailSender
 from app.mail.sender import MailSendError
@@ -163,7 +163,7 @@ async def test_a_token_works_once(
     await service.confirm(confirm)
     with pytest.raises(AppError) as raised:
         await service.confirm(confirm)
-    assert raised.value.detail["code"] == "PASSWORD_RESET_TOKEN_INVALID"
+    assert raised.value.code == ErrorCode.PASSWORD_RESET_TOKEN_INVALID
 
 
 async def test_a_weak_password_is_refused_and_the_token_survives(
@@ -175,7 +175,7 @@ async def test_a_weak_password_is_refused_and_the_token_survives(
     assert pending is not None
     with pytest.raises(AppError) as raised:
         await service.confirm(PasswordResetConfirm(token=pending.raw_token, new_password="short"))
-    assert raised.value.detail["code"] == "WEAK_PASSWORD"
+    assert raised.value.code == ErrorCode.WEAK_PASSWORD
     await service.confirm(PasswordResetConfirm(token=pending.raw_token, new_password=NEW_PASSWORD))
 
 

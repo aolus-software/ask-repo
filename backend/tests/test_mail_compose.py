@@ -2,6 +2,7 @@
 
 import inspect
 import uuid
+from typing import Any
 
 import pytest
 
@@ -14,7 +15,7 @@ from app.mail.compose import (
     compose_subject,
 )
 
-BASE = {
+BASE: dict[str, Any] = {
     "mail_enabled": True,
     "smtp_host": "relay.internal",
     "smtp_from": "askrepo@example.com",
