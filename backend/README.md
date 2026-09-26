@@ -120,6 +120,12 @@ wired in yet**, even though all four datastores are now read elsewhere in the ap
 | `POST` | `/auth/password-reset/request` | none | Request a password reset link. Phase 2.4; answers `202` for every address; `409 PASSWORD_RESET_UNAVAILABLE` if mail is not enabled |
 | `POST` | `/auth/password-reset/confirm` | none | Confirm the reset with a token (fragment-only) and new password. `400 PASSWORD_RESET_TOKEN_INVALID` for any token problem |
 
+### Me
+
+| Method | Path | Auth | Description |
+| --- | --- | --- | --- |
+| `GET` | `/me/memberships` | access token | The projects you are a member of, and your role on each |
+
 ### Users
 
 | Method | Path | Auth | Description |
