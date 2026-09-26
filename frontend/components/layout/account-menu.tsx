@@ -1,13 +1,17 @@
 "use client";
 
-import { LogOut, MonitorSmartphone } from "lucide-react";
+import { LogOut, MonitorSmartphone, UserRound } from "lucide-react";
+import Link from "next/link";
 
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuLabel,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useSession } from "@/hooks/use-session";
@@ -22,11 +26,8 @@ function initials(name: string): string {
 }
 
 /**
- * Deliberately just the sign-out actions for now, no profile display and no
- * change-password entry — both are coming back once there is a proper account
- * settings page for them to live on. Voluntary self-service password change is
- * therefore unreachable from the UI until then; the forced first-login flow at
- * `/change-password` is a separate route and is unaffected.
+ * Who is signed in, the way to their profile, and the two sign-out actions.
+ * Everything else about the account lives on `/profile`.
  */
 export function AccountMenu() {
   const user = useSession();
@@ -54,7 +55,24 @@ export function AccountMenu() {
           <AvatarFallback>{initials(user.name)}</AvatarFallback>
         </Avatar>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="w-48">
+      <DropdownMenuContent align="end" className="w-56">
+        {/* Base UI requires a group label inside a Group, or it throws at render. */}
+        <DropdownMenuGroup>
+          <DropdownMenuLabel>
+            <span className="text-foreground block truncate text-sm font-medium">
+              {user.name}
+            </span>
+            <span className="text-muted-foreground block truncate text-xs font-normal">
+              {user.email}
+            </span>
+          </DropdownMenuLabel>
+        </DropdownMenuGroup>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem render={<Link href="/profile" />}>
+          <UserRound className="size-4" />
+          Profile
+        </DropdownMenuItem>
+        <DropdownMenuSeparator />
         <DropdownMenuItem onClick={() => void logout(false)}>
           <LogOut className="size-4" />
           Log out

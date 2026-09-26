@@ -7,10 +7,8 @@ import { settingsNav } from "@/lib/settings-nav";
 
 /**
  * A group's index route only redirects to its first *reachable* child
- * (navigation.md §3). Notifications is the first child that is not `adminOnly`, so a
- * non-admin must resolve here too — redirecting to the first child outright would
- * send every non-admin operator to `/settings/users`, a page they cannot see, the
- * moment they had any reachable settings screen at all.
+ * (navigation.md §3). Every child is admin-only, so a non-admin falls through to `/` —
+ * the same outcome as before Notifications briefly lived here.
  */
 export default async function SettingsPage() {
   let user: UserResponse;
