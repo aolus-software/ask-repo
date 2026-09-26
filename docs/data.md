@@ -78,7 +78,7 @@ erDiagram
 | --- | --- |
 | `users` | `email` (partial unique index where not deleted), `password_hash`, `is_admin`, `must_change_password`, `last_login_at` |
 | `refresh_tokens` | `token_hash`, `family_id`, `issued_at`, `expires_at`, `used_at`, `revoked_at`, `revoked_reason` |
-| `password_reset_tokens` | `user_id`, `token_hash`, `created_at`, `expires_at`, `used_at` (hard-deleted if expired or used > 24h ago) |
+| `password_reset_tokens` | `id`, `user_id`, `token_hash`, `created_at`, `expires_at`, `used_at`, `revoked_at`, `sent_at` (hard-deleted if expired or used > 24h ago) |
 
 Refresh tokens are **opaque and stored hashed**, so they can be revoked and so the database
 never holds a usable credential. They **rotate on use**: `used_at` marks the spent one and
@@ -87,9 +87,12 @@ detectable. Access tokens are stateless JWTs (15 minutes) and are not stored at 
 
 Password reset tokens (Phase 2.4) are **also stored hashed and single-use**. The raw token
 never reaches Postgres — only a hashed version — and rides to the user in an email link
-fragment. `used_at` is stamped once the password is reset. Hard-deleted by the worker for
-expired tokens or those used more than 24 hours ago, which is what keeps password recovery
-resistant to token capture and replay.
+fragment. `used_at` is stamped once the password is reset; `revoked_at` is stamped on every
+other live token for a user the moment a new one is minted, so an earlier email's link stops
+working; `sent_at` is stamped only if the one send attempt succeeds. Hard-deleted by the worker
+for expired tokens or those used more than 24 hours ago — the same reasoning as
+`refresh_tokens`: a dead token is not a record anyone needs to keep, and `deleted_at` would only
+keep a hash around for longer with nothing reading it.
 
 There is no public registration and no email verification. Admin-provisioned accounts carry
 `must_change_password` set, which forces a change on first login. Self-service password reset

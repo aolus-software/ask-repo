@@ -371,14 +371,14 @@ a fresh instance sends nothing out of the network.
 
 | Variable | Default | What it does |
 | --- | --- | --- |
-| `MAIL_ENABLED` | `false` | **The one egress switch.** Disables all outbound mail. When `true`, the fields below become required and non-empty, or the instance refuses to boot. No SMTP connectivity probe runs at startup — a relay down for maintenance does not prevent booting |
+| `MAIL_ENABLED` | `false` | **The one egress switch.** Disables all outbound mail. When `true`, `SMTP_HOST`, `SMTP_FROM`, and `APP_BASE_URL` become required and non-empty — the startup validator in `app/config.py` checks exactly these three — or the instance refuses to boot. No SMTP connectivity probe runs at startup — a relay down for maintenance does not prevent booting |
 | `SMTP_HOST` | *empty* | Hostname or IP of the SMTP relay. Required when `MAIL_ENABLED=true` |
 | `SMTP_PORT` | `587` | Port to connect to |
 | `SMTP_SECURITY` | `starttls` | `starttls` to upgrade the connection, `tls` for implicit TLS on the port, or `none` for plaintext. `none` is a deliberate choice for internal relays; it sends in the clear and is not a defect to fix quietly |
-| `SMTP_USERNAME` | *empty* | Username for the relay, if authentication is required |
-| `SMTP_PASSWORD` | *empty* | Password for the relay — stored plaintext, like every other secret. (A secret is only secret if something keeps it; the .env file is a secret if it is git-ignored.) Required when `MAIL_ENABLED=true` |
-| `SMTP_FROM` | *empty* | Email address to send from, e.g. `askrepo@example.com`. Required when `MAIL_ENABLED=true` |
-| `MAIL_APP_NAME` | `AskRepo` | Display name in the `From` header of outbound mail, e.g. `From: AskRepo <askrepo@example.com>` |
+| `SMTP_USERNAME` | *empty* | Username for the relay. Optional: empty means the connection is made with no `AUTH` step at all, not a bad-credentials failure |
+| `SMTP_PASSWORD` | *empty* | Password for the relay — stored plaintext, like every other secret. (A secret is only secret if something keeps it; the .env file is a secret if it is git-ignored.) Optional, like `SMTP_USERNAME`: **not** required when `MAIL_ENABLED=true` — a relay with no authentication is a legitimate internal setup, and the two are read together (`username or None`, `password or None`) |
+| `SMTP_FROM` | *empty* | Email address to send from, e.g. `askrepo@example.com`. Required when `MAIL_ENABLED=true`. This is the literal `From` header value — there is no display name prepended to it |
+| `MAIL_APP_NAME` | `AskRepo` | Appears only in the subject line, as `... | {MAIL_APP_NAME}` — it is not part of the `From` header, which is `SMTP_FROM` exactly as configured |
 | `APP_BASE_URL` | *empty* | The URL users open in a browser to reach the app, e.g. `https://askrepo.example.com`. Required when `MAIL_ENABLED=true`. Must be an absolute `http://` or `https://` URL — not a relative path. Password reset links are built from this base |
 | `PASSWORD_RESET_TOKEN_TTL_MINUTES` | `30` | How long a password reset link remains valid after being mailed, in minutes. Minimum is 5 minutes |
 | `PASSWORD_RESET_RATE_PER_HOUR_IP` | `10` | Password reset requests allowed per hour from one IP address |

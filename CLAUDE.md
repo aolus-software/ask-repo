@@ -478,9 +478,16 @@ the page.
   because `REFRESH_COOKIE_NAME` is operator-configurable). The `Path=/` differs from the
   backend's `/auth` scope on purpose: `proxy.ts` runs at `/projects` and is only sent cookies
   whose path matches.
-- **`app/api/[...path]/route.ts` is the one route the browser talks to.** It attaches the bearer,
-  strips `set-cookie` from every backend response, and relays the body untouched. Only the three
-  `/api/auth/*` handlers write cookies.
+- **`app/api/[...path]/route.ts` is almost the only route the browser talks to.** It attaches the
+  bearer, strips `set-cookie` from every backend response, and relays the body untouched. Only
+  the three `/api/auth/*` handlers that write cookies — login, refresh, logout — do so. Four
+  more `/api/auth/*` routes are a deliberate, narrow exception: `password-policy` and the
+  `password-reset/{availability,request,confirm}` trio each forward through
+  `lib/auth/public-forward.ts` with no bearer and no cookie, because the catch-all proxy answers
+  `401` before forwarding when the browser holds no session cookie, and a signed-out visitor on
+  `/forgot-password` or `/reset-password` holds none (spec §6.4). `proxy.ts` has its own,
+  separate public-page list (`/login`, `/forgot-password`, `/reset-password`) — a page gate,
+  not the same list as these four API routes.
 - **The caller's address is relayed, not rewritten.** `lib/auth/forwarded.ts` passes
   `X-Forwarded-For` through on every path that reaches the API, because the backend has no other
   way to tell one caller from another — without it the per-caller login limit is one

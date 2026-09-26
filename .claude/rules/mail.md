@@ -12,109 +12,117 @@ Every invariant here fails silently when broken — no exception, no failing req
 email that reaches the network with something inside it that should have stayed private. That
 is what makes these rules rather than preferences.
 
-## Nothing derived from an indexed repository leaves the network
+## The composer's signature is the enforcement
 
-`app/mail/compose.py` composes every message that leaves the instance. The rule is **not**
-"check that every message is okay" — it is "accept no parameter that would allow one to leave
-the code". That is what the signature rules exist for.
+`app/mail/compose.py` builds every message that leaves the instance, and the rule is not "check
+that every message is okay" — it is "accept no parameter that would allow one to leave the
+code". `tests/test_mail_compose.py` pins both signatures; adding a parameter means updating that
+test, which is what makes a silent addition impossible.
 
-- **A notification email carries an event type and a link, never content.** Subject and body
-  leave the instance; both are fixed strings per event. `compose_notification` accepts only
-  `event_type`, `user_name` (for "Dear <name>"), `project_name`, `module_name`, and `web_url`.
-  It takes no message text, no answer text, no answer title, no snippet, no change set
-  proposal body. A parameter added here is not a convenience — it is a decision to export
-  that thing out of the network, and `docs/PRD.md` §9 owns that decision, not this file.
-- **A password reset email carries a link and nothing else.** The link is the entire message;
-  the user's email address is never mentioned. `compose_password_reset` accepts only
-  `user_name`, `reset_link`, and `instance_name`. Every other detail is generated on the
-  reset form itself, in the browser, never on this side of the email.
-
-`tests/test_mail_compose.py` signatures are the enforcement. Adding a parameter requires
-updating that test and makes the change visible to review; silent additions are caught by
-the signature check rather than left to remember.
+- **`compose_notification(*, event_type, target_type, target_id, project_id, to, settings)`.**
+  No `name`, no `path`, no `details` — nothing that could carry a display name, a repository
+  name, a module name, or free text out of the app. The subject and body sentence come from a
+  fixed table (`MESSAGES`, keyed by `NotificationType`) and the only thing composed per call is
+  a link built from ids: `_link` returns `/checklist/{target_id}` for a checklist module target
+  and `/projects/{project_id}` otherwise.
+- **`compose_password_reset(*, raw_token, to, settings)`.** The reset link is the entire message.
+  `raw_token` is handed in as an argument and lives nowhere else — see the token lifecycle below.
 
 ## Subjects are fixed strings per event, bodies are plain text
 
-- **No template variables in the subject.** Every event gets one subject line, and it carries
-  no context. The recipient reading an inbox has learned to sort notifications by sender;
-  subjects all saying "Update on your project" are undifferentiated noise.
-- **Bodies are plain text, not HTML.** No styling, no links embedded in `<a>` tags, no
-  rendering logic in the mailer. A reset link is `Click here: <URL>` or the `[URL]` form on
-  its own line, never an HTML template. This is an intentional simplification: it keeps
-  the compose logic thin and is what makes it safe to have none.
+`compose_subject` builds `"{message} | {MAIL_APP_NAME}"`, prefixed with `"[{APP_ENV}] "` in
+every environment except `production`, where the tag is omitted. There is no per-call
+templating: `MESSAGES` maps each `NotificationType` to one subject and one body sentence, and
+the reset email's subject is the same fixed string (`RESET_MESSAGE`) every time.
 
-## Resetting a password is never retried
+Bodies are plain text (`EmailMessage.set_content`), never HTML. No styling, no rendering logic
+in the mailer — a reset link is a bare URL on its own line, `https://.../reset-password#token=…`.
 
-A reset token is **single-use and short-lived** — designed so that a lost or intercepted email
-cannot be replayed. That single-use property depends on a hard delete in the token table. A
-retry path that redrew an expired or used token would defeat that.
+## The raw reset token exists only in memory and in the email
 
-- **Resetting a password raises immediately on a failed send.** No retry, no second attempt.
-  If the mail service is down or rejects the address, the user is told at request time and
-  must try again — which redraws the token automatically.
-- **A `password_reset_tokens` row is hard-deleted** by `PasswordResetRepository.delete_dead()`,
-  run on every worker tick, for expired tokens and for tokens used more than one day ago. The
-  latter covers the case where the email reached the user, the user clicked it once and reset
-  their password, then the second click arrives when they try to refresh — the browser backs up
-  and hits reset again. The token is gone and they are refused immediately, which is correct:
-  the second request is someone else getting the email off the wire or trying brute-force.
+`PasswordResetService.request` mints 32 random bytes and stores only `sha256_hex(raw_token)` in
+`password_reset_tokens.token_hash`. The raw value is carried as a field on `PendingResetEmail`,
+handed to `deliver_password_reset` as an argument, and never written anywhere — not a log line,
+not the audit trail (`.claude/rules/audit-trail.md` exemption 6), not a second column.
 
-## Notification email is claimed before it is sent
+- **Single use is `used_at`.** `PasswordResetTokenRepository.get_usable_by_hash` only returns a
+  row with `used_at IS NULL`, `revoked_at IS NULL`, and `expires_at > now()`, and locks the row
+  with `with_for_update()` so two concurrent confirms against the same token cannot both read it
+  usable. `confirm` stamps `used_at` in the same transaction that changes the password.
+- **Sent once, from a `BackgroundTasks` task, after the response.** `request_password_reset`
+  answers `202` before the send is attempted, so a live account is not measurably slower to
+  respond than an unknown one at the HTTP layer — a live account still costs a few extra
+  database writes (revoking prior tokens, minting and storing the new one) before that `202`.
+  `deliver_password_reset` runs after the response and **never retries**: on a `MailSendError`
+  it logs at `WARNING` with the token row's id — never the token itself — and returns. A user
+  whose email did not arrive requests another, which mints a fresh token and revokes the old one.
+- **Hard-deleted, not soft-deleted.** `PasswordResetTokenRepository.delete_dead`, run on every
+  worker tick, removes rows expired or used more than a day ago. A dead token is not a record
+  anyone needs to keep, unlike a refresh token.
+
+## Notification email is claimed before it is sent, and delivery is at-least-once
 
 Mechanism: `app/mail/outbox.py` and `mail_loop` in `app/worker.py`.
 
-- **A row in the notifications table is claimed with `SELECT ... FOR UPDATE SKIP LOCKED`**
-  before any network call. `email_claimed_until` holds the lease expiry; if the lease expires
-  or the worker dies, the row's `email_attempts` and `email_claimed_until` are cleared by the
-  reconcile sweep and the row is claimable again.
-- **The lease is held for the duration of the send.**  On success, `email_state` moves to
-  `sent` and `email_sent_at` is stamped. On failure, `email_state` becomes `failed` (if the
-  exception is not `MailSendError`) or returns to `pending` for retry (if it is
-  `MailSendError`). `email_attempts` counts delivery attempts, not retries — every claim is
-  one attempt.
-- **The same at-least-once guarantee that covers Kafka covers mail.** Kafka delivers a job
-  at least once. If a worker dies mid-send, the row is re-claimed and sent again — if the
-  first send succeeded but the worker crashed before `email_state` was updated, the email
-  still reaches once, because idempotent sends are the producer's responsibility to define,
-  and email providers define it per-provider. The rule is that the outbox handles
-  at-least-once semantics correctly: each send must check whether the previous send succeeded
-  before trying again, and Kafka re-delivery must be idempotent. The feature must not lie
-  about `email_sent_at`.
+- **The claim is a lease, not a flag.** `NotificationRepository.claim_pending_email` selects up
+  to `CLAIM_BATCH` (50) rows with `email_state = 'pending'` whose lease has expired or was never
+  set, locks them with `SELECT ... FOR UPDATE SKIP LOCKED`, and stamps `email_claimed_until` 15
+  minutes out. The lease is 15 minutes, not the 2 an earlier draft specified, because a batch of
+  50 rows against the 10-second SMTP timeout can run past 8 minutes in the worst case, and two
+  worker replicas draining on the same 60-second tick would otherwise both send a row still
+  within a shorter lease.
+- **Delivery is at-least-once, and nothing here claims otherwise.** A process that crashes after
+  the relay accepts a message and before the row is marked will send it again once the lease
+  expires. `mark_email` only writes a row still `email_state = 'pending'`, so a genuine
+  double-claim cannot have its outcome overwritten by the race's loser — but the outbox does not
+  itself deduplicate a message that reached two SMTP connections; a rare duplicate is the
+  accepted cost of a nudge.
+- **Failure classification**, in `_deliver`:
+  - A retryable `MailSendError` with `attempts < MAX_EMAIL_ATTEMPTS` (5) leaves the row
+    `pending` — the lease expiry is what spaces the next attempt.
+  - A non-retryable `MailSendError`, or the fifth retryable attempt, marks the row `failed`.
+  - **Anything that is not a `MailSendError`** — a bug in `compose_notification`, an
+    unrecognised `event_type` — fails that row immediately and lets the rest of the batch
+    proceed, rather than sitting leased behind a deterministic crash that would reproduce on
+    every future drain.
+  - A row whose event is older than `STALE_AFTER` (24 hours), or whose recipient is
+    deactivated, is marked `skipped` without a send attempt — turning mail off for a week and
+    back on must not deliver a week of stale "Index finished" notices.
+- **The SMTP error is logged at `WARNING` and never stored.** `email_state`/`email_attempts`
+  record the outcome; the exception text goes to the log, never to a column, and never to the
+  audit trail.
 
 ## `mail_loop` is never a step inside `reconcile_loop`
 
-`app/worker.py` runs two separate 60-second ticks: `reconcile_loop` and `mail_loop`.
+`app/worker.py` runs `mail_loop` as its own `asyncio.Task`, on its own 60-second cadence,
+**only when `MAIL_ENABLED` is true** — it is not constructed at all when mail is off, and
+`reconcile_loop` neither calls into it nor inspects its state. A slow relay must not delay
+stranded-job recovery, and a wedged Kafka must not stop mail from draining; keeping the two
+ticks as siblings is what makes each failure profile independent of the other.
 
-- **They do not compose.** `reconcile_loop` does not call into `mail_loop`, and `mail_loop`
-  does not use or inspect reconciliation state. Both are sibling ticks — parallel polling
-  loops over different tables.
-- **Why.** Reconciliation and mail delivery have different failure profiles. Reconciliation
-  finds stranded work and re-publishes it; mail finds claimed rows and retries. If mail were
-  a step inside reconciliation, a broken mail service could starve the reconcile path, and a
-  broken Kafka could starve the mail path. Keeping them separate means a mail provider down
-  does not stop stranded-job recovery, and a wedged job queue does not stop email from draining.
+## The email decision is a snapshot at fan-out, and email adds no recipient path
 
-## The email decision is a snapshot at fan-out
-
-Mechanism: `app/services/notification_fanout.py`, `.claude/rules/notifications.md` rule 4.
-
-- **`email_state` and `email_attempts` are written at the same moment as `in_app_visible`.**
-  Both are read off the preference snapshot at fan-out time and written to the
-  `notifications` row. A user who changes their email preference an hour later affects only
-  new events, not rows already written.
-- **Email adds no recipient path.** A notification either reaches someone in-app or via email,
-  or both, based on preferences snapshotted at the time the event occurred — not based on
-  any decision the mailer later makes. The mailer reads what was decided, tries to deliver
-  what was agreed, and reports the outcome. It does not re-evaluate who should be told.
+Mechanism: `app/services/notification_fanout.py`, `.claude/rules/notifications.md` rules 1 and
+4. `NotificationFanout._write` writes `email_state` at the same moment it writes
+`in_app_visible` — off the same preference read, for the same resolved recipient set. It writes
+`'pending'` when mail is enabled and the recipient's email preference is on, and `NULL`
+otherwise (mail off, or the preference off) — there is no `'skipped'` value written at fan-out;
+`'skipped'` is a terminal outcome the outbox writes later, at send time, for a stale event or a
+deactivated recipient. Nothing at fan-out, and nothing in the outbox, resolves a second
+recipient list: email reaches exactly the recipients `resolve_notification_recipients` already
+computed for the in-app row.
 
 ## Email delivery is not audited
 
-Mechanism: `app/core/audit.py`, exemption 6.
+Mechanism: `app/core/audit.py`, `.claude/rules/audit-trail.md` exemption 6, `docs/PRD.md` §2.1's
+Phase 2.4 entry — not a rule stated in `app/core/audit.py` itself, which carries no mail-specific
+code at all.
 
-- **Sending an email to a user is not an audited event.** The row on `notifications` records
-  that the event occurred and who was told; the audit trail records *human actions that change
-  data*. A mail loop pushing bytes through an SMTP service is infrastructure, not an action.
-- **A delivery failure is recorded on the row and nothing else.** `email_state` `failed`,
-  `email_attempts` incremented — the mechanism is the same as any other retriable work. No
-  audit row, no log line naming the address or the reason. If recovery is needed, it is
-  manual: an operator queries the table.
+- **Sending a reset link or a notification email is a transport of an event already recorded
+  elsewhere** — the notification event, or `auth.password_reset.requested` — not a new action.
+  No human performs the send: a `BackgroundTasks` task drains a reset email, and the worker's
+  `mail_loop` drains notification email.
+- **The outcome lives on the row itself**, never in the audit trail: `notifications.email_state`
+  / `email_attempts` / `email_sent_at` for notification email, `password_reset_tokens.sent_at`
+  for a reset email. An operator recovers by querying those tables, not by reading an audit
+  event.

@@ -120,15 +120,21 @@ write time would leave nothing for email to send against.
 
 Email is a second transport against the same notification record. When `MAIL_ENABLED` is on,
 every recipient's preference snapshot is written to the `notifications` row at fan-out time:
-`email_state` is `pending` when email is on, `skipped` when it is off, `NULL` when the
-recipient is deactivated or email has never been configured.
+`email_state` is `pending` when the recipient's email preference is also on, and `NULL`
+otherwise — mail off, the preference off, or email never configured all collapse to the same
+`NULL`. There is no `'skipped'` value written at fan-out.
 
-The mail loop is a sibling worker tick that claims rows with `email_state = pending`, sends
-each one through an SMTP relay, and updates the row with the outcome — `sent` on success,
-`failed` on a non-retryable error, or back to `pending` on `MailSendError` for retry. Delivery
-is at-least-once: the claim is the deduplication boundary, and a duplicate attempt is idempotent
-because `email_sent_at` is stamped once and never updated again. The sent flag itself is the
-idempotency check.
+The mail loop is a sibling worker tick that claims rows with `email_state = pending` under a
+15-minute lease, sends each one through an SMTP relay, and updates the row with the outcome:
+`sent` on success, `failed` on a non-retryable error (or the fifth retryable attempt), back to
+`pending` on a retryable `MailSendError` for a later attempt, or `skipped` — written at send
+time, not at fan-out — for an event more than 24 hours old or a recipient deactivated by then.
+**Delivery is at-least-once, not idempotent.** The claim's lease is what stops two workers
+sending the same row *at the same time*; it does not stop a crashed drain's row being sent again
+once the lease expires, and the outbox does not deduplicate across that gap. `mark_email` writes
+only a row still `email_state = 'pending'`, which stops the *loser* of a claim race from
+overwriting an outcome the winner already recorded — that is a narrower guarantee than
+idempotent delivery, not a restatement of it.
 
 **Email buys one thing in-app cannot: reaching someone who is not currently looking at AskRepo.**
 A twenty-minute checklist generation is the whole point of a notification the author has walked

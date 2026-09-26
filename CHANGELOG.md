@@ -53,17 +53,23 @@ incompatibly. Configuration defaults and internal module layout may change in a 
   and bodies are fixed strings per event type, never content derived from a repository. The
   `email` switch on `/settings/notifications` is enabled only when mail is configured.
 - **`MAIL_ENABLED` and SMTP settings**: when `MAIL_ENABLED` is `true`, password reset and
-  notification email ship. Requires `SMTP_HOST`, `SMTP_PORT`, `SMTP_FROM`, and `SMTP_PASSWORD`;
-  password reset also requires `APP_BASE_URL` for reset links. All default to off and empty,
-  so no SMTP dependency exists if not enabled.
+  notification email ship. Requires `SMTP_HOST`, `SMTP_FROM`, and `APP_BASE_URL` — `SMTP_PORT`,
+  `SMTP_USERNAME`, and `SMTP_PASSWORD` stay optional, since a relay with no authentication is a
+  legitimate internal setup. All default to off and empty, so no SMTP dependency exists if not
+  enabled.
 - **`password_reset_tokens` table** (migration; Phase 2.4). Holds id, user id, hashed token, created/expires/used timestamps.
   Hard-deleted by the worker for expired tokens or those used more than 24 hours ago.
-- **Four columns on `notifications` table** (`email_state`, `email_attempts`, `email_claimed_until`, `email_sent_at`):
-  the outbox and at-least-once delivery mechanism, added in Phase 2.3 but unused until Phase 2.4.
+- **Four columns on `notifications` table** (`email_state`, `email_attempts`, `email_claimed_until`, `email_sent_at`,
+  migration `c3f8a1d05e72`): the outbox and at-least-once delivery mechanism, added by this
+  phase. Phase 2.3 had shipped only the `notification_preferences.email` preference column.
 - **Two new audit events** (`docs/PRD.md` §2.1, phase 2.4): `auth.password_reset.requested` and
-  `auth.password_reset.completed`, both with the user id as actor. One new audit exemption (the
-  sixth): email delivery attempts do not record an audit event — sending through SMTP is a
-  transport of an event already recorded elsewhere, not a new user action.
+  `auth.password_reset.completed`. `requested` carries the matched user as actor when the
+  submitted address belongs to one, and a `NULL` actor with `unknownAccount: true` in `details`
+  otherwise — the same pattern `auth.login.failed` already uses, so a submitted address that
+  matches nobody is never attributed to a real account. `completed` always carries the user id:
+  reaching it required a valid, unexpired, unused token. One new audit exemption (the sixth):
+  email delivery attempts do not record an audit event — sending through SMTP is a transport of
+  an event already recorded elsewhere, not a new user action.
 
 ### Changed
 

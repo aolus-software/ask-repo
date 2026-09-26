@@ -111,7 +111,7 @@ infrastructure, no egress.
 
 - **Audit trail (shipped).** An append-only record of who did what. Phase 1 had attribution (`created_by`) but no history — a deleted project took its `created_by` with it, so nothing anywhere recorded who deleted it, and §7's destructive-gating criteria were verifiable by test but not after the fact on a live instance. Two constraints follow from §9 and are not optional: the trail records **that** an action happened and by whom, never the secret involved — no passwords, no tokens, no PATs, no clone URLs with credentials embedded — and it is append-only, so a user cannot erase their own entries.
 
-  **Coverage is a rule, not a list.** `.claude/rules/audit-trail.md` states the obligation — *every write and every export records an event* — because a fixed list goes stale the moment someone adds a route and the failure is silent. The catalogue in `app/core/audit.py` currently names **37 event types**: auth (login, failed login, logout, password change, refresh replay), accounts (create, update, deactivate, admin password reset), projects (create, reindex requested, delete), **RBAC** (membership granted / role changed / revoked, role created / updated / deleted — which this bullet originally omitted and which §2.2's own rationale asks for by name), checklist modules and items including the destructive bulk `results_cleared`, change-set applies and discards, mock data, the two exports, and conversations. `tests/test_audit_coverage.py` enforces it in both directions: a catalogue entry cannot exist unwritten, and a write site cannot invent a name.
+  **Coverage is a rule, not a list.** `.claude/rules/audit-trail.md` states the obligation — *every write and every export records an event* — because a fixed list goes stale the moment someone adds a route and the failure is silent. The catalogue in `app/core/audit.py` currently names **39 event types**: auth (login, failed login, logout, password change, refresh replay, password reset requested, password reset completed — the last two added at Phase 2.4), accounts (create, update, deactivate, admin password reset), projects (create, reindex requested, delete), **RBAC** (membership granted / role changed / revoked, role created / updated / deleted — which this bullet originally omitted and which §2.2's own rationale asks for by name), checklist modules and items including the destructive bulk `results_cleared`, change-set applies and discards, mock data, the two exports, and conversations. `tests/test_audit_coverage.py` enforces it in both directions: a catalogue entry cannot exist unwritten, and a write site cannot invent a name.
 
   **"PAT changes" collapsed into `project.created`.** There is no project-update route, so a PAT change is not an event that can happen; `project.created` carries a `patSupplied` boolean instead. If a project-update route is ever added, `project.updated` with a `patChanged` flag is the event to add with it.
 
@@ -190,9 +190,11 @@ What shipped:
   preferences show email controls disabled with a note. When on, the admin supplies an SMTP
   host, a credential, a from-address, and (for password reset links) an `APP_BASE_URL` so the
   reset link can be constructed outside the HTTP boundary. The provider is the single point of
-  failure for both password reset and notification email — they share the outbox, the sender,
-  and the deliverability problem, and paying that cost once for two features is what makes the
-  mail provider worth specifying rather than leaving it out forever.
+  failure for both password reset and notification email — they share the sender and the
+  deliverability problem, and paying that cost once for two features is what makes the mail
+  provider worth specifying rather than leaving it out forever. **They do not share the outbox**:
+  a reset email is sent once, directly, from a `BackgroundTasks` task after the response, and
+  never enters the `notifications` table's claim-and-drain path notification email uses.
 - **The composer is the enforcement.** `app/mail/compose.py` builds every message that leaves
   the instance. Subjects and bodies are fixed strings per event type — no templating, no
   parameters from the user, no content that could come from an indexed repository. A notification
@@ -202,28 +204,40 @@ What shipped:
   job to gate.
 - **Plain text, at-least-once, claimed before send.** Every message is plain text, not HTML. The
   outbox drains from `notifications.email_state` rows when `pending`; each row is claimed with
-  `SELECT ... FOR UPDATE SKIP LOCKED` before any network call, and delivery is idempotent — an
-  `email_sent_at` timestamp serves as both a record and an idempotency check. On success,
-  `email_state` moves to `sent`; on provider failure (`MailSendError`), it returns to `pending`
-  for retry; on any other exception it moves to `failed`. The mail loop is a sibling of the
-  reconcile loop in the worker, not a step inside it, so a broken mail service does not starve
-  stranded-work recovery.
+  `SELECT ... FOR UPDATE SKIP LOCKED`, holding a 15-minute lease, before any network call.
+  **Delivery is at-least-once, not idempotent** — a process that crashes after the relay accepts
+  a message and before the row is marked will send it again once the lease expires; `mark_email`
+  only writes a row still `pending`, which stops a stale double-claim from overwriting an
+  outcome, but does not make a duplicate send disappear. On success, `email_state` moves to
+  `sent`. On a *retryable* `MailSendError` with fewer than five attempts recorded, it returns to
+  `pending` for retry; on a non-retryable `MailSendError`, on the fifth retryable attempt, or on
+  any exception that is not a `MailSendError`, it moves to `failed`. The mail loop is a sibling
+  of the reconcile loop in the worker, not a step inside it, so a broken mail service does not
+  starve stranded-work recovery.
 - **Self-service password reset: three routes and one table.** `GET /auth/password-reset/availability`
   answers whether `MAIL_ENABLED` is on, which the login screen reads to show or hide "Forgot
   password?"; `POST /auth/password-reset/request` takes an email and always answers `202`, so the
   route cannot be used to learn which accounts exist; and `POST /auth/password-reset/confirm`
-  takes the token (fragment-only, never in the URL path or the body) and a new password. Rate
-  limits apply per IP and per email. Password policy
-  is enforced by the shared `validate_and_hash_new_password()` in `app/core/passwords.py`; a weak
-  password raises `400 WEAK_PASSWORD`. The `password_reset_tokens` table holds id, user id,
-  hashed token, created/expires/used timestamps, and is hard-deleted by the worker for expired
-  or used-more-than-24-hours-ago rows. The token is single-use and short-lived by construction,
-  never retried — on send failure the user is told at request time and must try again.
+  takes the token and a new password. The token rides in the email link's URL **fragment**, never
+  the path, so it is never sent to any server as part of the URL and so never reaches a server
+  access log — the reset page reads it client-side and does send it in the confirm request's
+  body, which is the one place it has to travel to be spent. Rate limits apply per IP and per
+  email. Password policy is enforced by the shared `validate_and_hash_new_password()` in
+  `app/core/passwords.py`; a weak password raises `400 WEAK_PASSWORD`. The `password_reset_tokens`
+  table holds id, user id, hashed token, created/expires/used timestamps, and is hard-deleted by
+  the worker for expired or used-more-than-24-hours-ago rows. The token is single-use and
+  short-lived by construction, never retried — on send failure nothing tells the requester at
+  request time (the `202` was already sent before delivery is attempted); they simply see no
+  email arrive and request another, which mints a fresh token and revokes the old one.
 - **Email is snapshotted at fan-out, not at delivery.** The same moment `in_app_visible` is
-  written to a notification row, `email_state`, `email_attempts`, and `email_claimed_until` are
-  also written — off the preference snapshot at fan-out time. `email_state` is `pending` when
-  the recipient has the email preference on, `skipped` when off, and `NULL` when email was never
-  in play. A user who changes their email preference later affects only new events; existing rows
+  written to a notification row, `email_state` is also written — off the same preference
+  snapshot, at the same fan-out time. `email_state` is `pending` when mail is enabled and the
+  recipient has the email preference on, and `NULL` in every other case (mail off, the
+  preference off, or email never in play). `email_attempts` and `email_claimed_until` are not
+  touched at fan-out; they start at their column defaults and are written later, by the outbox's
+  claim. `skipped` is likewise not a fan-out state — it is a terminal outcome the outbox writes
+  at send time, for an event gone stale (over 24 hours old) or a recipient deactivated by then.
+  A user who changes their email preference later affects only new events; existing rows
   remember what was decided when they were written.
 - **A sixth audit exemption.** Email delivery attempts do not record an audit event — the mail
   loop pushing bytes through an SMTP service is infrastructure, not a user action that changes
@@ -989,7 +1003,7 @@ because two of them turned out to be one defect and the shape is worth not repea
 - **~~Is the audit trail (§2.1) a Postgres table or a structured log stream?~~ Decided (Phase 2.2): a table.** `audit_events`, queryable from the product through two admin-only routes and two screens, covered by the Postgres backup §9 already requires, and adding no operator tooling. A stream would have been cheaper to retain and unreadable without something else to read it with, on an instance whose whole premise is that it runs on one box inside one network. Retention is `AUDIT_RETENTION_DAYS`, default `0` — keep forever — which is the answer the cheap-retention argument was really asking about.
 - Encryption key rotation for stored PATs — re-encrypt in place on rotation, or require re-entry?
 - GitHub webhook auto-reindex — not needed now; worth reconsidering in v2 if re-cloning per re-index becomes painful.
-- ~~**Is the email half of notifications (§2.1) worth a mail provider, or is in-app enough?** Decided (Phase 2.4): yes, with no requirement. Email is optional and off by default.~~ A mail provider buys reaching someone who is not currently looking at AskRepo, which matters for a generation that takes twenty minutes, and does not cost a schema change because Phase 2.3 already shipped both `notification_preferences.email` and the four email columns on `notifications`. In-app remains the default; email adds a sender path and a settings screen when an organization decides the cost is justified.
+- ~~**Is the email half of notifications (§2.1) worth a mail provider, or is in-app enough?** Decided (Phase 2.4): yes, with no requirement. Email is optional and off by default.~~ A mail provider buys reaching someone who is not currently looking at AskRepo, which matters for a generation that takes twenty minutes. Phase 2.3 shipped `notification_preferences.email`, the preference column; Phase 2.4's own migration (`c3f8a1d05e72`) is what added the four email columns on `notifications` (`email_state`, `email_attempts`, `email_claimed_until`, `email_sent_at`) that the outbox reads and writes. In-app remains the default; email adds a sender path, a settings screen, and this one schema change when an organization decides the cost is justified.
 - **Does the AI call log (§2.1) need per-call cost, or only per-call tokens?** (Owned by **Phase 2.5**.) Tokens are reported by the provider and are a fact; a cost figure needs a price table per provider and per model, which goes stale silently the moment a vendor changes it — and a wrong number shown next to a real invoice is worse than no number. Storing tokens and pricing them at read time keeps the stale part in one place, but it means the log alone cannot answer "what did last month cost" without that table. §2.1's choice of Langfuse narrows this rather than closing it: Langfuse maintains a price table, so the staleness moves to a dependency someone else updates instead of one this repository carries — which is better, not solved, since a self-hosted instance is only as current as the version an operator last pulled. Related: whether an instance running a local model logs at all, where the token counts are real but the spend is always zero.
 - **Does an administrator ever see the question behind a negative piece of feedback (§2.1)?** (Owned by **Phase 2.5**.) A reason code alone — *cited the wrong file*, *invented something* — tells an administrator which part of the system to look at and nothing about which repository or which colleague. Reading the turn itself is what makes a pattern diagnosable, and §4.2 and §7 both say that conversations are private and that an administrator is no exception. **Phase 2.2 narrowed that from "without qualification" to one recorded exception, and the exception is precisely the half that does not help here:** an administrator can see in the audit trail that a conversation was created or deleted — actor, project, when — and never its title (`target_label` is `NULL`, always) and never a message (the ask route is not audited at all, and no administrator bypass was added anywhere under `/conversations`). So the amendment covers existence metadata and this question is about content, which remains as unresolved as before. The two still cannot both be fully satisfied. The defensible positions are aggregate-only, or an explicit per-item opt-in where the person giving the feedback chooses to attach the turn — never an administrator-side toggle, which is the same sentence with the consent removed. Feedback on a checklist or mock-data change set does not have this problem at all, since §4.3 already publishes those to everyone.
 - ~~**Immediate or digested, and who decides?**~~ Decided (Phase 2.4): immediate, per event, and recipient-owned. One email per finished index, so a team adding a project a week sees one-per-week and a bulk import sees one-per-import. A digest would need a schedule, a window, and more machinery than the notification itself, and the data gathering from a per-user preference is clearer than an instance-wide policy. The preference is stored on `notification_preferences` and snapshotted onto each `notifications` row at fan-out, so the recipient owns it and changes made later affect only new events.
