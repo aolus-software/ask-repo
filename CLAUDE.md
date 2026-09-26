@@ -460,11 +460,13 @@ App Router, React 19, Tailwind CSS 4 (CSS-first `@theme`, no `tailwind.config.js
 The routes that exist are `/login`, `/forgot-password`, `/reset-password`, `/change-password`, `/` (dashboard),
 `/projects`, `/projects/[id]`, `/ask`, `/ask/[conversationId]`, `/settings/users`,
 `/settings/roles`, `/settings/roles/[id]`, `/settings/audit`, `/settings/audit/[eventId]`,
-`/notifications`, `/settings/notifications`,
+`/notifications`, `/settings/notifications`, `/profile`,
 `/checklist`, and `/checklist/[moduleId]` — the last
 of which now carries a Mock Data tab beside the checklist grid, no new route of its own.
-`/projects/[id]` likewise carries a Members tab rather than a route. `/settings` itself is not a
-screen: a group's index route only redirects to its first reachable child.
+`/projects/[id]` likewise carries a Members tab rather than a route. `/settings/notifications`
+now only redirects to `/profile#notifications` — notification preferences moved to the profile,
+so Settings is admin-only again and `/settings` itself is not a screen: a group's index route
+only redirects to its first reachable child.
 
 ### Next is a backend-for-frontend, not a thin client
 

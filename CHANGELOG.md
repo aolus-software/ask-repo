@@ -13,6 +13,13 @@ incompatibly. Configuration defaults and internal module layout may change in a 
 
 ### Added
 
+- **Profile page** at `/profile`, opened from the account menu: your account and project
+  memberships, your signed-in sessions with the device and address each started from and a
+  per-session sign-out, your own activity from the audit trail, notification preferences,
+  and password change (plus "Email me a reset link" when mail is on).
+- `GET /me/memberships`, `GET /me/sessions`, `DELETE /me/sessions/{sessionId}`,
+  `GET /me/activity`.
+- `ErrorCode.SESSION_NOT_FOUND`; audit event `auth.session.revoked`.
 - **Six notification routes** (`docs/PRD.md` §2.1, phase 2.3): `GET /notifications` (filterable
   by `unreadOnly`, `projectId`, `eventType`), `GET /notifications/unread-count`,
   `POST /notifications/mark-all-read`, `POST /notifications/{id}/read`,
@@ -51,7 +58,8 @@ incompatibly. Configuration defaults and internal module layout may change in a 
   preference snapshot at fan-out time (`email_state`: `pending` or `NULL`), and the mail loop
   drains pending rows, moving them to `sent`, `failed`, or `skipped` as delivery outcomes. Subjects
   and bodies are fixed strings per event type, never content derived from a repository. The
-  `email` switch on `/settings/notifications` is enabled only when mail is configured.
+  `email` switch, now on `/profile#notifications` (see the profile page entry below), is enabled
+  only when mail is configured.
 - **Every email now carries an HTML part alongside the plain text** (`docs/PRD.md` §2.1, phase
   2.4, amended after the phase's original design shipped): notification and password-reset
   emails send as `multipart/alternative`, plain text first and byte-identical to before, with an
@@ -82,6 +90,10 @@ incompatibly. Configuration defaults and internal module layout may change in a 
 
 ### Changed
 
+- Notification preferences moved from Settings to the profile; `/settings/notifications`
+  redirects there. Settings is administrator-only again, so non-admins no longer see it in
+  the sidebar.
+- Access tokens carry a `sid` claim naming their refresh-token family.
 - **A fifth audit exemption** (`.claude/rules/audit-trail.md`): marking a notification read,
   marking all read, and changing notification preferences do not record an audit event — that
   state is private to one user, describes no shared resource, and is written at a rate

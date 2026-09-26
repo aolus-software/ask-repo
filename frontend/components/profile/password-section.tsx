@@ -38,7 +38,8 @@ export function PasswordSection({ resetEnabled }: { resetEnabled: boolean }) {
         method: "POST",
         body: JSON.stringify({ email: user.email }),
       }),
-    onSuccess: () => toast.success("If mail can reach you, a reset link is on its way."),
+    onSuccess: () =>
+      toast.success("If mail can reach you, a reset link is on its way."),
     onError: (error) => {
       if (isApiError(error) && error.code === "RATE_LIMITED") {
         toast.success("If mail can reach you, a reset link is on its way.");
@@ -70,7 +71,11 @@ export function PasswordSection({ resetEnabled }: { resetEnabled: boolean }) {
         error={change.error}
         onSubmit={handleSubmit}
       >
-        <ChangePasswordFields values={values} onChange={setValues} error={change.error} />
+        <ChangePasswordFields
+          values={values}
+          onChange={setValues}
+          error={change.error}
+        />
       </FormPage>
       {resetEnabled ? (
         <div className="mx-auto flex max-w-3xl items-center justify-between gap-4">

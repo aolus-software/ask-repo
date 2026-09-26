@@ -78,8 +78,13 @@ export function SessionsSection() {
                         ) : null}
                       </div>
                     </TableCell>
-                    <TableCell className="text-sm">{session.ipAddress ?? "—"}</TableCell>
-                    <TableCell className="text-sm" title={formatAbsolute(session.startedAt)}>
+                    <TableCell className="text-sm">
+                      {session.ipAddress ?? "—"}
+                    </TableCell>
+                    <TableCell
+                      className="text-sm"
+                      title={formatAbsolute(session.startedAt)}
+                    >
                       {formatRelative(session.startedAt)}
                     </TableCell>
                     <TableCell

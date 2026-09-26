@@ -42,7 +42,6 @@ export function PreferencesScreen() {
 
   return (
     <div>
-
       {!emailEnabled && (
         <p className="border-border bg-muted text-muted-foreground mb-4 rounded-md border px-4 py-3 text-sm">
           Email delivery is turned off on this instance. Your choices are saved and will

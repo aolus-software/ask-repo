@@ -50,7 +50,9 @@ describe("PasswordSection", () => {
   it("offers a reset link only when mail is on", () => {
     stubFetch(() => new Response(null, { status: 202 }));
     const { unmount } = renderSection(true);
-    expect(screen.getByRole("button", { name: /email me a reset link/i })).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /email me a reset link/i }),
+    ).toBeInTheDocument();
     unmount();
 
     renderSection(false);
@@ -80,7 +82,9 @@ describe("PasswordSection", () => {
     stubFetch(
       () =>
         new Response(
-          JSON.stringify({ detail: { code: "RATE_LIMITED", message: "Too many requests" } }),
+          JSON.stringify({
+            detail: { code: "RATE_LIMITED", message: "Too many requests" },
+          }),
           { status: 429 },
         ),
     );
@@ -100,7 +104,10 @@ describe("PasswordSection", () => {
       () =>
         new Response(
           JSON.stringify({
-            detail: { code: "PASSWORD_RESET_UNAVAILABLE", message: "Ask an administrator." },
+            detail: {
+              code: "PASSWORD_RESET_UNAVAILABLE",
+              message: "Ask an administrator.",
+            },
           }),
           { status: 409 },
         ),
@@ -108,7 +115,9 @@ describe("PasswordSection", () => {
     renderSection(true);
     fireEvent.click(screen.getByRole("button", { name: /email me a reset link/i }));
 
-    await waitFor(() => expect(toastError).toHaveBeenCalledWith("Ask an administrator."));
+    await waitFor(() =>
+      expect(toastError).toHaveBeenCalledWith("Ask an administrator."),
+    );
     expect(toastSuccess).not.toHaveBeenCalled();
   });
 });

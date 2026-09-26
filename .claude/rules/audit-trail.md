@@ -35,7 +35,7 @@ nobody discovers until the day it is needed.
 | **Promote a proposal** | applying or discarding a checklist or mock-data change set | `<resource>.applied` / `.discarded` |
 | **Request expensive work** | reindex, checklist generation, mock-data generation | `<resource>.<action>.requested` |
 | **Move data out** | the checklist spreadsheet, mock data as JSON or spreadsheet | `<resource>.exported` |
-| **Authenticate** | login, **failed** login, logout, password change, admin reset, refresh replay, password reset request, password reset confirm | `auth.*` / `user.password.reset` / `auth.password_reset.requested` / `auth.password_reset.completed` |
+| **Authenticate** | login, **failed** login, logout, password change, admin reset, refresh replay, password reset request, password reset confirm, session revoke | `auth.*` / `user.password.reset` / `auth.password_reset.requested` / `auth.password_reset.completed` / `auth.session.revoked` |
 
 **An export is a write for this purpose even though it changes nothing.** It is the one action
 that takes a private repository's derived content out of the instance, and `docs/PRD.md` §9 treats
@@ -225,6 +225,13 @@ sides of that diff are what the content ban forbids storing.
 Admins, instance-wide, through the existing `AdminUser` dependency. The auth, account and export
 events span no project, so a per-project scope does not describe this read — it is a read on a
 different axis, not a narrower project scope.
+
+**A second, narrow reader exists since the profile page.** `GET /me/activity` lets a user read
+the rows where they are the actor — never a row where they are only a target — through
+`MeService`, never through `/audit-events`. Project-scoped rows are narrowed through
+`resolve_project_scope`, the same resolver every other read scoping in the app goes through: a
+read on a different axis again, still going through `app/core/access.py` and nowhere else. Every
+other read stays admin-only, exactly as above.
 
 The row still carries `project_id`, so a future per-project read is one permission plus a
 `require_permission` call. **If that is ever added it goes through `app/core/access.py` like

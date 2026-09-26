@@ -36,7 +36,8 @@ export function useSessions() {
 export function useRevokeSession() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (id: string) => apiFetch<void>(endpoints.me.session(id), { method: "DELETE" }),
+    mutationFn: (id: string) =>
+      apiFetch<void>(endpoints.me.session(id), { method: "DELETE" }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: keys.profile.sessions }),
   });
 }

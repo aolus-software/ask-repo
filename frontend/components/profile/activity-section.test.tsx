@@ -3,7 +3,11 @@ import { render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { ActivitySection } from "@/components/profile/activity-section";
-import type { ActivityEntry, MembershipSummary, PaginatedResponse } from "@/lib/api/types";
+import type {
+  ActivityEntry,
+  MembershipSummary,
+  PaginatedResponse,
+} from "@/lib/api/types";
 
 function page(items: ActivityEntry[]): PaginatedResponse<ActivityEntry> {
   return { items, page: 1, limit: 20, totalCount: items.length, totalPages: 1 };
@@ -55,7 +59,12 @@ describe("ActivitySection", () => {
 
   it("links a targetLabel-less row to the project, named from memberships", async () => {
     renderSection([
-      entry({ id: "e2", eventType: "conversation.created", targetLabel: null, projectId: "p1" }),
+      entry({
+        id: "e2",
+        eventType: "conversation.created",
+        targetLabel: null,
+        projectId: "p1",
+      }),
     ]);
     const link = await screen.findByRole("link", { name: "Acme API" });
     expect(link).toHaveAttribute("href", "/projects/p1");
@@ -63,7 +72,12 @@ describe("ActivitySection", () => {
 
   it("falls back to a dash when there is no label and no project", async () => {
     renderSection([
-      entry({ id: "e3", eventType: "auth.login.succeeded", targetLabel: null, projectId: null }),
+      entry({
+        id: "e3",
+        eventType: "auth.login.succeeded",
+        targetLabel: null,
+        projectId: null,
+      }),
     ]);
     expect(await screen.findAllByText("—")).not.toHaveLength(0);
   });

@@ -43,7 +43,10 @@ export function AccountSection() {
       {memberships.isError ? (
         <ListError error={memberships.error} onRetry={() => memberships.refetch()} />
       ) : !memberships.isLoading && rows.length === 0 ? (
-        <EmptyState size="compact" description="You aren't a member of any project yet." />
+        <EmptyState
+          size="compact"
+          description="You aren't a member of any project yet."
+        />
       ) : (
         <div className="overflow-x-auto">
           <Table>

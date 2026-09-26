@@ -112,3 +112,17 @@ Notes that bite:
 `/ask/[conversationId]` shows only the operator's own, and a foreign id answers `404`, not `403`
 (`response-api.md`). The nav must not imply otherwise: there is no "all conversations"
 destination, and the conversation list in the sidebar or picker is always the caller's own.
+
+## 8. `/notifications` and `/profile` are breadcrumb-only
+
+Neither is a sidebar destination, and neither belongs in `navItems`'s rendered tree.
+`/notifications` opens from the bell in the app shell's navbar; `/profile` opens from the
+account menu. Both still need a breadcrumb naming them when visited directly, which is why both
+live in `lib/nav.ts` — just outside what `visibleNavTree` puts in the sidebar.
+
+**Settings is admin-only again.** Notification preferences used to be its one non-admin child, at
+`/settings/notifications`; they moved to `/profile#notifications` — a section of the
+breadcrumb-only page above, not a route of its own — and `/settings/notifications` now only
+redirects there. With no reachable child left for a non-admin, `visibleNavTree` hides the whole
+Settings group for one, the same as it always has for every other child, which was admin-only
+already.

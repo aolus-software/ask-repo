@@ -21,7 +21,8 @@ function session(id: string, current: boolean): SessionSummary {
   const now = new Date().toISOString();
   return {
     id,
-    userAgent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) Chrome/129.0 Safari/537.36",
+    userAgent:
+      "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) Chrome/129.0 Safari/537.36",
     ipAddress: "203.0.113.9",
     startedAt: now,
     lastActiveAt: now,
@@ -45,7 +46,10 @@ afterEach(() => vi.unstubAllGlobals());
 
 describe("SessionsSection", () => {
   it("marks the current session and names the device", async () => {
-    vi.stubGlobal("fetch", vi.fn(async () => Response.json([session("a", true)])));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => Response.json([session("a", true)])),
+    );
     renderSection();
     expect(await screen.findByText("This device")).toBeInTheDocument();
     expect(screen.getByText("Chrome on macOS")).toBeInTheDocument();

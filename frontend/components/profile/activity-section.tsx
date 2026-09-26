@@ -84,7 +84,10 @@ export function ActivitySection() {
                 items.map((item) => (
                   <TableRow key={item.id}>
                     <TableCell>
-                      <StatusBadge tone="neutral" label={auditEventLabel(item.eventType)} />
+                      <StatusBadge
+                        tone="neutral"
+                        label={auditEventLabel(item.eventType)}
+                      />
                     </TableCell>
                     <TableCell>
                       <StatusBadge
@@ -96,7 +99,10 @@ export function ActivitySection() {
                       {targetCell(item, memberships.data)}
                     </TableCell>
                     <TableCell className="text-sm">{item.ipAddress ?? "—"}</TableCell>
-                    <TableCell className="text-sm" title={formatAbsolute(item.createdAt)}>
+                    <TableCell
+                      className="text-sm"
+                      title={formatAbsolute(item.createdAt)}
+                    >
                       {formatRelative(item.createdAt)}
                     </TableCell>
                   </TableRow>

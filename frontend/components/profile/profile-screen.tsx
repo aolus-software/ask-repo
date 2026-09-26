@@ -45,7 +45,11 @@ export function ProfileScreen({ resetEnabled }: { resetEnabled: boolean }) {
         </nav>
         <div className="min-w-0 space-y-10">
           {SECTIONS.map((section) => (
-            <section key={section.id} id={section.id} className="scroll-mt-24 space-y-3">
+            <section
+              key={section.id}
+              id={section.id}
+              className="scroll-mt-24 space-y-3"
+            >
               <h2 className="text-foreground text-lg font-semibold">{section.title}</h2>
               {body[section.id]}
             </section>
