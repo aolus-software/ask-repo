@@ -16,13 +16,29 @@ SETTINGS = Settings(
 EMAIL = OutboundEmail(to="dev@example.com", subject="Index finished | AskRepo", body="Hi.\n")
 
 
-def test_the_message_is_plain_text_only() -> None:
+def test_an_email_with_no_html_is_a_single_text_plain_part() -> None:
     message = build_message(EMAIL, sender="askrepo@example.com")
     assert message.get_content_type() == "text/plain"
     assert not message.is_multipart()
     assert message["From"] == "askrepo@example.com"
     assert message["To"] == "dev@example.com"
     assert message["Subject"] == "Index finished | AskRepo"
+
+
+def test_an_email_with_html_is_multipart_alternative_text_then_html() -> None:
+    email = OutboundEmail(
+        to=EMAIL.to,
+        subject=EMAIL.subject,
+        body=EMAIL.body,
+        html="<html><body>Hi.</body></html>",
+    )
+    message = build_message(email, sender="askrepo@example.com")
+    assert message.is_multipart()
+    assert message.get_content_type() == "multipart/alternative"
+    parts = list(message.iter_parts())
+    assert [part.get_content_type() for part in parts] == ["text/plain", "text/html"]
+    assert parts[0].get_content().strip() == "Hi."
+    assert "Hi." in parts[1].get_content()
 
 
 @pytest.mark.parametrize(

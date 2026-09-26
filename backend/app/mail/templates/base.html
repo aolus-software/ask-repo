@@ -1,0 +1,52 @@
+{#
+  Colors below are fixed hex values, copied verbatim from the *light*-theme tokens in
+  frontend/app/globals.css (root :root block). An email client cannot resolve a CSS
+  custom property or a Tailwind utility class, so every rule here has to be a literal
+  value inlined on the element it colors — this template is the one place outside
+  globals.css allowed to carry a raw hex, and it stays light-only (docs/design.md).
+
+    --background        #f1f5f9  -> page background, outside the card
+    --foreground        #0f172a  -> body text on the page
+    --card               #ffffff -> the message "card" surface
+    --card-foreground    #0f172a -> text on the card
+    --muted-foreground   #45556c -> secondary/footer text
+    --border             #e2e8f0 -> card border and the footer divider
+    --primary            #615fff -> button background and link color
+    --primary-foreground #ffffff -> text on the button
+#}
+{% macro button(url, label) -%}
+<a href="{{ url }}" style="display:inline-block; padding:10px 20px; background-color:#615fff; color:#ffffff; font-weight:600; text-decoration:none; border-radius:6px; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif; font-size:14px;">{{ label }}</a>
+{%- endmacro %}
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{{ subject }}</title>
+  </head>
+  <body style="margin:0; padding:0; background-color:#f1f5f9;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#f1f5f9;">
+      <tr>
+        <td align="center" style="padding:24px 16px;">
+          <table role="presentation" width="560" cellpadding="0" cellspacing="0" style="max-width:560px; width:100%; background-color:#ffffff; border:1px solid #e2e8f0; border-radius:8px;">
+            <tr>
+              <td style="padding:24px 32px 8px 32px; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif; font-size:16px; font-weight:600; color:#0f172a;">
+                {{ app_name }}
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:8px 32px 24px 32px; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif; font-size:14px; line-height:1.6; color:#0f172a;">
+                {% block content %}{% endblock %}
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:16px 32px 24px 32px; border-top:1px solid #e2e8f0; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif; font-size:12px; line-height:1.6; color:#45556c;">
+                {% block footer %}{% endblock %}
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>

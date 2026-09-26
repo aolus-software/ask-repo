@@ -55,3 +55,5 @@ async def test_a_membership_grant_is_delivered_by_email(
     assert email.to == authed_user.email
     assert "You were added to a project" in email.subject
     assert f"/projects/{project_id}" in email.body
+    assert email.html is not None
+    assert f"/projects/{project_id}" in email.html

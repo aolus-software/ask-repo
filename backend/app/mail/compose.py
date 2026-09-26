@@ -6,13 +6,35 @@ inventory of the organization's private codebases. The signatures below are the
 enforcement: there is no parameter through which `details`, a name or a path could
 arrive, and `tests/test_mail_compose.py` pins the parameter sets. See
 `.claude/rules/mail.md`.
+
+Each function renders an HTML alternative from `app/mail/templates/` alongside the
+plain-text body, from the same fixed sentence and the same link — no template is handed
+anything the text body does not already carry. The templates load no remote or embedded
+asset (no image, no external stylesheet, no script), so the HTML part cannot itself
+become a second egress path.
 """
 
 import uuid
 
+from jinja2 import Environment, PackageLoader, StrictUndefined, select_autoescape
+
 from app.config import Settings
 from app.core.notifications import NotificationType
 from app.mail.sender import OutboundEmail
+
+# Autoescaping is what keeps a value nobody has vetted from becoming markup: every value
+# handed to a template here is already a fixed sentence or a link built from ids (see the
+# module docstring), but the escaping is a property of the environment, not of
+# remembering to call `|e` at every call site. `StrictUndefined` turns a template typo —
+# a variable a `.html` file references that the composer never passed — into a render
+# failure instead of a silently blank line. `tests/test_mail_compose.py` asserts both.
+_ENVIRONMENT = Environment(
+    loader=PackageLoader("app.mail", "templates"),
+    autoescape=select_autoescape(["html"]),
+    undefined=StrictUndefined,
+    trim_blocks=True,
+    lstrip_blocks=True,
+)
 
 # (the subject's {message}, the body's one sentence). Fixed strings: the subject is the
 # most visible part of an email and carries the same ban as the body.
@@ -97,27 +119,51 @@ def compose_notification(
     """One notification email: a fixed sentence and a link that reveals only an id."""
     subject_message, sentence = MESSAGES[event_type]
     base = _base(settings)
+    link_url = f"{base}{_link(target_type, target_id, project_id)}"
+    settings_url = f"{base}/settings/notifications"
     body = (
         f"{sentence}\n\n"
-        f"Open: {base}{_link(target_type, target_id, project_id)}\n\n"
+        f"Open: {link_url}\n\n"
         "—\n"
         "You are receiving this because email notifications are on for this event.\n"
-        f"Manage them: {base}/settings/notifications\n"
+        f"Manage them: {settings_url}\n"
+    )
+    template = _ENVIRONMENT.get_template("notification.html")
+    html = template.render(
+        subject=compose_subject(subject_message, settings=settings),
+        app_name=settings.mail_app_name,
+        sentence=sentence,
+        link_url=link_url,
+        settings_url=settings_url,
     )
     return OutboundEmail(
-        to=to, subject=compose_subject(subject_message, settings=settings), body=body
+        to=to,
+        subject=compose_subject(subject_message, settings=settings),
+        body=body,
+        html=html,
     )
 
 
 def compose_password_reset(*, raw_token: str, to: str, settings: Settings) -> OutboundEmail:
     """The reset link, with the token in the fragment so no server ever logs it."""
     minutes = settings.password_reset_token_ttl_minutes
+    link_url = f"{_base(settings)}/reset-password#token={raw_token}"
     body = (
         "Someone asked to reset the password for this account.\n\n"
-        f"Choose a new password: {_base(settings)}/reset-password#token={raw_token}\n\n"
+        f"Choose a new password: {link_url}\n\n"
         f"The link works once and expires in {minutes} minutes. If you did not ask for "
         "this, ignore this email — your password has not changed.\n"
     )
+    template = _ENVIRONMENT.get_template("password_reset.html")
+    html = template.render(
+        subject=compose_subject(RESET_MESSAGE, settings=settings),
+        app_name=settings.mail_app_name,
+        link_url=link_url,
+        minutes=minutes,
+    )
     return OutboundEmail(
-        to=to, subject=compose_subject(RESET_MESSAGE, settings=settings), body=body
+        to=to,
+        subject=compose_subject(RESET_MESSAGE, settings=settings),
+        body=body,
+        html=html,
     )

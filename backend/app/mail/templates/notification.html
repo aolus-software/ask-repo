@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+
+{% block content %}
+<p style="margin:0 0 16px 0;">{{ sentence }}</p>
+<p style="margin:0 0 8px 0;">{{ button(link_url, "Open") }}</p>
+<p style="margin:0; font-size:12px; color:#45556c;">
+  <a href="{{ link_url }}" style="color:#615fff;">{{ link_url }}</a>
+</p>
+{% endblock %}
+
+{% block footer %}
+You are receiving this because email notifications are on for this event.<br>
+Manage them: <a href="{{ settings_url }}" style="color:#615fff;">{{ settings_url }}</a>
+{% endblock %}

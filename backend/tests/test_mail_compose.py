@@ -1,6 +1,7 @@
 """What leaves the network: a fixed message, a link, and nothing from a repository."""
 
 import inspect
+import re
 import uuid
 from typing import Any
 
@@ -9,11 +10,18 @@ import pytest
 from app.config import Settings
 from app.core.notifications import NotificationType
 from app.mail.compose import (
+    _ENVIRONMENT,
     MESSAGES,
     compose_notification,
     compose_password_reset,
     compose_subject,
 )
+
+# Every href in a rendered template must start with this, since a rendered email links
+# only the app itself.
+BASE_URL = "https://askrepo.internal"
+
+FORBIDDEN_HTML_SNIPPETS = ("<img", "<script", "<link", "url(", "src=")
 
 BASE: dict[str, Any] = {
     "mail_enabled": True,
@@ -80,6 +88,14 @@ def test_every_event_type_composes_with_a_link(event_type: NotificationType) -> 
     )
     assert f"Open: {expected}" in email.body
 
+    assert email.html is not None
+    assert expected in email.html
+    assert f"{BASE_URL}/settings/notifications" in email.html
+    for snippet in FORBIDDEN_HTML_SNIPPETS:
+        assert snippet not in email.html
+    for href in _hrefs(email.html):
+        assert href.startswith(BASE_URL)
+
 
 def test_the_composer_cannot_receive_content() -> None:
     """A "helpful preview" must be a signature change, not a quiet extra field."""
@@ -106,3 +122,22 @@ def test_the_reset_link_carries_the_token_in_the_fragment() -> None:
     assert "https://askrepo.internal/reset-password#token=abc-123_XYZ" in email.body
     assert "?token=" not in email.body
     assert "30 minutes" in email.body
+
+    assert email.html is not None
+    assert "https://askrepo.internal/reset-password#token=abc-123_XYZ" in email.html
+    assert "30 minutes" in email.html
+    for snippet in FORBIDDEN_HTML_SNIPPETS:
+        assert snippet not in email.html
+    for href in _hrefs(email.html):
+        assert href.startswith(BASE_URL)
+
+
+def _hrefs(html: str) -> list[str]:
+    """Every `href="..."` value in a rendered template, in document order."""
+    return re.findall(r'href="([^"]*)"', html)
+
+
+def test_the_environment_autoescapes() -> None:
+    assert _ENVIRONMENT.autoescape
+    template = _ENVIRONMENT.from_string("{{ value }}")
+    assert template.render(value="<b>hi</b>") == "&lt;b&gt;hi&lt;/b&gt;"

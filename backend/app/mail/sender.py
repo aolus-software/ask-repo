@@ -22,6 +22,7 @@ class OutboundEmail:
     to: str
     subject: str
     body: str
+    html: str | None = None
 
 
 class MailSendError(Exception):
@@ -39,12 +40,19 @@ class MailSender(Protocol):
 
 
 def build_message(email: OutboundEmail, *, sender: str) -> EmailMessage:
-    """Plain text, always: no HTML means nothing rendered from any value (spec §3.2)."""
+    """Plain text first, always; an HTML alternative is added only when `email.html` is set.
+
+    `set_content` puts the plain text part first, which is what a client without HTML
+    rendering (or one honouring the sender's stated preference) falls back to. With no
+    `html`, the message stays exactly what it always was: a single `text/plain` part.
+    """
     message = EmailMessage()
     message["From"] = sender
     message["To"] = email.to
     message["Subject"] = email.subject
     message.set_content(email.body)
+    if email.html is not None:
+        message.add_alternative(email.html, subtype="html")
     return message
 
 
