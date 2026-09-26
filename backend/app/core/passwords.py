@@ -13,7 +13,11 @@ import logging
 from functools import lru_cache
 from pathlib import Path
 
-from app.config import get_settings
+from fastapi import status
+
+from app.config import Settings, get_settings
+from app.core.errors import AppError, ErrorCode
+from app.core.security import hash_password
 
 logger = logging.getLogger(__name__)
 
@@ -68,3 +72,19 @@ def check_password(
 
     if password.strip().lower() in common:
         raise PasswordPolicyError("Password is too common. Choose something less predictable.")
+
+
+def validate_and_hash_new_password(password: str, settings: Settings) -> str:
+    """Check policy and hash, or raise `400 WEAK_PASSWORD`. Shared by every reset path."""
+    try:
+        check_password(
+            password,
+            min_length=settings.password_min_length,
+            max_bytes=settings.password_max_bytes,
+            common=get_common_passwords(),
+        )
+    except PasswordPolicyError as error:
+        raise AppError(
+            status.HTTP_400_BAD_REQUEST, ErrorCode.WEAK_PASSWORD, error.reason
+        ) from error
+    return hash_password(password, cost=settings.bcrypt_cost)

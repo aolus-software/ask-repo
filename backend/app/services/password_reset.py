@@ -22,8 +22,8 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from app.config import Settings
 from app.core.audit import AuditEntry, AuditEventType, AuditRecorder
 from app.core.errors import AppError, ErrorCode
-from app.core.passwords import PasswordPolicyError, check_password, get_common_passwords
-from app.core.security import generate_opaque_token, hash_password, sha256_hex
+from app.core.passwords import validate_and_hash_new_password
+from app.core.security import generate_opaque_token, sha256_hex
 from app.mail.compose import compose_password_reset
 from app.mail.sender import MailSender, MailSendError
 from app.models import PasswordResetToken
@@ -113,7 +113,7 @@ class PasswordResetService:
                 "This reset link is invalid or has expired. Request a new one.",
             )
 
-        user.password_hash = self._validate_new_password(payload.new_password)
+        user.password_hash = validate_and_hash_new_password(payload.new_password, self.settings)
         user.must_change_password = False
         user.updated_at = datetime.now(UTC)
         token.used_at = datetime.now(UTC)
@@ -131,21 +131,6 @@ class PasswordResetService:
                 context={"revokedCount": revoked},
             )
         )
-
-    def _validate_new_password(self, password: str) -> str:
-        # Mirrors AuthService._validate_new_password: one policy, one error code.
-        try:
-            check_password(
-                password,
-                min_length=self.settings.password_min_length,
-                max_bytes=self.settings.password_max_bytes,
-                common=get_common_passwords(),
-            )
-        except PasswordPolicyError as error:
-            raise AppError(
-                status.HTTP_400_BAD_REQUEST, ErrorCode.WEAK_PASSWORD, error.reason
-            ) from error
-        return hash_password(password, cost=self.settings.bcrypt_cost)
 
 
 async def deliver_password_reset(
