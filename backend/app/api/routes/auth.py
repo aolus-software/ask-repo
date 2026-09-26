@@ -197,21 +197,18 @@ async def refresh(
     status_code=status.HTTP_200_OK,
     summary="Change your own password",
     description=(
-        "Reads the refresh token from the cookie named by `REFRESH_COOKIE_NAME` "
-        "(not a typed OpenAPI parameter)."
+        "Revokes every other session. The caller's own session — the one its access "
+        "token names — stays signed in."
     ),
     dependencies=[Depends(enforce_password_change_ip_limit)],
     responses={code: ERROR_RESPONSES[code] for code in (400, 401, 422, 429)},
 )
 async def change_password(
-    request: Request,
     payload: ChangePasswordRequest,
     current_user: CurrentUser,
     service: AuthServiceDep,
-    settings: SettingsDep,
 ) -> UserResponse:
-    refresh_token = _read_refresh_cookie(request, settings)
-    return await service.change_password(current_user.id, payload, refresh_token)
+    return await service.change_password(current_user.id, payload, current_user.session_id)
 
 
 def get_password_reset_service(

@@ -89,19 +89,20 @@ class RefreshTokenRepository(BaseRepository[RefreshToken]):
         user_id: uuid.UUID,
         *,
         reason: RevokedReason,
-        except_token_id: uuid.UUID | None = None,
+        except_family_id: uuid.UUID | None = None,
     ) -> int:
         """Revoke every unrevoked token for one user. Returns the count.
 
-        `except_token_id` spares the caller's own session, which is what
-        `docs/PRD.md:108` means by revoking all *other* refresh tokens on a password
-        change.
+        `except_family_id` spares the caller's own session — every token in it, not one
+        row — which is what `docs/PRD.md:108` means by revoking all *other* refresh
+        tokens on a password change. A family is the session; sparing one token id was
+        only ever right for the family's newest token.
         """
         statement = update(RefreshToken).where(
             RefreshToken.user_id == user_id, RefreshToken.revoked_at.is_(None)
         )
-        if except_token_id is not None:
-            statement = statement.where(RefreshToken.id != except_token_id)
+        if except_family_id is not None:
+            statement = statement.where(RefreshToken.family_id != except_family_id)
         result = await self.session.execute(
             statement.values(revoked_at=datetime.now(UTC), revoked_reason=reason)
         )

@@ -15,6 +15,7 @@ caller's job, which keeps this module usable from the CLI as well as from routes
 import hashlib
 import secrets
 import uuid
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from functools import lru_cache
 from typing import Final
@@ -96,27 +97,49 @@ def generate_opaque_token() -> str:
     return secrets.token_urlsafe(_OPAQUE_TOKEN_BYTES)
 
 
-def create_access_token(user_id: uuid.UUID, *, secret: str, ttl_minutes: int) -> tuple[str, int]:
+@dataclass(frozen=True, slots=True)
+class AccessClaims:
+    """What an access token asserts: who, and which sign-in it belongs to.
+
+    `session_id` is the refresh-token `family_id`. It is how the backend tells one of a
+    user's sessions from another without the refresh cookie, which the BFF proxy never
+    forwards. `None` only for a token minted before the claim existed.
+    """
+
+    user_id: uuid.UUID
+    session_id: uuid.UUID | None
+
+
+def create_access_token(
+    user_id: uuid.UUID,
+    *,
+    secret: str,
+    ttl_minutes: int,
+    session_id: uuid.UUID | None = None,
+) -> tuple[str, int]:
     """Mint a signed access token. Returns the token and its lifetime in seconds.
 
     Deliberately carries no `is_admin` or `must_change_password` claim: both would go
     stale for up to `ttl_minutes`, and `docs/PRD.md:101` requires deactivation to end
-    a session immediately.
+    a session immediately. `sid` is safe to carry because it never changes for the
+    life of a session.
     """
     issued_at = datetime.now(UTC)
-    claims = {
+    claims: dict[str, object] = {
         "sub": str(user_id),
         "iat": issued_at,
         "exp": issued_at + timedelta(minutes=ttl_minutes),
         "jti": str(uuid.uuid4()),
         "typ": _ACCESS_TOKEN_TYPE,
     }
+    if session_id is not None:
+        claims["sid"] = str(session_id)
     token = jwt.encode(claims, secret, algorithm=_ACCESS_TOKEN_ALGORITHM)
     return token, ttl_minutes * 60
 
 
-def decode_access_token(token: str, *, secret: str) -> uuid.UUID:
-    """Verify an access token and return the user id it identifies."""
+def decode_access_claims(token: str, *, secret: str) -> AccessClaims:
+    """Verify an access token and return what it asserts."""
     try:
         claims = jwt.decode(token, secret, algorithms=[_ACCESS_TOKEN_ALGORITHM])
     except jwt.ExpiredSignatureError as error:
@@ -127,9 +150,20 @@ def decode_access_token(token: str, *, secret: str) -> uuid.UUID:
     if claims.get("typ") != _ACCESS_TOKEN_TYPE:
         raise TokenInvalidError("token is not an access token")
     try:
-        return uuid.UUID(claims["sub"])
+        user_id = uuid.UUID(claims["sub"])
     except (KeyError, ValueError) as error:
         raise TokenInvalidError("token subject is not a UUID") from error
+    raw_session = claims.get("sid")
+    try:
+        session_id = uuid.UUID(raw_session) if raw_session is not None else None
+    except ValueError as error:
+        raise TokenInvalidError("token session is not a UUID") from error
+    return AccessClaims(user_id=user_id, session_id=session_id)
+
+
+def decode_access_token(token: str, *, secret: str) -> uuid.UUID:
+    """Verify an access token and return the user id it identifies."""
+    return decode_access_claims(token, secret=secret).user_id
 
 
 @lru_cache(maxsize=8)

@@ -9,6 +9,7 @@ grace window mints a sibling token instead of treating the second use as a repla
 import uuid
 from datetime import UTC, datetime, timedelta
 
+import jwt
 import pytest
 from fastapi import FastAPI
 from httpx import AsyncClient
@@ -16,7 +17,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
-from app.core.security import hash_password, sha256_hex, verify_password
+from app.core.security import create_access_token, hash_password, sha256_hex, verify_password
 from app.models import User
 
 PASSWORD = "a-perfectly-fine-passphrase"
@@ -542,7 +543,7 @@ async def test_change_password_spares_the_callers_own_session(
 async def test_change_password_revokes_other_sessions_with_reason(
     client: AsyncClient, db_session: AsyncSession
 ) -> None:
-    """The `except_token_id` path spares the caller's own token, but it must also
+    """The `except_family_id` path spares the caller's own token, but it must also
     actually revoke the others — otherwise a stolen refresh token from a different
     device would keep working right through a password change meant to end it.
     """
@@ -657,6 +658,89 @@ async def test_login_refresh_logout_work_under_a_configured_cookie_name(
             assert logout_response.status_code == 204
         finally:
             get_settings.cache_clear()
+
+
+async def test_change_password_without_the_cookie_spares_the_callers_own_session(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    """The BFF proxy strips `cookie` from every forwarded request
+    (`frontend/app/api/[...path]/route.ts`), so this is how a real browser's change
+    arrives. The caller's session must survive it; every other session must not."""
+    await _make_user(db_session)
+    access, own_cookie = await _login(client)
+    _, other_cookie = await _login(client)
+
+    client.cookies.clear()
+    response = await client.post(
+        "/auth/change-password",
+        headers=_bearer(access),
+        json={"currentPassword": PASSWORD, "newPassword": NEW_PASSWORD},
+    )
+    assert response.status_code == 200, response.text
+
+    _present_cookie(client, own_cookie)
+    own_session = await client.post("/auth/refresh")
+    _present_cookie(client, other_cookie)
+    other_session = await client.post("/auth/refresh")
+
+    assert own_session.status_code == 200
+    assert other_session.status_code == 401
+
+
+async def test_change_password_with_a_pre_sid_token_revokes_every_session(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    """A token minted before the claim names no session, so none is spared."""
+    user = await _make_user(db_session)
+    _, own_cookie = await _login(client)
+    legacy, _ = create_access_token(user.id, secret=get_settings().secret_key, ttl_minutes=15)
+
+    client.cookies.clear()
+    await client.post(
+        "/auth/change-password",
+        headers=_bearer(legacy),
+        json={"currentPassword": PASSWORD, "newPassword": NEW_PASSWORD},
+    )
+    _present_cookie(client, own_cookie)
+
+    assert (await client.post("/auth/refresh")).status_code == 401
+
+
+async def test_the_forced_change_keeps_its_session(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    """The first-login flow goes through the same proxy, so it had the same defect."""
+    await _make_user(db_session, must_change_password=True)
+    access, cookie = await _login(client)
+
+    client.cookies.clear()
+    await client.post(
+        "/auth/change-password",
+        headers=_bearer(access),
+        json={"currentPassword": PASSWORD, "newPassword": NEW_PASSWORD},
+    )
+    _present_cookie(client, cookie)
+
+    assert (await client.post("/auth/refresh")).status_code == 200
+
+
+async def test_the_access_token_names_its_refresh_family(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    await _make_user(db_session)
+    access, cookie = await _login(client)
+    row = await db_session.execute(
+        text("SELECT family_id FROM refresh_tokens WHERE token_hash = :hash"),
+        {"hash": sha256_hex(cookie)},
+    )
+    family_id = row.scalar_one()
+    secret = get_settings().secret_key
+
+    assert jwt.decode(access, secret, algorithms=["HS256"])["sid"] == str(family_id)
+
+    _present_cookie(client, cookie)
+    refreshed = (await client.post("/auth/refresh")).json()["accessToken"]
+    assert jwt.decode(refreshed, secret, algorithms=["HS256"])["sid"] == str(family_id)
 
 
 def test_the_auth_prefix_is_gate_exempt() -> None:

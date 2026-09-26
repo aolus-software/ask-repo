@@ -83,15 +83,17 @@ class AuthService:
         hijacked chain is capped at the original token's remaining lifetime rather than
         renewing itself indefinitely on every rotation.
         """
+        family = family_id or uuid.uuid4()
         access_token, expires_in = create_access_token(
             user.id,
             secret=self.settings.secret_key,
             ttl_minutes=self.settings.access_token_ttl_minutes,
+            session_id=family,
         )
         raw_refresh = generate_opaque_token()
         await self.tokens.create(
             user_id=user.id,
-            family_id=family_id or uuid.uuid4(),
+            family_id=family,
             token_hash=sha256_hex(raw_refresh),
             expires_at=expires_at
             or datetime.now(UTC) + timedelta(days=self.settings.refresh_token_ttl_days),
@@ -303,7 +305,10 @@ class AuthService:
         return issued
 
     async def change_password(
-        self, user_id: uuid.UUID, payload: ChangePasswordRequest, raw_token: str | None
+        self,
+        user_id: uuid.UUID,
+        payload: ChangePasswordRequest,
+        session_id: uuid.UUID | None,
     ) -> UserResponse:
         """Change the caller's own password, keeping their current session alive."""
         user = await self.users.get(user_id)
@@ -322,13 +327,12 @@ class AuthService:
         user.must_change_password = False
         user.updated_at = datetime.now(UTC)
 
-        # Revoke all *other* sessions (docs/PRD.md:108). The caller's own token is
-        # identifiable because it arrived in the cookie.
-        current = await self.tokens.get_by_hash(sha256_hex(raw_token)) if raw_token else None
+        # Revoke all *other* sessions (docs/PRD.md:108). The caller's session is the one
+        # their access token names: the refresh cookie never reaches this route through
+        # the BFF proxy. A token minted before `sid` names none, so every session goes —
+        # the old behaviour, for at most one access-token lifetime after deploy.
         await self.tokens.revoke_all_for_user(
-            user.id,
-            reason="password_change",
-            except_token_id=current.id if current else None,
+            user.id, reason="password_change", except_family_id=session_id
         )
         await self.session.commit()
         await self._recorder.record(

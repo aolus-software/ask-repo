@@ -14,10 +14,12 @@ import pytest
 
 from app.core.security import (
     BCRYPT_MAX_BYTES,
+    AccessClaims,
     PasswordTooLongError,
     TokenExpiredError,
     TokenInvalidError,
     create_access_token,
+    decode_access_claims,
     decode_access_token,
     dummy_password_hash,
     generate_opaque_token,
@@ -204,3 +206,38 @@ def test_decoding_rejects_a_non_uuid_subject() -> None:
 
     with pytest.raises(TokenInvalidError):
         decode_access_token(token, secret=SECRET)
+
+
+def test_access_token_carries_the_session_id_when_given() -> None:
+    user_id, session_id = uuid.uuid4(), uuid.uuid4()
+    token, _ = create_access_token(user_id, secret=SECRET, ttl_minutes=15, session_id=session_id)
+
+    assert jwt.decode(token, SECRET, algorithms=["HS256"])["sid"] == str(session_id)
+    assert decode_access_claims(token, secret=SECRET) == AccessClaims(
+        user_id=user_id, session_id=session_id
+    )
+
+
+def test_a_token_without_sid_decodes_to_no_session() -> None:
+    """Tokens minted before `sid` existed stay valid until they expire."""
+    user_id = uuid.uuid4()
+    token, _ = create_access_token(user_id, secret=SECRET, ttl_minutes=15)
+
+    assert decode_access_claims(token, secret=SECRET) == AccessClaims(
+        user_id=user_id, session_id=None
+    )
+
+
+def test_decoding_rejects_a_non_uuid_session() -> None:
+    claims = {
+        "sub": str(uuid.uuid4()),
+        "sid": "not-a-uuid",
+        "iat": datetime.now(UTC),
+        "exp": datetime.now(UTC) + timedelta(minutes=15),
+        "jti": str(uuid.uuid4()),
+        "typ": "access",
+    }
+    token = jwt.encode(claims, SECRET, algorithm="HS256")
+
+    with pytest.raises(TokenInvalidError):
+        decode_access_claims(token, secret=SECRET)

@@ -89,6 +89,15 @@ incompatibly. Configuration defaults and internal module layout may change in a 
 - **"No mail provider anywhere in the stack" is no longer true.** Phase 2.4 introduces an optional
   mail provider (off by default); `docs/PRD.md` §1 and `CLAUDE.md` have been updated.
 
+### Fixed
+
+- **Changing your password no longer signs you out of the session you changed it from.**
+  The backend looked for the caller's session in the refresh cookie, which the frontend's
+  API proxy never forwards, so every session was revoked — the caller's included — and they
+  were sent to the sign-in page within 15 minutes. Access tokens now carry a `sid` claim
+  naming their session, and the change spares that one. This affected the forced
+  first-login change too.
+
 ## [2.1.0] — 2026-09-19
 
 Append-only audit trail (`docs/PRD.md` §2.1, phase 2.2): who did what, never the secret involved
