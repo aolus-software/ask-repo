@@ -51,6 +51,8 @@ queries (issue #48 owns push).
 6. **The routes live under a new `/me` prefix,** not under `/auth` and not as flags on
    existing routes (§1.1).
 7. **The account menu gains a header and a Profile item;** it does not shrink.
+8. **The password-change session defect is fixed in this change** (§1.10), using the `sid`
+   claim this design adds anyway.
 
 ### 0.2 Amendments to `docs/PRD.md` and the rules, made in the implementation change
 
@@ -225,9 +227,11 @@ unchanged. Preference changes remain exemption 5.
 `tests/test_api_model.py` covers them. `/me/activity` reuses `AuditEventResponse`. Nothing
 here streams, so `SSE_EVENT_MODELS` is untouched.
 
-### 1.10 Flagged for decision: password change revokes the current session too
+### 1.10 Fixed in this change: password change revokes the current session too
 
-**SUSPECT, traced but not reproduced.** `AuthService.change_password`
+**Decided by the owner (2026-09-26): fixed in this change.**
+
+**The defect — traced, not yet reproduced.** `AuthService.change_password`
 (`app/services/auth.py:305`) spares the caller's own session by hashing the refresh token
 "because it arrived in the cookie", and the route reads it with `_read_refresh_cookie`
 (`app/api/routes/auth.py:213`). But the frontend calls `/auth/change-password` through the
@@ -237,14 +241,37 @@ catch-all proxy (`frontend/hooks/use-change-password.ts`), which strips `cookie`
 to `/login` within 15 minutes of changing their password — on the forced first-login flow
 as well as the new profile form.
 
-Settled by: changing a password in the running app and checking whether the caller's own
-`refresh_tokens` row has `revoked_reason = 'password_change'`.
+The implementation reproduces it first, as a failing test (below), before changing any
+code. If the test passes against unchanged code, the premise is wrong: stop and report
+rather than applying the fix.
 
-If confirmed, the `sid` claim (§1.2) is the natural fix: `change_password` spares
-`user.session_id`'s family instead of looking up a cookie the backend never receives. That
-is a behavioural fix to an existing route and **is not part of this design until the owner
-decides** — it is listed here because the profile's password section is the second place
-that would inherit the defect.
+**The fix: spare the session named by the `sid` claim.**
+
+- `RefreshTokenRepository.revoke_all_for_user` replaces `except_token_id` with
+  `except_family_id: uuid.UUID | None`. It spares every token in that family, not one row.
+  That is also more correct than the old shape: a family is the session, and sparing one
+  token id was only ever correct for the family's newest token.
+- `AuthService.change_password` drops its `raw_token` parameter and takes the caller's
+  `session_id` (from `AuthenticatedUser`, §1.2), passing it as `except_family_id`.
+- The route stops reading the refresh cookie for this call, and its `description` stops
+  claiming it does. `_read_refresh_cookie` stays for the routes that really receive the
+  cookie (refresh and logout, through their own `/api/auth/*` handlers).
+- A token minted before this change has no `sid`, so `session_id` is `None` and every
+  session is revoked — exactly today's behaviour, for at most 15 minutes after deploy.
+- No other caller of `revoke_all_for_user` passes the exception argument; each one is
+  checked when the parameter is renamed.
+
+**Tests** (`test_auth_api.py`):
+
+- Written first, and expected to fail against unchanged code: sign in twice (two families);
+  change the password with the first session's bearer and **no cookie**, as the proxy sends
+  it; assert the first family is still usable (a refresh succeeds) and the second is revoked
+  with `revoked_reason = 'password_change'`.
+- A bearer without `sid` revokes every family.
+- The forced first-login flow keeps its session the same way.
+
+**Docs:** `CHANGELOG.md` records it under *Fixed*: "Changing your password no longer signs
+you out of the session you changed it from."
 
 ---
 
@@ -390,7 +417,7 @@ revoke the other browser and see its next navigation after token expiry land on 
 | `backend/README.md` | the four `/me` routes |
 | `frontend/README.md` | the screen and the layout tree |
 | `CLAUDE.md` | the frontend route list gains `/profile`; `/settings/notifications` is a redirect |
-| `CHANGELOG.md` | under `[Unreleased]`: the page, the routes, `SESSION_NOT_FOUND`, the event, Settings hidden from non-admins |
+| `CHANGELOG.md` | under `[Unreleased]`: the page, the routes, `SESSION_NOT_FOUND`, the event, Settings hidden from non-admins; under *Fixed*, the password-change session fix (§1.10) |
 
 `docs/configuration.md` is untouched: no setting is added. The PR closes #50.
 
