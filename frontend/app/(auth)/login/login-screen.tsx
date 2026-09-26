@@ -2,6 +2,7 @@
 
 import { Loader2 } from "lucide-react";
 import Image from "next/image";
+import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useState } from "react";
 
@@ -20,7 +21,7 @@ import { Input } from "@/components/ui/input";
 import { parseApiError } from "@/lib/api/errors";
 import { safeNext } from "@/lib/safe-next";
 
-export function LoginScreen() {
+export function LoginScreen({ resetEnabled }: { resetEnabled: boolean }) {
   const searchParams = useSearchParams();
 
   const [email, setEmail] = useState("");
@@ -153,6 +154,17 @@ export function LoginScreen() {
             {isPending ? <Loader2 className="size-4 animate-spin" /> : null}
             Sign in
           </Button>
+
+          {resetEnabled ? (
+            <div className="mt-4 text-center">
+              <Link
+                href="/forgot-password"
+                className="text-muted-foreground text-sm hover:underline"
+              >
+                Forgot password?
+              </Link>
+            </div>
+          ) : null}
         </form>
       </CardContent>
     </Card>

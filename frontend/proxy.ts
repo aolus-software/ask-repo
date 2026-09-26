@@ -10,6 +10,9 @@ import {
 import { forwardedHeaders } from "@/lib/auth/forwarded";
 import { refreshSession } from "@/lib/auth/session";
 
+/** Pages a signed-out visitor must reach. Everything else redirects to /login. */
+const PUBLIC_ROUTES = new Set(["/login", "/forgot-password", "/reset-password"]);
+
 /**
  * The coarse gate: is there a session at all?
  *
@@ -29,16 +32,16 @@ import { refreshSession } from "@/lib/auth/session";
  */
 export async function proxy(request: NextRequest): Promise<NextResponse> {
   const { pathname } = request.nextUrl;
-  const isLoginRoute = pathname === "/login";
+  const isPublicRoute = PUBLIC_ROUTES.has(pathname);
 
   const sessionCookie = request.cookies.get(SESSION_COOKIE)?.value;
   const hasAccess = Boolean(request.cookies.get(ACCESS_COOKIE)?.value);
 
   if (!sessionCookie) {
-    return isLoginRoute ? NextResponse.next() : redirectToLogin(request);
+    return isPublicRoute ? NextResponse.next() : redirectToLogin(request);
   }
 
-  if (isLoginRoute) {
+  if (pathname === "/login") {
     return NextResponse.redirect(new URL("/", request.url));
   }
 

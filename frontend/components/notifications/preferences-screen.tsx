@@ -19,10 +19,9 @@ import { notificationTitleForType } from "@/lib/notifications";
 /**
  * One row per event type, two switches each.
  *
- * The email column is stored and disabled: `docs/PRD.md` §6 has no mail provider
- * until Phase 2.4. Disabling it rather than hiding it shows the shape of the feature
- * without telling the user something untrue — the preference they set now is the one
- * that will be honoured once delivery exists.
+ * The email column follows `emailEnabled`, which is the instance's `MAIL_ENABLED`.
+ * With mail off the switches stay visible and disabled rather than hidden: the
+ * preference a user sets now is the one honoured if an operator turns mail on.
  */
 export function PreferencesScreen() {
   const [draft, setDraft] = useState<NotificationPreference[] | null>(null);
@@ -50,8 +49,8 @@ export function PreferencesScreen() {
 
       {!emailEnabled && (
         <p className="border-border bg-muted text-muted-foreground mb-4 rounded-md border px-4 py-3 text-sm">
-          Email delivery is not configured on this instance. Your choices are saved and
-          will apply once it is.
+          Email delivery is turned off on this instance. Your choices are saved and will
+          apply if an administrator turns it on.
         </p>
       )}
 

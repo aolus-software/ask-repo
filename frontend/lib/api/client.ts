@@ -25,11 +25,17 @@ async function request(path: string, init?: RequestInit): Promise<Response> {
   return response;
 }
 
-/** Typed JSON. A 204 resolves to `undefined` cast to T, which every caller ignores. */
+/**
+ * Typed JSON. A 204 resolves to `undefined` cast to T, which every caller ignores.
+ * A 202 can carry an empty body too — the password-reset request route answers every
+ * address identically with no payload — so an empty body is read as `undefined`
+ * regardless of status rather than failing `.json()` on a string with nothing in it.
+ */
 export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await request(path, init);
   if (response.status === 204) return undefined as T;
-  return (await response.json()) as T;
+  const text = await response.text();
+  return (text ? JSON.parse(text) : undefined) as T;
 }
 
 /** The raw response, for the one caller that needs a stream (the answer endpoint). */
