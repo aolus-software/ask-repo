@@ -237,8 +237,8 @@ nothing else, so it cannot be aimed at anyone's entries. Never add an `update` m
 a route that writes.
 
 **`AuditRecorder.record` opens its own session and never raises.** That is what makes "an audit
-failure cannot fail a user's action" structural rather than a promise each of the 41 call sites
-keeps. The accepted consequence is not to be quietly reframed as a guarantee: an action that
+failure cannot fail a user's action" structural rather than a promise each of the 42 call sites
+keeps (41 in services, plus the `seed-admins` CLI). The accepted consequence is not to be quietly reframed as a guarantee: an action that
 commits and then crashes before its audit write leaves no row, silently — the trail is a strong
 record, not a complete one. Services record **after** the commit that made the change true, from
 plain locals, never from an ORM object.
@@ -460,11 +460,13 @@ App Router, React 19, Tailwind CSS 4 (CSS-first `@theme`, no `tailwind.config.js
 The routes that exist are `/login`, `/forgot-password`, `/reset-password`, `/change-password`, `/` (dashboard),
 `/projects`, `/projects/[id]`, `/ask`, `/ask/[conversationId]`, `/settings/users`,
 `/settings/roles`, `/settings/roles/[id]`, `/settings/audit`, `/settings/audit/[eventId]`,
-`/notifications`, `/settings/notifications`,
+`/notifications`, `/settings/notifications`, `/profile`,
 `/checklist`, and `/checklist/[moduleId]` — the last
 of which now carries a Mock Data tab beside the checklist grid, no new route of its own.
-`/projects/[id]` likewise carries a Members tab rather than a route. `/settings` itself is not a
-screen: a group's index route only redirects to its first reachable child.
+`/projects/[id]` likewise carries a Members tab rather than a route. `/settings/notifications`
+now only redirects to `/profile#notifications` — notification preferences moved to the profile,
+so Settings is admin-only again and `/settings` itself is not a screen: a group's index route
+only redirects to its first reachable child.
 
 ### Next is a backend-for-frontend, not a thin client
 

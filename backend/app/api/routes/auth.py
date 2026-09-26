@@ -10,7 +10,7 @@ without a request or response object.
 
 from typing import Annotated
 
-from fastapi import APIRouter, BackgroundTasks, Depends, Request, Response, status
+from fastapi import APIRouter, BackgroundTasks, Depends, Header, Request, Response, status
 
 from app.api.deps import AuditRecorderDep, ClientIpDep, CurrentUser, SessionDep
 from app.config import Settings, get_settings
@@ -63,6 +63,7 @@ def get_auth_service(
     attempts: LoginAttemptLimiterDep,
     recorder: AuditRecorderDep,
     client_ip: ClientIpDep,
+    user_agent: Annotated[str | None, Header()] = None,
 ) -> AuthService:
     """Provide the service with a request-scoped session.
 
@@ -70,9 +71,11 @@ def get_auth_service(
     keeps every handler down to one service call — see `.claude/rules/router.md`.
     Building a `LoginAttemptLimiter` does no I/O, so the routes that never touch it pay
     nothing for carrying it. The recorder and the client IP arrive the same way and for
-    the same reason.
+    the same reason. The user agent arrives the same way, and only `login` stores it.
     """
-    return AuthService(session, settings, attempts, recorder=recorder, client_ip=client_ip)
+    return AuthService(
+        session, settings, attempts, recorder=recorder, client_ip=client_ip, user_agent=user_agent
+    )
 
 
 AuthServiceDep = Annotated[AuthService, Depends(get_auth_service)]
@@ -197,21 +200,18 @@ async def refresh(
     status_code=status.HTTP_200_OK,
     summary="Change your own password",
     description=(
-        "Reads the refresh token from the cookie named by `REFRESH_COOKIE_NAME` "
-        "(not a typed OpenAPI parameter)."
+        "Revokes every other session. The caller's own session — the one its access "
+        "token names — stays signed in."
     ),
     dependencies=[Depends(enforce_password_change_ip_limit)],
     responses={code: ERROR_RESPONSES[code] for code in (400, 401, 422, 429)},
 )
 async def change_password(
-    request: Request,
     payload: ChangePasswordRequest,
     current_user: CurrentUser,
     service: AuthServiceDep,
-    settings: SettingsDep,
 ) -> UserResponse:
-    refresh_token = _read_refresh_cookie(request, settings)
-    return await service.change_password(current_user.id, payload, refresh_token)
+    return await service.change_password(current_user.id, payload, current_user.session_id)
 
 
 def get_password_reset_service(

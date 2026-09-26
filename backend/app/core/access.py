@@ -22,7 +22,7 @@ from typing import Self
 from fastapi import status
 
 from app.core.errors import AppError, ErrorCode
-from app.core.middleware import AuthenticatedUser
+from app.core.middleware import AuthenticatedUser, ProjectGrant
 from app.core.permissions import Permission
 from app.repositories.membership import MembershipRepository
 
@@ -137,6 +137,18 @@ def role_for(user: AuthenticatedUser, project_id: uuid.UUID) -> str | None:
     """
     grant = user.grants.get(project_id)
     return grant.role if grant else None
+
+
+def memberships_for(user: AuthenticatedUser) -> list[ProjectGrant]:
+    """The projects this caller actually holds a membership on, with the role on each.
+
+    A different question from `resolve_project_scope`: that one answers "what may I
+    read", and an administrator may read everything. This answers "where am I a
+    member", and an administrator is a member only where someone granted it. Read from
+    the snapshot the middleware already loaded — no I/O, and the only membership read
+    the profile makes (`tests/test_scoping_is_single_point.py`).
+    """
+    return list(user.grants.values())
 
 
 def resolve_conversation_owner(user: AuthenticatedUser) -> uuid.UUID:

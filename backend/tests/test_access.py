@@ -13,6 +13,7 @@ from fastapi import HTTPException
 
 from app.core.access import (
     ProjectScope,
+    memberships_for,
     permissions_for,
     require_permission,
     resolve_conversation_owner,
@@ -200,3 +201,31 @@ def test_conversation_owner_is_the_caller_even_for_an_admin() -> None:
     admin = _user(is_admin=True)
 
     assert resolve_conversation_owner(admin) == admin.id
+
+
+# ── memberships_for ─────────────────────────────────────────────────────
+
+
+def test_memberships_for_returns_real_grants_even_for_an_admin() -> None:
+    """Unlike `resolve_project_scope`, this answers "where am I a member" — an admin's
+    unrestricted read does not make them a member of anything."""
+    project_id = uuid.uuid4()
+    grant = ProjectGrant(project_id=project_id, role="editor", permissions=frozenset())
+    admin = AuthenticatedUser(
+        id=uuid.uuid4(),
+        name="Admin",
+        email="admin@example.com",
+        is_admin=True,
+        must_change_password=False,
+        grants={project_id: grant},
+    )
+    nobody = AuthenticatedUser(
+        id=uuid.uuid4(),
+        name="Admin",
+        email="other@example.com",
+        is_admin=True,
+        must_change_password=False,
+    )
+
+    assert memberships_for(admin) == [grant]
+    assert memberships_for(nobody) == []

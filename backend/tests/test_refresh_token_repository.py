@@ -142,7 +142,7 @@ async def test_revoke_all_for_user_can_spare_the_caller(db_session: AsyncSession
     await db_session.commit()
 
     revoked = await repository.revoke_all_for_user(
-        user.id, reason="password_change", except_token_id=keep.id
+        user.id, reason="password_change", except_family_id=keep.family_id
     )
     await db_session.commit()
 

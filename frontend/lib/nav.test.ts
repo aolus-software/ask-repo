@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 
 import { resolveBreadcrumbs, visibleNavTree } from "@/lib/nav";
-import { settingsNav } from "@/lib/settings-nav";
 
 const admin = { isAdmin: true };
 const member = { isAdmin: false };
@@ -17,13 +16,12 @@ describe("visibleNavTree", () => {
     ]);
   });
 
-  it("keeps a group visible when at least one child is reachable", () => {
+  it("hides Settings from a non-admin, whose group has no reachable child", () => {
     expect(visibleNavTree(member).map((i) => i.href)).toEqual([
       "/",
       "/projects",
       "/ask",
       "/checklist",
-      "/settings",
     ]);
   });
 
@@ -33,22 +31,7 @@ describe("visibleNavTree", () => {
       "/settings/users",
       "/settings/roles",
       "/settings/audit",
-      "/settings/notifications",
     ]);
-  });
-
-  it("resolves /settings to notifications for a non-admin", () => {
-    // Until now every settings child was admin-only, so a non-admin never reached the
-    // group at all. Notifications is the first child everyone can see, which changes
-    // what the group's index redirects to -- the kind of thing that works in every
-    // developer's admin session and is broken for everyone else.
-    const reachable = settingsNav.filter((child) => !child.adminOnly);
-    expect(reachable.map((c) => c.href)).toContain("/settings/notifications");
-  });
-
-  it("shows only notifications to a non-admin under settings", () => {
-    const settings = visibleNavTree(member).find((i) => i.href === "/settings");
-    expect(settings?.children?.map((c) => c.href)).toEqual(["/settings/notifications"]);
   });
 
   it("hides Roles from a non-admin", () => {
@@ -79,12 +62,8 @@ describe("visibleNavTree", () => {
       (item) => item.title === "Settings",
     );
 
-    // `settings` is defined here, unlike before Notifications existed: a non-admin
-    // now has one reachable child (Notifications), so the group stays visible with
-    // just that child rather than being dropped entirely.
-    expect(
-      settings?.children?.some((child) => child.href === "/settings/audit") ?? false,
-    ).toBe(false);
+    // Settings is now hidden entirely for non-admins, since all children are admin-only.
+    expect(settings).toBeUndefined();
   });
 
   it("shows the audit trail to an admin", () => {
@@ -99,6 +78,12 @@ describe("visibleNavTree", () => {
 });
 
 describe("resolveBreadcrumbs", () => {
+  it("names the profile page, which is reached from the account menu", () => {
+    expect(resolveBreadcrumbs("/profile", member)).toEqual([
+      { href: "/profile", label: "Profile" },
+    ]);
+  });
+
   it("resolves a trail by longest matching nav item", () => {
     expect(resolveBreadcrumbs("/settings/users", admin)).toEqual([
       { href: "/settings", label: "Settings" },

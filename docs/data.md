@@ -77,13 +77,23 @@ erDiagram
 | Table | Notable columns |
 | --- | --- |
 | `users` | `email` (partial unique index where not deleted), `password_hash`, `is_admin`, `must_change_password`, `last_login_at` |
-| `refresh_tokens` | `token_hash`, `family_id`, `issued_at`, `expires_at`, `used_at`, `revoked_at`, `revoked_reason` |
+| `refresh_tokens` | `token_hash`, `family_id`, `issued_at`, `expires_at`, `used_at`, `revoked_at`, `revoked_reason`, `user_agent` (255), `ip_address` (45) |
 | `password_reset_tokens` | `id`, `user_id`, `token_hash`, `created_at`, `expires_at`, `used_at`, `revoked_at`, `sent_at` (hard-deleted if expired or used > 24h ago) |
 
 Refresh tokens are **opaque and stored hashed**, so they can be revoked and so the database
 never holds a usable credential. They **rotate on use**: `used_at` marks the spent one and
 `family_id` ties a chain together, which is what makes replay of an already-used token
 detectable. Access tokens are stateless JWTs (15 minutes) and are not stored at all.
+
+`user_agent` (255) and `ip_address` (45, migration `d4a9e6b27c15`) are captured at **login** and
+copied forward on rotation, so a chain keeps the device and address it started from as it
+rotates. Both are nullable — existing rows predate the column and simply show no device. A
+**live session** is a `refresh_tokens` row that is the unrevoked, unexpired head of its
+`family_id` chain: `used_at IS NULL`, `revoked_at IS NULL`, `expires_at > now()`. `GET
+/me/sessions` lists the caller's own live sessions this way, and `DELETE
+/me/sessions/{sessionId}` revokes one with `revoked_reason='user_revoked'` — a new
+`RevokedReason` member alongside `rotated`, `replay`, `logout`, `logout_all`,
+`password_change`, `admin_reset`, `user_deactivated` and `password_reset`.
 
 Password reset tokens (Phase 2.4) are **also stored hashed and single-use**. The raw token
 never reaches Postgres — only a hashed version — and rides to the user in an email link
@@ -197,9 +207,10 @@ Four non-partial indexes — `created_at`, `actor_user_id`, `event_type`, `proje
 them is partial because there is no `deleted_at` to filter, which is the one place this table
 diverges from every other group above.
 
-**The catalogue is a `StrEnum` in `app/core/audit.py`, not a table** — 39 event types across auth,
-accounts, projects, RBAC, password reset, checklist modules and items, change sets, mock data, exports and
-conversations. Existence lives in code for the reason `app/core/permissions.py` gives for the
+**The catalogue is a `StrEnum` in `app/core/audit.py`, not a table** — 40 event types across auth
+(including session revoke, added with the profile page), accounts, projects, RBAC, password reset,
+checklist modules and items, change sets, mock data, exports and conversations. Existence lives in
+code for the reason `app/core/permissions.py` gives for the
 permission catalogue: if it lived in a table, deleting a row would orphan every write site that
 names it. Which operations must record one is a rule rather than a list —
 `.claude/rules/audit-trail.md`, enforced in both directions by
@@ -210,7 +221,7 @@ reduced to its host by `urlsplit().hostname`, which excludes the userinfo a PAT 
 content (no prompt, no message, no source excerpt, and **`target_label` is `NULL` for a
 conversation**, because its title derives from the user's first question).
 
-**`details` is one envelope** for all 39 events:
+**`details` is one envelope** for all 40 events:
 
 ```json
 {

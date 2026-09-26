@@ -10,6 +10,7 @@ export const AUDIT_EVENT_TYPES = [
   "auth.logout",
   "auth.password.changed",
   "auth.refresh.replayed",
+  "auth.session.revoked",
   "user.created",
   "user.updated",
   "user.deactivated",

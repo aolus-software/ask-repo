@@ -107,6 +107,10 @@ The email switch is stored and rendered **disabled**, with a line saying email d
 configured on this instance — Phase 2.4 turns it on by adding a sender, not by touching the
 schema.
 
+**The switches live at `/profile#notifications`.** Preferences belong to a person, not the
+instance, so they moved off Settings; `/settings/notifications` now only redirects there, and
+Settings is admin-only again with no non-admin child left.
+
 **The counter-intuitive part, stated outright because it reads as a bug otherwise: muting in-app
 does not stop the row being written.** A `notifications` row is written for every resolved
 recipient regardless of their preference; muting in-app sets that row's `in_app_visible` to

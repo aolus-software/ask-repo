@@ -6,6 +6,7 @@ import {
   type LucideIcon,
   MessagesSquare,
   Settings,
+  UserRound,
 } from "lucide-react";
 
 import type { NavChild } from "@/lib/nav-child";
@@ -76,11 +77,14 @@ export function visibleNavTree(user: NavUser): VisibleNavItem[] {
  * its primary entry point is the bell's "See all" link
  * (`components/notifications/notification-bell.tsx`), and folding it into `navItems`
  * would also put it in `visibleNavTree` — and therefore in the sidebar, which
- * `lib/nav.test.ts` pins at exactly five top-level destinations. Kept as its own list
- * so a breadcrumb-only destination never has to earn a sidebar row it does not want.
+ * `lib/nav.test.ts` pins — five top-level destinations for an admin, four for everyone else.
+ * `/profile` is here for the same reason: it opens from the account menu.
+ * Kept as its own list so a breadcrumb-only destination never has to earn a sidebar row
+ * it does not want.
  */
 const breadcrumbOnlyItems: { title: string; href: string; icon: LucideIcon }[] = [
   { title: "Notifications", href: "/notifications", icon: Bell },
+  { title: "Profile", href: "/profile", icon: UserRound },
 ];
 
 export interface Crumb {

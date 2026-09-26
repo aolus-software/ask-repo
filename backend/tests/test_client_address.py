@@ -15,10 +15,11 @@ import uuid
 import pytest
 from fastapi import FastAPI
 from httpx import AsyncClient
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import Settings, get_settings
-from app.core.security import hash_password
+from app.core.security import hash_password, sha256_hex
 from app.models import User
 from tests.conftest import AuditRows
 
@@ -159,3 +160,63 @@ async def test_no_forwarded_header_falls_back_to_the_socket(
 
     rows = await audit_rows("auth.login.succeeded")
     assert rows[0].ip_address is not None
+
+
+async def _device_of(session: AsyncSession, cookie: str) -> tuple[str | None, str | None]:
+    row = await session.execute(
+        text("SELECT user_agent, ip_address FROM refresh_tokens WHERE token_hash = :hash"),
+        {"hash": sha256_hex(cookie)},
+    )
+    return tuple(row.one())
+
+
+async def test_a_session_records_the_device_it_started_on(
+    behind_a_proxy: FastAPI, client: AsyncClient, db_session: AsyncSession
+) -> None:
+    await _make_user(db_session)
+    response = await client.post(
+        "/auth/login",
+        json={"email": "dev@example.com", "password": PASSWORD},
+        headers={"x-forwarded-for": "203.0.113.9", "user-agent": "Mozilla/5.0 (Test)"},
+    )
+    cookie = response.cookies[get_settings().refresh_cookie_name]
+
+    assert await _device_of(db_session, cookie) == ("Mozilla/5.0 (Test)", "203.0.113.9")
+
+
+async def test_rotation_keeps_the_device_the_session_started_on(
+    behind_a_proxy: FastAPI, client: AsyncClient, db_session: AsyncSession
+) -> None:
+    """A refresh arrives from the Next server, not the browser — copying the parent's
+    values is what keeps the session describing the browser that signed in."""
+    await _make_user(db_session)
+    login = await client.post(
+        "/auth/login",
+        json={"email": "dev@example.com", "password": PASSWORD},
+        headers={"x-forwarded-for": "203.0.113.9", "user-agent": "Mozilla/5.0 (Test)"},
+    )
+    name = get_settings().refresh_cookie_name
+    client.cookies.set(name, login.cookies[name])
+    refreshed = await client.post(
+        "/auth/refresh", headers={"x-forwarded-for": "198.51.100.1", "user-agent": "node"}
+    )
+
+    assert await _device_of(db_session, refreshed.cookies[name]) == (
+        "Mozilla/5.0 (Test)",
+        "203.0.113.9",
+    )
+
+
+async def test_an_overlong_user_agent_is_truncated(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    await _make_user(db_session)
+    response = await client.post(
+        "/auth/login",
+        json={"email": "dev@example.com", "password": PASSWORD},
+        headers={"user-agent": "x" * 1000},
+    )
+    cookie = response.cookies[get_settings().refresh_cookie_name]
+
+    user_agent, _ = await _device_of(db_session, cookie)
+    assert user_agent == "x" * 255

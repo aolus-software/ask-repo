@@ -536,3 +536,32 @@ export interface NotificationListParams extends ListParams {
   projectId?: string;
   unreadOnly?: boolean;
 }
+
+/** `GET /me/memberships` — a project the caller belongs to, and their role on it. */
+export interface MembershipSummary {
+  projectId: string;
+  projectName: string;
+  role: string;
+}
+
+/** `GET /me/sessions` — one live sign-in. `id` is the refresh-token family. */
+export interface SessionSummary {
+  id: string;
+  userAgent: string | null;
+  ipAddress: string | null;
+  startedAt: string;
+  lastActiveAt: string;
+  expiresAt: string;
+  current: boolean;
+}
+
+/** `GET /me/activity` — one audit row the caller is the actor of. */
+export interface ActivityEntry {
+  id: string;
+  createdAt: string;
+  eventType: string;
+  outcome: AuditOutcome;
+  targetLabel: string | null;
+  projectId: string | null;
+  ipAddress: string | null;
+}

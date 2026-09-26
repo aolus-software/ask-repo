@@ -35,6 +35,11 @@ from app.schemas.user import UserResponse
 
 logger = logging.getLogger(__name__)
 
+# `refresh_tokens.user_agent` is `String(255)`. A header is client-controlled and
+# unbounded, so it is cut rather than rejected — a long agent is not an attack worth
+# refusing a login over.
+MAX_USER_AGENT_LENGTH = 255
+
 
 class AuthService:
     """Business rules for `/auth`."""
@@ -47,6 +52,7 @@ class AuthService:
         *,
         recorder: AuditRecorder,
         client_ip: str | None = None,
+        user_agent: str | None = None,
     ) -> None:
         self.session = session
         self.settings = settings
@@ -55,6 +61,7 @@ class AuthService:
         self.tokens = RefreshTokenRepository(session)
         self._recorder = recorder
         self._client_ip = client_ip
+        self._user_agent = user_agent[:MAX_USER_AGENT_LENGTH] if user_agent else None
 
     # --- helpers -----------------------------------------------------------
 
@@ -73,28 +80,37 @@ class AuthService:
         self,
         user: User,
         *,
-        family_id: uuid.UUID | None = None,
+        parent: RefreshToken | None = None,
         expires_at: datetime | None = None,
     ) -> tuple[AccessTokenResponse, str]:
         """Mint an access token and a refresh token, storing only the latter's digest.
+
+        With no `parent` this starts a session: a new family, and the device this
+        request came from. With one it continues that session: the parent's family,
+        and the parent's device — a rotation arrives from the Next server, so its own
+        agent and address describe the proxy, not the person.
 
         `expires_at` defaults to a fresh `now + refresh_token_ttl_days`. The grace-window
         sibling path (see `refresh`) passes the *parent's* `expires_at` instead, so a
         hijacked chain is capped at the original token's remaining lifetime rather than
         renewing itself indefinitely on every rotation.
         """
+        family = parent.family_id if parent else uuid.uuid4()
         access_token, expires_in = create_access_token(
             user.id,
             secret=self.settings.secret_key,
             ttl_minutes=self.settings.access_token_ttl_minutes,
+            session_id=family,
         )
         raw_refresh = generate_opaque_token()
         await self.tokens.create(
             user_id=user.id,
-            family_id=family_id or uuid.uuid4(),
+            family_id=family,
             token_hash=sha256_hex(raw_refresh),
             expires_at=expires_at
             or datetime.now(UTC) + timedelta(days=self.settings.refresh_token_ttl_days),
+            user_agent=parent.user_agent if parent else self._user_agent,
+            ip_address=parent.ip_address if parent else self._client_ip,
         )
         response = AccessTokenResponse(
             access_token=access_token,
@@ -287,7 +303,7 @@ class AuthService:
                 await self.tokens.revoke_family(token.family_id, reason="user_deactivated")
                 await self.session.commit()
                 raise self._invalid_token()
-            issued = await self._issue(user, family_id=token.family_id, expires_at=token.expires_at)
+            issued = await self._issue(user, parent=token, expires_at=token.expires_at)
             await self.session.commit()
             return issued
 
@@ -298,12 +314,15 @@ class AuthService:
             raise self._invalid_token()
 
         await self.tokens.mark_used(token)
-        issued = await self._issue(user, family_id=token.family_id)
+        issued = await self._issue(user, parent=token)
         await self.session.commit()
         return issued
 
     async def change_password(
-        self, user_id: uuid.UUID, payload: ChangePasswordRequest, raw_token: str | None
+        self,
+        user_id: uuid.UUID,
+        payload: ChangePasswordRequest,
+        session_id: uuid.UUID | None,
     ) -> UserResponse:
         """Change the caller's own password, keeping their current session alive."""
         user = await self.users.get(user_id)
@@ -322,13 +341,12 @@ class AuthService:
         user.must_change_password = False
         user.updated_at = datetime.now(UTC)
 
-        # Revoke all *other* sessions (docs/PRD.md:108). The caller's own token is
-        # identifiable because it arrived in the cookie.
-        current = await self.tokens.get_by_hash(sha256_hex(raw_token)) if raw_token else None
+        # Revoke all *other* sessions (docs/PRD.md:108). The caller's session is the one
+        # their access token names: the refresh cookie never reaches this route through
+        # the BFF proxy. A token minted before `sid` names none, so every session goes —
+        # the old behaviour, for at most one access-token lifetime after deploy.
         await self.tokens.revoke_all_for_user(
-            user.id,
-            reason="password_change",
-            except_token_id=current.id if current else None,
+            user.id, reason="password_change", except_family_id=session_id
         )
         await self.session.commit()
         await self._recorder.record(

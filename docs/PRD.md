@@ -111,7 +111,7 @@ infrastructure, no egress.
 
 - **Audit trail (shipped).** An append-only record of who did what. Phase 1 had attribution (`created_by`) but no history — a deleted project took its `created_by` with it, so nothing anywhere recorded who deleted it, and §7's destructive-gating criteria were verifiable by test but not after the fact on a live instance. Two constraints follow from §9 and are not optional: the trail records **that** an action happened and by whom, never the secret involved — no passwords, no tokens, no PATs, no clone URLs with credentials embedded — and it is append-only, so a user cannot erase their own entries.
 
-  **Coverage is a rule, not a list.** `.claude/rules/audit-trail.md` states the obligation — *every write and every export records an event* — because a fixed list goes stale the moment someone adds a route and the failure is silent. The catalogue in `app/core/audit.py` currently names **39 event types**: auth (login, failed login, logout, password change, refresh replay, password reset requested, password reset completed — the last two added at Phase 2.4), accounts (create, update, deactivate, admin password reset), projects (create, reindex requested, delete), **RBAC** (membership granted / role changed / revoked, role created / updated / deleted — which this bullet originally omitted and which §2.2's own rationale asks for by name), checklist modules and items including the destructive bulk `results_cleared`, change-set applies and discards, mock data, the two exports, and conversations. `tests/test_audit_coverage.py` enforces it in both directions: a catalogue entry cannot exist unwritten, and a write site cannot invent a name.
+  **Coverage is a rule, not a list.** `.claude/rules/audit-trail.md` states the obligation — *every write and every export records an event* — because a fixed list goes stale the moment someone adds a route and the failure is silent. The catalogue in `app/core/audit.py` currently names **40 event types**: auth (login, failed login, logout, password change, refresh replay, password reset requested, password reset completed — the last two added at Phase 2.4 — and session revoke, added by the profile page), accounts (create, update, deactivate, admin password reset), projects (create, reindex requested, delete), **RBAC** (membership granted / role changed / revoked, role created / updated / deleted — which this bullet originally omitted and which §2.2's own rationale asks for by name), checklist modules and items including the destructive bulk `results_cleared`, change-set applies and discards, mock data, the two exports, and conversations. `tests/test_audit_coverage.py` enforces it in both directions: a catalogue entry cannot exist unwritten, and a write site cannot invent a name.
 
   **"PAT changes" collapsed into `project.created`.** There is no project-update route, so a PAT change is not an event that can happen; `project.created` carries a `patSupplied` boolean instead. If a project-update route is ever added, `project.updated` with a `patChanged` flag is the event to add with it.
 
@@ -124,6 +124,14 @@ infrastructure, no egress.
   5. **`details` is an allowlist per event, never a diff of dirty attributes.** A generic differ would start writing `password_hash` and `encrypted_pat` the moment someone adds a column. A new column is invisible to the trail until someone names it, and that is the correct failure direction.
   6. **Retention defaults to off.** `AUDIT_RETENTION_DAYS=0` keeps forever; a positive value is a window the worker's existing 60-second tick enforces through the single `delete_older_than(cutoff)` path — which takes a cutoff and nothing else, so the one code path that removes these rows cannot be aimed at anyone's entries.
   7. **Conversations are audited as metadata only**, which is a deliberate, narrow amendment to §4.2 made in this same change — see §4.2 and the note in §8.
+
+  **Amended (2026-09-26): a second, narrow reader.** The trail gains one non-admin read: `GET
+  /me/activity` lets a user read the rows where **they** are the actor — never rows where they
+  are only a target, such as an admin acting on them — with project-scoped rows narrowed through
+  `resolve_project_scope`, the same resolver every other read scoping in the app goes through.
+  Every other read stays admin-only, instance-wide, exactly as decision 3 above states. Written in
+  the same register as the conversation-metadata amendment to §4.2: a deliberate, recorded
+  narrowing, not a contradiction to quietly work around. See §4.0 *Profile*.
 
 #### Phase 2.3 — Notifications: the record, and in-app delivery
 
@@ -174,6 +182,10 @@ What shipped:
   the column at fan-out, per its own section below.)
 - **A fifth audit exemption.** Marking a notification read, marking all read, and changing
   preferences do not record an audit event — see the Phase 2.2 exemption bullet above.
+
+**Amended (2026-09-26):** the preference switches moved from `/settings/notifications` to
+`/profile#notifications` (§4.0 *Profile*); the old path now redirects there. The polled,
+60-second unread count is unchanged.
 
 #### Phase 2.4 — The mail provider: self-service password reset, and email delivery
 
@@ -498,7 +510,32 @@ The field is `password_hash`, not `password`. The plaintext exists only in the r
   token (unknown, expired, used, or revoked) and ends every session on success. `POST
   /auth/password-reset/request` answers `409 PASSWORD_RESET_UNAVAILABLE` when mail is off.
 
-**Out of scope for v1:** self-service registration, email verification, OAuth/social login, 2FA/TOTP, per-project roles (phase 2), session-activity history.
+**Out of scope for v1:** self-service registration, email verification, OAuth/social login, 2FA/TOTP, per-project roles (phase 2).
+
+**Amended (2026-09-26):** a user sees and may revoke their own sessions, with device and address
+captured at sign-in (§4.0 *Profile*). There is still no administrator view of anyone else's
+sessions.
+
+#### Profile
+
+A signed-in user has one page about themselves, `/profile`, reached from the account menu —
+never a sidebar or breadcrumb destination of its own. Five sections: **account** (name, email,
+admin flag, project memberships), **sessions** (every live refresh-token chain, the device and
+address it started from, and a per-session revoke), **activity** (the caller's own rows from the
+audit trail), **notifications** (the preference switches that used to live under Settings), and
+**password** (change password, plus "Email me a reset link" when mail is on).
+
+Four routes back it, all under `/me` and all scoped to the caller by construction — no route
+takes a user id: `GET /me/memberships`, `GET /me/sessions`, `DELETE
+/me/sessions/{sessionId}`, and `GET /me/activity`.
+
+There is no `/profile/{id}`. An administrator views another user's account, memberships, or
+activity only through `/settings/users` — never through this page, and never another person's
+sessions or activity at all. Editing one's own name or email stays out of scope: it would change
+the admin-provisioned account model this section opens with. A session that is revoked keeps its
+already-issued access token working for the rest of that token's lifetime — 15 minutes by
+default, the same as every other revoke path — because the access token carries no live-lookup
+claim; only the next refresh is refused.
 
 ---
 
@@ -942,12 +979,17 @@ Most of this seam already exists and is not part of the milestone. §5's chat ro
 
 **Phase 1.1 — module path picker (shipped, 2026-09-08).** Not a milestone of its own: one generalization pass over what M4 already shipped, so a user who has never seen the repository's directory structure can point a checklist module at a path. It added `GET /projects/{id}/indexed-paths` and the `400 MODULE_PATH_NOT_INDEXED` refusal at create and re-point time. See §2.1.
 
+**M0 amendment — profile page (in progress, 2026-09-26).** Not a milestone of its own: one page
+over what M0, Phase 2.2 and Phase 2.3 already shipped — account and memberships, own sessions
+with revoke, own audit activity, notification preferences, and password change. Also fixed
+password change revoking the caller's own session. See §4.0.
+
 **Phase 2 (after M5), split into seven sub-phases.** Nine items in a committed order, driven by
 deployability for an audience that did not write the code. §2.1 carries what each covers, what it
 costs, and why it sits where it does; the list here is the order and nothing else.
 
 6. **Phase 2.1 — Per-project RBAC (shipped):** `roles`, `role_permissions` and `project_memberships`; three seeded system roles plus admin-defined custom ones; `resolve_project_scope`'s body swapped for a membership lookup and `require_permission` added beside it, replacing six inline `created_by` gates. A breaking status-code change (§4.1), a `409 LAST_OWNER` guard on deactivation (§8), a Redis-cached grant snapshot, and the membership/role/permission routes. No new infrastructure. Everything after it that asks "who may see this" resolves through it, and phase 3 is blocked on this sub-phase alone. See §2.1.
-7. **Phase 2.2 — Append-only audit trail (shipped):** who did what, never the secret involved. Directly after RBAC, because that is when "who granted whom access to what" first becomes a question with no answer. One `audit_events` table carrying neither timestamp nor soft-delete mixin, a 37-event catalogue with a per-event field allowlist, two admin-only read routes, `AUDIT_RETENTION_DAYS` pruned by the worker's existing tick, and two admin screens. Conversations are audited as metadata only — a narrow, recorded amendment to §4.2. See §2.1.
+7. **Phase 2.2 — Append-only audit trail (shipped):** who did what, never the secret involved. Directly after RBAC, because that is when "who granted whom access to what" first becomes a question with no answer. One `audit_events` table carrying neither timestamp nor soft-delete mixin, a 40-event catalogue with a per-event field allowlist, two admin-only read routes plus one narrow self-read (`GET /me/activity`, added with the profile page), `AUDIT_RETENTION_DAYS` pruned by the worker's existing tick, and two admin screens. Conversations are audited as metadata only — a narrow, recorded amendment to §4.2. See §2.1.
 8. **Phase 2.3 — Notifications, the record and in-app delivery (shipped):** three tables — `notification_events` (one row per occurrence), `notifications` (one row per recipient, carrying read state), `notification_preferences` (sparse, absence meaning on) — an eleven-member event catalogue, a fan-out at nine call sites resolving recipients through Phase 2.1's `resolve_project_scope`/`resolve_notification_recipients`, a polled unread count at 60 seconds and deliberately no socket, and `NOTIFICATION_RETENTION_DAYS` default `90` pruned by the worker's existing tick. See §2.1.
 9. **Phase 2.4 — The mail provider (shipped):** `MAIL_ENABLED`, off by default; three routes
    (`GET /auth/password-reset/availability`, `POST /auth/password-reset/request`, `POST
@@ -1038,6 +1080,12 @@ The instance is internal, which lowers the threat model but does not empty it. T
 - **The audit trail is a destination on the `scrub` path, not an exception to it (Phase 2.2).** It is by definition something an operator reads, so the rule that no secret survives into anything an operator can read applies to `audit_events` first, not last. Two mechanisms hold it rather than care: `details` is an **allowlist per event type**, so a new column on `users` or `projects` is invisible to the trail until somebody names it; and a clone URL is stored **host-only** via `urlsplit().hostname`, which excludes the userinfo a PAT rides in by construction. The second ban is content: no prompt, no completion, no message text, no conversation title, no source excerpt — storing those would put a second copy of a private repository's code outside the lifecycle §5.1's delete rule governs.
 - **Retention is an operator responsibility (Phase 2.2).** `AUDIT_RETENTION_DAYS` defaults to `0`, meaning keep forever, because a fresh instance must not silently start discarding the one record whose purpose is being the record. That default is a starting point, not a recommendation for every instance: the table's write rate is proportional to QA activity — `checklist_item.result_recorded` fires once per test a tester ticks — so an active instance should choose a window deliberately rather than inherit the default. The only delete path takes a cutoff and nothing else, so setting a window is the one lever; nobody can erase a row.
 - **Backups.** Restorable Postgres backups, with the PAT encryption key backed up **separately** from the database.
+- **New personal data on `refresh_tokens` (profile page, 2026-09-26).** `user_agent` and
+  `ip_address` are captured at login and copied forward on rotation, so a session's device and
+  address now persist for as long as the token does. The address a colleague's failed sign-in
+  attempt came from is visible to the account it was attempted against, through `GET
+  /me/activity` — the same row the account's own successful logins already surface, not a new
+  disclosure of anyone else's activity.
 - **A hosted answering model sends private source code out of the network (M4.5, §6).** This is the sharpest consequence of making the provider configurable, and it is a change to §1's premise rather than a detail of it: every question ships the retrieved excerpts — real code from a private repository, with file paths — to whichever provider `CHAT_BASE_URL` names. The prompt-injection note below still holds and is unaffected; what changes is the direction. Four things follow. The **API key** joins the PAT and the encryption key as a secret to manage, and unlike them it authorises spending. The provider's **retention and training policy** becomes part of this instance's security posture, which means it is a procurement question and not an engineering one — an aggregator that routes to an undisclosed downstream host cannot answer it at all. **A PAT is never in scope to send**, because only chunk text and paths reach a prompt, and that must stay true when a provider adapter is added. And the choice is per instance and reversible: a hosted answerer requires no re-index (§5), so an organization that decides against it switches back by changing configuration, which is the strongest argument for keeping the embedder local.
 - **Egress (Phase 2.4).** Email is the instance's first path out of the network. It leaves through a host outside the VPN that §5 puts everything else behind, and is optional and off by default — when on, the admin supplies an SMTP relay and the responsibility to keep the provider's retention policy within the organization's security posture. What is at stake is not the message body alone: repository names, module names and file paths are inventory of the organization's private codebases, and they are held here *because* here is internal. The outbound rule is narrow enough to test — a message carries an event type and a link, never content derived from an indexed repository (no answer text, no proposal body, no snippet) — and lives here rather than in the mail rules, because the reviewer of a notifications change is the person most likely to add "a helpful preview" without noticing what it exports. Password reset tokens are never stored in logs or the audit trail; only the hashed version lives in the table and the raw token rides in the email link fragment. `SMTP_PASSWORD` joins the PAT and the encryption key as a secret to manage. Every message sends as `multipart/alternative` — the same plain text plus a guarded HTML alternative rendered by Jinja2 (`.claude/rules/mail.md`); the guard is the same outbound rule stated a different way: no remote or embedded asset, autoescape and `StrictUndefined` on the render environment, and the same fixed sentence and link the text body carries, never a new parameter on the composer.
 - **Not in the threat model:** malicious authenticated users, tenant isolation, and public internet exposure. If the instance is ever published, §4.0 needs self-service account flows and this section needs revisiting — that is a different document.

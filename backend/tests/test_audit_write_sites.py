@@ -148,6 +148,27 @@ async def test_logout_all_records_the_wider_scope(
     assert rows[0].details == {"scope": "all"}
 
 
+async def test_session_revoked_records_the_family_and_whether_it_was_current(
+    authed_client: AsyncClient, authed_user: User, audit_rows: AuditRows
+) -> None:
+    login = await authed_client.post(
+        "/auth/login", json={"email": authed_user.email, "password": TEST_PASSWORD}
+    )
+    assert login.status_code == 200
+    access = login.json()["accessToken"]
+    headers = {"Authorization": f"Bearer {access}"}
+    current = (await authed_client.get("/me/sessions", headers=headers)).json()[0]
+
+    response = await authed_client.delete(f"/me/sessions/{current['id']}", headers=headers)
+    assert response.status_code == 204
+
+    [row] = await audit_rows(AuditEventType.AUTH_SESSION_REVOKED)
+    assert row.outcome == "success"
+    assert row.details["familyId"] == current["id"]
+    assert row.details["current"] is True
+    assert row.details["revokedCount"] == 1
+
+
 async def test_password_change_records_no_password(
     authed_client: AsyncClient, audit_rows: AuditRows
 ) -> None:

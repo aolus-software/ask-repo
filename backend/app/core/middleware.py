@@ -30,7 +30,7 @@ from starlette.middleware.base import BaseHTTPMiddleware, RequestResponseEndpoin
 from app.config import get_settings
 from app.core.errors import ErrorCode, error_detail
 from app.core.grant_cache import get_grant_cache
-from app.core.security import TokenExpiredError, TokenInvalidError, decode_access_token
+from app.core.security import TokenExpiredError, TokenInvalidError, decode_access_claims
 from app.db.session import get_sessionmaker
 from app.repositories.user import UserRepository
 
@@ -89,6 +89,9 @@ class AuthenticatedUser:
     grants: Mapping[uuid.UUID, ProjectGrant] = field(
         default_factory=dict, compare=False, hash=False
     )
+    # The refresh-token family this request's access token was minted for — which of
+    # the user's sessions is calling. `None` for a token minted before the `sid` claim.
+    session_id: uuid.UUID | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -167,7 +170,7 @@ class AuthContextMiddleware(BaseHTTPMiddleware):
 
         settings = get_settings()
         try:
-            user_id = decode_access_token(
+            claims = decode_access_claims(
                 header.removeprefix(_BEARER_PREFIX), secret=settings.secret_key
             )
         except TokenExpiredError:
@@ -178,7 +181,7 @@ class AuthContextMiddleware(BaseHTTPMiddleware):
         # A session of its own: middleware cannot use `Depends`, and this one closes
         # before the handler's session opens.
         async with get_sessionmaker()() as session:
-            user = await UserRepository(session).get(user_id)
+            user = await UserRepository(session).get(claims.user_id)
             if user is None:
                 # Covers both "never existed" and "soft-deleted since the token was
                 # issued". Loading grants for a user who cannot log in is wasted work.
@@ -193,6 +196,7 @@ class AuthContextMiddleware(BaseHTTPMiddleware):
                 is_admin=user.is_admin,
                 must_change_password=user.must_change_password,
                 grants=grants,
+                session_id=claims.session_id,
             ),
             error=None,
         )

@@ -23,6 +23,12 @@ export const endpoints = {
     passwordResetConfirm: "/auth/password-reset/confirm",
     me: "/auth/me",
   },
+  me: {
+    memberships: "/me/memberships",
+    sessions: "/me/sessions",
+    session: (id: string) => `/me/sessions/${id}`,
+    activity: "/me/activity",
+  },
   users: {
     list: "/users",
     detail: (id: string) => `/users/${id}`,
