@@ -190,7 +190,7 @@ class MockDataGenerator:
 
         # Before the commit, mirroring `ChecklistGenerator.run`: the change set and
         # the notification of it are one transaction.
-        await NotificationFanout(self.session).raise_event(
+        await NotificationFanout(self.session, mail_enabled=self.settings.mail_enabled).raise_event(
             event_type=NotificationType.MOCK_DATA_CHANGE_SET_PENDING,
             project_id=module.project_id,
             # No actor: a worker raised this.

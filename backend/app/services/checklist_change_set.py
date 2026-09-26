@@ -195,7 +195,7 @@ class ChecklistChangeSetService:
         # Before the commit. The audit record below goes *after* it, and both
         # orderings are load-bearing: an audit failure must not fail the user's
         # action, and a lost notification is the feature not working.
-        await NotificationFanout(self.session).raise_event(
+        await NotificationFanout(self.session, mail_enabled=self.settings.mail_enabled).raise_event(
             event_type=NotificationType.CHECKLIST_CHANGE_SET_APPLIED,
             project_id=project_id,
             actor_user_id=actor.id,
@@ -264,7 +264,7 @@ class ChecklistChangeSetService:
         await self._settle_module(module)
 
         # Before the commit, matching `apply`.
-        await NotificationFanout(self.session).raise_event(
+        await NotificationFanout(self.session, mail_enabled=self.settings.mail_enabled).raise_event(
             event_type=NotificationType.CHECKLIST_CHANGE_SET_DISCARDED,
             project_id=project_id,
             actor_user_id=actor.id,

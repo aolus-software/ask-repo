@@ -236,7 +236,7 @@ Three tables. `docs/PRD.md` §2.1, Phase 2.3; mechanism in `.claude/rules/notifi
 | Table | One row per | Notes |
 | --- | --- | --- |
 | `notification_events` | occurrence | `event_type`, nullable `actor_user_id`, not-null `project_id`, nullable `target_type`/`target_id` (not an FK — same reasoning as `audit_events.target_id`), a per-event `details` JSONB allowlist |
-| `notifications` | `(event, recipient)` | `event_id` FK **`ON DELETE CASCADE`**, `user_id`, `in_app_visible` (the preference snapshot), `read_at`. `UNIQUE (event_id, user_id)` is the deduplication boundary |
+| `notifications` | `(event, recipient)` | `event_id` FK **`ON DELETE CASCADE`**, `user_id`, `in_app_visible` (the preference snapshot), `read_at`. `UNIQUE (event_id, user_id)` is the deduplication boundary. `email_state` (`pending`/`sent`/`failed`/`skipped`, `NULL` when email was never in play), `email_attempts`, `email_claimed_until`, `email_sent_at` — the same fan-out-time snapshot as `in_app_visible`, added in Phase 2.4 for the outbox drain to work against |
 | `notification_preferences` | `(user, event_type)` a user has an opinion about | `in_app`, `email` — both default `true`. Sparse: **absence means on**, so a new event type is on for everybody with no backfill |
 
 `notification_events` carries neither `TimestampMixin` nor `SoftDeleteMixin`, for two of

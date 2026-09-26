@@ -83,3 +83,22 @@ class NotificationPreferenceRepository(BaseRepository[NotificationPreference]):
             )
         )
         return frozenset(result.scalars().all())
+
+    async def muted_email(
+        self, event_type: str, user_ids: frozenset[uuid.UUID]
+    ) -> frozenset[uuid.UUID]:
+        """Which of these users have turned this event's email delivery off.
+
+        Same sparse, absence-means-on semantics as `muted_in_app`: it asks which rows
+        say `false`, never which say `true`.
+        """
+        if not user_ids:
+            return frozenset()
+        result = await self.session.execute(
+            select(NotificationPreference.user_id).where(
+                NotificationPreference.user_id.in_(user_ids),
+                NotificationPreference.event_type == event_type,
+                NotificationPreference.email.is_(False),
+            )
+        )
+        return frozenset(result.scalars().all())
