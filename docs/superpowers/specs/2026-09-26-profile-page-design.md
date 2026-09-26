@@ -309,8 +309,10 @@ and Log out everywhere as today. The comment promising a future settings page is
 
 ### 2.3 The page
 
-Sections stack in one column; on wide screens a sticky index of section anchors sits beside
-them. Each section is its own component under `components/profile/`.
+One section shows at a time, chosen from a vertical tab list styled like the app sidebar — a
+card, with the active row in the sidebar's accent — beside the content on wide screens and
+above it on narrow ones. The URL hash follows the active tab, so `/profile#notifications`
+opens Notifications. Each section is its own component under `components/profile/`.
 
 | Section | Content | Data |
 | --- | --- | --- |
