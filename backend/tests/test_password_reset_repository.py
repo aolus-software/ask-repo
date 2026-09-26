@@ -80,3 +80,19 @@ async def test_dead_tokens_are_hard_deleted_after_a_day(db_session: AsyncSession
     assert await repo.delete_dead() == 1
     await db_session.commit()
     assert await repo.get_usable_by_hash("1" * 64) is not None
+
+
+async def test_id_defaults_to_uuid4_when_not_provided(db_session: AsyncSession) -> None:
+    user = await _user(db_session)
+    repo = PasswordResetTokenRepository(db_session)
+    now = datetime.now(UTC)
+    # Construct token without passing id — relies on default=uuid.uuid4
+    token = PasswordResetToken(
+        user_id=user.id,
+        token_hash="g" * 64,
+        created_at=now,
+        expires_at=now + timedelta(minutes=30),
+    )
+    added = await repo.add(token)
+    assert isinstance(added.id, uuid.UUID)
+    await db_session.commit()
