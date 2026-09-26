@@ -133,14 +133,20 @@ Two nullable columns, existing rows `NULL`:
 
 - Captured at **login**. A rotation copies both from the parent, so a session keeps the
   device it started on.
-- The login route hands both to `AuthService.login` the same way it already hands the
-  client IP to the recorder. The BFF already relays `X-Forwarded-For`
+- `AuthService` receives both through its dependency, the same way it already receives
+  the client IP. The BFF already relays `X-Forwarded-For`
   (`frontend/lib/auth/forwarded.ts`), so `TRUSTED_PROXY_HOPS` resolves the real caller.
+- **The BFF does not relay `User-Agent` today.** The login handler
+  (`frontend/app/api/auth/login/route.ts`) calls the backend from the Next server, so
+  without a change every session would record Node's own agent string. The login handler
+  therefore also relays the browser's `User-Agent`, through a small helper beside
+  `forwardedHeaders` (`lib/auth/user-agent-header.ts`). It is relayed on login only —
+  rotation copies the parent's value, so no other path needs it.
 
 ### 1.4 `memberships_for` in `app/core/access.py`
 
 ```python
-def memberships_for(user: AuthenticatedUser) -> list[Grant]:
+def memberships_for(user: AuthenticatedUser) -> list[ProjectGrant]:
     """The projects this caller actually holds a membership on, with the role name."""
 ```
 
@@ -160,10 +166,12 @@ from nothing else.
 | `GET /me/memberships` | `MembershipSummary[]`: `{projectId, projectName, role}`. Grants from `memberships_for`; names from `ProjectRepository`, soft-deleted projects dropped; ordered by project name | `200`, `401`, `403 PASSWORD_CHANGE_REQUIRED` |
 | `GET /me/sessions` | `SessionResponse[]`, one per live family: `{id, userAgent, ipAddress, startedAt, lastActiveAt, expiresAt, current}`. `id` is the `family_id`; `startedAt` the family's first `issued_at`; `lastActiveAt` its newest `issued_at` (tokens rotate on use, so the newest issue is the last refresh); `current` is `id == user.session_id`. Newest `lastActiveAt` first | `200`, `401`, `403` |
 | `DELETE /me/sessions/{id}` | Revokes every unrevoked token in the family with `reason="user_revoked"`, after confirming the family belongs to the caller. Records `auth.session.revoked` after the commit | `204`, `401`, `403`, `404 SESSION_NOT_FOUND` |
-| `GET /me/activity` | `Page[AuditEventResponse]` — the rows where the caller is the actor, project-scoped rows narrowed (§1.6). Plain `ListQuery` pagination, no filters | `200`, `401`, `403` |
+| `GET /me/activity` | `PaginatedResponse[ActivityEntry]` — the rows where the caller is the actor, project-scoped rows narrowed (§1.6). Plain `ListQuery` pagination, no filters | `200`, `401`, `403` |
 
-**A "live family"** has at least one token with `revoked_at IS NULL` and
-`expires_at > now()`.
+**A "live family"** has a chain head: a token with `revoked_at IS NULL`, `used_at IS NULL`
+and `expires_at > now()`. Checking `revoked_at` alone is not enough — `mark_used` leaves a
+rotated token's `revoked_at` `NULL`, and `logout` revokes only the presented token, so a
+logged-out family still holds unrevoked, used ancestors.
 
 **`404 SESSION_NOT_FOUND`** covers both an unknown id and a family owned by another user —
 the same answer, so the route cannot confirm that someone else's session id exists. It is a
@@ -180,14 +188,15 @@ has today. The frontend says so on the confirm dialog.
 ### 1.6 The activity query
 
 `AuditEventRepository._filtered` (`app/repositories/audit_event.py:42`) gains an optional
-`project_scope: ProjectScope | None`:
+`visible_project_ids: frozenset[uuid.UUID] | None`:
 
 - `None` — no narrowing. `/audit-events` passes `None` and is unchanged.
-- unrestricted (an administrator) — no narrowing.
-- restricted — `WHERE project_id IS NULL OR project_id IN scope.ids`.
+- a set — `WHERE project_id IS NULL OR project_id IN (…)`.
 
-`MeService.activity` calls `page(actor_user_id=user.id,
-project_scope=resolve_project_scope(user))`. This is a narrowing applied on top of the
+The repository takes plain ids rather than a `ProjectScope` so it does not import
+`app/core/access.py` (which imports the middleware, which imports repositories).
+`MeService.activity` does the conversion: `scope = resolve_project_scope(user)`, then
+`None if scope.unrestricted else scope.ids`. This is a narrowing applied on top of the
 resolver's answer, never a replacement for it, so it passes the single-point rule the same
 way `?ownerless` does.
 
@@ -212,8 +221,8 @@ Consequences, all deliberate:
 `auth.session.revoked` joins the catalogue in `app/core/audit.py`:
 
 - No `changed` block — the event's meaning is its name.
-- Context keys: `familyId`, `current` (bool), `revokedCount` — the same shape as the
-  existing logout event (`auth.py:243`).
+- Context keys: `familyId`, `current` (bool), `revokedCount` — `familyId` and
+  `revokedCount` are the keys `auth.refresh.replayed` already uses (`auth.py:243`).
 - Recorded after the commit, on the caller as actor.
 - `tests/test_audit_coverage.py` names it; `docs/data.md`'s event list and `CHANGELOG.md`
   mention it.
@@ -223,8 +232,12 @@ unchanged. Preference changes remain exemption 5.
 
 ### 1.9 Response models
 
-`MembershipSummary` and `SessionResponse` are new and inherit `ApiModel`;
-`tests/test_api_model.py` covers them. `/me/activity` reuses `AuditEventResponse`. Nothing
+`MembershipSummary`, `SessionResponse` and `ActivityEntry` are new and inherit `ApiModel`;
+`tests/test_api_model.py` walks only the SSE models, so the exact camelCase key sets asserted in
+`tests/test_me_api.py` are what hold these to the rule. `ActivityEntry` is deliberately slimmer than the
+admin models: `{id, createdAt, eventType, outcome, targetLabel, projectId, ipAddress}`.
+It carries no `details`, no `actorEmail` (always the caller) and none of
+`AuditEventResponse`'s live `current` lookups, which cost a query per row. Nothing
 here streams, so `SSE_EVENT_MODELS` is untouched.
 
 ### 1.10 Fixed in this change: password change revokes the current session too
@@ -314,8 +327,9 @@ them. Each section is its own component under `components/profile/`.
 - Any other row: a confirm dialog — "It may stay signed in for up to 15 minutes." — then the
   sessions query is invalidated.
 
-**Event labels.** The admin audit screen already maps event types to readable labels. That
-mapping moves to a shared `lib/audit-labels.ts` rather than being copied.
+**Event labels.** `auditEventLabel` in `lib/audit.ts` is already shared and derives a label
+from any event name, so the activity list imports it. `auth.session.revoked` is added to
+`AUDIT_EVENT_TYPES` there so the admin filter offers it.
 
 **Device labels.** A small pure parser, `lib/user-agent.ts`, maps a user-agent string to
 "Browser on OS" for common agents and falls back to the raw string. No new dependency.
@@ -376,7 +390,8 @@ Added, never renamed (`response-api.md`).
   authenticates with `session_id = None`.
 - `test_audit_coverage.py` — `auth.session.revoked` named and emitted.
 - `test_audit_events_api.py` — `/audit-events` unchanged: admin-only, no narrowing.
-- `test_api_model.py` — the new models inherit `ApiModel`.
+- `test_me_api.py` asserts each route's exact camelCase key set — `test_api_model.py`
+  walks only the SSE models.
 - Migration — upgrade and downgrade clean, following the existing pattern.
 
 **Unchanged and expected to pass:** `test_scoping_is_single_point.py`, which is what proves
@@ -387,8 +402,8 @@ Added, never renamed (`response-api.md`).
 - `lib/nav.test.ts` — a non-admin's tree has no Settings group; an admin's has three
   children; `/profile` resolves a breadcrumb.
 - `lib/user-agent.test.ts` — common agents, empty string, unknown agent falls back to raw.
-- `lib/audit-labels.test.ts` — every catalogued event type has a label; unknown types fall
-  back to the raw name.
+- `lib/auth/user-agent-header.test.ts` — relays the browser's agent; sends nothing when
+  absent.
 - Components — revoking the current session hard-reloads to `/login`, another session
   refetches in place; the reset-link button appears only when availability says mail is on;
   the password section routes field errors as the form-shell tests already require.
