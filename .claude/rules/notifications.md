@@ -84,7 +84,8 @@ changing a preference later does not retroactively reveal or hide what already h
 is what a person expects from a notification setting.
 
 **The same snapshot applies to email (Phase 2.4), but only at fan-out.** At the moment
-`in_app_visible` is written, `email_state` is written too, off the same preference read: it is
+`in_app_visible` is written, `email_state` is written too, off a separate preference lookup made
+at the same moment (`_muted_for` for in-app, `muted_email` for email): it is
 `'pending'` when mail is on and the recipient's email preference for this event is on, and
 `NULL` when email was never in play — mail off instance-wide, or the recipient's preference off.
 That is the whole snapshot; `email_attempts` is left at its default of `0`. What `email_state`
