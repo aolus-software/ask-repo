@@ -119,7 +119,7 @@ export function PathPicker({
               </button>
               {trail.map((crumb) => (
                 <span key={crumb.path} className="flex shrink-0 items-center gap-1">
-                  <ChevronRight className="text-muted-foreground size-3" aria-hidden />
+                  <ChevronRight className="text-muted-foreground size-4" aria-hidden />
                   <button
                     type="button"
                     className="text-muted-foreground hover:text-foreground font-mono"

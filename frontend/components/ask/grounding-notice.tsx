@@ -10,7 +10,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
  * not a check. A console line or a tooltip would be the same as not having them.
  *
  * Built on `Alert`'s `warning` variant rather than a hand-rolled div
- * (`docs/ui-audit-findings.md` §U6.3), so "pay attention to this" looks the same way
+ * (`docs/audit-finding-solved-logs.md` §U6.3), so "pay attention to this" looks the same way
  * everywhere in the app.
  */
 const MESSAGES: Record<string, string> = {

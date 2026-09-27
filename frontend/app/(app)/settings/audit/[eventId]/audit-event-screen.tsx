@@ -19,6 +19,7 @@ import { useAuditEvent } from "@/hooks/use-audit-events";
 import { useSession } from "@/hooks/use-session";
 import { auditEventLabel } from "@/lib/audit";
 import { formatRelative } from "@/lib/dates";
+import { auditOutcomeLabel, auditOutcomeTone } from "@/lib/status";
 
 export function AuditEventScreen({ id }: { id: string }) {
   const user = useSession();
@@ -60,8 +61,8 @@ export function AuditEventScreen({ id }: { id: string }) {
         title={auditEventLabel(event.eventType)}
         titleAddon={
           <StatusBadge
-            tone={event.outcome === "failure" ? "danger" : "success"}
-            label={event.outcome === "failure" ? "Failure" : "Success"}
+            tone={auditOutcomeTone(event.outcome)}
+            label={auditOutcomeLabel(event.outcome)}
           />
         }
         description={`Recorded ${formatRelative(event.createdAt)}`}

@@ -14,7 +14,7 @@ import type {
 import { useLiveEvents } from "@/hooks/use-live-events";
 import { keys } from "@/lib/query/keys";
 
-/** The module list, alongside `useProjects`/`useUsers` (`docs/ui-audit-findings.md` §U3.2). */
+/** The module list, alongside `useProjects`/`useUsers` (`docs/audit-finding-solved-logs.md` §U3.2). */
 export function useChecklistModules(params: ChecklistModuleListParams) {
   return useQuery({
     queryKey: keys.checklistModules.list(params),

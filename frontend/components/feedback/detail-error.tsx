@@ -6,7 +6,7 @@ import { isApiError } from "@/lib/api/errors";
 
 /**
  * The one ladder every detail screen uses to read a fetch failure
- * (`docs/ui-audit-findings.md` §U7.2): `404` is a miss and renders `NotFound`, `403` is
+ * (`docs/audit-finding-solved-logs.md` §U7.2): `404` is a miss and renders `NotFound`, `403` is
  * a resource the caller may see but not read this way and renders `Forbidden`, and
  * everything else — a dropped connection, a `500`, an unreachable backend — is a real
  * failure with a retry, never "not found". Reporting a network error as a deleted

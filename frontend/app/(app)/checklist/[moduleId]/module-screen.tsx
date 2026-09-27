@@ -410,7 +410,7 @@ export function ModuleScreen({ moduleId }: { moduleId: string }) {
               branches `RecordsTable` renders "No mock data yet -- generate a batch"
               while the fetch is still in flight, and keeps that invitation up
               permanently if it fails -- over a dataset that already exists
-              (`docs/ui-audit-findings.md` §U7.6). */}
+              (`docs/audit-finding-solved-logs.md` §U7.6). */}
           {mockData.isLoading ? (
             <div className="space-y-2">
               {Array.from({ length: 5 }, (_, index) => (

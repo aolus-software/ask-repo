@@ -72,7 +72,7 @@ export function ModuleTable({
                     {/* A second signal for the same fact as the status badge above —
                         it must agree with it, so it goes through the same tone the
                         `review` status uses rather than a hand-picked colour
-                        (`docs/ui-audit-findings.md` §U4.2). Kept distinct from the
+                        (`docs/audit-finding-solved-logs.md` §U4.2). Kept distinct from the
                         status badge because a chat-originated change set can be
                         pending without the module's own status having moved to
                         `review`. */}

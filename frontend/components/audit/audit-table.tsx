@@ -23,7 +23,7 @@ import { formatAbsolute, formatRelative } from "@/lib/dates";
  *
  * Identity first, status second, timestamps last, actions right-aligned -- the same
  * order `/settings/users` and `/settings/roles` read in (`docs/design.md` -> Lists).
- * Time led here until `docs/ui-audit-findings.md` §U3.4; a trail is chronological, but
+ * Time led here until `docs/audit-finding-solved-logs.md` §U3.4; a trail is chronological, but
  * that is what the default sort expresses, not what the column order has to.
  */
 export function AuditTable({

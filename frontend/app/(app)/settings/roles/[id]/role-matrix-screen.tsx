@@ -14,6 +14,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useUpdateRolePermissions } from "@/hooks/use-role-mutations";
 import { usePermissionCatalog, useRole } from "@/hooks/use-roles";
+import { useSession } from "@/hooks/use-session";
 import { isApiError } from "@/lib/api/errors";
 
 /**
@@ -24,6 +25,7 @@ import { isApiError } from "@/lib/api/errors";
  */
 export function RoleMatrixScreen({ id }: { id: string }) {
   const router = useRouter();
+  const user = useSession();
   const roleQuery = useRole(id);
   const catalogQuery = usePermissionCatalog();
   const mutation = useUpdateRolePermissions(id);
@@ -38,6 +40,15 @@ export function RoleMatrixScreen({ id }: { id: string }) {
     setSeededId(roleQuery.data.id);
     setSelected(new Set(roleQuery.data.permissions));
   }
+
+  // The route body is wrapped in its gate. Hiding the nav item is not gating the
+  // route — an operator can type the URL (navigation.md §6). This mirrors the
+  // backend's `require_admin`; it does not replace it. Both queries above have
+  // already fired by the time this check runs (rules of hooks), so this is the
+  // same "queries fire, gate renders first" shape every sibling admin screen uses,
+  // not a conditional hook.
+  if (!user.isAdmin)
+    return <Forbidden message="Only administrators can manage roles." />;
 
   if (roleQuery.isLoading || catalogQuery.isLoading) {
     return (

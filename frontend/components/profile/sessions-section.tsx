@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { toast } from "sonner";
 
 import { ListError } from "@/components/feedback/list-error";
 import { StatusBadge } from "@/components/feedback/status-badge";
@@ -78,7 +79,7 @@ export function SessionsSection() {
                         ) : null}
                       </div>
                     </TableCell>
-                    <TableCell className="text-sm">
+                    <TableCell className="font-mono text-sm">
                       {session.ipAddress ?? "—"}
                     </TableCell>
                     <TableCell
@@ -121,7 +122,13 @@ export function SessionsSection() {
         isPending={revoke.isPending}
         error={revoke.error}
         onConfirm={() =>
-          pending && revoke.mutate(pending.id, { onSuccess: () => setPending(null) })
+          pending &&
+          revoke.mutate(pending.id, {
+            onSuccess: () => {
+              toast.success("Session signed out");
+              setPending(null);
+            },
+          })
         }
       />
     </Card>

@@ -51,7 +51,7 @@ export function ModuleRowActions({ module }: { module: ChecklistModuleResponse }
   // The same three reasons the module's own screen gives, in the same order. The
   // permission is one of them: without it the menu offered an enabled Generate that
   // the backend correctly refused, and the refusal went nowhere
-  // (`docs/ui-audit-findings.md` §U6.5).
+  // (`docs/audit-finding-solved-logs.md` §U6.5).
   const generateDisabledReason =
     module.status === "generating"
       ? "Generation is already in progress"
@@ -143,7 +143,7 @@ export function ModuleRowActions({ module }: { module: ChecklistModuleResponse }
                 // `startEditing` does. `useState` seeds once at mount and the row stays
                 // mounted as long as the list does, so without this a cancelled edit
                 // comes back as the field's value and reads as the saved one
-                // (`docs/ui-audit-findings.md` §U5.8).
+                // (`docs/audit-finding-solved-logs.md` §U5.8).
                 setEditingName(module.name);
                 setEditingPath(module.sourcePath);
                 setEditingDialog(true);

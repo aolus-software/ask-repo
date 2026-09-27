@@ -9,6 +9,7 @@ import { Answer } from "@/components/ask/answer";
 import { AssistantTurn } from "@/components/ask/assistant-turn";
 import { Composer } from "@/components/ask/composer";
 import { GroundingNotice } from "@/components/ask/grounding-notice";
+import { InterruptedNote } from "@/components/ask/interrupted-note";
 import { MessageList } from "@/components/ask/message-list";
 import { Sources } from "@/components/ask/sources";
 import { DetailError } from "@/components/feedback/detail-error";
@@ -60,7 +61,7 @@ export function ConversationScreen({ conversationId }: { conversationId: string 
     // exists, and is_admin does not widen this (docs/PRD.md §4.2). A network or
     // server failure is neither, and must not read as "deleted" — a conversation is
     // private and unrecoverable, so that claim is exactly the wrong one to guess at
-    // (`docs/ui-audit-findings.md` §U7.2).
+    // (`docs/audit-finding-solved-logs.md` §U7.2).
     return (
       <DetailError
         error={conversation.error}
@@ -149,9 +150,7 @@ export function ConversationScreen({ conversationId }: { conversationId: string 
 
           {/* The stored row renders its own interrupted note from finishReason. */}
           {state.terminal === "interrupted" && !state.reconciled ? (
-            <p className="text-muted-foreground mt-2 text-xs">
-              The connection dropped. What arrived above is kept.
-            </p>
+            <InterruptedNote />
           ) : null}
 
           {state.terminal === "error" ? (
