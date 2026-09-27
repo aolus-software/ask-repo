@@ -58,7 +58,50 @@ export type ErrorCode =
   | "MEMBERSHIP_NOT_FOUND"
   | "MEMBERSHIP_EXISTS"
   | "PASSWORD_RESET_UNAVAILABLE"
-  | "PASSWORD_RESET_TOKEN_INVALID";
+  | "PASSWORD_RESET_TOKEN_INVALID"
+  | "FEEDBACK_TARGET_NOT_FOUND"
+  | "FEEDBACK_REASON_NOT_APPLICABLE";
+
+export type FeedbackTargetType =
+  | "message"
+  | "checklist_message"
+  | "mock_data_message"
+  | "checklist_change_set"
+  | "mock_data_change_set";
+
+export type FeedbackRating = "up" | "down";
+
+export type FeedbackReasonCode =
+  | "wrong_file_cited"
+  | "missed_something"
+  | "invented_something"
+  | "right_but_unusable"
+  | "wrong_language_or_tone"
+  | "duplicate_or_redundant"
+  | "wrong_scope"
+  | "other";
+
+export type FeedbackFeature =
+  | "answer"
+  | "refine_checklist"
+  | "refine_mock_data"
+  | "generate_checklist"
+  | "propose_checklist"
+  | "generate_mock_data"
+  | "propose_mock_data";
+
+/** The caller's own vote. Never anyone else's. */
+export interface MyFeedback {
+  rating: FeedbackRating;
+  reasonCodes: FeedbackReasonCode[];
+  note: string | null;
+}
+
+export interface FeedbackRead extends MyFeedback {
+  targetType: FeedbackTargetType;
+  targetId: string;
+  updatedAt: string;
+}
 
 /** The one error shape the whole API uses (`docs/PRD.md` §5.1). */
 export interface ErrorEnvelope {
@@ -164,6 +207,7 @@ export interface MessageResponse {
   model: string | null;
   finishReason: FinishReason | null;
   createdAt: string;
+  myFeedback?: MyFeedback | null;
 }
 
 export interface ConversationResponse {
@@ -310,6 +354,7 @@ export interface ChecklistChangeSetResponse {
   resolvedAt: string | null;
   createdBy: string;
   createdAt: string;
+  myFeedback?: MyFeedback | null;
 }
 
 export interface ChangeSetApplyResponse {
@@ -329,6 +374,7 @@ export interface ChecklistMessageResponse {
   finishReason: FinishReason | null;
   createdBy: string;
   createdAt: string;
+  myFeedback?: MyFeedback | null;
 }
 
 /** The one event M4 adds to the stream. At most once, after the last token. */
@@ -390,6 +436,7 @@ export interface MockDataChangeSetResponse {
   resolvedAt: string | null;
   createdBy: string;
   createdAt: string;
+  myFeedback?: MyFeedback | null;
 }
 
 export interface MockDataChangeSetApplyResponse {
@@ -408,6 +455,7 @@ export interface MockDataMessageResponse {
   finishReason: FinishReason | null;
   createdBy: string;
   createdAt: string;
+  myFeedback?: MyFeedback | null;
 }
 
 export interface MockDataChangeSetEventPayload {

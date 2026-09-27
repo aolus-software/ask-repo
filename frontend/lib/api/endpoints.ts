@@ -2,6 +2,7 @@ import type {
   AuditEventListParams,
   ChecklistItemListParams,
   ChecklistModuleListParams,
+  FeedbackTargetType,
   ListParams,
   NotificationListParams,
 } from "@/lib/api/types";
@@ -105,6 +106,12 @@ export const endpoints = {
     markAllRead: "/notifications/mark-all-read",
     markRead: (id: string) => `/notifications/${id}/read`,
     preferences: "/notification-preferences",
+  },
+  feedback: {
+    vote: (targetType: FeedbackTargetType, targetId: string) =>
+      `/feedback/${targetType}/${targetId}`,
+    list: "/feedback",
+    summary: "/feedback/summary",
   },
 } as const;
 
