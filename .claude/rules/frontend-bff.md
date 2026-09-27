@@ -105,13 +105,23 @@ Moving refresh logic into a Server Component, or moving the proxy's refresh chec
 body starts streaming, are both regressions that look correct in every case except the one they
 exist for.
 
-## The answer stream is piped through the proxy unbuffered
+## Any `text/event-stream` is piped through the proxy unbuffered
 
 `text/event-stream`, `Cache-Control: no-cache`, and `X-Accel-Buffering: no` must survive the
-proxy hop unchanged. Buffering the response here — even accidentally, via a helper that reads a
-`Response` fully before re-emitting it — turns a live token stream into a response that arrives
-all at once after the model finishes, which defeats the entire streaming UI with no error and no
-failing test outside the ones listed below.
+proxy hop unchanged, on **every** stream the catch-all relays, not only the answer stream: `GET
+/events` (`.claude/rules/live-events.md`) is a second, longer-lived SSE route through the same
+`forward()`. Buffering the response here — even accidentally, via a helper that reads a
+`Response` fully before re-emitting it — turns a live token stream, or a live-events stream, into
+a response that arrives all at once (or never, since `/events` has no terminator to arrive at),
+which defeats the entire streaming UI with no error and no failing test outside the ones listed
+below.
+
+**`forward()` also passes the request's own abort signal to `fetch`** (`signal: request.signal`),
+so a closed tab ends the backend request immediately instead of leaving it running until its next
+write fails. This matters most for `/events`: without it, a stream held open by a tab nobody is
+watching would sit on the backend until its next heartbeat write discovers the socket is gone,
+holding a Kafka-consuming task and a database session for however long
+`LIVE_EVENTS_HEARTBEAT_SECONDS` allows.
 
 ## `API_URL` is server-only
 

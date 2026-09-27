@@ -258,6 +258,20 @@ transaction that made the change true, ahead of the commit, which is the opposit
 `AuditRecorder` and is exactly as deliberate: a lost notification is the feature failing, where a
 lost audit row is an accepted, logged gap.
 
+### Live updates are hints over Kafka
+
+Mechanism: `.claude/rules/live-events.md`.
+
+Project status and reindex, checklist and mock-data generation, and the notification bell also
+push over one per-user SSE stream, `GET /events`, instead of leaving every open screen to poll.
+A state-changing write **stages** a `LiveEvent` on the session; a commit hook publishes it to a
+new Kafka topic, `askrepo.live.events`, and discards it on rollback — no call site orders a
+publish against a commit by hand. **The API process now consumes Kafka as well as producing to
+it**: each API process runs its own group-less consumer over that topic and fans out in memory
+to its open streams. The event carries an id, never content, and a stream re-checks the
+caller's access before forwarding each one. Every screen this serves must still work by polling
+when the stream is unavailable — the stream is a hint, not a delivery guarantee.
+
 ### Ingestion is fire-and-forget, and disk is scratch
 
 `POST /projects` returns immediately and the clone+index runs in the background. The cloned
@@ -412,7 +426,7 @@ route does not return, which is the one-error-shape rule failing silently rather
 
 ## Rules
 
-Sixteen rule files in `.claude/rules/`. Read the ones your change touches.
+Seventeen rule files in `.claude/rules/`. Read the ones your change touches.
 
 | Rule | Read it when |
 | --- | --- |
@@ -431,6 +445,7 @@ Sixteen rule files in `.claude/rules/`. Read the ones your change touches.
 | `frontend-bff.md` | Any `proxy.ts`, the `app/api/[...path]` API proxy, `/api/auth/*`, or session/refresh code — cookies, the refresh split, SSE piping |
 | `audit-trail.md` | Any write or export in any service — what must record an audit event, the six exemptions, and the two content bans. **Adding a mutating route means adding an event in the same change** |
 | `notifications.md` | Anything under `app/core/notifications.py`, `app/services/notification_fanout.py`, or a fan-out call site — recipient resolution, the before-commit/after-commit straddle with audit, and the preference-snapshot rule |
+| `live-events.md` | Anything under `app/live/`, `GET /events`, a status write the frontend shows, or `components/live/` — ids only, stage never publish, visibility in `access.py`, polling stays the fallback |
 | `audit-findings.md` | Writing an audit report |
 
 Seven commands in `.claude/commands/`: `audit-flow.md` (read-only sweep, writes

@@ -13,6 +13,11 @@ incompatibly. Configuration defaults and internal module layout may change in a 
 
 ### Added
 
+- **Live updates.** Project status and reindex, checklist and mock-data generation, and the
+  notification bell update the moment they change, over one per-user stream (`GET /events`).
+  Screens fall back to polling when it is unavailable.
+- `GET /events`, `ErrorCode.LIVE_EVENTS_UNAVAILABLE`, and the settings `LIVE_EVENTS_ENABLED`,
+  `KAFKA_LIVE_EVENTS_TOPIC`, `LIVE_EVENTS_HEARTBEAT_SECONDS`, `LIVE_EVENTS_MAX_STREAM_MINUTES`.
 - **Profile page** at `/profile`, opened from the account menu: your account and project
   memberships, your signed-in sessions with the device and address each started from and a
   per-session sign-out, your own activity from the audit trail, notification preferences,
@@ -90,6 +95,8 @@ incompatibly. Configuration defaults and internal module layout may change in a 
 
 ### Changed
 
+- While the live stream is connected, job screens poll every 60 s instead of 3 s and the bell
+  every 5 min instead of 60 s.
 - Notification preferences moved from Settings to the profile; `/settings/notifications`
   redirects there. Settings is administrator-only again, so non-admins no longer see it in
   the sidebar.
@@ -103,6 +110,8 @@ incompatibly. Configuration defaults and internal module layout may change in a 
 
 ### Fixed
 
+- **The frontend's API proxy now forwards the browser's abort signal**, so closing a tab ends
+  the backend request.
 - **Changing your password no longer signs you out of the session you changed it from.**
   The backend looked for the caller's session in the refresh cookie, which the frontend's
   API proxy never forwards, so every session was revoked — the caller's included — and they

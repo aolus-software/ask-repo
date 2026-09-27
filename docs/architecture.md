@@ -25,7 +25,7 @@ flowchart LR
       P[("Postgres<br/>rows")]
       Q[("Qdrant<br/>vectors")]
       R[("Redis<br/>rate limits<br/>grant cache")]
-      K[["Kafka<br/>job queue"]]
+      K[["Kafka<br/>job queue +<br/>live events"]]
     end
     M{{"Chat model<br/>Ollama / OpenAI / Anthropic"}}
     E{{"Embedding model"}}
@@ -33,7 +33,7 @@ flowchart LR
     B <--> F
     F <--> A
     A --> P & Q & R
-    A -- publishes --> K
+    A -- publishes/consumes --> K
     K -- delivers --> W
     W --> P & Q
     A --> M
@@ -188,6 +188,12 @@ Twelve Kafka topics, in three independent ladders — ingestion, checklist, mock
 They are separate on purpose: a checklist generation retrying for eleven minutes must not sit in
 the queue a project reindex is waiting in.
 
+**A thirteenth topic, `askrepo.live.events`, is not a fourth ladder.** One partition,
+`retention.ms` of one hour, no retry topic and no dead letter — a live event that never arrives
+is not retried, because the safety poll every screen keeps running recovers it, and retrying a
+hint nobody is still waiting for would just be noise. It is also the only topic the API process
+consumes as well as produces to. See "Live events" below.
+
 **Kafka has no delayed-delivery primitive**, so the delay is built out of topics. A failed job
 is re-published to a fixed-delay retry topic, and a `RetryConsumer` on that topic holds the
 partition head until the message is due rather than sleeping.
@@ -265,6 +271,34 @@ on purpose; do not "fix" one ordering to match the other.
 Reading it is the six routes under `/notifications` and `/notification-preferences`, all scoped
 to the caller's own rows with no administrative view. What the rows hold is in
 [`data.md`](data.md#notifications).
+
+---
+
+## Live events: the API process consumes Kafka too
+
+Every screen above learns about a state change by polling. `GET /events`
+(`.claude/rules/live-events.md`) pushes a hint instead, and it is the one place the API process
+reads from Kafka rather than only writing to it — every earlier section in this document has the
+API producing a job and the worker consuming it; this path runs the other way.
+
+The flow: a repository or service method **stages** a `LiveEvent` on the session
+(`app/live/staging.py`) instead of publishing it; a SQLAlchemy `after_commit` hook hands whatever
+staged during that transaction to the process's publisher, and `after_soft_rollback` discards it
+with no publish at all — so an event can only leave a process describing a change that actually
+committed. The publisher writes to a new topic, `askrepo.live.events`, alongside the three job
+ladders below. Every API process (not the worker) also runs one `KafkaLiveEventHub` consumer
+against that topic — no consumer group, every partition assigned to itself, seeking to the end on
+start — and fans each message out in memory to that process's open `/events` streams. Each stream
+re-checks, per event, whether the caller may see it (`live_event_visible_to` in
+`app/core/access.py`) before forwarding an `invalidate {kind, id, projectId}`; the browser then
+refetches the same REST routes it already polls, whose `404`/`403` rules decide what it actually
+sees. Nothing about this path carries content — an id is all a `LiveEvent` or an `invalidate`
+payload ever holds.
+
+Stage → commit hook → Kafka → `KafkaLiveEventHub` → `GET /events` → browser `invalidate` → REST
+refetch. Every hop is best-effort: a lost publish, a dropped connection, or a full per-connection
+queue (collapsed to one `resync` marker rather than an unbounded backlog) costs a delayed screen
+update, never a failed write, and the safety poll every screen keeps running is what recovers it.
 
 ---
 

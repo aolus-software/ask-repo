@@ -90,10 +90,19 @@ exactly as a read one is.
 
 Full definition, including the cascade and the prune mechanism: [`configuration.md`](configuration.md).
 
-**Not configurable, deliberately.** The bell's 60-second poll interval is a frontend constant
-rather than a setting, and there is no socket or SSE stream for notifications — a per-user
-notification stream is a different connection lifecycle than the one answer-stream SSE machinery
-was built for, and polling an integer is honest at this scale. See [`PRD.md`](PRD.md) §2.1.
+**Not configurable, deliberately.** The bell's poll interval is a frontend constant rather than a
+setting.
+
+**Amendment (2026-09-27, in progress) — the bell is now pushed too.** A per-user SSE stream,
+`GET /events`, was built for a different reason — job status for project and generation screens
+(`.claude/rules/live-events.md`) — and the bell rides it rather than gaining a stream of its own:
+a `notification` live event fans out to the recipients the fan-out already resolved, and an open
+tab's bell refetches on it the moment a `notifications` row lands, instead of waiting for its
+next poll. Polling is what this page originally shipped and it stays as the fallback: 60 seconds
+while `/events` is unavailable, 5 minutes while connected, since the stream is a hint and not a
+delivery guarantee (`.claude/rules/live-events.md` rule 5) — a lost or delayed live event still
+surfaces on the next poll. See [`PRD.md`](PRD.md) §2.1 and
+`docs/superpowers/specs/2026-09-27-live-updates-design.md`.
 
 ---
 
