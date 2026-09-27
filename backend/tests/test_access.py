@@ -229,3 +229,38 @@ def test_memberships_for_returns_real_grants_even_for_an_admin() -> None:
 
     assert memberships_for(admin) == [grant]
     assert memberships_for(nobody) == []
+
+
+# ── live_event_visible_to ───────────────────────────────────────────────
+
+
+def test_a_project_event_is_visible_only_within_scope() -> None:
+    from app.live.events import project_event
+
+    member_of = uuid.uuid4()
+    other = uuid.uuid4()
+    member = _user(
+        grants={
+            member_of: ProjectGrant(project_id=member_of, role="viewer", permissions=frozenset())
+        }
+    )
+    admin = _user(is_admin=True)
+
+    from app.core.access import live_event_visible_to
+
+    assert live_event_visible_to(member, project_event(member_of)) is True
+    assert live_event_visible_to(member, project_event(other)) is False
+    assert live_event_visible_to(admin, project_event(other)) is True
+
+
+def test_a_notification_is_visible_only_to_its_recipients() -> None:
+    from app.live.events import notification_event
+
+    reader = _user()
+    admin = _user(is_admin=True)
+    event = notification_event(uuid.uuid4(), uuid.uuid4(), [reader.id])
+
+    from app.core.access import live_event_visible_to
+
+    assert live_event_visible_to(reader, event) is True
+    assert live_event_visible_to(admin, event) is False  # rule 5: no admin bypass on notifications
