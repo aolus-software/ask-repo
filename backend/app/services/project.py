@@ -25,6 +25,8 @@ from app.core.permissions import OWNER_NAME, SYSTEM_ROLES, Permission
 from app.core.repo_url import RepoUrlRejected, validate_repo_url
 from app.ingestion.errors import IngestionError
 from app.ingestion.vector_store import VectorStoreFactory
+from app.live.events import project_event
+from app.live.staging import stage_live_event
 from app.models.project import Project, ProjectStatus
 from app.queue.protocol import IngestionQueue
 from app.queue.topics import INGEST_TOPIC, IngestionMessage
@@ -118,6 +120,7 @@ class ProjectService:
             encrypted_pat=encrypted_pat,
         )
         await self._repository.add(project)
+        stage_live_event(self.session, project_event(project.id))
 
         # The creator becomes the owner in the same transaction. A project that exists
         # with no owner breaks the invariant §9 enforces, and a second transaction is
@@ -256,6 +259,7 @@ class ProjectService:
 
         project.reindex_in_progress = True
         project.updated_at = datetime.now(UTC)
+        stage_live_event(self.session, project_event(project.id))
         # Captured before the commit, matching `create` and `delete`: the recorder
         # reads plain locals, never the ORM row.
         project_id = project.id
@@ -304,6 +308,7 @@ class ProjectService:
         embedding_collection = project.embedding_collection
 
         await self._repository.soft_delete(project)
+        stage_live_event(self.session, project_event(project.id))
 
         # docs/PRD.md §4.2: deleting a project soft-deletes the conversations against
         # it. Not scoped by owner — the project was shared, so the conversations
