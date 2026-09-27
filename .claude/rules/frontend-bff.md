@@ -120,8 +120,9 @@ below.
 so a closed tab ends the backend request immediately instead of leaving it running until its next
 write fails. This matters most for `/events`: without it, a stream held open by a tab nobody is
 watching would sit on the backend until its next heartbeat write discovers the socket is gone,
-holding a Kafka-consuming task and a database session for however long
-`LIVE_EVENTS_HEARTBEAT_SECONDS` allows.
+holding a Kafka-consuming task open for however long `LIVE_EVENTS_HEARTBEAT_SECONDS` allows — not
+a held database session, since each re-check (`.claude/rules/live-events.md`) opens and closes
+its own rather than keeping one for the life of the stream.
 
 ## `API_URL` is server-only
 

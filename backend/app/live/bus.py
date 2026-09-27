@@ -47,3 +47,7 @@ class InMemoryLiveEventBus(LiveEventHub):
         for live_event in events:
             self.published.append(live_event)
             self._fanout.deliver(live_event)
+
+    def close_all(self) -> None:
+        """Simulate the broker connection being lost for good: end every open stream."""
+        self._fanout.close_all()

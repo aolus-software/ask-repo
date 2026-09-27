@@ -9,6 +9,7 @@ a long job; a group-less consumer that polls continuously has no seat to lose.
 import asyncio
 import contextlib
 import logging
+import time
 from collections.abc import Sequence
 from contextlib import AbstractAsyncContextManager
 from typing import Final
@@ -25,6 +26,11 @@ logger = logging.getLogger(__name__)
 # Nothing reads history: the consumer starts at the end. An hour is margin, not a promise.
 LIVE_TOPIC_CONFIGS: Final = {"retention.ms": "3600000"}
 _RECONNECT_BACKOFF_SECONDS: Final = (1, 2, 5, 10, 30)
+_STOP_TIMEOUT_SECONDS: Final = 5
+# A group-less consumer that receives nothing looks identical to a healthy one with no
+# traffic: neither raises. This is the interval on which liveness is checked by hand.
+_HEALTH_CHECK_SECONDS: Final = 10
+_HEALTH_CHECK_TIMEOUT_SECONDS: Final = 5
 
 
 class KafkaLivePublisher:
@@ -42,9 +48,21 @@ class KafkaLivePublisher:
         await self._producer.start()
 
     async def stop(self) -> None:
-        """Wait for in-flight sends and disconnect."""
+        """Wait for in-flight sends and disconnect.
+
+        Bounded: a dead broker can make an in-flight `send_and_wait` hang past its own
+        request timeout during shutdown, and shutdown must still finish. A timeout here
+        means those sends are abandoned, not delivered — the same "a lost event costs a
+        delayed screen update" trade-off this class already makes everywhere else.
+        """
         if self._pending:
-            await asyncio.gather(*self._pending, return_exceptions=True)
+            try:
+                await asyncio.wait_for(
+                    asyncio.gather(*self._pending, return_exceptions=True),
+                    timeout=_STOP_TIMEOUT_SECONDS,
+                )
+            except TimeoutError:
+                logger.warning("live event publisher shutdown timed out waiting for sends")
         if self._producer is not None:
             await self._producer.stop()
             self._producer = None
@@ -67,7 +85,10 @@ class KafkaLivePublisher:
             return
         for live_event in events:
             try:
-                await self._producer.send(self._topic, value=live_event.to_bytes())
+                # `send` only enqueues; the delivery outcome resolves on the future it
+                # returns. `send_and_wait` is what actually surfaces a failed delivery
+                # into this `except`, rather than into a future nobody reads.
+                await self._producer.send_and_wait(self._topic, value=live_event.to_bytes())
             except Exception:
                 logger.warning(
                     "live event publish failed: kind=%s id=%s",
@@ -133,20 +154,45 @@ class KafkaLiveEventHub(LiveEventHub):
                 await consumer.seek_to_end(*assigned)
                 self._available = True
                 attempt = 0
-                async for message in consumer:
-                    if message.value is not None:
-                        self.dispatch(message.value)
+                # Whatever happened while disconnected was lost: no offsets, no group,
+                # nothing to replay. Every open stream needs the same `resync` a slow
+                # reader would get on its own.
+                self._fanout.resync_all()
+                await self._consume(consumer)
             except asyncio.CancelledError:
                 raise
             except Exception:
                 logger.warning("live event consumer lost the broker; retrying", exc_info=True)
             finally:
                 self._available = False
+                self._fanout.close_all()
                 with contextlib.suppress(Exception):
                     await consumer.stop()
             delay = _RECONNECT_BACKOFF_SECONDS[min(attempt, len(_RECONNECT_BACKOFF_SECONDS) - 1)]
             attempt += 1
             await asyncio.sleep(delay)
+
+    async def _consume(self, consumer: AIOKafkaConsumer) -> None:
+        """Read messages while periodically proving the connection is still alive.
+
+        A group-less consumer raises nothing on its own when the broker drops: there is
+        no heartbeat to miss and no rebalance to fail. Absent traffic, `getone()` alone
+        would block forever without ever noticing. So this polls with a bounded wait
+        and, every `_HEALTH_CHECK_SECONDS`, forces a metadata round trip
+        (`consumer.topics()`) whose failure raises into `_run`'s `except Exception`.
+        """
+        last_health_check = time.monotonic()
+        while True:
+            now = time.monotonic()
+            if now - last_health_check >= _HEALTH_CHECK_SECONDS:
+                await asyncio.wait_for(consumer.topics(), timeout=_HEALTH_CHECK_TIMEOUT_SECONDS)
+                last_health_check = now
+            try:
+                message = await asyncio.wait_for(consumer.getone(), timeout=_HEALTH_CHECK_SECONDS)
+            except TimeoutError:
+                continue
+            if message.value is not None:
+                self.dispatch(message.value)
 
 
 class DisabledLiveEventHub(LiveEventHub):

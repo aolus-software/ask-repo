@@ -283,8 +283,9 @@ API producing a job and the worker consuming it; this path runs the other way.
 
 The flow: a repository or service method **stages** a `LiveEvent` on the session
 (`app/live/staging.py`) instead of publishing it; a SQLAlchemy `after_commit` hook hands whatever
-staged during that transaction to the process's publisher, and `after_soft_rollback` discards it
-with no publish at all — so an event can only leave a process describing a change that actually
+staged during that transaction to the process's publisher, and `after_transaction_end` discards
+whatever is left once the outermost transaction ends (a rollback, or a close) with no publish at
+all — so an event can only leave a process describing a change that actually
 committed. The publisher writes to a new topic, `askrepo.live.events`, alongside the three job
 ladders below. Every API process (not the worker) also runs one `KafkaLiveEventHub` consumer
 against that topic — no consumer group, every partition assigned to itself, seeking to the end on
@@ -298,6 +299,10 @@ payload ever holds.
 Stage → commit hook → Kafka → `KafkaLiveEventHub` → `GET /events` → browser `invalidate` → REST
 refetch. Every hop is best-effort: a lost publish, a dropped connection, or a full per-connection
 queue (collapsed to one `resync` marker rather than an unbounded backlog) costs a delayed screen
+update. A group-less consumer raises nothing when the broker drops, so the hub proves its
+connection with a metadata round trip every 10 seconds; on a loss it ends every open stream, whose
+client reconnects into `503` and polls, and on a reconnect it sends every stream a `resync`,
+because nothing replays what was published in between. Either way the cost stays a delayed screen
 update, never a failed write, and the safety poll every screen keeps running is what recovers it.
 
 ---

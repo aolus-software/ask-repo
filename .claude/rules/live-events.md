@@ -37,7 +37,10 @@ this one channel skip the check that everything else goes through."
 
 `stage_live_event(session, event)` appends to a list on `session.info`; nothing calls a
 publisher directly. A SQLAlchemy `after_commit` hook hands the staged list to the process's
-`LivePublisher` and clears it; `after_soft_rollback` discards it with no publish at all.
+`LivePublisher` and clears it; `after_transaction_end` discards whatever is left once the
+outermost transaction ends — a rollback, or a close — with no publish at all. A savepoint ending
+is not the outermost transaction ending (`transaction.parent is not None`), so a nested rollback
+cannot drop events staged before it opened.
 
 This is the mechanism, not a convention a call site has to get right by hand. Publishing after a
 `session.commit()` line by hand is one `await` away from publishing an event whose transaction
@@ -80,9 +83,19 @@ someone who holds no membership on it.
 **Re-checked per event, not decided once at connect.** The stream reloads the caller through
 `load_authenticated_user` (grants via the grant cache, falling back to Postgres) before
 forwarding a project-scoped event, and again on every heartbeat. A revoked membership stops that
-project's events from the next event on; a deactivated account or a `must_change_password` flag
-closes the stream within one heartbeat interval. The access token's own expiry is irrelevant to
-this — the re-check, not the token, is what keeps a long-lived stream honest.
+project's events from the next event on; a deactivated account, a `must_change_password` flag,
+or a signed-out/revoked session (the caller's own refresh-token family, via
+`RefreshTokenRepository.family_is_live`) closes the stream within one heartbeat interval. The
+access token's own expiry is irrelevant to this — the re-check, not the token, is what keeps a
+long-lived stream honest.
+
+**Bounded so it cannot become its own outage.** Every open stream in a process can re-check at
+once — the pool is small — so `app/live/stream.py` caps concurrent re-checks at
+`_RECHECK_CONCURRENCY` (4) with a module-level semaphore, and reuses a successful re-check for
+`_RECHECK_REUSE_SECONDS` (2 seconds): an event or heartbeat due inside that window sees the
+already-checked user rather than opening a second session. A re-check that raises is logged and
+treated as "closed" rather than propagating out of the generator — one flaky check costs one
+client a reconnect, not the request.
 
 **No administrator bypass for a `notification` event**, matching
 `.claude/rules/notifications.md` rule 5: `require_permission` lets an administrator through
@@ -94,7 +107,12 @@ screens already list every project), which is not the same thing.
 ## 5. The stream is a hint — every screen it serves must still update by polling
 
 `GET /events` answers `503 LIVE_EVENTS_UNAVAILABLE` when `LIVE_EVENTS_ENABLED` is off or the hub
-has no broker connection, and nothing else changes: `LiveEventsProvider` backs off and retries,
+has no broker connection, and nothing else changes. "No broker connection" has to be noticed by
+hand — a group-less consumer raises nothing when the broker drops — so `KafkaLiveEventHub` runs a
+metadata round trip every `_HEALTH_CHECK_SECONDS` (10) and, on any loss, marks itself unavailable
+and ends every open stream (`close_all`), so each client reconnects into the `503` rather than
+sitting "connected" to a hub that will never deliver; a reconnect sends every stream a `resync`,
+since what was published during the gap is gone. Beyond that: `LiveEventsProvider` backs off and retries,
 and every hook it would otherwise quiet down keeps its unconnected interval. A published event
 can also simply never arrive — a process that commits and dies before its publish, a full
 per-connection queue collapsed to one `resync` marker, a broker that drops a message Kafka

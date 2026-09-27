@@ -185,7 +185,10 @@ One per API process, started and stopped in the FastAPI lifespan.
   `QUEUE_SIZE = 100`, not a setting). A message goes to every registered queue. A
   full queue is drained and given a single `resync` marker instead of an unbounded backlog.
 - **Availability:** `hub.available` is `False` until the consumer has connected, and whenever
-  it loses the broker. A background task retries with backoff. `LIVE_EVENTS_ENABLED=false`
+  it loses the broker. A group-less consumer raises nothing when the broker drops, so the hub
+  runs a metadata round trip (`consumer.topics()`) every 10 seconds to notice; a loss ends every
+  open stream (`close_all`) so its client reconnects into `503`, and a reconnect sends every
+  stream a `resync`. A background task retries with backoff. `LIVE_EVENTS_ENABLED=false`
   never starts the consumer.
 - **Test double:** `InMemoryLiveEventBus` implements both the publisher and the hub interface,
   so route, service and staging tests run with no broker (the same pattern as
@@ -236,8 +239,12 @@ middleware calls it.
 - Before forwarding a project-scoped event, the stream opens a session from the sessionmaker,
   reloads the user through `load_authenticated_user` (grants via the grant cache, falling back
   to Postgres), and calls `live_event_visible_to`. Invisible events are dropped silently.
-- On every heartbeat the user row is re-read. If the user is gone (deactivated) or
-  `must_change_password` is set, the stream closes.
+- On every heartbeat the user row is re-read. If the user is gone (deactivated),
+  `must_change_password` is set, or the caller's own session (refresh-token family) is no longer
+  live — signed out, revoked from `/profile`, or swept by a password change — the stream closes.
+  The heartbeat keeps its own clock, so traffic the caller cannot see never delays it.
+- Re-checks are bounded: at most four at once per process, and a successful one is reused for
+  two seconds. A re-check that raises is logged and closes the stream rather than propagating.
 - The stream uses its **own** sessions from the sessionmaker, never the request-scoped one, for
   the reason `.claude/rules/rag.md` gives for the answer stream.
 

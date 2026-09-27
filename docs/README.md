@@ -79,7 +79,7 @@ deduplication boundary" → `.claude/rules/ingestion.md`.
 
 ## Also worth knowing
 
-- **[`../backend/README.md`](../backend/README.md)** — the exhaustive route table (73 routes), the
+- **[`../backend/README.md`](../backend/README.md)** — the exhaustive route table (81 routes), the
   backend layout, and dev commands.
 - **[`../frontend/README.md`](../frontend/README.md)** — frontend scripts, env, and the BFF layout.
 - **[`../CLAUDE.md`](../CLAUDE.md)** — the invariants a coding agent must not break. It states
