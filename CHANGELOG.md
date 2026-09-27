@@ -8,8 +8,19 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 What each version means for an operator: the **wire contract** — route paths, JSON field names,
 and `ErrorCode` values — is what versioning covers. A `MAJOR` bump means one of those changed
 incompatibly. Configuration defaults and internal module layout may change in a `MINOR`.
+Removing an `ErrorCode` value that no response ever carried is not an incompatible change: no
+client can have received it, so it is recorded under Changed and allowed in a `MINOR`.
 
 ## [Unreleased]
+
+## [2.2.0] — 2026-09-27
+
+Notifications (`docs/PRD.md` §2.1, phase 2.3), optional mail with self-service password reset
+(phase 2.4), a profile page, and live updates over one per-user stream, plus the fixes from the
+2026-09-27 audit sweeps. **Nothing here breaks the wire contract**: six `ErrorCode`s and 14 routes
+were added and none renamed, no route path changed, and no JSON field was dropped. The one
+`ErrorCode` removed, `MESSAGE_NOT_FOUND`, was never carried by any response. See the versioning
+note above.
 
 ### Added
 
@@ -118,12 +129,9 @@ incompatibly. Configuration defaults and internal module layout may change in a 
   `LIVE_EVENTS_HEARTBEAT_SECONDS`, `LIVE_EVENTS_MAX_STREAM_MINUTES`, `AUDIT_RETENTION_DAYS` and
   `NOTIFICATION_RETENTION_DAYS` through to the containers. Setting them in `infra/.env`
   previously did nothing.
-
-### Removed
-
-- **`ErrorCode.MESSAGE_NOT_FOUND`.** No route raised it: there is no route that fetches a
-  single message. It is removed from the backend enum and the frontend mirror. This is an incompatible
-  change to the wire contract, so the next release is a major version.
+- **`ErrorCode.MESSAGE_NOT_FOUND` is removed.** No route ever raised it, since no route fetches
+  a single message, so no client can have received it. It is gone from the backend enum and the
+  frontend mirror. Under the versioning note above, that makes this a `MINOR` change.
 
 ### Fixed
 
@@ -671,7 +679,8 @@ None of these is a defect. Each is a documented, deliberate scope decision:
 
 ---
 
-[Unreleased]: https://github.com/aolus-software/ask-repo/compare/v2.1.0...HEAD
+[Unreleased]: https://github.com/aolus-software/ask-repo/compare/v2.2.0...HEAD
+[2.2.0]: https://github.com/aolus-software/ask-repo/compare/v2.1.0...v2.2.0
 [2.1.0]: https://github.com/aolus-software/ask-repo/compare/v2.0.0...v2.1.0
 [2.0.0]: https://github.com/aolus-software/ask-repo/compare/v1.1.0...v2.0.0
 [1.1.0]: https://github.com/aolus-software/ask-repo/compare/v1.0.0...v1.1.0
