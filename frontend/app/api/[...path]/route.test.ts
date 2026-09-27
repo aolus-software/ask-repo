@@ -302,7 +302,10 @@ describe("the proxy", () => {
   it("forwards the browser's abort signal so a closed tab ends the backend stream", async () => {
     const spy = vi.fn(async () => jsonOk({}));
     vi.stubGlobal("fetch", spy);
-    const request = proxyRequest("/api/events", "askrepo_access=jwt; askrepo_session=s%3D1");
+    const request = proxyRequest(
+      "/api/events",
+      "askrepo_access=jwt; askrepo_session=s%3D1",
+    );
 
     await GET(request, context(["events"]));
 

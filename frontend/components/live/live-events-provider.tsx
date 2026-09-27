@@ -6,7 +6,11 @@ import { useEffect, useState } from "react";
 import { endpoints } from "@/lib/api/endpoints";
 import { parseSseStream } from "@/lib/ask/sse";
 import { nextDelay } from "@/lib/live/backoff";
-import { ALL_LIVE_KEYS, type InvalidatePayload, keysToInvalidate } from "@/lib/live/invalidation";
+import {
+  ALL_LIVE_KEYS,
+  isInvalidatePayload,
+  keysToInvalidate,
+} from "@/lib/live/invalidation";
 import { LiveEventsContext } from "@/hooks/use-live-events";
 
 /**
@@ -32,7 +36,8 @@ export function LiveEventsProvider({ children }: { children: React.ReactNode }) 
     let attempt = 0;
 
     function invalidateAll() {
-      for (const queryKey of ALL_LIVE_KEYS) void queryClient.invalidateQueries({ queryKey });
+      for (const queryKey of ALL_LIVE_KEYS)
+        void queryClient.invalidateQueries({ queryKey });
     }
 
     function schedule() {
@@ -70,8 +75,8 @@ export function LiveEventsProvider({ children }: { children: React.ReactNode }) 
             invalidateAll();
           } else if (event.event === "resync") {
             invalidateAll();
-          } else if (event.event === "invalidate") {
-            for (const queryKey of keysToInvalidate(event.data as InvalidatePayload)) {
+          } else if (event.event === "invalidate" && isInvalidatePayload(event.data)) {
+            for (const queryKey of keysToInvalidate(event.data)) {
               void queryClient.invalidateQueries({ queryKey });
             }
           }
@@ -109,5 +114,9 @@ export function LiveEventsProvider({ children }: { children: React.ReactNode }) 
     };
   }, [queryClient]);
 
-  return <LiveEventsContext.Provider value={{ connected }}>{children}</LiveEventsContext.Provider>;
+  return (
+    <LiveEventsContext.Provider value={{ connected }}>
+      {children}
+    </LiveEventsContext.Provider>
+  );
 }

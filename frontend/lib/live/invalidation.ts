@@ -26,10 +26,32 @@ export function keysToInvalidate(payload: InvalidatePayload): QueryKey[] {
         keys.checklistChangeSets.forModule(payload.id),
       ];
     case "mock_data":
-      return [keys.mockData.detail(payload.id), keys.mockDataChangeSets.forModule(payload.id)];
+      return [
+        keys.mockData.detail(payload.id),
+        keys.mockDataChangeSets.forModule(payload.id),
+      ];
     case "notification":
       return [keys.notifications.all];
+    default:
+      // An event kind this build does not know about — a newer server talking to an
+      // older tab. Nothing to invalidate rather than a runtime crash on the switch.
+      return [];
   }
+}
+
+/**
+ * Whether `data` is shaped enough to be an `InvalidatePayload` — just `kind` and `id`,
+ * since that is all `keysToInvalidate` reads. An `invalidate` event that fails this
+ * check is ignored rather than handed to `keysToInvalidate`, which cannot itself guard
+ * against a payload that is not an object at all.
+ */
+export function isInvalidatePayload(data: unknown): data is InvalidatePayload {
+  return (
+    typeof data === "object" &&
+    data !== null &&
+    typeof (data as { kind?: unknown }).kind === "string" &&
+    typeof (data as { id?: unknown }).id === "string"
+  );
 }
 
 /**

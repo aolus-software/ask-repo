@@ -37,14 +37,15 @@ describe("LiveEventsProvider", () => {
   it("connects on ready and invalidates on an event", async () => {
     vi.stubGlobal(
       "fetch",
-      vi.fn(async () =>
-        new Response(
-          sseBody([
-            "event: ready\ndata: {}\n\n",
-            'event: invalidate\ndata: {"kind":"checklist_module","id":"m1","projectId":"p1"}\n\n',
-          ]),
-          { status: 200, headers: { "content-type": "text/event-stream" } },
-        ),
+      vi.fn(
+        async () =>
+          new Response(
+            sseBody([
+              "event: ready\ndata: {}\n\n",
+              'event: invalidate\ndata: {"kind":"checklist_module","id":"m1","projectId":"p1"}\n\n',
+            ]),
+            { status: 200, headers: { "content-type": "text/event-stream" } },
+          ),
       ),
     );
     const client = new QueryClient();
@@ -54,7 +55,9 @@ describe("LiveEventsProvider", () => {
 
     expect(await screen.findByText("connected")).toBeInTheDocument();
     await waitFor(() =>
-      expect(spy).toHaveBeenCalledWith({ queryKey: keys.checklistModules.detail("m1") }),
+      expect(spy).toHaveBeenCalledWith({
+        queryKey: keys.checklistModules.detail("m1"),
+      }),
     );
   });
 
@@ -77,7 +80,10 @@ describe("LiveEventsProvider", () => {
   it("stops reconnecting for good after a 401, even across a visibility change", async () => {
     const spy = vi.fn(async () => Response.json({}, { status: 401 }));
     vi.stubGlobal("fetch", spy);
-    const originalDescriptor = Object.getOwnPropertyDescriptor(document, "visibilityState");
+    const originalDescriptor = Object.getOwnPropertyDescriptor(
+      document,
+      "visibilityState",
+    );
 
     try {
       renderProvider(new QueryClient());
