@@ -62,6 +62,8 @@ class KafkaLivePublisher:
 
     async def _send(self, events: list[LiveEvent]) -> None:
         if self._producer is None:
+            for live_event in events:
+                logger.warning("live event dropped: kind=%s id=%s", live_event.kind, live_event.id)
             return
         for live_event in events:
             try:

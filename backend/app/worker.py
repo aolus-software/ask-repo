@@ -25,7 +25,7 @@ from app.ingestion.embedder import build_embedder, probe_dimensions
 from app.ingestion.pipeline import IngestionPipeline
 from app.ingestion.vector_store import QdrantVectorStore, build_store_factory, collection_name
 from app.live.kafka import LIVE_TOPIC_CONFIGS, KafkaLivePublisher
-from app.live.staging import set_live_publisher
+from app.live.staging import NullPublisher, set_live_publisher
 from app.mail.outbox import mail_loop
 from app.mail.sender import SmtpMailSender
 from app.mockdata.generator import MockDataGenerator
@@ -408,8 +408,18 @@ async def main() -> None:
     finally:
         for task in tasks:
             task.cancel()
-        await live_publisher.stop()
-        await producer.stop()
+        # Each step is isolated: one failing to stop must not skip the rest. The
+        # publisher is unhooked before it is asked to stop, so nothing can hand it a
+        # fresh event while it is mid-shutdown.
+        set_live_publisher(NullPublisher())
+        try:
+            await live_publisher.stop()
+        except Exception:
+            logger.warning("live event publisher failed to stop", exc_info=True)
+        try:
+            await producer.stop()
+        except Exception:
+            logger.warning("ingestion producer failed to stop", exc_info=True)
 
 
 if __name__ == "__main__":

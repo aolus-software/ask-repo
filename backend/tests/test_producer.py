@@ -108,11 +108,12 @@ class StubLivePublisher:
 
     instances: ClassVar[list["StubLivePublisher"]] = []
 
-    def __init__(self, *, bootstrap_servers: str, topic: str) -> None:
+    def __init__(self, *, bootstrap_servers: str, topic: str, raise_on_stop: bool = False) -> None:
         self.bootstrap_servers = bootstrap_servers
         self.topic = topic
         self.started = False
         self.stopped = False
+        self._raise_on_stop = raise_on_stop
         StubLivePublisher.instances.append(self)
 
     async def start(self) -> None:
@@ -120,6 +121,15 @@ class StubLivePublisher:
 
     async def stop(self) -> None:
         self.stopped = True
+        if self._raise_on_stop:
+            raise RuntimeError("live publisher stop failed")
+
+
+class RaisingLivePublisher(StubLivePublisher):
+    """A `StubLivePublisher` whose `stop()` always raises, for the shutdown-isolation test."""
+
+    def __init__(self, *, bootstrap_servers: str, topic: str) -> None:
+        super().__init__(bootstrap_servers=bootstrap_servers, topic=topic, raise_on_stop=True)
 
 
 class ExplodingAdminClient:
@@ -481,6 +491,40 @@ async def test_the_lifespan_stops_the_producer_when_the_app_raises(
 
     assert StubQueue.instances[0].stopped is True
     assert StubLivePublisher.instances[0].stopped is True
+
+
+async def test_a_failing_publisher_stop_does_not_skip_the_queue_stop(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Each shutdown step is isolated: `live_publisher.stop()` raising must not
+    prevent `queue.stop()` from running."""
+    settings = Settings(app_env="development", live_events_enabled=False)
+    monkeypatch.setattr("app.main.get_settings", lambda: settings)
+
+    async def noop(
+        *,
+        bootstrap_servers: str,
+        partitions: int,
+        topics: tuple[str, ...] = (),
+        topic_configs: Mapping[str, str] | None = None,
+    ) -> None:
+        return None
+
+    monkeypatch.setattr("app.main.ensure_topics", noop)
+    monkeypatch.setattr("app.main.KafkaIngestionQueue", StubQueue)
+    monkeypatch.setattr("app.main.KafkaLivePublisher", RaisingLivePublisher)
+
+    async def noop_probe(chat_model: object) -> None:
+        return None
+
+    monkeypatch.setattr("app.main.probe_structured_output", noop_probe)
+
+    application = FastAPI()
+    async with lifespan(application):
+        pass
+
+    assert StubLivePublisher.instances[0].stopped is True
+    assert StubQueue.instances[0].stopped is True
 
 
 async def test_the_lifespan_skips_the_chat_probe_in_the_test_environment(

@@ -145,11 +145,23 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     try:
         yield
     finally:
+        # Each step is isolated: one failing to stop must not skip the rest. The
+        # publisher is unhooked before it is asked to stop, so nothing can hand it a
+        # fresh event while it is mid-shutdown.
         if isinstance(live_hub, KafkaLiveEventHub):
-            await live_hub.stop()
-        await live_publisher.stop()
+            try:
+                await live_hub.stop()
+            except Exception:
+                logger.warning("live event hub failed to stop", exc_info=True)
         set_live_publisher(NullPublisher())
-        await queue.stop()
+        try:
+            await live_publisher.stop()
+        except Exception:
+            logger.warning("live event publisher failed to stop", exc_info=True)
+        try:
+            await queue.stop()
+        except Exception:
+            logger.warning("ingestion queue failed to stop", exc_info=True)
 
 
 def create_app() -> FastAPI:
