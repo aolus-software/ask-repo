@@ -23,6 +23,7 @@ from app.config import Settings
 from app.core import access
 from app.core.audit import AuditEntry, AuditEventType, AuditRecorder, ChangedValue
 from app.core.errors import AppError, ErrorCode
+from app.core.feedback import FeedbackTarget
 from app.core.middleware import AuthenticatedUser
 from app.core.permissions import Permission
 from app.live.events import checklist_module_event
@@ -75,6 +76,7 @@ from app.schemas.conversation import (
 )
 from app.schemas.pagination import PaginatedResponse
 from app.services import path_tree
+from app.services.feedback import my_feedback_map
 from app.services.indexed_path import IndexedPathReader
 
 logger = logging.getLogger(__name__)
@@ -349,7 +351,18 @@ class ChecklistModuleService:
         """This module's change sets, newest first -- the audit trail."""
         await self._require_readable(module_id, actor)
         rows = await self.change_sets.list_for_module(module_id, limit=MAX_CHANGE_SETS)
-        return [ChecklistChangeSetResponse.model_validate(row) for row in rows]
+        mine = await my_feedback_map(
+            self.session,
+            actor=actor,
+            target_type=FeedbackTarget.CHECKLIST_CHANGE_SET,
+            target_ids=[row.id for row in rows],
+        )
+        return [
+            ChecklistChangeSetResponse.model_validate(row).model_copy(
+                update={"my_feedback": mine.get(row.id)}
+            )
+            for row in rows
+        ]
 
     async def messages(
         self, module_id: uuid.UUID, *, actor: AuthenticatedUser
@@ -357,7 +370,18 @@ class ChecklistModuleService:
         """The module's shared chat. Readable by every authenticated user (spec 2.4)."""
         await self._require_readable(module_id, actor)
         rows = await self.messages_repository.list_for_module(module_id, limit=MAX_CHAT_MESSAGES)
-        return [ChecklistMessageResponse.model_validate(row) for row in rows]
+        mine = await my_feedback_map(
+            self.session,
+            actor=actor,
+            target_type=FeedbackTarget.CHECKLIST_MESSAGE,
+            target_ids=[row.id for row in rows],
+        )
+        return [
+            ChecklistMessageResponse.model_validate(row).model_copy(
+                update={"my_feedback": mine.get(row.id)}
+            )
+            for row in rows
+        ]
 
     async def prepare_turn(
         self,

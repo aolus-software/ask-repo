@@ -22,6 +22,7 @@ from app.config import Settings
 from app.core import access
 from app.core.audit import AuditEntry, AuditEventType, AuditRecorder
 from app.core.errors import AppError, ErrorCode
+from app.core.feedback import FeedbackTarget
 from app.core.middleware import AuthenticatedUser
 from app.models.conversation import (
     MAX_TITLE_CHARS,
@@ -50,6 +51,7 @@ from app.schemas.conversation import (
     encode_event,
 )
 from app.schemas.pagination import ListQuery, PaginatedResponse
+from app.services.feedback import my_feedback_map
 
 logger = logging.getLogger(__name__)
 
@@ -151,6 +153,12 @@ class ConversationService:
         """One conversation and its messages, oldest first."""
         conversation = await self._require_own(conversation_id, actor)
         messages = await self._messages.list_for_conversation(conversation.id)
+        mine = await my_feedback_map(
+            self.session,
+            actor=actor,
+            target_type=FeedbackTarget.MESSAGE,
+            target_ids=[m.id for m in messages],
+        )
         return ConversationDetailResponse(
             id=conversation.id,
             project_id=conversation.project_id,
@@ -158,7 +166,9 @@ class ConversationService:
             created_at=conversation.created_at,
             updated_at=conversation.updated_at,
             messages=[
-                MessageResponse.model_validate(message, from_attributes=True)
+                MessageResponse.model_validate(message, from_attributes=True).model_copy(
+                    update={"my_feedback": mine.get(message.id)}
+                )
                 for message in messages
             ],
         )

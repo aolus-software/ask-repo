@@ -20,6 +20,7 @@ from pydantic import Field
 from app.core.errors import ErrorCode
 from app.models.conversation import FinishReason, Intent, MessageRole
 from app.schemas.base import ApiModel
+from app.schemas.feedback import MyFeedback
 from app.schemas.pagination import ListQuery
 
 # Sent during any gap. Caddy sits in front of the API (docs/PRD.md §5), and an idle
@@ -95,6 +96,9 @@ class MessageResponse(ApiModel):
     model: str | None
     finish_reason: FinishReason | None
     created_at: datetime
+    # The caller's own vote, and only theirs — never another reviewer's
+    # (`.claude/rules/feedback.md`). Filled by the list reads; null elsewhere.
+    my_feedback: MyFeedback | None = None
 
 
 class ConversationDetailResponse(ConversationResponse):
