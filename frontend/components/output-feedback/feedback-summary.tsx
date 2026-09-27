@@ -1,5 +1,6 @@
 import { REASON_LABELS } from "@/components/output-feedback/reason-labels";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import type { FeedbackFeature, FeedbackSummary as Summary } from "@/lib/api/types";
 
@@ -16,6 +17,39 @@ export const FEATURE_LABELS: Record<FeedbackFeature, string> = {
 function downRate(up: number, down: number): string {
   const total = up + down;
   return total === 0 ? "—" : `${Math.round((down / total) * 100)}%`;
+}
+
+/**
+ * Card-shaped placeholder matching `FeedbackSummary`'s own grid, so the layout does
+ * not jump when the summary query resolves (`docs/design.md` → Lists) — the same
+ * reasoning `TableSkeleton` follows for the list below it.
+ */
+export function FeedbackSummarySkeleton() {
+  return (
+    <div className="space-y-6">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        {Array.from({ length: 4 }, (_, index) => (
+          <Card key={index}>
+            <CardHeader>
+              <Skeleton className="h-4 w-24" />
+            </CardHeader>
+            <CardContent>
+              <Skeleton className="h-8 w-16" />
+              <Skeleton className="mt-2 h-3 w-28" />
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+      <div className="grid gap-6 lg:grid-cols-2">
+        <Card className="p-6">
+          <Skeleton className="h-32 w-full" />
+        </Card>
+        <Card className="p-6">
+          <Skeleton className="h-32 w-full" />
+        </Card>
+      </div>
+    </div>
+  );
 }
 
 export function FeedbackSummary({ summary }: { summary: Summary }) {

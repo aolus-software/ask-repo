@@ -9,7 +9,10 @@ import { ListToolbar } from "@/components/layout/list-toolbar";
 import { PageHeader } from "@/components/layout/page-header";
 import { PaginationFooter } from "@/components/layout/pagination-footer";
 import { FeedbackFilters } from "@/components/output-feedback/feedback-filters";
-import { FeedbackSummary } from "@/components/output-feedback/feedback-summary";
+import {
+  FeedbackSummary,
+  FeedbackSummarySkeleton,
+} from "@/components/output-feedback/feedback-summary";
 import { FeedbackTable } from "@/components/output-feedback/feedback-table";
 import { Card } from "@/components/ui/card";
 import { useFeedbackList, useFeedbackSummary } from "@/hooks/use-feedback";
@@ -56,7 +59,7 @@ export function FeedbackScreen() {
       />
 
       <ListToolbar
-        columns={4}
+        columns={5}
         filters={
           <FeedbackFilters
             currentFilters={listParams}
@@ -68,7 +71,13 @@ export function FeedbackScreen() {
         }
       />
 
-      {summary.data ? <FeedbackSummary summary={summary.data} /> : null}
+      {summary.isError ? (
+        <ListError error={summary.error} onRetry={() => summary.refetch()} />
+      ) : summary.isLoading ? (
+        <FeedbackSummarySkeleton />
+      ) : summary.data ? (
+        <FeedbackSummary summary={summary.data} />
+      ) : null}
 
       <Card className="p-0">
         {list.isError ? (
