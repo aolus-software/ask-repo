@@ -103,6 +103,39 @@ export interface FeedbackRead extends MyFeedback {
   updatedAt: string;
 }
 
+/** `GET /feedback` row. Admin-only, and carries no voter — see `.claude/rules/feedback.md`. */
+export interface FeedbackAdminRead {
+  id: string;
+  projectId: string;
+  projectName: string;
+  targetType: FeedbackTargetType;
+  feature: FeedbackFeature;
+  rating: FeedbackRating;
+  reasonCodes: FeedbackReasonCode[];
+  note: string | null;
+  promptVersion: string;
+  createdAt: string;
+  updatedAt: string;
+  traceUrl: string | null;
+}
+
+/** `GET /feedback/summary`. Ignores pagination — only the filters shape it. */
+export interface FeedbackSummary {
+  byFeature: { feature: FeedbackFeature; up: number; down: number }[];
+  byReason: { feature: FeedbackFeature; reasonCode: FeedbackReasonCode; count: number }[];
+  byPromptVersion: { promptVersion: string; up: number; down: number }[];
+}
+
+export interface FeedbackListParams extends ListParams {
+  projectId?: string;
+  feature?: FeedbackFeature;
+  rating?: FeedbackRating;
+  reasonCode?: FeedbackReasonCode;
+  promptVersion?: string;
+  createdFrom?: string;
+  createdTo?: string;
+}
+
 /** The one error shape the whole API uses (`docs/PRD.md` §5.1). */
 export interface ErrorEnvelope {
   detail: {
