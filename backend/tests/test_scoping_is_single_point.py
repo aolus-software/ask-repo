@@ -94,6 +94,43 @@ def test_nothing_else_constructs_a_notification_row() -> None:
     assert offenders == [], f"Notification/NotificationEvent built outside fan-out: {offenders}"
 
 
+ALLOWED_LIVE_EVENT_VISIBILITY_DECIDERS = {ACCESS}
+
+# `grep -rln "\.recipients" backend/app` finds exactly this file today. A second file
+# reading `.recipients` off a `LiveEvent` — `app/live/stream.py` above all — would be a
+# second place deciding who a live event is for, which is the same defect
+# `.claude/rules/notifications.md` rule 1 names for a second recipient resolver.
+ALLOWED_RECIPIENTS_READERS = {ACCESS}
+
+
+def test_live_event_visibility_is_decided_in_exactly_one_place() -> None:
+    """`live_event_visible_to` is `resolve_project_scope` asked for a stream instead of
+    a request (`.claude/rules/live-events.md` rule 4). A second definition would be a
+    second place deciding whether a stream may forward an event."""
+    offenders = [
+        path.relative_to(APP)
+        for path in _python_files()
+        if path not in ALLOWED_LIVE_EVENT_VISIBILITY_DECIDERS
+        and "def live_event_visible_to" in path.read_text(encoding="utf-8")
+    ]
+
+    assert offenders == [], f"live_event_visible_to defined outside app/core/access.py: {offenders}"
+
+
+def test_nothing_outside_access_reads_a_live_events_recipients() -> None:
+    """A second reader of `LiveEvent.recipients` — `app/live/stream.py` above all — would
+    be a second place deciding who a notification-kind event is for, the same defect
+    `.claude/rules/notifications.md` rule 1 names for a second recipient resolver."""
+    offenders = [
+        path.relative_to(APP)
+        for path in _python_files()
+        if path not in ALLOWED_RECIPIENTS_READERS
+        and ".recipients" in path.read_text(encoding="utf-8")
+    ]
+
+    assert offenders == [], f".recipients read outside the allowlist: {offenders}"
+
+
 def test_no_module_compares_created_by_to_an_actor() -> None:
     """`created_by` is attribution. After Phase 2.1 it gates nothing — the six inline
     gates it used to drive are now `require_permission` calls."""

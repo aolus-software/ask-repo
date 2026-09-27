@@ -253,6 +253,18 @@ def test_a_project_event_is_visible_only_within_scope() -> None:
     assert live_event_visible_to(admin, project_event(other)) is True
 
 
+def test_a_project_less_non_notification_event_is_visible_to_nobody() -> None:
+    """`project_id is None` on any kind but `notification` is not "everyone" and not
+    even an administrator — there is no project scope to check it against."""
+    from app.core.access import live_event_visible_to
+    from app.live.events import LiveEvent
+
+    event = LiveEvent(kind="project", id=uuid.uuid4(), project_id=None)
+
+    assert live_event_visible_to(_user(), event) is False
+    assert live_event_visible_to(_user(is_admin=True), event) is False
+
+
 def test_a_notification_is_visible_only_to_its_recipients() -> None:
     from app.live.events import notification_event
 
