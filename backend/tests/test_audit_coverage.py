@@ -35,7 +35,7 @@ EXPORT_ROUTES = frozenset(
     }
 )
 
-# The six exemptions from `.claude/rules/audit-trail.md`. Each value is the reason,
+# The seven exemptions from `.claude/rules/audit-trail.md`. Each value is the reason,
 # so a reader finds a decision rather than what looks like an oversight.
 READS = "ordinary read — the trail records what changed"
 PROPOSAL = "refinement-chat turn — a proposal is not a row; the apply is audited"
@@ -52,9 +52,13 @@ NOTIFICATION_STATE = "a user's own notification state — private, non-shared, a
 EMAIL_DELIVERY = (
     "email delivery — a transport of an already-recorded event; state columns are its record"
 )
+# Exemption 7. A vote on model output: private to one user, describes no change to a
+# shared resource, the `feedback` table is its own record, and its rate tracks
+# attention — the same three reasons as exemption 5. See `.claude/rules/audit-trail.md`.
+FEEDBACK_VOTE = "a user's own vote on model output — private, its own record, attention-rate"
 
 VALID_EXEMPTIONS = frozenset(
-    {READS, PROPOSAL, CALL_LOG, NO_ACTOR, NOTIFICATION_STATE, EMAIL_DELIVERY}
+    {READS, PROPOSAL, CALL_LOG, NO_ACTOR, NOTIFICATION_STATE, EMAIL_DELIVERY, FEEDBACK_VOTE}
 )
 
 # (method, path) -> the event it records, or the reason it does not.
@@ -145,6 +149,9 @@ ROUTE_EVENTS: dict[tuple[str, str], AuditEventType | str] = {
     ("POST", "/notifications/mark-all-read"): NOTIFICATION_STATE,
     ("POST", "/notifications/{notification_id}/read"): NOTIFICATION_STATE,
     ("PUT", "/notification-preferences"): NOTIFICATION_STATE,
+    # --- Task 3: feedback, exemption 7 ---
+    ("PUT", "/feedback/{target_type}/{target_id}"): FEEDBACK_VOTE,
+    ("DELETE", "/feedback/{target_type}/{target_id}"): FEEDBACK_VOTE,
 }
 
 

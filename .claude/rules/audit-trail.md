@@ -17,7 +17,7 @@ anywhere recorded who deleted it**.
 
 So the rule is not "log the interesting things". It is:
 
-> **Every write, and every export, records an audit event. No exceptions beyond the six named
+> **Every write, and every export, records an audit event. No exceptions beyond the seven named
 > in this file.**
 
 This is written as a rule rather than a list because a list goes stale the moment someone adds a
@@ -45,7 +45,7 @@ egress as a category of its own. "It's only a GET" is not a reason to skip it.
 with a filter can erase a week of a tester's recorded observations without deleting a single row,
 and it is the only write in the app that destroys human-recorded work that way.
 
-## The six exemptions, and each one's reason
+## The seven exemptions, and each one's reason
 
 Named here so a later reader finds a **decision** rather than what looks like an oversight. Do not
 "fix" these; changing one is a PRD change first.
@@ -82,6 +82,13 @@ Named here so a later reader finds a **decision** rather than what looks like an
    success or failure is recorded on the row itself — `notifications.email_state`/`email_sent_at`,
    `password_reset_tokens.sent_at` — and visible to operations through a table query, never
    through the audit trail.
+7. **A user's vote on model output.** `PUT`/`DELETE /feedback/{targetType}/{targetId}`. The
+   same three reasons as exemption 5: the vote is one user's opinion, not a change to a shared
+   resource; the `feedback` table is itself the record (and admins read it through
+   `/feedback`, not through `/audit-events`); and its write rate is proportional to attention,
+   so auditing it would bury `user.deactivated` under thumb clicks. The note lifecycle writes
+   (`conversation.deleted` nulling notes, `project.deleted` soft-deleting rows) are
+   consequences of events that are already audited and are not recorded separately.
 
 ## Adding a mutating route means adding an event, in the same change
 
