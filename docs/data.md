@@ -306,8 +306,12 @@ working rather than an accepted, logged gap. See `.claude/rules/notifications.md
 A partial unique index, `uq_feedback_user_target` on `(user_id, target_type, target_id) WHERE
 deleted_at IS NULL`, is what makes a second `PUT` an update in place rather than a second row.
 Two check constraints: `rating IN ('up', 'down')`, and `rating = 'up' OR
-cardinality(reason_codes) > 0` — a `down` vote cannot skip the reason. Two more non-unique
-indexes, `(project_id, created_at)` and `(feature, created_at)`, back the admin aggregate.
+cardinality(reason_codes) > 0` — a `down` vote cannot skip the reason. Three more non-unique
+indexes: `(project_id, created_at)` and `(feature, created_at)` back the admin aggregate, and
+`ix_feedback_target` on `(target_type, target_id)` backs the lookups that aggregate has nothing
+to do with — `myFeedback` (`mine_for_targets`), withdrawing a vote (`delete_mine`), and clearing
+notes when their conversation is deleted (`clear_notes_for_conversation`), all of which filter by
+subject rather than by project or feature.
 
 | Event | Effect on feedback |
 | --- | --- |
