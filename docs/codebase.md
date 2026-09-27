@@ -145,16 +145,16 @@ backend/app/
 │
 ├── api/
 │   ├── deps.py        shared dependencies (CurrentUser, AdminUser, service factories)
-│   └── routes/        19 routers, 81 routes
+│   └── routes/        20 routers, 85 routes
 │
-├── core/              cross-cutting: access, audit, crypto, errors, grant_cache, logging,
-│                      middleware, notifications, passwords, permissions, rate_limit,
+├── core/              cross-cutting: access, audit, crypto, errors, feedback, grant_cache,
+│                      logging, middleware, notifications, passwords, permissions, rate_limit,
 │                      repo_url, role_seed, security
 ├── db/session.py      engine + sessionmaker
-├── models/            11 modules, 21 tables
-├── repositories/      20 repositories — the only place SQL is written
+├── models/            12 modules, 22 tables
+├── repositories/      21 repositories — the only place SQL is written
 ├── schemas/           request/response shapes, all on ApiModel
-├── services/          19 services — business rules and authorization,
+├── services/          20 services — business rules and authorization,
 │                      plus path_tree.py: pure tree shaping, no I/O
 │
 ├── ingestion/         cloner, walker, chunker, embedder/, vector_store, pipeline
@@ -229,7 +229,7 @@ frontend/
 ├── components/
 │   ├── ui/              shadcn on the Base UI base (30 components)
 │   ├── ask/ checklist/ mock-data/ projects/ roles/ users/   feature components
-│   ├── form/ feedback/ layout/                       shared shells
+│   ├── form/ feedback/ output-feedback/ layout/              shared shells
 ├── hooks/               React Query hooks
 ├── lib/                 api client, query keys, SSE parser, auth/session
 └── proxy.ts             route protection + refresh on navigation
@@ -301,10 +301,10 @@ Run everything CI runs with `make check`: ruff, prettier, mypy, pytest, vitest.
 
 ## The rule files
 
-`.claude/rules/` holds 17 rule files that encode conventions this page only summarises —
+`.claude/rules/` holds 18 rule files that encode conventions this page only summarises —
 `router.md`, `persistence.md`, `response-api.md`, `rag.md`, `ingestion.md`, `notifications.md`,
-`design-system.md`, `forms.md`, `navigation.md`, `frontend-bff.md`, and others. They are written
-for coding agents
+`design-system.md`, `forms.md`, `navigation.md`, `frontend-bff.md`, `feedback.md`, and others.
+They are written for coding agents
 but are the most precise statement of each convention, and worth reading before a change in the
 area they cover.
 
