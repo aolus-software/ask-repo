@@ -73,4 +73,35 @@ describe("LiveEventsProvider", () => {
 
     expect(await screen.findByText("polling")).toBeInTheDocument();
   });
+
+  it("stops reconnecting for good after a 401, even across a visibility change", async () => {
+    const spy = vi.fn(async () => Response.json({}, { status: 401 }));
+    vi.stubGlobal("fetch", spy);
+    const originalDescriptor = Object.getOwnPropertyDescriptor(document, "visibilityState");
+
+    try {
+      renderProvider(new QueryClient());
+      await waitFor(() => expect(spy).toHaveBeenCalledTimes(1));
+
+      Object.defineProperty(document, "visibilityState", {
+        configurable: true,
+        get: () => "hidden",
+      });
+      document.dispatchEvent(new Event("visibilitychange"));
+
+      Object.defineProperty(document, "visibilityState", {
+        configurable: true,
+        get: () => "visible",
+      });
+      document.dispatchEvent(new Event("visibilitychange"));
+
+      // Give any (incorrect) reconnect a chance to fire before asserting it didn't.
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      expect(spy).toHaveBeenCalledTimes(1);
+    } finally {
+      if (originalDescriptor) {
+        Object.defineProperty(document, "visibilityState", originalDescriptor);
+      }
+    }
+  });
 });

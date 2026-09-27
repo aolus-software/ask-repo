@@ -16,7 +16,9 @@ import { LiveEventsContext } from "@/hooks/use-live-events";
  *
  * `fetch` rather than `EventSource`, so the BFF's refresh-on-401 applies and the backoff is
  * ours. The stream closes while the tab is hidden and reopens — with a full refetch on
- * `ready` — when it is visible again.
+ * `ready` — when it is visible again. A 401 the BFF could not refresh stops reconnecting
+ * for the life of this provider — no timer, and no restart from a visibility change —
+ * because the normal session handling is what redirects to `/login` from here.
  */
 export function LiveEventsProvider({ children }: { children: React.ReactNode }) {
   const queryClient = useQueryClient();
@@ -24,6 +26,7 @@ export function LiveEventsProvider({ children }: { children: React.ReactNode }) 
 
   useEffect(() => {
     let stopped = false;
+    let gaveUp = false;
     let controller: AbortController | null = null;
     let timer: ReturnType<typeof setTimeout> | null = null;
     let attempt = 0;
@@ -33,13 +36,13 @@ export function LiveEventsProvider({ children }: { children: React.ReactNode }) 
     }
 
     function schedule() {
-      if (stopped || document.visibilityState === "hidden") return;
+      if (stopped || gaveUp || document.visibilityState === "hidden") return;
       timer = setTimeout(() => void connect(), nextDelay(attempt));
       attempt += 1;
     }
 
     async function connect() {
-      if (stopped || document.visibilityState === "hidden") return;
+      if (stopped || gaveUp || document.visibilityState === "hidden") return;
       controller = new AbortController();
       try {
         const response = await fetch(`/api${endpoints.events}`, {
@@ -47,8 +50,15 @@ export function LiveEventsProvider({ children }: { children: React.ReactNode }) 
           cache: "no-store",
           headers: { accept: "text/event-stream" },
         });
-        // An unrefreshable session: stop, and let the normal session handling redirect.
-        if (response.status === 401) return;
+        // An unrefreshable session: stop for good, and let the normal session handling
+        // redirect. `controller` is cleared so `onVisibilityChange`'s `!controller` check
+        // cannot mistake this for a connection to resume — `gaveUp` is what actually holds
+        // it off, but leaving a stale controller around is its own footgun.
+        if (response.status === 401) {
+          gaveUp = true;
+          controller = null;
+          return;
+        }
         if (!response.ok || !response.body) {
           schedule();
           return;
@@ -84,7 +94,7 @@ export function LiveEventsProvider({ children }: { children: React.ReactNode }) 
     function onVisibilityChange() {
       if (document.visibilityState === "hidden") {
         disconnect();
-      } else if (!controller) {
+      } else if (!gaveUp && !controller) {
         attempt = 0;
         void connect();
       }
