@@ -126,7 +126,7 @@ class MockDataDatasetService:
         for the same reason `ChecklistModuleService.request_generation` has none:
         generation filters and scrolls, it embeds nothing. Gated on `generate.run`."""
         module = await self._require_readable_module(module_id, actor)
-        project = await self._require_readable_project(module.project_id, actor)
+        project = await access.require_readable_project(self.projects, module.project_id, actor)
         access.require_permission(actor, project.id, Permission.GENERATE_RUN)
         self._require_indexed(project)
         self._require_a_stable_index(project)
@@ -305,8 +305,8 @@ class MockDataDatasetService:
         """Everything that can still set a status code, before any bytes are sent.
         Same split `ChecklistModuleService.prepare_turn` makes, for the same reason."""
         module = await self._require_readable_module(module_id, actor)
-        project = await self._require_readable_project(module.project_id, actor)
-        self._require_answerable(project)
+        project = await access.require_readable_project(self.projects, module.project_id, actor)
+        access.require_answerable(project, self.settings)
 
         # A dataset row must exist before the chat can propose against it or mark
         # itself `review` -- lazily created here, matching `request_generation`.
@@ -392,26 +392,6 @@ class MockDataDatasetService:
             updated_at=dataset.updated_at if dataset else datetime.now(UTC),
         )
 
-    def _require_answerable(self, project: Project) -> None:
-        """Same guard `ChecklistModuleService._require_answerable` applies -- chat
-        retrieves, so the embedding-model check does apply here."""
-        if project.status != ProjectStatus.READY.value or not project.embedding_collection:
-            raise AppError(
-                status.HTTP_409_CONFLICT,
-                ErrorCode.PROJECT_NOT_READY,
-                "This project is not indexed yet. Wait for indexing to finish.",
-            )
-        if project.embedding_model != self.settings.embedding_model:
-            raise AppError(
-                status.HTTP_409_CONFLICT,
-                ErrorCode.EMBEDDING_MODEL_CHANGED,
-                (
-                    f"This project was indexed with {project.embedding_model!r} but this "
-                    f"instance now embeds with {self.settings.embedding_model!r}. Reindex "
-                    "the project, or change the embedding model back."
-                ),
-            )
-
     async def _require_readable_module(
         self, module_id: uuid.UUID, actor: AuthenticatedUser
     ) -> ChecklistModule:
@@ -425,17 +405,6 @@ class MockDataDatasetService:
                 "Checklist module not found.",
             )
         return module
-
-    async def _require_readable_project(
-        self, project_id: uuid.UUID, actor: AuthenticatedUser
-    ) -> Project:
-        scope = access.resolve_project_scope(actor)
-        project = await self.projects.get(project_id)
-        if project is None or not (scope.unrestricted or project.id in scope.ids):
-            raise AppError(
-                status.HTTP_404_NOT_FOUND, ErrorCode.PROJECT_NOT_FOUND, "Project not found."
-            )
-        return project
 
     @staticmethod
     def _require_indexed(project: Project) -> None:

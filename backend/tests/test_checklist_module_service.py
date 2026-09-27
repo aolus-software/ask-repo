@@ -8,6 +8,7 @@ from fastapi import status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import Settings
+from app.core import access
 from app.core.errors import AppError, ErrorCode
 from app.core.permissions import EDITOR_NAME, VIEWER_NAME
 from app.models.checklist import (
@@ -621,4 +622,4 @@ async def test_the_refinement_chat_is_not_refused_during_a_reindex(
     project.reindex_in_progress = True
     await db_session.commit()
 
-    checklist_module_service(db_session)._require_answerable(project)
+    access.require_answerable(project, Settings())

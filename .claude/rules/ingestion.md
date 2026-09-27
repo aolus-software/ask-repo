@@ -67,7 +67,7 @@ flag is right; allowing the run is the defect.
 
 **The chat and question paths deliberately do not take this guard.** They read the live generation
 and record nothing, and a reindex can run for twenty minutes — refusing questions for that long
-costs far more than it saves. `_require_answerable` and `_require_indexed` stay separate for this
+costs far more than it saves. `access.require_answerable` and `_require_indexed` stay separate for this
 reason; do not merge them.
 
 ## The checklist sweep buys its own cheapness, because the claim cannot

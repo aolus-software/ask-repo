@@ -123,6 +123,9 @@ def test_created_by_ownership_error_codes_are_retired() -> None:
         assert name not in ErrorCode.__members__
 
 
-def test_message_not_found_survives() -> None:
-    """Still raised by the conversations surface, which this milestone does not touch."""
-    assert ErrorCode.MESSAGE_NOT_FOUND.value == "MESSAGE_NOT_FOUND"
+def test_message_not_found_is_retired() -> None:
+    """No route ever raised it — there is no per-message fetch route, and the
+    conversations router raises only `CONVERSATION_NOT_FOUND`/`PROJECT_NOT_FOUND`.
+    Removing it is a deliberate breaking wire change, same precedent as
+    `test_qa_error_codes_are_retired` above."""
+    assert "MESSAGE_NOT_FOUND" not in ErrorCode.__members__

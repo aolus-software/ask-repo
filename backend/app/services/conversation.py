@@ -30,7 +30,6 @@ from app.models.conversation import (
     Message,
     MessageRole,
 )
-from app.models.project import Project, ProjectStatus
 from app.rag.answerer import Answerer
 from app.rag.prompts import Turn
 from app.repositories.conversation import ConversationRepository, MessageRepository
@@ -93,7 +92,7 @@ class ConversationService:
         self, payload: ConversationCreateRequest, *, actor: AuthenticatedUser
     ) -> ConversationResponse:
         """Open a conversation against a project the caller may read."""
-        await self._require_readable_project(payload.project_id, actor)
+        await access.require_readable_project(self._projects, payload.project_id, actor)
         conversation = Conversation(
             id=uuid.uuid4(),
             user_id=access.resolve_conversation_owner(actor),
@@ -205,8 +204,10 @@ class ConversationService:
         to survive regardless of what happens next.
         """
         conversation = await self._require_own(conversation_id, actor)
-        project = await self._require_readable_project(conversation.project_id, actor)
-        self._require_answerable(project)
+        project = await access.require_readable_project(
+            self._projects, conversation.project_id, actor
+        )
+        access.require_answerable(project, self.settings)
 
         await self._messages.add(
             Message(
@@ -275,43 +276,6 @@ class ConversationService:
                 "Conversation not found.",
             )
         return conversation
-
-    async def _require_readable_project(
-        self, project_id: uuid.UUID, actor: AuthenticatedUser
-    ) -> Project:
-        """The project, scoped through the access resolver and nowhere else."""
-        scope = access.resolve_project_scope(actor)
-        project = await self._projects.get(project_id)
-        if project is None or not (scope.unrestricted or project.id in scope.ids):
-            raise AppError(
-                status.HTTP_404_NOT_FOUND, ErrorCode.PROJECT_NOT_FOUND, "Project not found."
-            )
-        return project
-
-    def _require_answerable(self, project: Project) -> None:
-        """Refuse to answer from an index that is absent or built by another model.
-
-        The embedding check is the one that would otherwise fail silently. Swap one
-        768-wide model for another and Qdrant accepts the query, returns its nearest
-        neighbours in a space this collection was never built in, and the model
-        writes a fluent, cited answer about noise — with no error anywhere.
-        """
-        if project.status != ProjectStatus.READY.value or not project.embedding_collection:
-            raise AppError(
-                status.HTTP_409_CONFLICT,
-                ErrorCode.PROJECT_NOT_READY,
-                "This project is not indexed yet. Wait for indexing to finish.",
-            )
-        if project.embedding_model != self.settings.embedding_model:
-            raise AppError(
-                status.HTTP_409_CONFLICT,
-                ErrorCode.EMBEDDING_MODEL_CHANGED,
-                (
-                    f"This project was indexed with {project.embedding_model!r} but this "
-                    f"instance now embeds with {self.settings.embedding_model!r}. Reindex "
-                    "the project, or change the embedding model back."
-                ),
-            )
 
 
 def _derive_title(question: str) -> str:

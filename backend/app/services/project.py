@@ -221,7 +221,7 @@ class ProjectService:
 
     async def get(self, project_id: uuid.UUID, *, actor: AuthenticatedUser) -> ProjectResponse:
         """One project, by id."""
-        project = await self._require_readable(project_id, actor)
+        project = await access.require_readable_project(self._repository, project_id, actor)
         return self._to_response(project, actor)
 
     async def reindex(self, project_id: uuid.UUID, *, actor: AuthenticatedUser) -> ReindexResponse:
@@ -246,7 +246,7 @@ class ProjectService:
         otherwise strand it at True forever. `updated_at` is stamped with it because
         that branch measures the wait from there.
         """
-        project = await self._require_readable(project_id, actor)
+        project = await access.require_readable_project(self._repository, project_id, actor)
         access.require_permission(actor, project.id, Permission.PROJECT_REINDEX)
 
         if project.status in BUSY_STATUSES or project.reindex_in_progress:
@@ -295,7 +295,7 @@ class ProjectService:
         Qdrant refuses, the row stays visible rather than becoming a soft-deleted
         project whose content is still queryable.
         """
-        project = await self._require_readable(project_id, actor)
+        project = await access.require_readable_project(self._repository, project_id, actor)
         access.require_permission(actor, project.id, Permission.PROJECT_DELETE)
 
         # Captured before the sweeps below mutate or soft-delete anything: the audit
@@ -412,16 +412,6 @@ class ProjectService:
         response.role = access.role_for(actor, project.id)
         response.permissions = sorted(access.permissions_for(actor, project.id))
         return response
-
-    async def _require_readable(self, project_id: uuid.UUID, actor: AuthenticatedUser) -> Project:
-        """Load a project the caller may see, or raise 404."""
-        scope = access.resolve_project_scope(actor)
-        project = await self._repository.get(project_id)
-        if project is None or not (scope.unrestricted or project.id in scope.ids):
-            raise AppError(
-                status.HTTP_404_NOT_FOUND, ErrorCode.PROJECT_NOT_FOUND, "Project not found."
-            )
-        return project
 
 
 def _derive_name(repo_url: str) -> str:
