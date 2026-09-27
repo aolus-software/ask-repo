@@ -28,6 +28,8 @@ from app.core.security import create_access_token, hash_password
 from app.db.session import get_sessionmaker, reset_engine
 from app.ingestion.embedder import FakeEmbedder
 from app.ingestion.vector_store import InMemoryVectorStore
+from app.live.bus import InMemoryLiveEventBus
+from app.live.staging import NullPublisher, set_live_publisher
 from app.models import AuditEvent, Base, User
 from app.queue.protocol import InMemoryIngestionQueue
 from app.rag.answerer import Answerer
@@ -150,6 +152,19 @@ async def _clean_redis(_test_environment: None) -> AsyncIterator[None]:
     await client.flushdb()
     yield
     await client.aclose()
+
+
+@pytest.fixture(autouse=True)
+def live_bus() -> Iterator[InMemoryLiveEventBus]:
+    """The in-memory publisher and hub, installed for every test.
+
+    Autouse because staging happens deep inside repositories: a test that never asked for
+    live events still commits through the hook, and must not reach for a real broker.
+    """
+    bus = InMemoryLiveEventBus()
+    set_live_publisher(bus)
+    yield bus
+    set_live_publisher(NullPublisher())
 
 
 @pytest.fixture
