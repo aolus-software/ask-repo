@@ -191,11 +191,14 @@ async def redis_client() -> AsyncIterator[aioredis.Redis]:
 
 
 @pytest.fixture
-def app() -> FastAPI:
+def app(live_bus: InMemoryLiveEventBus) -> FastAPI:
     """A freshly built app, so middleware and overrides don't leak between tests."""
+    from app.api.routes.events import get_live_hub
     from app.main import create_app
 
-    return create_app()
+    application = create_app()
+    application.dependency_overrides[get_live_hub] = lambda: live_bus
+    return application
 
 
 @pytest.fixture
@@ -271,6 +274,7 @@ def app_with_queue(
     ingestion_queue: InMemoryIngestionQueue,
     vector_store: InMemoryVectorStore,
     chat_model: ScriptedChatModel,
+    live_bus: InMemoryLiveEventBus,
 ) -> FastAPI:
     """The app with every out-of-process dependency replaced — broker, vector store,
     embedder, and chat model — so route tests need no Kafka, no Qdrant, no Ollama.
@@ -283,6 +287,7 @@ def app_with_queue(
         get_proposing_answerer_factory,
     )
     from app.api.routes.conversations import get_answerer_factory
+    from app.api.routes.events import get_live_hub
     from app.api.routes.mock_data_datasets import (
         get_mock_data_queue,
         get_proposing_mock_data_answerer_factory,
@@ -291,6 +296,7 @@ def app_with_queue(
     from app.main import create_app
 
     application = create_app()
+    application.dependency_overrides[get_live_hub] = lambda: live_bus
     application.dependency_overrides[get_ingestion_queue] = lambda: ingestion_queue
     application.dependency_overrides[get_answerer_factory] = lambda: _fake_answerer_factory(
         vector_store, chat_model

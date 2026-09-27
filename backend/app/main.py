@@ -15,6 +15,7 @@ from app.api.routes import (
     checklist_items,
     checklist_modules,
     conversations,
+    events,
     health,
     index,
     me,
@@ -218,6 +219,7 @@ def create_app() -> FastAPI:
     app.include_router(audit_events.router)
     app.include_router(notifications.router)
     app.include_router(notification_preferences.router)
+    app.include_router(events.router)
 
     return app
 
