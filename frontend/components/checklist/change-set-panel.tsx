@@ -16,6 +16,7 @@ import {
 } from "@/components/change-sets/operation-row";
 import { ConfirmDialog } from "@/components/form/confirm-dialog";
 import { FormError } from "@/components/form/form-error";
+import { FeedbackControl } from "@/components/output-feedback/feedback-control";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -245,26 +246,34 @@ export function ChangeSetPanel({
 
         <FormError error={applyMutation.error} />
       </CardContent>
-      <CardFooter className="justify-end gap-2">
-        <Button
-          variant="outline"
-          onClick={() => setConfirmingDiscard(true)}
-          disabled={!canApply || applyMutation.isPending || discardMutation.isPending}
-        >
-          Discard
-        </Button>
-        <Button
-          onClick={handleApply}
-          disabled={
-            !canApply ||
-            !hasChecked ||
-            applyMutation.isPending ||
-            discardMutation.isPending
-          }
-        >
-          {applyMutation.isPending ? <Loader2 className="size-4 animate-spin" /> : null}
-          Apply selected
-        </Button>
+      <CardFooter className="justify-between gap-2">
+        <FeedbackControl
+          targetType="checklist_change_set"
+          targetId={changeSet.id}
+          initial={changeSet.myFeedback}
+          className="mt-0"
+        />
+        <div className="flex gap-2">
+          <Button
+            variant="outline"
+            onClick={() => setConfirmingDiscard(true)}
+            disabled={!canApply || applyMutation.isPending || discardMutation.isPending}
+          >
+            Discard
+          </Button>
+          <Button
+            onClick={handleApply}
+            disabled={
+              !canApply ||
+              !hasChecked ||
+              applyMutation.isPending ||
+              discardMutation.isPending
+            }
+          >
+            {applyMutation.isPending ? <Loader2 className="size-4 animate-spin" /> : null}
+            Apply selected
+          </Button>
+        </div>
       </CardFooter>
 
       <ConfirmDialog

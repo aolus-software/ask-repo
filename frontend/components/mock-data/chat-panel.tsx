@@ -237,7 +237,7 @@ export function MockDataChatPanel({
           </AlertDescription>
         </Alert>
       ) : messages.data && messages.data.length > 0 ? (
-        <MessageList messages={messages.data} />
+        <MessageList messages={messages.data} feedbackTarget="mock_data_message" />
       ) : (
         <EmptyState
           size="compact"

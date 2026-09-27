@@ -6,9 +6,12 @@ import { useState } from "react";
 import { Answer } from "@/components/ask/answer";
 import { AssistantTurn } from "@/components/ask/assistant-turn";
 import { Sources } from "@/components/ask/sources";
+import { FeedbackControl } from "@/components/output-feedback/feedback-control";
 import { Button } from "@/components/ui/button";
 import type { MessageResponse } from "@/lib/api/types";
 import { cn } from "@/lib/utils";
+
+type MessageFeedbackTarget = "message" | "checklist_message" | "mock_data_message";
 
 /**
  * Not a "bubble" UI on both sides — neither Claude.ai nor ChatGPT bubbles the
@@ -55,7 +58,13 @@ function UserTurn({ content }: { content: string }) {
   );
 }
 
-function AssistantMessage({ message }: { message: MessageResponse }) {
+function AssistantMessage({
+  message,
+  feedbackTarget,
+}: {
+  message: MessageResponse;
+  feedbackTarget: MessageFeedbackTarget;
+}) {
   return (
     <AssistantTurn>
       <Answer content={message.content} />
@@ -67,18 +76,29 @@ function AssistantMessage({ message }: { message: MessageResponse }) {
             : `This answer ended early (${message.finishReason}).`}
         </p>
       ) : null}
+      <FeedbackControl
+        targetType={feedbackTarget}
+        targetId={message.id}
+        initial={message.myFeedback}
+      />
     </AssistantTurn>
   );
 }
 
-export function MessageList({ messages }: { messages: MessageResponse[] }) {
+export function MessageList({
+  messages,
+  feedbackTarget = "message",
+}: {
+  messages: MessageResponse[];
+  feedbackTarget?: MessageFeedbackTarget;
+}) {
   return (
     <div className="space-y-8">
       {messages.map((message) =>
         message.role === "user" ? (
           <UserTurn key={message.id} content={message.content} />
         ) : (
-          <AssistantMessage key={message.id} message={message} />
+          <AssistantMessage key={message.id} message={message} feedbackTarget={feedbackTarget} />
         ),
       )}
     </div>
