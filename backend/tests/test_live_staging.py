@@ -67,6 +67,21 @@ async def test_a_failing_publisher_never_fails_the_commit(
     assert "live event publish failed" in caplog.text
 
 
+async def test_a_closed_session_discards_what_it_staged(
+    db_session: AsyncSession, live_bus: InMemoryLiveEventBus
+) -> None:
+    """`after_transaction_end` (F9), not `after_soft_rollback`: closing a session ends
+    its outermost transaction the same way a rollback does, and staged events must not
+    survive to be published by an unrelated commit that happens to reuse the session
+    later."""
+    stage_live_event(db_session, project_event(uuid.uuid4()))
+
+    await db_session.close()
+    await db_session.commit()
+
+    assert live_bus.published == []
+
+
 def test_an_event_round_trips_through_bytes() -> None:
     event = notification_event(uuid.uuid4(), uuid.uuid4(), [uuid.uuid4(), uuid.uuid4()])
     assert LiveEvent.from_bytes(event.to_bytes()) == event

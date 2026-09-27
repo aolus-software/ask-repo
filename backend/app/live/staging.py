@@ -1,9 +1,11 @@
 """Stage on the session, publish on commit — the only way a live event leaves a process.
 
 A service never publishes: it stages. The `after_commit` hook hands the staged events to the
-process's publisher, and `after_soft_rollback` drops them, so a change that rolled back can never
-announce itself and no call site has to order a publish against a commit by hand
-(`.claude/rules/live-events.md`).
+process's publisher, and `after_transaction_end` drops whatever is left once the outermost
+transaction ends — on rollback, on close, or redundantly after a commit that already emptied it
+— so a change that rolled back can never announce itself, closing a session mid-transaction
+cannot leak a stale queue into whatever commits on it next, and no call site has to order a
+publish against a commit by hand (`.claude/rules/live-events.md`).
 
 The publisher is process-wide: `KafkaLivePublisher` in the API and the worker,
 `InMemoryLiveEventBus` in tests, and `NullPublisher` until one is installed.
@@ -57,8 +59,8 @@ def stage_live_event(session: AsyncSession | Session, live_event: LiveEvent) -> 
     A repeat of the same event in one transaction is kept once. Begins a transaction if none
     is open, so rollback events fire reliably.
     """
-    # Ensure a transaction is open so that a later rollback triggers after_soft_rollback;
-    # a rollback with no open transaction fires no event and staged events would leak.
+    # Ensure a transaction is open so that its end fires `after_transaction_end`; a
+    # rollback or close with no open transaction fires no event and staged events would leak.
     sync_session = session.sync_session if isinstance(session, AsyncSession) else session
     if not sync_session.in_transaction():
         sync_session.begin()
@@ -81,6 +83,17 @@ def _publish_staged(session: Session) -> None:
         logger.warning("live event publish failed for %d event(s)", len(staged), exc_info=True)
 
 
-@event.listens_for(Session, "after_soft_rollback")
-def _discard_staged(session: Session, previous_transaction: SessionTransaction) -> None:
-    session.info.pop(_STAGED_KEY, None)
+@event.listens_for(Session, "after_transaction_end")
+def _discard_staged(session: Session, transaction: SessionTransaction) -> None:
+    """Drop anything still staged once the outermost transaction ends.
+
+    Fires on rollback, on close, and after a commit — including the commit
+    `_publish_staged` already handled, where `pop` is a no-op because that hook already
+    emptied the key. `transaction.parent is None` restricts this to the outermost
+    transaction: a savepoint (a nested transaction, `parent` is not `None`) ending is
+    not the end of the session's staging window, and popping there would let a savepoint
+    rollback silently discard events staged before the savepoint was ever opened —
+    events a later, real commit of the outer transaction is entitled to publish.
+    """
+    if transaction.parent is None:
+        session.info.pop(_STAGED_KEY, None)
