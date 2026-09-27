@@ -34,6 +34,7 @@ from app.models.conversation import (
 from app.rag.answerer import Answerer
 from app.rag.prompts import Turn
 from app.repositories.conversation import ConversationRepository, MessageRepository
+from app.repositories.feedback import FeedbackRepository
 from app.repositories.project import ProjectRepository
 from app.schemas.conversation import (
     KEEP_ALIVE,
@@ -185,6 +186,10 @@ class ConversationService:
         # `list_for_conversation` can still see them.
         message_count = len(await self._messages.list_for_conversation(conversation.id))
         project_id = conversation.project_id
+        # The note is the user's words about this private turn and goes with it; the
+        # rating and reason codes survive so the aggregate still adds up
+        # (`.claude/rules/feedback.md` §4). Same transaction as the soft delete.
+        await FeedbackRepository(self.session).clear_notes_for_conversation(conversation.id)
         await self._conversations.soft_delete(conversation)
         await self.session.commit()
         await self._recorder.record(

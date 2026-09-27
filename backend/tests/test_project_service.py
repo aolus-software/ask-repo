@@ -4,6 +4,7 @@ fact that a PAT never leaves the service."""
 import uuid
 
 import pytest
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
@@ -16,6 +17,7 @@ from app.ingestion.chunker import Chunk
 from app.ingestion.errors import RetryableIngestionError
 from app.ingestion.vector_store import InMemoryVectorStore, VectorStore, VectorStoreFactory
 from app.models.checklist import ChangeSetOrigin, ChangeSetStatus
+from app.models.feedback import Feedback
 from app.models.mock_data import MockDataChangeSet
 from app.models.project import ProjectStatus
 from app.queue.protocol import InMemoryIngestionQueue
@@ -39,6 +41,7 @@ from tests.factories import (
     create_checklist_message,
     create_checklist_module,
     create_conversation,
+    create_feedback,
     create_mock_data_message,
     create_mock_data_record,
     create_project,
@@ -201,6 +204,25 @@ async def test_delete_hard_deletes_the_vectors_in_the_recorded_collection(
 
     assert asked == [recorded]
     assert store.points == []
+
+
+async def test_delete_soft_deletes_the_projects_feedback(db_session: AsyncSession) -> None:
+    """A project's feedback goes with the project it judged, like every other
+    project-owned row (`.claude/rules/feedback.md` §4)."""
+    recorded = "code_chunks__ollama__nomic_embed_text__768"
+    owner = await create_user(db_session)
+    project = await create_project(db_session, created_by=owner.id)
+    project.embedding_collection = recorded
+    await create_feedback(db_session, user_id=owner.id, project_id=project.id)
+    await db_session.commit()
+
+    store = InMemoryVectorStore(dimensions=4)
+    service = service_for(db_session, InMemoryIngestionQueue(), store_factory=lambda _c: store)
+    await service.delete(project.id, actor=await authenticated(db_session, owner))
+
+    db_session.expire_all()
+    row = (await db_session.execute(select(Feedback))).scalar_one()
+    assert row.deleted_at is not None
 
 
 async def test_delete_does_not_touch_qdrant_when_nothing_was_ever_indexed(

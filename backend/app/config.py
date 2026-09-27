@@ -243,6 +243,12 @@ class Settings(BaseSettings):
     # operator who wants it.
     notification_retention_days: int = Field(default=90, ge=0)
 
+    # How long a vote on model output is kept before the worker's tick removes it. 0
+    # means keep forever — the default, matching `audit_retention_days`: the aggregate
+    # is what makes a prompt change comparable over time, and a small instance never
+    # needs to lose it.
+    feedback_retention_days: int = Field(default=0, ge=0)
+
     # --- Mail (Phase 2.4) ---------------------------------------------------------
     # The one switch for all egress. Off by default: a fresh instance sends nothing out
     # of the network, which is the posture docs/PRD.md §9 describes. See

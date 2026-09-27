@@ -49,6 +49,7 @@ from app.rag.capability import probe_structured_output
 from app.rag.chat import build_chat_model
 from app.repositories.audit_event import AuditEventRepository
 from app.repositories.checklist_module import ChecklistModuleRepository
+from app.repositories.feedback import FeedbackRepository
 from app.repositories.mock_data_dataset import MockDataDatasetRepository
 from app.repositories.notification_event import NotificationEventRepository
 from app.repositories.password_reset_token import PasswordResetTokenRepository
@@ -205,6 +206,10 @@ async def reconcile_loop(
                     pruned_notifications = await NotificationEventRepository(
                         session
                     ).delete_older_than(cutoff)
+                pruned_feedback = 0
+                if settings.feedback_retention_days > 0:
+                    cutoff = datetime.now(UTC) - timedelta(days=settings.feedback_retention_days)
+                    pruned_feedback = await FeedbackRepository(session).delete_older_than(cutoff)
                 await session.commit()
                 if pruned:
                     logger.info("pruned %d dead refresh tokens", pruned)
@@ -216,6 +221,10 @@ async def reconcile_loop(
                     logger.info(
                         "pruned %d notification events past the retention window",
                         pruned_notifications,
+                    )
+                if pruned_feedback:
+                    logger.info(
+                        "pruned %d feedback rows past the retention window", pruned_feedback
                     )
         except Exception:
             logger.exception("reconcile tick failed")

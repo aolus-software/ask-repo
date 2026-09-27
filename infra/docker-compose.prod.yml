@@ -100,6 +100,7 @@ x-app-env: &app-env
   # Read by the worker's reconcile tick. 0 keeps audit history forever, on purpose.
   AUDIT_RETENTION_DAYS: ${AUDIT_RETENTION_DAYS:-0}
   NOTIFICATION_RETENTION_DAYS: ${NOTIFICATION_RETENTION_DAYS:-90}
+  FEEDBACK_RETENTION_DAYS: ${FEEDBACK_RETENTION_DAYS:-0}
 
 services:
   postgres:
