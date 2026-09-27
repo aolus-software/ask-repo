@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.feedback import FeedbackFeature, FeedbackRating, FeedbackTarget
 from app.models.feedback import Feedback
+from app.models.project import Project
 from app.repositories.feedback import FeedbackRepository
 from tests.factories import (
     create_conversation,
@@ -201,3 +202,145 @@ async def test_page_joins_the_project_name_and_filters(db_session: AsyncSession)
 
     assert total == 1
     assert [name for _, name in rows] == ["alpha"]
+
+
+async def test_page_excludes_rows_whose_project_was_soft_deleted(db_session: AsyncSession) -> None:
+    """A PUT racing a project delete must not surface that project's row afterwards."""
+    user = await create_user(db_session)
+    live = await create_project(db_session, name="live")
+    doomed = await create_project(db_session, name="doomed")
+    await create_feedback(db_session, user_id=user.id, project_id=live.id)
+    await create_feedback(db_session, user_id=user.id, project_id=doomed.id)
+    await db_session.execute(
+        update(Project).where(Project.id == doomed.id).values(deleted_at=datetime.now(UTC))
+    )
+
+    rows, total = await FeedbackRepository(db_session).page(limit=10, offset=0, filters={})
+
+    assert total == 1
+    assert [name for _, name in rows] == ["live"]
+
+
+async def test_page_filters_by_feature(db_session: AsyncSession) -> None:
+    user = await create_user(db_session)
+    project = await create_project(db_session)
+    await create_feedback(
+        db_session, user_id=user.id, project_id=project.id, feature=FeedbackFeature.ANSWER
+    )
+    await create_feedback(
+        db_session,
+        user_id=user.id,
+        project_id=project.id,
+        feature=FeedbackFeature.PROPOSE_CHECKLIST,
+        reason_codes=("wrong_scope",),
+    )
+
+    _, total = await FeedbackRepository(db_session).page(
+        limit=10, offset=0, filters={"feature": FeedbackFeature.ANSWER.value}
+    )
+
+    assert total == 1
+
+
+async def test_page_filters_by_rating(db_session: AsyncSession) -> None:
+    user = await create_user(db_session)
+    project = await create_project(db_session)
+    await create_feedback(
+        db_session,
+        user_id=user.id,
+        project_id=project.id,
+        rating=FeedbackRating.UP,
+        reason_codes=(),
+    )
+    await create_feedback(
+        db_session, user_id=user.id, project_id=project.id, rating=FeedbackRating.DOWN
+    )
+
+    _, total = await FeedbackRepository(db_session).page(
+        limit=10, offset=0, filters={"rating": "up"}
+    )
+
+    assert total == 1
+
+
+async def test_page_filters_by_reason_code(db_session: AsyncSession) -> None:
+    user = await create_user(db_session)
+    project = await create_project(db_session)
+    await create_feedback(
+        db_session, user_id=user.id, project_id=project.id, reason_codes=("wrong_file_cited",)
+    )
+    await create_feedback(
+        db_session, user_id=user.id, project_id=project.id, reason_codes=("missed_something",)
+    )
+
+    _, total = await FeedbackRepository(db_session).page(
+        limit=10, offset=0, filters={"reason_code": "wrong_file_cited"}
+    )
+
+    assert total == 1
+
+
+async def test_page_filters_by_prompt_version(db_session: AsyncSession) -> None:
+    user = await create_user(db_session)
+    project = await create_project(db_session)
+    await create_feedback(
+        db_session, user_id=user.id, project_id=project.id, prompt_version="aaaaaaaaaaaa"
+    )
+    await create_feedback(
+        db_session, user_id=user.id, project_id=project.id, prompt_version="bbbbbbbbbbbb"
+    )
+
+    _, total = await FeedbackRepository(db_session).page(
+        limit=10, offset=0, filters={"prompt_version": "aaaaaaaaaaaa"}
+    )
+
+    assert total == 1
+
+
+async def test_page_filters_by_created_from(db_session: AsyncSession) -> None:
+    user = await create_user(db_session)
+    project = await create_project(db_session)
+    old = await create_feedback(db_session, user_id=user.id, project_id=project.id)
+    await create_feedback(db_session, user_id=user.id, project_id=project.id)
+    await db_session.execute(
+        update(Feedback)
+        .where(Feedback.id == old.id)
+        .values(created_at=datetime.now(UTC) - timedelta(days=10))
+    )
+
+    _, total = await FeedbackRepository(db_session).page(
+        limit=10, offset=0, filters={"created_from": datetime.now(UTC) - timedelta(days=1)}
+    )
+
+    assert total == 1
+
+
+async def test_page_filters_by_created_to_includes_the_whole_selected_day(
+    db_session: AsyncSession,
+) -> None:
+    """A bare calendar day (from `<input type="date">`) must not exclude votes cast
+    that same day — the same fix `AuditEventRepository` already applies."""
+    user = await create_user(db_session)
+    project = await create_project(db_session)
+    today = await create_feedback(db_session, user_id=user.id, project_id=project.id)
+    tomorrow = await create_feedback(db_session, user_id=user.id, project_id=project.id)
+    now = datetime.now(UTC)
+    today_midnight = datetime(now.year, now.month, now.day, tzinfo=UTC)
+    await db_session.execute(
+        update(Feedback)
+        .where(Feedback.id == today.id)
+        .values(created_at=today_midnight + timedelta(hours=12))
+    )
+    await db_session.execute(
+        update(Feedback)
+        .where(Feedback.id == tomorrow.id)
+        .values(created_at=today_midnight + timedelta(days=1, hours=1))
+    )
+
+    _, total = await FeedbackRepository(db_session).page(
+        limit=10,
+        offset=0,
+        filters={"created_from": today_midnight, "created_to": today_midnight},
+    )
+
+    assert total == 1

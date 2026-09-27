@@ -7,10 +7,10 @@ target exists and is visible to it. The admin reads take `project_ids` from
 
 import uuid
 from collections.abc import Sequence
-from datetime import datetime
+from datetime import datetime, time, timedelta
 from typing import Any, TypedDict, cast
 
-from sqlalchemy import Select, delete, func, select, update
+from sqlalchemy import Select, and_, delete, func, select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.engine import CursorResult
 
@@ -50,7 +50,16 @@ def _apply(statement: Select[Any], filters: FeedbackFilters) -> Select[Any]:
     if created_from := filters.get("created_from"):
         statement = statement.where(Feedback.created_at >= created_from)
     if created_to := filters.get("created_to"):
-        statement = statement.where(Feedback.created_at <= created_to)
+        # `<input type="date">` on the admin filter screen submits a bare calendar day
+        # (`2026-09-27`), which pydantic parses as midnight. A `<=` comparison against
+        # midnight excludes every vote actually cast that day, so From == To would
+        # always return nothing. `AuditEventRepository._filtered` solves the same
+        # problem the same way: a value with no time component is treated as the
+        # whole day and compared exclusively against the start of the next one.
+        if created_to.time() == time.min:
+            statement = statement.where(Feedback.created_at < created_to + timedelta(days=1))
+        else:
+            statement = statement.where(Feedback.created_at <= created_to)
     return statement
 
 
@@ -173,17 +182,21 @@ class FeedbackRepository(BaseRepository[Feedback]):
     async def page(
         self, *, limit: int, offset: int, filters: FeedbackFilters
     ) -> tuple[list[tuple[Feedback, str]], int]:
-        """One page, newest first, each row with its project's name, plus the total."""
-        statement = _apply(
-            select(Feedback, Project.name).join(Project, Project.id == Feedback.project_id),
-            filters,
-        )
+        """One page, newest first, each row with its project's name, plus the total.
+
+        Joined against a live project only: a `PUT` racing a project's soft delete
+        must not surface that project's row on this admin screen afterwards.
+        """
+        on_clause = and_(Project.id == Feedback.project_id, Project.deleted_at.is_(None))
+        statement = _apply(select(Feedback, Project.name).join(Project, on_clause), filters)
         rows = await self.session.execute(
             statement.order_by(Feedback.created_at.desc(), Feedback.id.desc())
             .limit(limit)
             .offset(offset)
         )
-        count = await self.session.execute(_apply(select(func.count(Feedback.id)), filters))
+        count = await self.session.execute(
+            _apply(select(func.count(Feedback.id)).join(Project, on_clause), filters)
+        )
         return [(row, name) for row, name in rows.all()], count.scalar_one()
 
     async def counts_by_feature(self, filters: FeedbackFilters) -> list[tuple[str, str, int]]:

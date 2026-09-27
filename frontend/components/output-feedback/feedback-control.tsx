@@ -40,6 +40,15 @@ interface FeedbackControlProps {
  * (`.claude/rules/feedback.md`). Optimistic, with a local rollback: the list
  * that supplied `initial` is not refetched, because nothing else on the
  * screen depends on the vote.
+ *
+ * `initial` can change under us — a cached list refetches while this control
+ * is mounted, or the same control remounts against a fresh `initial` from
+ * cache within the query's `gcTime`. Re-seeding is done during render, the
+ * same pattern `forms.md` rule 6 uses for an edit form: state tracks the
+ * `initial` it was last seeded from and re-seeds when that no longer
+ * matches, rather than in an effect, which would cost an extra render pass.
+ * It is skipped while a mutation is in flight so an in-progress vote is
+ * never clobbered by a stale `initial` racing it.
  */
 export function FeedbackControl({
   targetType,
@@ -71,6 +80,12 @@ export function FeedbackControl({
       toast.error("Your feedback was not saved. Try again.");
     },
   });
+
+  const [seededFrom, setSeededFrom] = useState(initial);
+  if (initial !== seededFrom && !mutation.isPending) {
+    setSeededFrom(initial);
+    setVote(initial ?? null);
+  }
 
   function submit(next: MyFeedback | null) {
     mutation.mutate(next);
@@ -108,6 +123,7 @@ export function FeedbackControl({
         aria-label="Helpful"
         aria-pressed={vote?.rating === "up"}
         className={vote?.rating === "up" ? "text-primary" : "text-muted-foreground"}
+        disabled={mutation.isPending}
         onClick={() => onThumb("up")}
       >
         <ThumbsUp className="size-4" />
@@ -123,6 +139,7 @@ export function FeedbackControl({
               className={
                 vote?.rating === "down" ? "text-primary" : "text-muted-foreground"
               }
+              disabled={mutation.isPending}
               onClick={(event) => {
                 if (vote?.rating === "down") {
                   event.preventDefault();
@@ -155,6 +172,9 @@ export function FeedbackControl({
             onChange={(event) => setNote(event.target.value)}
           />
           <p className="text-muted-foreground text-xs">{NOTE_DISCLOSURE}</p>
+          <p className="text-muted-foreground text-xs">
+            {note.length}/{NOTE_MAX_LENGTH}
+          </p>
           <div className="flex justify-end">
             <Button size="sm" disabled={reasons.length === 0} onClick={sendDown}>
               Send feedback

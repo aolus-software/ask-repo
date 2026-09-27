@@ -4,6 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 
 import { FeedbackControl } from "@/components/output-feedback/feedback-control";
+import { NOTE_MAX_LENGTH } from "@/components/output-feedback/reason-labels";
 import * as client from "@/lib/api/client";
 import { ApiError } from "@/lib/api/errors";
 
@@ -110,5 +111,65 @@ describe("FeedbackControl", () => {
         "false",
       ),
     );
+  });
+
+  it("re-syncs from a new `initial` once no mutation is pending", async () => {
+    vi.spyOn(client, "apiFetch").mockResolvedValue({});
+    const { rerender } = renderControl({ initial: null });
+
+    expect(screen.getByRole("button", { name: "Helpful" })).toHaveAttribute(
+      "aria-pressed",
+      "false",
+    );
+
+    const queryClient = new QueryClient({
+      defaultOptions: { mutations: { retry: false } },
+    });
+    rerender(
+      <QueryClientProvider client={queryClient}>
+        <FeedbackControl
+          targetType="message"
+          targetId="m1"
+          initial={{ rating: "up", reasonCodes: [], note: null }}
+        />
+      </QueryClientProvider>,
+    );
+
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Helpful" })).toHaveAttribute(
+        "aria-pressed",
+        "true",
+      ),
+    );
+  });
+
+  it("disables both thumbs while a vote is in flight", async () => {
+    let resolveFetch: (value: unknown) => void = () => {};
+    vi.spyOn(client, "apiFetch").mockImplementation(
+      () => new Promise((resolve) => (resolveFetch = resolve)),
+    );
+    renderControl();
+
+    await userEvent.click(screen.getByRole("button", { name: "Helpful" }));
+
+    expect(screen.getByRole("button", { name: "Helpful" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /not helpful/i })).toBeDisabled();
+
+    resolveFetch({});
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Helpful" })).not.toBeDisabled(),
+    );
+  });
+
+  it("shows a character counter on the note field", async () => {
+    renderControl();
+
+    await userEvent.click(screen.getByRole("button", { name: /not helpful/i }));
+
+    expect(screen.getByText(`0/${NOTE_MAX_LENGTH}`)).toBeInTheDocument();
+
+    await userEvent.type(screen.getByRole("textbox"), "Wrong file");
+
+    expect(screen.getByText(`10/${NOTE_MAX_LENGTH}`)).toBeInTheDocument();
   });
 });

@@ -65,6 +65,25 @@ async def test_a_second_put_changes_the_vote_in_place(
     assert [(r.rating, r.reason_codes, r.note) for r in rows] == [("up", [], None)]
 
 
+async def test_an_up_vote_clears_any_reason_codes_sent_with_it(
+    authed_client: AsyncClient, authed_user: User, db_session: AsyncSession
+) -> None:
+    """An up vote is not a place for a down-vote reason to survive by accident."""
+    conversation = await create_conversation(db_session, user_id=authed_user.id)
+    message = await create_message(db_session, conversation_id=conversation.id)
+    await db_session.commit()
+
+    response = await authed_client.put(
+        f"/feedback/message/{message.id}",
+        json={"rating": "up", "reasonCodes": ["wrong_file_cited"]},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["reasonCodes"] == []
+    row = (await db_session.execute(select(Feedback))).scalar_one()
+    assert row.reason_codes == []
+
+
 async def test_withdrawing_a_vote_removes_it(
     authed_client: AsyncClient, authed_user: User, db_session: AsyncSession
 ) -> None:

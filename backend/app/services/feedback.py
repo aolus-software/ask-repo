@@ -88,6 +88,15 @@ class FeedbackService:
                 ErrorCode.FEEDBACK_REASON_NOT_APPLICABLE,
                 f"Not a reason for this kind of output: {', '.join(not_allowed)}.",
             )
+        # An up vote carries no reason: the frontend always sends `[]`, and any code
+        # sent alongside one is a down-vote reason left over from switching the
+        # thumb, not something to keep. Clearing it here (rather than rejecting it)
+        # adds no new failure mode for no benefit.
+        reason_codes = (
+            []
+            if payload.rating is FeedbackRating.UP
+            else [code.value for code in dict.fromkeys(payload.reason_codes)]
+        )
         row = await self._feedback.upsert(
             user_id=actor.id,
             project_id=subject.project_id,
@@ -95,7 +104,7 @@ class FeedbackService:
             target_id=target_id,
             feature=subject.feature.value,
             rating=payload.rating.value,
-            reason_codes=[code.value for code in dict.fromkeys(payload.reason_codes)],
+            reason_codes=reason_codes,
             note=(payload.note or "").strip() or None,
             prompt_version=PROMPT_VERSION,
         )

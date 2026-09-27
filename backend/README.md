@@ -429,7 +429,7 @@ voter. No route here records an audit event — exemption 7 in `.claude/rules/au
 | --- | --- | --- | --- |
 | `PUT` | `/feedback/{targetType}/{targetId}` | any user | Record or revise the caller's own vote. Body: `rating` (`up`/`down`), `reasonCodes` (required, non-empty, for `down`), optional `note` (≤500 chars). `200 FeedbackRead`. `404 FEEDBACK_TARGET_NOT_FOUND` for a missing target, a user-role message, someone else's conversation, or a module outside scope. `400 FEEDBACK_REASON_NOT_APPLICABLE` for a reason code that does not apply to this target type. `422` for an unknown code, a `down` with no code, or a note over 500 characters |
 | `DELETE` | `/feedback/{targetType}/{targetId}` | any user | Withdraw the caller's own vote. `204`, idempotent — withdrawing a vote that does not exist is also `204` |
-| `GET` | `/feedback/summary` | admin | Counts by `feature` × `rating`, by reason code, and by `promptVersion`. Filters: `projectId`, `feature`, `rating`, `reasonCode`, `promptVersion`, `from`/`to` |
+| `GET` | `/feedback/summary` | admin | Counts by `feature` × `rating`, by reason code, and by `promptVersion`. Filters: `projectId`, `feature`, `rating`, `reasonCode`, `promptVersion`, `createdFrom`/`createdTo` |
 | `GET` | `/feedback` | admin | A page of individual votes with their notes, newest first, same filters as the summary. Carries no user field of any kind |
 
 ## Layout
