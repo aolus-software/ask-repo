@@ -126,6 +126,7 @@ def test_created_by_ownership_error_codes_are_retired() -> None:
 def test_message_not_found_is_retired() -> None:
     """No route ever raised it — there is no per-message fetch route, and the
     conversations router raises only `CONVERSATION_NOT_FOUND`/`PROJECT_NOT_FOUND`.
-    Removing it is a deliberate breaking wire change, same precedent as
+    Because no response ever carried it, removing it is not an incompatible wire
+    change (CHANGELOG's versioning note). Same precedent as
     `test_qa_error_codes_are_retired` above."""
     assert "MESSAGE_NOT_FOUND" not in ErrorCode.__members__

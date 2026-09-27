@@ -420,7 +420,7 @@ site evades it today — the pattern's narrowness is CONFIRMED by reading it.
 
 ### §9.2 `MESSAGE_NOT_FOUND` is raised by nothing, and a test asserts otherwise — 🟡 CONFIRMED — ✅ RESOLVED 2026-09-27
 
-> Fixed by deletion, at the owner's decision. `ErrorCode.MESSAGE_NOT_FOUND` is gone from `errors.py` and from the frontend mirror in `lib/api/types.ts`, and `test_message_not_found_is_retired` asserts it stays absent. Removing an `ErrorCode` is an incompatible wire change, so the next release is a MAJOR one. It is recorded under `### Removed` in `CHANGELOG.md`. On `fix/audit-sweep-2026-09-27`.
+> Fixed by deletion, at the owner's decision. `ErrorCode.MESSAGE_NOT_FOUND` is gone from `errors.py` and from the frontend mirror in `lib/api/types.ts`, and `test_message_not_found_is_retired` asserts it stays absent. It was first recorded as an incompatible change needing a MAJOR release. When v2.2.0 was cut, the owner amended `CHANGELOG.md`'s versioning note instead: removing a value no response ever carried is not incompatible. The entry moved to `### Changed`, and the release shipped as a MINOR. On `fix/audit-sweep-2026-09-27`.
 >
 > Original finding follows.
 
