@@ -1,7 +1,14 @@
 import { REASON_LABELS } from "@/components/output-feedback/reason-labels";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import type { FeedbackFeature, FeedbackSummary as Summary } from "@/lib/api/types";
 
 export const FEATURE_LABELS: Record<FeedbackFeature, string> = {
@@ -59,7 +66,9 @@ export function FeedbackSummary({ summary }: { summary: Summary }) {
         {summary.byFeature.map((row) => (
           <Card key={row.feature}>
             <CardHeader>
-              <CardTitle className="text-sm font-medium">{FEATURE_LABELS[row.feature]}</CardTitle>
+              <CardTitle className="text-sm font-medium">
+                {FEATURE_LABELS[row.feature]}
+              </CardTitle>
             </CardHeader>
             <CardContent>
               <p className="text-2xl font-semibold">{downRate(row.up, row.down)}</p>
@@ -105,9 +114,13 @@ export function FeedbackSummary({ summary }: { summary: Summary }) {
             <TableBody>
               {summary.byPromptVersion.map((row) => (
                 <TableRow key={row.promptVersion}>
-                  <TableCell className="font-mono text-xs">{row.promptVersion}</TableCell>
+                  <TableCell className="font-mono text-xs">
+                    {row.promptVersion}
+                  </TableCell>
                   <TableCell className="text-right">{row.up + row.down}</TableCell>
-                  <TableCell className="text-right">{downRate(row.up, row.down)}</TableCell>
+                  <TableCell className="text-right">
+                    {downRate(row.up, row.down)}
+                  </TableCell>
                 </TableRow>
               ))}
             </TableBody>
@@ -115,8 +128,8 @@ export function FeedbackSummary({ summary }: { summary: Summary }) {
         </Card>
       </div>
       <p className="text-muted-foreground text-xs">
-        A vote is stamped with the prompt version running when it was cast, which for a change
-        set reviewed days later can be newer than the one that generated it.
+        A vote is stamped with the prompt version running when it was cast, which for a
+        change set reviewed days later can be newer than the one that generated it.
       </p>
     </div>
   );

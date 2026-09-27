@@ -122,7 +122,11 @@ export interface FeedbackAdminRead {
 /** `GET /feedback/summary`. Ignores pagination — only the filters shape it. */
 export interface FeedbackSummary {
   byFeature: { feature: FeedbackFeature; up: number; down: number }[];
-  byReason: { feature: FeedbackFeature; reasonCode: FeedbackReasonCode; count: number }[];
+  byReason: {
+    feature: FeedbackFeature;
+    reasonCode: FeedbackReasonCode;
+    count: number;
+  }[];
   byPromptVersion: { promptVersion: string; up: number; down: number }[];
 }
 

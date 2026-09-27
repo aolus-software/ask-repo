@@ -44,7 +44,7 @@ def _apply(statement: Select[Any], filters: FeedbackFilters) -> Select[Any]:
     if rating := filters.get("rating"):
         statement = statement.where(Feedback.rating == rating)
     if reason_code := filters.get("reason_code"):
-        statement = statement.where(Feedback.reason_codes.any(reason_code))
+        statement = statement.where(Feedback.reason_codes.any_() == reason_code)
     if prompt_version := filters.get("prompt_version"):
         statement = statement.where(Feedback.prompt_version == prompt_version)
     if created_from := filters.get("created_from"):

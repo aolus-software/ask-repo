@@ -98,7 +98,11 @@ export function MessageList({
         message.role === "user" ? (
           <UserTurn key={message.id} content={message.content} />
         ) : (
-          <AssistantMessage key={message.id} message={message} feedbackTarget={feedbackTarget} />
+          <AssistantMessage
+            key={message.id}
+            message={message}
+            feedbackTarget={feedbackTarget}
+          />
         ),
       )}
     </div>

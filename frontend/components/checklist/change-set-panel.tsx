@@ -270,7 +270,9 @@ export function ChangeSetPanel({
               discardMutation.isPending
             }
           >
-            {applyMutation.isPending ? <Loader2 className="size-4 animate-spin" /> : null}
+            {applyMutation.isPending ? (
+              <Loader2 className="size-4 animate-spin" />
+            ) : null}
             Apply selected
           </Button>
         </div>

@@ -53,10 +53,26 @@ def test_no_code_restates_a_grounding_warning() -> None:
         (FeedbackTarget.MESSAGE, None, FeedbackFeature.ANSWER),
         (FeedbackTarget.CHECKLIST_MESSAGE, None, FeedbackFeature.REFINE_CHECKLIST),
         (FeedbackTarget.MOCK_DATA_MESSAGE, None, FeedbackFeature.REFINE_MOCK_DATA),
-        (FeedbackTarget.CHECKLIST_CHANGE_SET, ChangeSetOrigin.GENERATION, FeedbackFeature.GENERATE_CHECKLIST),
-        (FeedbackTarget.CHECKLIST_CHANGE_SET, ChangeSetOrigin.CHAT, FeedbackFeature.PROPOSE_CHECKLIST),
-        (FeedbackTarget.MOCK_DATA_CHANGE_SET, ChangeSetOrigin.GENERATION, FeedbackFeature.GENERATE_MOCK_DATA),
-        (FeedbackTarget.MOCK_DATA_CHANGE_SET, ChangeSetOrigin.CHAT, FeedbackFeature.PROPOSE_MOCK_DATA),
+        (
+            FeedbackTarget.CHECKLIST_CHANGE_SET,
+            ChangeSetOrigin.GENERATION,
+            FeedbackFeature.GENERATE_CHECKLIST,
+        ),
+        (
+            FeedbackTarget.CHECKLIST_CHANGE_SET,
+            ChangeSetOrigin.CHAT,
+            FeedbackFeature.PROPOSE_CHECKLIST,
+        ),
+        (
+            FeedbackTarget.MOCK_DATA_CHANGE_SET,
+            ChangeSetOrigin.GENERATION,
+            FeedbackFeature.GENERATE_MOCK_DATA,
+        ),
+        (
+            FeedbackTarget.MOCK_DATA_CHANGE_SET,
+            ChangeSetOrigin.CHAT,
+            FeedbackFeature.PROPOSE_MOCK_DATA,
+        ),
     ],
 )
 def test_feature_is_derived_from_the_target(

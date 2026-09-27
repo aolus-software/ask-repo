@@ -89,6 +89,8 @@ describe("FeedbackScreen", () => {
     const { container } = renderScreen();
 
     expect(screen.queryByText("Could not load this list")).not.toBeInTheDocument();
-    expect(container.querySelectorAll('[data-slot="skeleton"]').length).toBeGreaterThan(0);
+    expect(container.querySelectorAll('[data-slot="skeleton"]').length).toBeGreaterThan(
+      0,
+    );
   });
 });

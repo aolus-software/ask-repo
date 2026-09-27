@@ -41,6 +41,8 @@ export function useFeedbackSummary(params: Partial<FeedbackListParams>) {
   return useQuery({
     queryKey: keys.feedback.summary(filters),
     queryFn: () =>
-      apiFetch<FeedbackSummary>(`${endpoints.feedback.summary}${feedbackListQueryString(filters)}`),
+      apiFetch<FeedbackSummary>(
+        `${endpoints.feedback.summary}${feedbackListQueryString(filters)}`,
+      ),
   });
 }

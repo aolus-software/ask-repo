@@ -7,8 +7,12 @@ import { FeedbackControl } from "@/components/output-feedback/feedback-control";
 import * as client from "@/lib/api/client";
 import { ApiError } from "@/lib/api/errors";
 
-function renderControl(props: Partial<React.ComponentProps<typeof FeedbackControl>> = {}) {
-  const queryClient = new QueryClient({ defaultOptions: { mutations: { retry: false } } });
+function renderControl(
+  props: Partial<React.ComponentProps<typeof FeedbackControl>> = {},
+) {
+  const queryClient = new QueryClient({
+    defaultOptions: { mutations: { retry: false } },
+  });
   return render(
     <QueryClientProvider client={queryClient}>
       <FeedbackControl targetType="message" targetId="m1" initial={null} {...props} />
@@ -45,12 +49,16 @@ describe("FeedbackControl", () => {
     await userEvent.click(screen.getByRole("button", { name: /not helpful/i }));
 
     expect(
-      screen.getByText("Administrators can read this note. It is never sent to the AI model."),
+      screen.getByText(
+        "Administrators can read this note. It is never sent to the AI model.",
+      ),
     ).toBeInTheDocument();
     const submit = screen.getByRole("button", { name: /send feedback/i });
     expect(submit).toBeDisabled();
 
-    await userEvent.click(screen.getByRole("checkbox", { name: /cited the wrong file/i }));
+    await userEvent.click(
+      screen.getByRole("checkbox", { name: /cited the wrong file/i }),
+    );
     await userEvent.type(screen.getByRole("textbox"), "Pointed at the old router.");
     await userEvent.click(submit);
 
@@ -67,7 +75,9 @@ describe("FeedbackControl", () => {
     await userEvent.click(screen.getByRole("button", { name: /not helpful/i }));
 
     expect(screen.getByRole("checkbox", { name: /wrong scope/i })).toBeInTheDocument();
-    expect(screen.queryByRole("checkbox", { name: /cited the wrong file/i })).toBeNull();
+    expect(
+      screen.queryByRole("checkbox", { name: /cited the wrong file/i }),
+    ).toBeNull();
   });
 
   it("withdraws when the active thumb is clicked again", async () => {

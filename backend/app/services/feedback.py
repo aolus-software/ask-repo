@@ -20,7 +20,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core import access
 from app.core.errors import AppError, ErrorCode
-from app.core.feedback import FeedbackFeature, FeedbackTarget, feature_for, reasons_for
+from app.core.feedback import (
+    FeedbackFeature,
+    FeedbackRating,
+    FeedbackTarget,
+    ReasonCode,
+    feature_for,
+    reasons_for,
+)
 from app.core.middleware import AuthenticatedUser
 from app.models.conversation import MessageRole
 from app.rag.prompt_version import PROMPT_VERSION
@@ -95,8 +102,8 @@ class FeedbackService:
         response = FeedbackRead(
             target_type=target_type,
             target_id=target_id,
-            rating=row.rating,
-            reason_codes=row.reason_codes,
+            rating=FeedbackRating(row.rating),
+            reason_codes=[ReasonCode(code) for code in row.reason_codes],
             note=row.note,
             updated_at=row.updated_at,
         )
@@ -130,10 +137,10 @@ class FeedbackService:
                 id=row.id,
                 project_id=row.project_id,
                 project_name=project_name,
-                target_type=row.target_type,
-                feature=row.feature,
-                rating=row.rating,
-                reason_codes=row.reason_codes,
+                target_type=FeedbackTarget(row.target_type),
+                feature=FeedbackFeature(row.feature),
+                rating=FeedbackRating(row.rating),
+                reason_codes=[ReasonCode(code) for code in row.reason_codes],
                 note=row.note,
                 prompt_version=row.prompt_version,
                 created_at=row.created_at,
@@ -159,11 +166,13 @@ class FeedbackService:
         reasons = await self._feedback.counts_by_reason(filters)
         return FeedbackSummary(
             by_feature=[
-                FeatureVotes(feature=feature, **votes)
+                FeatureVotes(feature=FeedbackFeature(feature), **votes)
                 for feature, votes in sorted(by_feature.items())
             ],
             by_reason=[
-                ReasonCount(feature=feature, reason_code=reason, count=count)
+                ReasonCount(
+                    feature=FeedbackFeature(feature), reason_code=ReasonCode(reason), count=count
+                )
                 for feature, reason, count in sorted(reasons, key=lambda r: (r[0], -r[2], r[1]))
             ],
             by_prompt_version=[
@@ -223,10 +232,10 @@ class FeedbackService:
                     raise _not_found()
                 return row.module_id, None
             case FeedbackTarget.MOCK_DATA_MESSAGE:
-                row = await MockDataMessageRepository(self.session).get(target_id)
-                if row is None or row.role != MessageRole.ASSISTANT.value:
+                mock_row = await MockDataMessageRepository(self.session).get(target_id)
+                if mock_row is None or mock_row.role != MessageRole.ASSISTANT.value:
                     raise _not_found()
-                return row.checklist_module_id, None
+                return mock_row.checklist_module_id, None
             case FeedbackTarget.CHECKLIST_CHANGE_SET:
                 change_set = await ChecklistChangeSetRepository(self.session).get(target_id)
                 if change_set is None:
@@ -253,6 +262,10 @@ async def my_feedback_map(
         user_id=actor.id, target_type=target_type.value, target_ids=target_ids
     )
     return {
-        target_id: MyFeedback(rating=row.rating, reason_codes=row.reason_codes, note=row.note)
+        target_id: MyFeedback(
+            rating=FeedbackRating(row.rating),
+            reason_codes=[ReasonCode(code) for code in row.reason_codes],
+            note=row.note,
+        )
         for target_id, row in rows.items()
     }

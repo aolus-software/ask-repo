@@ -49,7 +49,9 @@ export function FeedbackScreen() {
   const rows = list.data?.items ?? [];
 
   if (!user.isAdmin)
-    return <Forbidden message="Only administrators can read feedback on model output." />;
+    return (
+      <Forbidden message="Only administrators can read feedback on model output." />
+    );
 
   return (
     <div className="mx-auto w-full max-w-7xl space-y-6">

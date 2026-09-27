@@ -49,7 +49,9 @@ export function FeedbackControl({
 }: FeedbackControlProps) {
   const [vote, setVote] = useState<MyFeedback | null>(initial ?? null);
   const [open, setOpen] = useState(false);
-  const [reasons, setReasons] = useState<FeedbackReasonCode[]>(initial?.reasonCodes ?? []);
+  const [reasons, setReasons] = useState<FeedbackReasonCode[]>(
+    initial?.reasonCodes ?? [],
+  );
   const [note, setNote] = useState(initial?.note ?? "");
 
   const path = endpoints.feedback.vote(targetType, targetId);
@@ -118,7 +120,9 @@ export function FeedbackControl({
               size="icon-sm"
               aria-label="Not helpful"
               aria-pressed={vote?.rating === "down"}
-              className={vote?.rating === "down" ? "text-primary" : "text-muted-foreground"}
+              className={
+                vote?.rating === "down" ? "text-primary" : "text-muted-foreground"
+              }
               onClick={(event) => {
                 if (vote?.rating === "down") {
                   event.preventDefault();

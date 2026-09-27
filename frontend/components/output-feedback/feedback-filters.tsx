@@ -10,7 +10,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import type { FeedbackFeature, FeedbackListParams, FeedbackRating, FeedbackReasonCode } from "@/lib/api/types";
+import type {
+  FeedbackFeature,
+  FeedbackListParams,
+  FeedbackRating,
+  FeedbackReasonCode,
+} from "@/lib/api/types";
 
 /**
  * "No filter" needs a real option value, the same sentinel every other list screen's
@@ -94,7 +99,8 @@ export function FeedbackFilters({
           onValueChange={(value: string | null | undefined) =>
             onFiltersChange({
               ...currentFilters,
-              reasonCode: !value || value === ANY ? undefined : (value as FeedbackReasonCode),
+              reasonCode:
+                !value || value === ANY ? undefined : (value as FeedbackReasonCode),
             })
           }
         >

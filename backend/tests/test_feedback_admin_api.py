@@ -1,6 +1,5 @@
 """Admin feedback reads: admin-only, filtered through the scope, never naming a voter."""
 
-import pytest
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -8,7 +7,9 @@ from app.core.feedback import FeedbackRating
 from app.schemas.feedback import FeedbackAdminRead
 from tests.factories import create_feedback, create_project, create_user
 
-pytestmark = pytest.mark.asyncio
+# No `pytestmark = pytest.mark.asyncio`: this repo runs pytest-asyncio in "auto" mode
+# (`asyncio_mode = "auto"` in pyproject.toml), so an `async def test_...` needs no
+# marker, and a module-level mark would wrongly apply to the sync test below too.
 
 
 async def test_non_admins_are_refused(authed_client: AsyncClient) -> None:

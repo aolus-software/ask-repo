@@ -110,4 +110,6 @@ def feature_for(target: FeedbackTarget, *, origin: str | None) -> FeedbackFeatur
     """The feature that produced a target. A change set needs its `origin`."""
     if target in MESSAGE_TARGETS:
         return _MESSAGE_FEATURES[target]
+    if origin is None:
+        raise ValueError(f"change-set feedback target {target} requires an origin")
     return _CHANGE_SET_FEATURES[(target, ChangeSetOrigin(origin))]

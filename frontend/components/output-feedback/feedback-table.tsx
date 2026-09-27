@@ -57,9 +57,15 @@ export function FeedbackTable({
                 <TableCell className="text-sm">{FEATURE_LABELS[row.feature]}</TableCell>
                 <TableCell>
                   {row.rating === "up" ? (
-                    <ThumbsUp className="text-muted-foreground size-4" aria-label="Up" />
+                    <ThumbsUp
+                      className="text-muted-foreground size-4"
+                      aria-label="Up"
+                    />
                   ) : (
-                    <ThumbsDown className="text-muted-foreground size-4" aria-label="Down" />
+                    <ThumbsDown
+                      className="text-muted-foreground size-4"
+                      aria-label="Down"
+                    />
                   )}
                 </TableCell>
                 <TableCell className="text-muted-foreground text-sm">

@@ -1,6 +1,5 @@
 """Feedback follows its subject: notes go with a conversation, rows with a project."""
 
-import pytest
 from httpx import AsyncClient
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -10,7 +9,9 @@ from app.models.feedback import Feedback
 from app.models.user import User
 from tests.factories import create_conversation, create_feedback, create_message
 
-pytestmark = pytest.mark.asyncio
+# No `pytestmark = pytest.mark.asyncio`: this repo runs pytest-asyncio in "auto" mode
+# (`asyncio_mode = "auto"` in pyproject.toml), so an `async def test_...` needs no
+# marker, and a module-level mark would wrongly apply to the sync test below too.
 
 
 async def test_deleting_a_conversation_nulls_its_notes_and_keeps_the_votes(
