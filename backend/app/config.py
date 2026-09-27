@@ -108,6 +108,13 @@ class Settings(BaseSettings):
     mock_data_max_files_per_job: int = Field(default=200, ge=1)
     mock_data_export_max_rows: int = 5000
 
+    # Live updates (issue #48). `GET /events` streams id-only invalidations fed by this
+    # topic; off, the route answers 503 and every client polls. See docs/configuration.md.
+    live_events_enabled: bool = True
+    kafka_live_events_topic: str = "askrepo.live.events"
+    live_events_heartbeat_seconds: int = Field(default=25, ge=1)
+    live_events_max_stream_minutes: int = Field(default=60, ge=1)
+
     # The checklist module path picker (docs/PRD.md §2.1, phase 1.1). Enumerates the
     # `file_path` payloads of a project's active generation so a user browses the real
     # tree instead of typing a path from memory.

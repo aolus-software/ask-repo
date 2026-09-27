@@ -1,6 +1,7 @@
 """Publishing ingestion jobs to Kafka."""
 
 import logging
+from collections.abc import Mapping
 
 from aiokafka import AIOKafkaProducer
 from aiokafka.admin import AIOKafkaAdminClient, NewTopic
@@ -76,13 +77,20 @@ class KafkaIngestionQueue:
 
 
 async def ensure_topics(
-    *, bootstrap_servers: str, partitions: int, topics: tuple[str, ...] = ALL_TOPICS
+    *,
+    bootstrap_servers: str,
+    partitions: int,
+    topics: tuple[str, ...] = ALL_TOPICS,
+    topic_configs: Mapping[str, str] | None = None,
 ) -> None:
     """Create the topics if they are absent. Idempotent, so both processes may call it.
 
     `topics` is a parameter rather than a constant because M4 adds a second family
     (`ALL_CHECKLIST_TOPICS`) with its own partition count -- generation's instance-wide
     cap is one partition, ingestion's is two.
+
+    `topic_configs` carries broker-side topic settings such as `retention.ms` — the
+    live-events topic sets one, none of the job-queue topics do.
 
     Explicit rather than relying on broker auto-creation: auto-created topics get
     one partition, which would silently halve the ingestion concurrency cap that
@@ -98,7 +106,12 @@ async def ensure_topics(
         new_topics = [
             # Replication factor 1: a single-broker cluster cannot do better, and
             # the source of truth for a project's state is Postgres regardless.
-            NewTopic(name=name, num_partitions=partitions, replication_factor=1)
+            NewTopic(
+                name=name,
+                num_partitions=partitions,
+                replication_factor=1,
+                topic_configs=dict(topic_configs or {}),
+            )
             for name in topics
         ]
         try:

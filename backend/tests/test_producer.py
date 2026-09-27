@@ -8,6 +8,7 @@ for the test suite — that the application lifespan opens no socket under
 """
 
 import uuid
+from collections.abc import Mapping
 from typing import ClassVar, Self
 
 import pytest
@@ -102,6 +103,25 @@ class StubQueue:
         self.stopped = True
 
 
+class StubLivePublisher:
+    """Stands in for KafkaLivePublisher inside the lifespan tests."""
+
+    instances: ClassVar[list["StubLivePublisher"]] = []
+
+    def __init__(self, *, bootstrap_servers: str, topic: str) -> None:
+        self.bootstrap_servers = bootstrap_servers
+        self.topic = topic
+        self.started = False
+        self.stopped = False
+        StubLivePublisher.instances.append(self)
+
+    async def start(self) -> None:
+        self.started = True
+
+    async def stop(self) -> None:
+        self.stopped = True
+
+
 class ExplodingAdminClient:
     """An admin client that fails the way an unreachable broker does."""
 
@@ -149,6 +169,7 @@ def _reset_stub_registries() -> None:
     """The stubs above record their instances on the class; keep tests independent."""
     StubAdminClient.instances.clear()
     StubQueue.instances.clear()
+    StubLivePublisher.instances.clear()
 
 
 # --- the producer -----------------------------------------------------------------
@@ -380,18 +401,27 @@ async def test_the_lifespan_owns_the_producer_outside_the_test_environment(
         kafka_bootstrap_servers="broker:9092",
         kafka_ingest_topic=INGEST_TOPIC,
         kafka_ingest_partitions=2,
+        # A real KafkaLiveEventHub would spawn a background task trying to reach
+        # "broker:9092"; keeping it off here means a DisabledLiveEventHub is built
+        # instead, with no socket involved.
+        live_events_enabled=False,
     )
     monkeypatch.setattr("app.main.get_settings", lambda: settings)
 
     ensured: list[tuple[str, int]] = []
 
     async def record_ensure_topics(
-        *, bootstrap_servers: str, partitions: int, topics: tuple[str, ...] = ()
+        *,
+        bootstrap_servers: str,
+        partitions: int,
+        topics: tuple[str, ...] = (),
+        topic_configs: Mapping[str, str] | None = None,
     ) -> None:
         ensured.append((bootstrap_servers, partitions))
 
     monkeypatch.setattr("app.main.ensure_topics", record_ensure_topics)
     monkeypatch.setattr("app.main.KafkaIngestionQueue", StubQueue)
+    monkeypatch.setattr("app.main.KafkaLivePublisher", StubLivePublisher)
 
     async def noop_probe(chat_model: object) -> None:
         return None
@@ -406,30 +436,38 @@ async def test_the_lifespan_owns_the_producer_outside_the_test_environment(
         assert queue.stopped is False
         assert queue.bootstrap_servers == "broker:9092"
         assert queue.topic == INGEST_TOPIC
+        assert StubLivePublisher.instances[0].started is True
 
-    # The ingest call, then the checklist family, then the mock-data family.
+    # The ingest call, then the checklist family, the mock-data family, then live events.
     assert ensured == [
         ("broker:9092", 2),
         ("broker:9092", settings.kafka_checklist_partitions),
         ("broker:9092", settings.kafka_mock_data_partitions),
+        ("broker:9092", 1),
     ]
     assert StubQueue.instances[0].stopped is True
+    assert StubLivePublisher.instances[0].stopped is True
 
 
 async def test_the_lifespan_stops_the_producer_when_the_app_raises(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """A crash during serving must still flush and close the producer."""
-    settings = Settings(app_env="development")
+    settings = Settings(app_env="development", live_events_enabled=False)
     monkeypatch.setattr("app.main.get_settings", lambda: settings)
 
     async def noop(
-        *, bootstrap_servers: str, partitions: int, topics: tuple[str, ...] = ()
+        *,
+        bootstrap_servers: str,
+        partitions: int,
+        topics: tuple[str, ...] = (),
+        topic_configs: Mapping[str, str] | None = None,
     ) -> None:
         return None
 
     monkeypatch.setattr("app.main.ensure_topics", noop)
     monkeypatch.setattr("app.main.KafkaIngestionQueue", StubQueue)
+    monkeypatch.setattr("app.main.KafkaLivePublisher", StubLivePublisher)
 
     async def noop_probe(chat_model: object) -> None:
         return None
@@ -442,6 +480,7 @@ async def test_the_lifespan_stops_the_producer_when_the_app_raises(
             raise RuntimeError("serving failed")
 
     assert StubQueue.instances[0].stopped is True
+    assert StubLivePublisher.instances[0].stopped is True
 
 
 async def test_the_lifespan_skips_the_chat_probe_in_the_test_environment(
@@ -467,11 +506,15 @@ async def test_the_lifespan_probes_the_chat_model_outside_the_test_environment(
     """An unreachable or incapable chat model must fail *before* the app starts
     serving (`docs/PRD.md` §6), which for an ASGI lifespan means the exception
     propagates out of `lifespan` unhandled."""
-    settings = Settings(app_env="development")
+    settings = Settings(app_env="development", live_events_enabled=False)
     monkeypatch.setattr("app.main.get_settings", lambda: settings)
 
     async def noop(
-        *, bootstrap_servers: str, partitions: int, topics: tuple[str, ...] = ()
+        *,
+        bootstrap_servers: str,
+        partitions: int,
+        topics: tuple[str, ...] = (),
+        topic_configs: Mapping[str, str] | None = None,
     ) -> None:
         return None
 

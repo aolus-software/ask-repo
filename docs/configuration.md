@@ -334,6 +334,19 @@ your `.env` rather than assuming it carried over.
 | `MOCK_DATA_SCROLL_PAGE_SIZE` | `256` | Points fetched per Qdrant scroll page while enumerating a module's files for schema detection. |
 | `MOCK_DATA_MAX_FILES_PER_JOB` | `200` | Files read per generation run before the rest are reported skipped. Unlike the checklist generator this is a single model call over the concatenated (capped) source, not a map-reduce — schema-shaped code is typically small relative to a whole module. |
 
+### Live updates
+
+Issue #48. `GET /events` streams id-only invalidations — never a name or a status value — fed
+by a dedicated, group-less Kafka topic; a browser refetches through REST on receipt, whose own
+`403`/`404` rules still decide what it sees.
+
+| Variable | Default | What it does |
+| --- | --- | --- |
+| `LIVE_EVENTS_ENABLED` | `true` | Off: `/events` answers `503 LIVE_EVENTS_UNAVAILABLE`, no consumer starts, and every client falls back to polling. The publisher still runs regardless of this flag — the worker and every other API process may have it on, and publishing to a topic nobody reads is harmless. Set it off in front of a proxy that buffers streaming responses. |
+| `KAFKA_LIVE_EVENTS_TOPIC` | `askrepo.live.events` | The topic. One partition, `retention.ms` of one hour — nothing reads history, since a stream that (re)connects always seeks to the end; the retention window is margin, not a promise. |
+| `LIVE_EVENTS_HEARTBEAT_SECONDS` | `25` | How often a `: ping` comment line is sent down an idle stream, which is also the bound on how late the per-connection re-check notices a caller was deactivated or lost a membership. Lower it on a proxy with an aggressive idle timeout; raise it only if the extra traffic matters more than that latency. |
+| `LIVE_EVENTS_MAX_STREAM_MINUTES` | `60` | Server-side cap on one `/events` connection's lifetime; the client reconnects after it closes. Bounds how long a single stream can hold a server-side task and a Kafka partition assignment. |
+
 ### Checklist module path picker
 
 Phase 1.1 (`docs/PRD.md` §2.1). These bound `GET /projects/{id}/indexed-paths`, the read that

@@ -33,6 +33,14 @@ from app.core.errors import register_exception_handlers
 from app.core.logging import configure_logging
 from app.core.middleware import AuthContextMiddleware
 from app.ingestion.embedder import build_embedder
+from app.live.bus import LiveEventHub
+from app.live.kafka import (
+    LIVE_TOPIC_CONFIGS,
+    DisabledLiveEventHub,
+    KafkaLiveEventHub,
+    KafkaLivePublisher,
+)
+from app.live.staging import NullPublisher, set_live_publisher
 from app.queue.producer import KafkaIngestionQueue, ensure_topics
 from app.queue.topics import ALL_CHECKLIST_TOPICS, ALL_MOCK_DATA_TOPICS
 from app.rag.capability import probe_structured_output
@@ -71,6 +79,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     if settings.app_env == "test":
         logger.debug("APP_ENV=test: skipping the Kafka producer")
+        # Tests override the dependency (Task 5); this only guarantees the attribute
+        # exists so a route reading it does not hit an AttributeError first.
+        app.state.live_hub = DisabledLiveEventHub()
         yield
         return
 
@@ -91,6 +102,12 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         partitions=settings.kafka_mock_data_partitions,
         topics=ALL_MOCK_DATA_TOPICS,
     )
+    await ensure_topics(
+        bootstrap_servers=settings.kafka_bootstrap_servers,
+        partitions=1,
+        topics=(settings.kafka_live_events_topic,),
+        topic_configs=LIVE_TOPIC_CONFIGS,
+    )
     # A live call, deliberately after the test guard above: an instance should fail
     # to boot on a model it cannot use, not fail on the first generation
     # (`docs/PRD.md` §6).
@@ -103,9 +120,35 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     )
     await queue.start()
     app.state.ingestion_queue = queue
+
+    # The publisher starts regardless of `live_events_enabled`: the worker and any
+    # other API process may have it on, and publishing to a topic nobody reads is
+    # harmless.
+    live_publisher = KafkaLivePublisher(
+        bootstrap_servers=settings.kafka_bootstrap_servers,
+        topic=settings.kafka_live_events_topic,
+    )
+    await live_publisher.start()
+    set_live_publisher(live_publisher)
+    live_hub: LiveEventHub = (
+        KafkaLiveEventHub(
+            bootstrap_servers=settings.kafka_bootstrap_servers,
+            topic=settings.kafka_live_events_topic,
+        )
+        if settings.live_events_enabled
+        else DisabledLiveEventHub()
+    )
+    if isinstance(live_hub, KafkaLiveEventHub):
+        await live_hub.start()
+    app.state.live_hub = live_hub
+
     try:
         yield
     finally:
+        if isinstance(live_hub, KafkaLiveEventHub):
+            await live_hub.stop()
+        await live_publisher.stop()
+        set_live_publisher(NullPublisher())
         await queue.stop()
 
 

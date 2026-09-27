@@ -24,6 +24,8 @@ from app.ingestion.chunker import LanguageAwareChunker
 from app.ingestion.embedder import build_embedder, probe_dimensions
 from app.ingestion.pipeline import IngestionPipeline
 from app.ingestion.vector_store import QdrantVectorStore, build_store_factory, collection_name
+from app.live.kafka import LIVE_TOPIC_CONFIGS, KafkaLivePublisher
+from app.live.staging import set_live_publisher
 from app.mail.outbox import mail_loop
 from app.mail.sender import SmtpMailSender
 from app.mockdata.generator import MockDataGenerator
@@ -252,6 +254,12 @@ async def main() -> None:
         partitions=settings.kafka_mock_data_partitions,
         topics=ALL_MOCK_DATA_TOPICS,
     )
+    await ensure_topics(
+        bootstrap_servers=settings.kafka_bootstrap_servers,
+        partitions=1,
+        topics=(settings.kafka_live_events_topic,),
+        topic_configs=LIVE_TOPIC_CONFIGS,
+    )
 
     producer = KafkaIngestionQueue(
         bootstrap_servers=settings.kafka_bootstrap_servers,
@@ -260,6 +268,16 @@ async def main() -> None:
         mock_data_topic=settings.kafka_mock_data_topic,
     )
     await producer.start()
+
+    # The worker publishes live events too (a checklist generation finishing, a
+    # reindex completing) -- it runs regardless of `live_events_enabled`, since some
+    # other API process may have it on.
+    live_publisher = KafkaLivePublisher(
+        bootstrap_servers=settings.kafka_bootstrap_servers,
+        topic=settings.kafka_live_events_topic,
+    )
+    await live_publisher.start()
+    set_live_publisher(live_publisher)
 
     # Probed once at startup: the width names the collection, so guessing it wrong
     # is not a small mistake.
@@ -390,6 +408,7 @@ async def main() -> None:
     finally:
         for task in tasks:
             task.cancel()
+        await live_publisher.stop()
         await producer.stop()
 
 
