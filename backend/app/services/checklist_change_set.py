@@ -26,6 +26,8 @@ from app.core.errors import AppError, ErrorCode
 from app.core.middleware import AuthenticatedUser
 from app.core.notifications import NotificationType
 from app.core.permissions import Permission
+from app.live.events import checklist_module_event
+from app.live.staging import stage_live_event
 from app.models.checklist import (
     ChangeSetOrigin,
     ChangeSetStatus,
@@ -368,6 +370,7 @@ class ChecklistChangeSetService:
             ChecklistModuleStatus.READY.value if remaining else ChecklistModuleStatus.EMPTY.value
         )
         module.updated_at = datetime.now(UTC)
+        stage_live_event(self.session, checklist_module_event(module.id, module.project_id))
 
     async def _require_pending(
         self, change_set_id: uuid.UUID, actor: AuthenticatedUser

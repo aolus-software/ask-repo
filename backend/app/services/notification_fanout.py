@@ -37,6 +37,8 @@ from app.core.notifications import (
     NotificationType,
     build_details,
 )
+from app.live.events import notification_event
+from app.live.staging import stage_live_event
 from app.models.notification import Notification, NotificationEvent
 from app.repositories.membership import MembershipRepository
 from app.repositories.notification import NotificationRepository
@@ -159,6 +161,7 @@ class NotificationFanout:
                     for user_id in sorted(recipients)
                 ]
             )
+            stage_live_event(self.session, notification_event(event.id, project_id, recipients))
         await self.session.flush()
 
     async def _muted_for(

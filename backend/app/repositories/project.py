@@ -14,6 +14,8 @@ from sqlalchemy import case, func, or_, select, update
 from sqlalchemy.engine import CursorResult
 
 from app.core.access import ProjectScope
+from app.live.events import project_event
+from app.live.staging import stage_live_event
 from app.models.project import Project, ProjectStatus
 from app.repositories.base import BaseRepository
 
@@ -125,7 +127,10 @@ class ProjectRepository(BaseRepository[Project]):
             )
         )
         result = await self.session.execute(statement)
-        return cast(CursorResult[Any], result).rowcount == 1
+        claimed = cast(CursorResult[Any], result).rowcount == 1
+        if claimed:
+            stage_live_event(self.session, project_event(project_id))
+        return claimed
 
     async def renew_lease(
         self, *, project_id: uuid.UUID, worker_id: str, lease_seconds: int
@@ -149,13 +154,15 @@ class ProjectRepository(BaseRepository[Project]):
         reports has moved on.
         """
         now = datetime.now(UTC)
-        await self.session.execute(
+        result = await self.session.execute(
             update(Project)
             .where(Project.id == project_id)
             # Bulk UPDATE: `onupdate` does not fire on this path
             # (.claude/rules/persistence.md).
             .values(status=status.value, updated_at=now)
         )
+        if cast(CursorResult[Any], result).rowcount == 1:
+            stage_live_event(self.session, project_event(project_id))
 
     async def release(
         self,
@@ -204,7 +211,10 @@ class ProjectRepository(BaseRepository[Project]):
                 **fields,
             )
         )
-        return cast(CursorResult[Any], result).rowcount == 1
+        released = cast(CursorResult[Any], result).rowcount == 1
+        if released:
+            stage_live_event(self.session, project_event(project_id))
+        return released
 
     async def abandon(self, *, project_id: uuid.UUID, worker_id: str) -> bool:
         """Give up a run without deciding its outcome. True if we still held it.
@@ -239,7 +249,10 @@ class ProjectRepository(BaseRepository[Project]):
                 updated_at=now,
             )
         )
-        return cast(CursorResult[Any], result).rowcount == 1
+        abandoned = cast(CursorResult[Any], result).rowcount == 1
+        if abandoned:
+            stage_live_event(self.session, project_event(project_id))
+        return abandoned
 
     async def find_stranded(self, *, pending_older_than_seconds: int) -> Sequence[Project]:
         """Projects whose job was lost: never picked up, or held by a dead worker.

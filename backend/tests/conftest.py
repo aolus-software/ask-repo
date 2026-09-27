@@ -28,6 +28,8 @@ from app.core.security import create_access_token, hash_password
 from app.db.session import get_sessionmaker, reset_engine
 from app.ingestion.embedder import FakeEmbedder
 from app.ingestion.vector_store import InMemoryVectorStore
+from app.live.bus import InMemoryLiveEventBus
+from app.live.staging import NullPublisher, set_live_publisher
 from app.models import AuditEvent, Base, User
 from app.queue.protocol import InMemoryIngestionQueue
 from app.rag.answerer import Answerer
@@ -152,6 +154,19 @@ async def _clean_redis(_test_environment: None) -> AsyncIterator[None]:
     await client.aclose()
 
 
+@pytest.fixture(autouse=True)
+def live_bus() -> Iterator[InMemoryLiveEventBus]:
+    """The in-memory publisher and hub, installed for every test.
+
+    Autouse because staging happens deep inside repositories: a test that never asked for
+    live events still commits through the hook, and must not reach for a real broker.
+    """
+    bus = InMemoryLiveEventBus()
+    set_live_publisher(bus)
+    yield bus
+    set_live_publisher(NullPublisher())
+
+
 @pytest.fixture
 async def db_session() -> AsyncIterator[AsyncSession]:
     """A session for tests that talk to repositories directly."""
@@ -176,11 +191,14 @@ async def redis_client() -> AsyncIterator[aioredis.Redis]:
 
 
 @pytest.fixture
-def app() -> FastAPI:
+def app(live_bus: InMemoryLiveEventBus) -> FastAPI:
     """A freshly built app, so middleware and overrides don't leak between tests."""
+    from app.api.routes.events import get_live_hub
     from app.main import create_app
 
-    return create_app()
+    application = create_app()
+    application.dependency_overrides[get_live_hub] = lambda: live_bus
+    return application
 
 
 @pytest.fixture
@@ -256,6 +274,7 @@ def app_with_queue(
     ingestion_queue: InMemoryIngestionQueue,
     vector_store: InMemoryVectorStore,
     chat_model: ScriptedChatModel,
+    live_bus: InMemoryLiveEventBus,
 ) -> FastAPI:
     """The app with every out-of-process dependency replaced — broker, vector store,
     embedder, and chat model — so route tests need no Kafka, no Qdrant, no Ollama.
@@ -268,6 +287,7 @@ def app_with_queue(
         get_proposing_answerer_factory,
     )
     from app.api.routes.conversations import get_answerer_factory
+    from app.api.routes.events import get_live_hub
     from app.api.routes.mock_data_datasets import (
         get_mock_data_queue,
         get_proposing_mock_data_answerer_factory,
@@ -276,6 +296,7 @@ def app_with_queue(
     from app.main import create_app
 
     application = create_app()
+    application.dependency_overrides[get_live_hub] = lambda: live_bus
     application.dependency_overrides[get_ingestion_queue] = lambda: ingestion_queue
     application.dependency_overrides[get_answerer_factory] = lambda: _fake_answerer_factory(
         vector_store, chat_model

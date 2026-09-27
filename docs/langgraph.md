@@ -248,9 +248,41 @@ model.
 
 ---
 
+## A second SSE contract: `GET /events`
+
+`GET /events` (`app/api/routes/events.py`, `.claude/rules/live-events.md`) streams
+Server-Sent Events too, but it is not the answer graph's stream and does not share its
+contract — a client reading it must not assume the rules above apply.
+
+| Event | Payload | Meaning |
+| --- | --- | --- |
+| `ready` | `{}` | The stream is open. Sent first, and first again after every reconnect — the client refetches everything live. |
+| `invalidate` | `{kind, id, projectId}` | This row changed; refetch its queries. |
+| `resync` | `{}` | Events were dropped for this connection (a full per-connection queue); refetch everything live. |
+| `: ping` | comment line | Sent every `LIVE_EVENTS_HEARTBEAT_SECONDS`, to keep a proxy from idling the stream out. |
+
+Three differences from the answer stream, each one deliberate:
+
+- **No terminator.** The answer stream always ends in exactly one of `done`/`error`, each
+  carrying a `finishReason`. `/events` has neither — it keeps running until the client
+  disconnects, a per-event access re-check fails (a revoked membership, a deactivated account,
+  `must_change_password` set), or `LIVE_EVENTS_MAX_STREAM_MINUTES` elapses, at which point the
+  client is expected to reconnect. There is nothing to persist at the end of it, so there is
+  nothing that needs a status to persist with.
+- **Content-free by construction.** `citations` and `token` carry the answer; `invalidate`
+  carries only `kind`, `id` and `projectId` — an instruction to refetch, never something to
+  render. `ReadyEvent`, `InvalidateEvent` and `ResyncEvent` still inherit `ApiModel` and are
+  still listed in `SSE_EVENT_MODELS` (`tests/test_api_model.py`), the same enforcement every
+  other SSE payload in this document gets.
+- **One stream per user, not one per turn.** The answer stream lives for one question; `/events`
+  is opened once per browser tab and stays open, so its failure handling is its own
+  (`.claude/rules/live-events.md` rules 4–5) rather than reused from `Answerer` — it is not a
+  fourth call site of the graph, and no node in `app/rag/graph/` writes to it.
+
 ## See also
 
 - [`rag.md`](rag.md) — retrieval, grounding, and untrusted excerpts
 - [`llm.md`](llm.md) — providers, structured output, retry classification
+- [`live-events.md`](../.claude/rules/live-events.md) — the second SSE contract's invariants
 - [`data.md`](data.md) — where the change sets these chats propose end up
 - [`PRD.md`](PRD.md) §4.2 — the specified streaming behaviour

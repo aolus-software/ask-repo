@@ -170,6 +170,20 @@ What shipped:
   machinery in §4.2 is built for the lifetime of one answer; a per-user notification stream is a
   different connection lifecycle with different failure modes, and polling an integer is honest at
   this scale. The interval is a frontend constant, not a setting.
+
+  **Amendment, 2026-09-27 (in progress) — a per-user stream now exists, for job status.** The
+  per-user SSE stream this entry ruled out for notifications alone turns out to be worth building
+  for a different reason: `GET /events` (issue #48) exists to push project status/reindex and
+  checklist/mock-data generation state to open screens instead of a 3-second poll, and the bell
+  rides the same stream rather than gaining a second mechanism of its own. It ships with its own
+  failure handling rather than assuming the answer stream's: events carry ids only, never
+  content; visibility is re-checked per event, not decided once at connect; and every screen it
+  serves keeps polling as the fallback (60 s while connected, 5 min for the bell) so the app works
+  identically with the stream absent. The lifecycle objection this entry raised — a per-user
+  stream has a different connection lifecycle and failure modes from the answer stream — is
+  answered, not dismissed: see spec `2026-09-27-live-updates-design.md` §4.4 (lifetime: disconnect,
+  a failed per-event re-check, or a server-side cap) and §5.3 (reconnect backoff, closing when
+  hidden, a `401` the BFF could not refresh stops reconnecting for good).
 - **`NOTIFICATION_RETENTION_DAYS` defaults to `90`**, pruned by the worker's existing 60-second
   tick regardless of read state — diverging from `AUDIT_RETENTION_DAYS`'s default of `0` on
   purpose: audit keeps forever because it is the record; a notification is a nudge with a shelf
@@ -913,6 +927,14 @@ Those costs are real, and the M1 design spec (`docs/superpowers/specs/2026-08-25
 
 Redis stays in the stack for login rate limiting only. It does not back the queue.
 
+**A fourth topic, `askrepo.live.events` (2026-09-27, in progress), carries hints rather than
+jobs.** One partition, `retention.ms` of one hour, and no consumer group: every API process
+assigns itself the whole topic and reads from the end, because nothing here needs history or
+per-message acknowledgement — a dropped or duplicated hint costs a delayed screen refresh, and
+the safety poll (§2.1) recovers it. This is not a fourth ladder: there is no retry topic and no
+dead letter, because a lost live event is not retried, it is superseded by the next state change
+or caught by the poll. See §2.1 and `.claude/rules/live-events.md`.
+
 ### 5.1 Conventions
 
 - **Naming:** `snake_case` **internally** — Python attributes, Postgres columns. `camelCase` **on the wire** — every JSON request and response body. The translation happens in exactly one place: the `ApiModel` base class (`backend/app/schemas/base.py`), which sets Pydantic's `to_camel` alias generator with `populate_by_name=True`. No route or service converts anything by hand, and a schema that inherits plain `BaseModel` is a bug. See `.claude/rules/response-api.md`.
@@ -983,6 +1005,10 @@ Most of this seam already exists and is not part of the milestone. §5's chat ro
 over what M0, Phase 2.2 and Phase 2.3 already shipped — account and memberships, own sessions
 with revoke, own audit activity, notification preferences, and password change. Also fixed
 password change revoking the caller's own session. See §4.0.
+
+**Phase 2.3 amendment — live updates (in progress, 2026-09-27).** Not a milestone of its own: job
+status and the bell pushed over one per-user SSE stream fed by Kafka, with polling as the
+fallback. See §2.1.
 
 **Phase 2 (after M5), split into seven sub-phases.** Nine items in a committed order, driven by
 deployability for an audience that did not write the code. §2.1 carries what each covers, what it

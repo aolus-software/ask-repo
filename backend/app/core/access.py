@@ -24,6 +24,7 @@ from fastapi import status
 from app.core.errors import AppError, ErrorCode
 from app.core.middleware import AuthenticatedUser, ProjectGrant
 from app.core.permissions import Permission
+from app.live.events import LiveEvent
 from app.repositories.membership import MembershipRepository
 
 
@@ -219,3 +220,19 @@ def resolve_notification_owner(user: AuthenticatedUser) -> uuid.UUID:
     This is the one body someone changes if notifications ever become shareable.
     """
     return user.id
+
+
+def live_event_visible_to(user: AuthenticatedUser, event: LiveEvent) -> bool:
+    """Whether an open `/events` stream may forward this event to this caller.
+
+    A notification goes only to the users the fan-out resolved — with no administrator
+    bypass, for the reason `.claude/rules/notifications.md` rule 5 gives. Every other kind
+    follows project read scope, so an administrator sees every project's invalidations
+    (ids only) and a member only their own projects'.
+    """
+    if event.kind == "notification":
+        return user.id in event.recipients
+    if event.project_id is None:
+        return False
+    scope = resolve_project_scope(user)
+    return scope.unrestricted or event.project_id in scope.ids

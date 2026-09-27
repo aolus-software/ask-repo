@@ -14,9 +14,11 @@ from collections.abc import Sequence
 from datetime import UTC, datetime, timedelta
 from typing import Any, cast
 
-from sqlalchemy import func, or_, select, update
+from sqlalchemy import ScalarSelect, func, or_, select, update
 from sqlalchemy.engine import CursorResult
 
+from app.live.events import mock_data_event
+from app.live.staging import stage_live_event
 from app.models.checklist import ChecklistModule
 from app.models.mock_data import MockDataDataset, MockDataDatasetStatus
 from app.repositories.base import BaseRepository
@@ -24,6 +26,15 @@ from app.repositories.base import BaseRepository
 LEASE_SECONDS = 300
 LEASE_RENEWAL_SECONDS = 60
 STRANDED_AFTER_SECONDS = 120
+
+
+def _dataset_project_id() -> ScalarSelect[uuid.UUID]:
+    """The dataset's project, reached through its module (datasets carry no project_id)."""
+    return (
+        select(ChecklistModule.project_id)
+        .where(ChecklistModule.id == MockDataDataset.checklist_module_id)
+        .scalar_subquery()
+    )
 
 
 class MockDataDatasetRepository(BaseRepository[MockDataDataset]):
@@ -79,8 +90,14 @@ class MockDataDatasetRepository(BaseRepository[MockDataDataset]):
                 error=None,
                 updated_at=now,
             )
+            .returning(MockDataDataset.checklist_module_id, _dataset_project_id())
         )
-        return cast(CursorResult[Any], result).rowcount == 1
+        row = result.one_or_none()
+        if row is None:
+            return False
+        module_id, project_id = row
+        stage_live_event(self.session, mock_data_event(module_id, project_id))
+        return True
 
     async def renew_lease(
         self, *, dataset_id: uuid.UUID, worker_id: str, lease_seconds: int
@@ -122,8 +139,14 @@ class MockDataDatasetRepository(BaseRepository[MockDataDataset]):
                 updated_at=now,
                 **fields,
             )
+            .returning(MockDataDataset.checklist_module_id, _dataset_project_id())
         )
-        return cast(CursorResult[Any], result).rowcount == 1
+        row = result.one_or_none()
+        if row is None:
+            return False
+        module_id, project_id = row
+        stage_live_event(self.session, mock_data_event(module_id, project_id))
+        return True
 
     async def mark_in_review(self, dataset_id: uuid.UUID) -> None:
         """Move a dataset to `review` because a proposal is now pending.
@@ -136,7 +159,7 @@ class MockDataDatasetRepository(BaseRepository[MockDataDataset]):
         has no other signal that a worker still holds the lease) and, if the worker
         finished normally instead, would leave a second pending change set behind it.
         """
-        await self.session.execute(
+        result = await self.session.execute(
             update(MockDataDataset)
             .where(
                 MockDataDataset.id == dataset_id,
@@ -144,7 +167,12 @@ class MockDataDatasetRepository(BaseRepository[MockDataDataset]):
                 MockDataDataset.status != MockDataDatasetStatus.GENERATING.value,
             )
             .values(status=MockDataDatasetStatus.REVIEW.value, updated_at=func.now())
+            .returning(MockDataDataset.checklist_module_id, _dataset_project_id())
         )
+        row = result.one_or_none()
+        if row is not None:
+            module_id, project_id = row
+            stage_live_event(self.session, mock_data_event(module_id, project_id))
 
     async def claim_stranded(self, *, generating_older_than_seconds: int) -> Sequence[uuid.UUID]:
         """Take the datasets whose generation was lost, and stamp them so they stay taken.
@@ -168,9 +196,14 @@ class MockDataDatasetRepository(BaseRepository[MockDataDataset]):
                 ),
             )
             .values(updated_at=now)
-            .returning(MockDataDataset.id)
+            .returning(
+                MockDataDataset.id, MockDataDataset.checklist_module_id, _dataset_project_id()
+            )
         )
-        return list(result.scalars().all())
+        rows = result.all()
+        for _, module_id, project_id in rows:
+            stage_live_event(self.session, mock_data_event(module_id, project_id))
+        return [row[0] for row in rows]
 
     async def defer(self, *, dataset_id: uuid.UUID, worker_id: str, hold_seconds: int) -> bool:
         """Hand the dataset back for a retry due `hold_seconds` from now, still
@@ -190,8 +223,14 @@ class MockDataDatasetRepository(BaseRepository[MockDataDataset]):
                 MockDataDataset.lease_owner == worker_id,
             )
             .values(lease_expires_at=now + timedelta(seconds=hold_seconds), updated_at=now)
+            .returning(MockDataDataset.checklist_module_id, _dataset_project_id())
         )
-        return cast(CursorResult[Any], result).rowcount == 1
+        row = result.one_or_none()
+        if row is None:
+            return False
+        module_id, project_id = row
+        stage_live_event(self.session, mock_data_event(module_id, project_id))
+        return True
 
     async def soft_delete_for_module(self, module_id: uuid.UUID) -> int:
         """Soft-delete a module's dataset row, if it has one."""

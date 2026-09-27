@@ -25,6 +25,8 @@ from app.core.audit import AuditEntry, AuditEventType, AuditRecorder
 from app.core.errors import AppError, ErrorCode
 from app.core.middleware import AuthenticatedUser
 from app.core.permissions import Permission
+from app.live.events import mock_data_event
+from app.live.staging import stage_live_event
 from app.models.checklist import ChangeSetOrigin, ChangeSetStatus, ChecklistModule
 from app.models.conversation import FinishReason, MessageRole
 from app.models.mock_data import (
@@ -147,6 +149,7 @@ class MockDataDatasetService:
         dataset.status = MockDataDatasetStatus.GENERATING.value
         dataset.error = None
         dataset.updated_at = datetime.now(UTC)
+        stage_live_event(self.session, mock_data_event(dataset.checklist_module_id, project.id))
         await self.session.commit()
 
         await queue.enqueue_mock_data(

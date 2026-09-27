@@ -134,6 +134,29 @@ async def _load_grants(
     )
 
 
+async def load_authenticated_user(
+    session: AsyncSession, user_id: uuid.UUID, session_id: uuid.UUID | None
+) -> AuthenticatedUser | None:
+    """The request-scoped identity for one user, or `None` if the row is gone.
+
+    Shared by the middleware and by long-lived streams that must re-check who is on the
+    other end without a new request (`GET /events`).
+    """
+    user = await UserRepository(session).get(user_id)
+    if user is None:
+        return None
+    grants = await _load_grants(session, user.id)
+    return AuthenticatedUser(
+        id=user.id,
+        name=user.name,
+        email=user.email,
+        is_admin=user.is_admin,
+        must_change_password=user.must_change_password,
+        grants=grants,
+        session_id=session_id,
+    )
+
+
 class AuthContextMiddleware(BaseHTTPMiddleware):
     """Decode the bearer token, load the user, and enforce the password-change gate."""
 
@@ -181,22 +204,10 @@ class AuthContextMiddleware(BaseHTTPMiddleware):
         # A session of its own: middleware cannot use `Depends`, and this one closes
         # before the handler's session opens.
         async with get_sessionmaker()() as session:
-            user = await UserRepository(session).get(claims.user_id)
+            user = await load_authenticated_user(session, claims.user_id, claims.session_id)
             if user is None:
                 # Covers both "never existed" and "soft-deleted since the token was
                 # issued". Loading grants for a user who cannot log in is wasted work.
                 return AuthContext(user=None, error=ErrorCode.INVALID_TOKEN)
-            grants = await _load_grants(session, user.id)
 
-        return AuthContext(
-            user=AuthenticatedUser(
-                id=user.id,
-                name=user.name,
-                email=user.email,
-                is_admin=user.is_admin,
-                must_change_password=user.must_change_password,
-                grants=grants,
-                session_id=claims.session_id,
-            ),
-            error=None,
-        )
+        return AuthContext(user=user, error=None)

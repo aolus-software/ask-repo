@@ -25,6 +25,8 @@ from app.core.audit import AuditEntry, AuditEventType, AuditRecorder, ChangedVal
 from app.core.errors import AppError, ErrorCode
 from app.core.middleware import AuthenticatedUser
 from app.core.permissions import Permission
+from app.live.events import checklist_module_event
+from app.live.staging import stage_live_event
 from app.models.checklist import (
     ChangeSetOrigin,
     ChangeSetStatus,
@@ -314,6 +316,7 @@ class ChecklistModuleService:
         # See the matching comment in `update` -- `updated_at` needs the same
         # explicit set, or `_summaries` below hits an unawaited lazy load.
         module.updated_at = datetime.now(UTC)
+        stage_live_event(self.session, checklist_module_event(module.id, module.project_id))
         await self.session.commit()
         await self._recorder.record(
             AuditEntry(

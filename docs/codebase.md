@@ -131,7 +131,7 @@ membership's role, never from that column, and it never scopes reads.
 
 ```
 backend/app/
-├── main.py            FastAPI app + lifespan (topics, probes, queue)
+├── main.py            FastAPI app + lifespan (topics, probes, queue, the live hub)
 ├── worker.py          the separate process: 3 consumers + retry ladders + reconcile sweep
 ├── config.py          Settings — the only place os.environ is read
 ├── cli.py             seed-admins and restore-system-roles; seed-admins runs from
@@ -139,7 +139,7 @@ backend/app/
 │
 ├── api/
 │   ├── deps.py        shared dependencies (CurrentUser, AdminUser, service factories)
-│   └── routes/        17 routers, 73 routes
+│   └── routes/        19 routers, 81 routes
 │
 ├── core/              cross-cutting: access, audit, crypto, errors, grant_cache, logging,
 │                      middleware, notifications, passwords, permissions, rate_limit,
@@ -156,8 +156,26 @@ backend/app/
 ├── rag/               retriever, chat, prompts, answerer, grounding, capability, errors
 │   └── graph/         build.py, nodes.py, state.py
 ├── checklist/         generator, model_output, operations, source
-└── mockdata/          generator, model_output, operations
+├── mockdata/          generator, model_output, operations
+└── live/              kinds, events, staging, fanout, bus, kafka — the live-update
+                       stream behind `GET /events` (issue #48)
 ```
+
+### The `live/` modules
+
+| Module | Holds |
+| --- | --- |
+| `kinds.py` | `LiveKind` — what a live event can be about. Imports nothing from `app` |
+| `events.py` | `LiveEvent` and its constructors — ids only, never content |
+| `staging.py` | `stage_live_event`, and the `after_commit`/`after_transaction_end` hooks that publish or discard it |
+| `fanout.py` | `LiveEventFanout` — one bounded queue per open stream in this process, plus `resync_all`/`close_all` |
+| `bus.py` | `LiveEventHub`, and `InMemoryLiveEventBus` — the test double for both the publisher and the hub |
+| `kafka.py` | `KafkaLivePublisher` and `KafkaLiveEventHub` — the group-less consumer, and `DisabledLiveEventHub` |
+| `stream.py` | `live_event_stream` — the body of `GET /events`: ready, per-event and per-heartbeat re-checks, the heartbeat itself |
+
+`app/api/routes/events.py` mounts it as `GET /events`. See `.claude/rules/live-events.md` for the
+full file list this feature touches outside `app/live/`, including `live_event_visible_to` in
+`app/core/access.py`.
 
 ### The RBAC modules
 

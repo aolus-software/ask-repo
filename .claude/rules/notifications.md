@@ -53,6 +53,16 @@ have happened. Rolling the state change back with a failed fan-out is the correc
 database connection that cannot take a handful of insert rows was not going to take the status
 commit either.
 
+**The fan-out also stages a `notification` live event (2026-09-27, `.claude/rules/live-events.md`),
+carrying the resolved recipients, and it rides the same transaction as the rows it describes.**
+`NotificationFanout._write` calls `stage_live_event` beside its `flush`, not after it — the event
+leaves only through the commit hook (`live-events.md` rule 2), so it inherits the same guarantee
+the notification rows already have: a rollback here is a rollback there, and neither the row nor
+the hint that a bell should refresh survives a fan-out that never actually committed. This is one
+staging call added at the one fan-out call site, not a second recipient resolution — the
+`recipients` on the live event are the same list `_write` already resolved for the rows, passed
+straight through.
+
 ## 3. `details` is in-app only — Phase 2.4's email composes from `event_type` and `target_id`
 
 Every in-app recipient is, by construction, a member who can already read the project name and

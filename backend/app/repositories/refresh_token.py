@@ -172,6 +172,28 @@ class RefreshTokenRepository(BaseRepository[RefreshToken]):
             )
         return list(seen.values())
 
+    async def family_is_live(self, family_id: uuid.UUID) -> bool:
+        """Whether this session still has a live chain head.
+
+        Mirrors the definition `live_families_for` uses, for exactly one family: a
+        family is live while it holds an unused, unrevoked, unexpired token. Used by
+        the `/events` stream to close a connection whose session was signed out,
+        revoked from `/profile`, or swept up by a password change — none of which
+        touch the access token that is still, on its own, unexpired.
+        """
+        now = datetime.now(UTC)
+        result = await self.session.execute(
+            select(RefreshToken.id)
+            .where(
+                RefreshToken.family_id == family_id,
+                RefreshToken.revoked_at.is_(None),
+                RefreshToken.used_at.is_(None),
+                RefreshToken.expires_at > now,
+            )
+            .limit(1)
+        )
+        return result.scalar_one_or_none() is not None
+
     async def family_belongs_to(self, family_id: uuid.UUID, user_id: uuid.UUID) -> bool:
         """Whether this family is one of this user's. One answer for "not yours" and
         "does not exist", so the caller cannot tell them apart."""

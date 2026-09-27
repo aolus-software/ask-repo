@@ -402,6 +402,20 @@ event: exemption 5 in `.claude/rules/audit-trail.md`.
 | `GET` | `/notification-preferences` | any user | Every event type in the catalogue, gaps filled in as on, plus `emailEnabled` (reflects `MAIL_ENABLED`) |
 | `PUT` | `/notification-preferences` | any user | Replaces the whole set. `400 UNKNOWN_EVENT_TYPE` for an event type the catalogue does not name |
 
+### Live events
+
+A per-user Server-Sent Events stream that tells a connected client *what changed*, never
+what it changed to — a `project`, `checklist_module`, `mock_data` or `notification` row's
+id, so the client refetches through the ordinary REST routes and their own `403`/`404`
+rules decide what it sees. Access is re-checked on the stream itself, not trusted from the
+token that opened it: every non-notification event and every heartbeat reloads the
+caller's grants and asks `live_event_visible_to` (`app/core/access.py`), so a revoked
+membership or a deactivated account is caught within one heartbeat, not just on reconnect.
+
+| Method | Path | Auth | Description |
+| --- | --- | --- | --- |
+| `GET` | `/events` | any user | `ready`, then `invalidate` (`{kind, id, projectId}`) per visible change, and `resync` when this connection's backlog was dropped. `503 LIVE_EVENTS_UNAVAILABLE` when the feature is disabled or the hub is down — poll instead |
+
 ## Layout
 
 ```
@@ -434,7 +448,8 @@ backend/
 │   │       ├── mock_data_change_sets.py # apply + discard mock-data change sets
 │   │       ├── audit_events.py # GET /audit-events, GET /audit-events/{id} (admin, reads only)
 │   │       ├── notifications.py # /notifications list + unread-count + mark-read(-all)
-│   │       └── notification_preferences.py # GET/PUT /notification-preferences
+│   │       ├── notification_preferences.py # GET/PUT /notification-preferences
+│   │       └── events.py   # GET /events — the live-update SSE stream
 │   ├── core/
 │   │   ├── access.py     # resolve_project_scope + require_permission — the only two
 │   │   ├── audit.py      # the 37-event catalogue, the per-event field allowlist, AuditRecorder

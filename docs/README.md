@@ -49,7 +49,7 @@ Read these in order the first time. Roughly two hours end to end.
 | **[`design.md`](design.md)** | Writing any UI. Tokens, typography, layout geometry, spacing, the component inventory |
 | **[`notifications.md`](notifications.md)** | What gets notified, to whom, and the one setting that governs how long a notification is kept |
 | **[`codebase.md`](codebase.md)** | Adding a route, a table, a setting, a screen, or a background job |
-| **[`../.claude/rules/`](../.claude/rules/)** | 15 rule files with the precise convention for each area — routers, persistence, RAG, ingestion, forms, navigation, the frontend BFF, notifications. Written for coding agents, but the most exact statement of each rule |
+| **[`../.claude/rules/`](../.claude/rules/)** | 17 rule files with the precise convention for each area — routers, persistence, RAG, ingestion, forms, navigation, the frontend BFF, notifications, live updates. Written for coding agents, but the most exact statement of each rule |
 
 ---
 
@@ -79,7 +79,7 @@ deduplication boundary" → `.claude/rules/ingestion.md`.
 
 ## Also worth knowing
 
-- **[`../backend/README.md`](../backend/README.md)** — the exhaustive route table (73 routes), the
+- **[`../backend/README.md`](../backend/README.md)** — the exhaustive route table (81 routes), the
   backend layout, and dev commands.
 - **[`../frontend/README.md`](../frontend/README.md)** — frontend scripts, env, and the BFF layout.
 - **[`../CLAUDE.md`](../CLAUDE.md)** — the invariants a coding agent must not break. It states

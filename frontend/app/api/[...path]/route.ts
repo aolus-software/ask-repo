@@ -130,6 +130,9 @@ function forward(
     body,
     cache: "no-store",
     redirect: "manual",
+    // A closed tab aborts the backend request too — without it a long-lived stream
+    // (`/events`) would run until its next heartbeat write failed.
+    signal: request.signal,
     // Required by undici whenever a request carries a body.
     ...(body ? { duplex: "half" } : {}),
   } as RequestInit);

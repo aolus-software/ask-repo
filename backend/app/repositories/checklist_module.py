@@ -19,6 +19,8 @@ from sqlalchemy import Select, func, or_, select, update
 from sqlalchemy.engine import CursorResult
 
 from app.core.access import ProjectScope
+from app.live.events import checklist_module_event
+from app.live.staging import stage_live_event
 from app.models.checklist import ChecklistModule, ChecklistModuleStatus
 from app.repositories.base import BaseRepository
 
@@ -134,8 +136,13 @@ class ChecklistModuleRepository(BaseRepository[ChecklistModule]):
                 # (.claude/rules/persistence.md).
                 updated_at=now,
             )
+            .returning(ChecklistModule.project_id)
         )
-        return cast(CursorResult[Any], result).rowcount == 1
+        project_id = result.scalar_one_or_none()
+        if project_id is None:
+            return False
+        stage_live_event(self.session, checklist_module_event(module_id, project_id))
+        return True
 
     async def renew_lease(
         self, *, module_id: uuid.UUID, worker_id: str, lease_seconds: int
@@ -184,8 +191,13 @@ class ChecklistModuleRepository(BaseRepository[ChecklistModule]):
                 updated_at=now,
                 **fields,
             )
+            .returning(ChecklistModule.project_id)
         )
-        return cast(CursorResult[Any], result).rowcount == 1
+        project_id = result.scalar_one_or_none()
+        if project_id is None:
+            return False
+        stage_live_event(self.session, checklist_module_event(module_id, project_id))
+        return True
 
     async def mark_in_review(self, module_id: uuid.UUID) -> None:
         """Move a module to `review` because a proposal is now pending.
@@ -193,11 +205,15 @@ class ChecklistModuleRepository(BaseRepository[ChecklistModule]):
         A bulk UPDATE from the stream's own session, so `updated_at` is set explicitly
         (`.claude/rules/persistence.md`).
         """
-        await self.session.execute(
+        result = await self.session.execute(
             update(ChecklistModule)
             .where(ChecklistModule.id == module_id, ChecklistModule.deleted_at.is_(None))
             .values(status=ChecklistModuleStatus.REVIEW.value, updated_at=func.now())
+            .returning(ChecklistModule.project_id)
         )
+        project_id = result.scalar_one_or_none()
+        if project_id is not None:
+            stage_live_event(self.session, checklist_module_event(module_id, project_id))
 
     async def claim_stranded(self, *, generating_older_than_seconds: int) -> Sequence[uuid.UUID]:
         """Take the modules whose generation was lost, and stamp them so they stay taken.
@@ -236,9 +252,12 @@ class ChecklistModuleRepository(BaseRepository[ChecklistModule]):
             # Bulk UPDATE: `onupdate` does not fire on this path
             # (.claude/rules/persistence.md).
             .values(updated_at=now)
-            .returning(ChecklistModule.id)
+            .returning(ChecklistModule.id, ChecklistModule.project_id)
         )
-        return list(result.scalars().all())
+        rows = result.all()
+        for module_id, project_id in rows:
+            stage_live_event(self.session, checklist_module_event(module_id, project_id))
+        return [row[0] for row in rows]
 
     async def defer(self, *, module_id: uuid.UUID, worker_id: str, hold_seconds: int) -> bool:
         """Hand the module back for a retry already scheduled `hold_seconds` from now.
@@ -279,8 +298,13 @@ class ChecklistModuleRepository(BaseRepository[ChecklistModule]):
                 ChecklistModule.lease_owner == worker_id,
             )
             .values(lease_expires_at=now + timedelta(seconds=hold_seconds), updated_at=now)
+            .returning(ChecklistModule.project_id)
         )
-        return cast(CursorResult[Any], result).rowcount == 1
+        project_id = result.scalar_one_or_none()
+        if project_id is None:
+            return False
+        stage_live_event(self.session, checklist_module_event(module_id, project_id))
+        return True
 
     async def soft_delete_for_project(self, project_id: uuid.UUID) -> int:
         """Soft-delete every module of a project, for every creator.

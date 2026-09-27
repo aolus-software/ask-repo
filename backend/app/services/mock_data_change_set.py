@@ -22,6 +22,8 @@ from app.core.errors import AppError, ErrorCode
 from app.core.middleware import AuthenticatedUser
 from app.core.notifications import NotificationType
 from app.core.permissions import Permission
+from app.live.events import mock_data_event
+from app.live.staging import stage_live_event
 from app.models.checklist import ChangeSetOrigin, ChangeSetStatus
 from app.models.mock_data import MockDataChangeSet, MockDataDatasetStatus, MockDataRecord
 from app.repositories.checklist_module import ChecklistModuleRepository
@@ -134,7 +136,7 @@ class MockDataChangeSetService:
         applied_count = len(touched)
         project = await self.projects.get(project_id)
         project_name = project.name if project is not None else module_name
-        await self._settle_dataset(module_id)
+        await self._settle_dataset(module_id, project_id)
 
         # Before the commit. The audit record below goes *after* it, and both
         # orderings are load-bearing: an audit failure must not fail the user's
@@ -202,7 +204,7 @@ class MockDataChangeSetService:
         operations_proposed = len(change_set.operations)
         project = await self.projects.get(project_id)
         project_name = project.name if project is not None else module_name
-        await self._settle_dataset(module_id)
+        await self._settle_dataset(module_id, project_id)
 
         # Before the commit, matching `apply`.
         await NotificationFanout(self.session, mail_enabled=self.settings.mail_enabled).raise_event(
@@ -274,7 +276,7 @@ class MockDataChangeSetService:
         record.updated_at = datetime.now(UTC)
         return record
 
-    async def _settle_dataset(self, module_id: uuid.UUID) -> None:
+    async def _settle_dataset(self, module_id: uuid.UUID, project_id: uuid.UUID) -> None:
         """Where the dataset lands once nothing is pending. `ready` when it has
         records, `empty` when it does not -- never `review`, which means "waiting"."""
         dataset = await self.datasets.get_by_module(module_id)
@@ -285,6 +287,7 @@ class MockDataChangeSetService:
             MockDataDatasetStatus.READY.value if remaining else MockDataDatasetStatus.EMPTY.value
         )
         dataset.updated_at = datetime.now(UTC)
+        stage_live_event(self.session, mock_data_event(module_id, project_id))
 
     async def _require_pending(
         self, change_set_id: uuid.UUID, actor: AuthenticatedUser

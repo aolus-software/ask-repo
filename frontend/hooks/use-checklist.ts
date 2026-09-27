@@ -11,6 +11,7 @@ import type {
   ChecklistModuleResponse,
   PaginatedResponse,
 } from "@/lib/api/types";
+import { useLiveEvents } from "@/hooks/use-live-events";
 import { keys } from "@/lib/query/keys";
 
 /** The module list, alongside `useProjects`/`useUsers` (`docs/ui-audit-findings.md` §U3.2). */
@@ -29,9 +30,12 @@ export function useChecklistModules(params: ChecklistModuleListParams) {
  *
  * Polls only while a generation is running, and never in a backgrounded tab: a
  * generation takes minutes, and the screen has to notice the change set arriving
- * without the user reloading. Every other status is settled, so polling stops.
+ * without the user reloading. Every other status is settled, so polling stops. The
+ * interval is now a fallback and safety net for a lost live event: `connected` relaxes
+ * it to a minute once `LiveEventsProvider` is delivering `invalidate` events itself.
  */
 export function useChecklistModule(moduleId: string) {
+  const { connected } = useLiveEvents();
   return useQuery({
     queryKey: keys.checklistModules.detail(moduleId),
     queryFn: () =>
@@ -42,7 +46,7 @@ export function useChecklistModule(moduleId: string) {
     // fires GET /checklist-modules/ and 404s on every render.
     enabled: Boolean(moduleId),
     refetchInterval: (query) =>
-      query.state.data?.status === "generating" ? 3000 : false,
+      query.state.data?.status === "generating" ? (connected ? 60_000 : 3000) : false,
     refetchIntervalInBackground: false,
   });
 }
