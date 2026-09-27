@@ -2,6 +2,7 @@ import { AppBreadcrumbs } from "@/components/layout/app-breadcrumbs";
 import { AppNavbar } from "@/components/layout/app-navbar";
 import { AppSidebar } from "@/components/layout/app-sidebar";
 import { SessionProvider } from "@/components/layout/session-context";
+import { LiveEventsProvider } from "@/components/live/live-events-provider";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import type { UserResponse } from "@/lib/api/types";
 
@@ -15,16 +16,18 @@ export function AppShell({
 }) {
   return (
     <SessionProvider user={user}>
-      <SidebarProvider>
-        <AppNavbar />
-        <AppSidebar />
-        <SidebarInset>
-          <main className="mt-16 p-4 md:p-8">
-            <AppBreadcrumbs />
-            {children}
-          </main>
-        </SidebarInset>
-      </SidebarProvider>
+      <LiveEventsProvider>
+        <SidebarProvider>
+          <AppNavbar />
+          <AppSidebar />
+          <SidebarInset>
+            <main className="mt-16 p-4 md:p-8">
+              <AppBreadcrumbs />
+              {children}
+            </main>
+          </SidebarInset>
+        </SidebarProvider>
+      </LiveEventsProvider>
     </SessionProvider>
   );
 }

@@ -11,6 +11,7 @@ import type {
  * snake_case sort trap below gets rediscovered one screen at a time.
  */
 export const endpoints = {
+  events: "/events",
   auth: {
     login: "/auth/login",
     refresh: "/auth/refresh",

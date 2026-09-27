@@ -12,6 +12,7 @@ import type {
   NotificationSummary,
   UnreadCountResponse,
 } from "@/lib/api/types";
+import { useLiveEvents } from "@/hooks/use-live-events";
 import { keys } from "@/lib/query/keys";
 
 /**
@@ -26,14 +27,20 @@ import { keys } from "@/lib/query/keys";
  * `useUnreadNotificationCount` below: the bell mounts both queries with no `enabled`
  * gate and no remount on popover open, so a mismatched interval would let the badge
  * and the list drift out of step for as long as the tab stays open.
+ *
+ * Both intervals are now the fallback and the safety net for a lost live event:
+ * `connected` (from `LiveEventsProvider`) relaxes them to five minutes once the live
+ * stream is delivering `invalidate` events for `notification` itself.
  */
 const POLL_INTERVAL_MS = 60_000;
+const CONNECTED_POLL_INTERVAL_MS = 5 * 60_000;
 
 export function useUnreadNotificationCount() {
+  const { connected } = useLiveEvents();
   return useQuery({
     queryKey: keys.notifications.unreadCount(),
     queryFn: () => apiFetch<UnreadCountResponse>(endpoints.notifications.unreadCount),
-    refetchInterval: POLL_INTERVAL_MS,
+    refetchInterval: connected ? CONNECTED_POLL_INTERVAL_MS : POLL_INTERVAL_MS,
     refetchIntervalInBackground: false,
   });
 }
@@ -43,13 +50,14 @@ export function useUnreadNotificationCount() {
  * paginated, filtered list are served by the same query shape and the same cache key.
  */
 export function useNotifications(params: NotificationListParams) {
+  const { connected } = useLiveEvents();
   return useQuery({
     queryKey: keys.notifications.list(params),
     queryFn: () =>
       apiFetch<PaginatedResponse<NotificationSummary>>(
         `${endpoints.notifications.list}${notificationListQueryString(params)}`,
       ),
-    refetchInterval: POLL_INTERVAL_MS,
+    refetchInterval: connected ? CONNECTED_POLL_INTERVAL_MS : POLL_INTERVAL_MS,
     refetchIntervalInBackground: false,
   });
 }

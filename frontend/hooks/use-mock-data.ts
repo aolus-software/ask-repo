@@ -8,17 +8,23 @@ import type {
   MockDataChangeSetResponse,
   MockDataDatasetDetailResponse,
 } from "@/lib/api/types";
+import { useLiveEvents } from "@/hooks/use-live-events";
 import { keys } from "@/lib/query/keys";
 
-/** A module's mock dataset. Polls only while a generation is running. */
+/**
+ * A module's mock dataset. Polls only while a generation is running — the interval is
+ * a fallback and safety net for a lost live event: `connected` relaxes it to a minute
+ * once `LiveEventsProvider` is delivering `invalidate` events itself.
+ */
 export function useMockDataDataset(moduleId: string) {
+  const { connected } = useLiveEvents();
   return useQuery({
     queryKey: keys.mockData.detail(moduleId),
     queryFn: () =>
       apiFetch<MockDataDatasetDetailResponse>(endpoints.mockData.detail(moduleId)),
     enabled: Boolean(moduleId),
     refetchInterval: (query) =>
-      query.state.data?.status === "generating" ? 3000 : false,
+      query.state.data?.status === "generating" ? (connected ? 60_000 : 3000) : false,
     refetchIntervalInBackground: false,
   });
 }
