@@ -107,8 +107,35 @@ incompatibly. Configuration defaults and internal module layout may change in a 
   proportional to attention rather than to change.
 - **"No mail provider anywhere in the stack" is no longer true.** Phase 2.4 introduces an optional
   mail provider (off by default); `docs/PRD.md` §1 and `CLAUDE.md` have been updated.
+- The mock-data change set is grouped like the checklist's: a count line, then Added, Changed
+  and Removed sections.
+- A dropped connection in the checklist and mock-data refinement chats shows the same quiet
+  note as the Ask screen ("The connection dropped. What arrived above is kept") instead of a
+  red failure banner. The partial reply was always kept, so nothing had failed.
+- Unread notifications are marked by a dot, a heavier title and a screen-reader label, not by a
+  background tint alone.
+- Compose now passes `LIVE_EVENTS_ENABLED`, `KAFKA_LIVE_EVENTS_TOPIC`,
+  `LIVE_EVENTS_HEARTBEAT_SECONDS`, `LIVE_EVENTS_MAX_STREAM_MINUTES`, `AUDIT_RETENTION_DAYS` and
+  `NOTIFICATION_RETENTION_DAYS` through to the containers. Setting them in `infra/.env`
+  previously did nothing.
+
+### Removed
+
+- **`ErrorCode.MESSAGE_NOT_FOUND`.** No route raised it: there is no route that fetches a
+  single message. It is removed from the backend enum and the frontend mirror. This is an incompatible
+  change to the wire contract, so the next release is a major version.
 
 ### Fixed
+
+- **Saving notification preferences could fail with no sign of it.** The switches kept showing
+  the unsaved choice. A save now confirms with a toast, and a failed save shows an error above
+  the Save button.
+- Marking a notification read, or marking all read, now reports a failure instead of silently
+  leaving the count unchanged.
+- Signing out a session from the profile now confirms it.
+- Non-administrators opening a role's permission screen see "Forbidden" at once, instead of a
+  loading state first.
+- The profile page uses the same width as other form and detail screens.
 
 - **The frontend's API proxy now forwards the browser's abort signal**, so closing a tab ends
   the backend request.

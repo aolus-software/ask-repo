@@ -84,7 +84,9 @@ categories across the whole repository.
   file intended sharing as a security finding. Read scoping that bypasses the resolver *is* a
   finding — as 🟠, because it breaks phase 2 rather than leaking today.
 - Prefer updating the existing `docs/audit-findings.md` over creating a new file, so the report
-  stays a single living record.
+  stays a single living record of what is open. Resolved findings live in
+  `docs/audit-finding-solved-logs.md`; consult it to check for regressions, and never re-file a
+  resolved finding under a new number.
 - Cite `file:line` for every finding. No finding without a location.
 - Writing format, severity choice, CONFIRMED-vs-SUSPECT honesty, document layout, and how to
   mark a finding resolved are all governed by `.claude/rules/audit-findings.md`. **Read it
