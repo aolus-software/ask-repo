@@ -228,7 +228,7 @@ function ConversationList({
           /* Ahead of the empty state, never behind it: `data` is undefined on a
              failure, so without this branch a dropped request tells someone with a
              full history that they have none -- which reads as data loss rather than
-             a retryable error (`docs/ui-audit-findings.md` §U7.5). */
+             a retryable error (`docs/audit-finding-solved-logs.md` §U7.5). */
           <ListError error={query.error} onRetry={() => query.refetch()} />
         ) : conversations.length === 0 ? (
           <EmptyState

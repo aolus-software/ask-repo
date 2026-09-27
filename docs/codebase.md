@@ -103,7 +103,13 @@ def require_permission(user, project_id, permission) -> None:
 That discipline is what made per-project RBAC a change to one function's body rather than a
 rewrite: phase 2.1 replaced the `return ProjectScope.all()` that shipped in phase 1, added
 `require_permission` beside it, and touched none of the 15 call sites it had at the time
-(there are 20 today).
+(there are 14 today).
+
+Two helpers sit beside them in the same file, so that no service carries its own copy of a
+check that is really about access. `require_readable_project` loads a project, or raises `404`
+when the caller may not see it. `require_answerable` refuses a project whose index is not ready,
+or was built by another embedding model. Five services call the first and three call the
+second.
 
 `ProjectScope` is an explicit dataclass rather than `list[UUID] | None`, because a `None`
 sentinel meaning "unrestricted" is fail-open — a bug that forgets to set it hands out
@@ -145,10 +151,10 @@ backend/app/
 │                      middleware, notifications, passwords, permissions, rate_limit,
 │                      repo_url, role_seed, security
 ├── db/session.py      engine + sessionmaker
-├── models/            9 modules, 20 tables
-├── repositories/      18 repositories — the only place SQL is written
+├── models/            11 modules, 21 tables
+├── repositories/      20 repositories — the only place SQL is written
 ├── schemas/           request/response shapes, all on ApiModel
-├── services/          17 services — business rules and authorization,
+├── services/          19 services — business rules and authorization,
 │                      plus path_tree.py: pure tree shaping, no I/O
 │
 ├── ingestion/         cloner, walker, chunker, embedder/, vector_store, pipeline
@@ -295,7 +301,7 @@ Run everything CI runs with `make check`: ruff, prettier, mypy, pytest, vitest.
 
 ## The rule files
 
-`.claude/rules/` holds 15 rule files that encode conventions this page only summarises —
+`.claude/rules/` holds 17 rule files that encode conventions this page only summarises —
 `router.md`, `persistence.md`, `response-api.md`, `rag.md`, `ingestion.md`, `notifications.md`,
 `design-system.md`, `forms.md`, `navigation.md`, `frontend-bff.md`, and others. They are written
 for coding agents

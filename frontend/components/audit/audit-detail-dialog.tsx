@@ -79,7 +79,7 @@ export function AuditDetailDialog({
               <AuditEventFacts event={event} />
               {/* The real `Card`, not a Card-shaped div: a hand-copied radius and
                   border stop tracking the token the moment `Card` is restyled
-                  (`docs/ui-audit-findings.md` §U2.4). */}
+                  (`docs/audit-finding-solved-logs.md` §U2.4). */}
               <Card className="border-info/40 bg-info/5 p-6">
                 <AuditEventCurrent event={event} />
               </Card>

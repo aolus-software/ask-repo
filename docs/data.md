@@ -11,7 +11,7 @@ Read [`architecture.md`](architecture.md) first for why there are four.
 
 | Store | Holds | Survives a restart? |
 | --- | --- | --- |
-| **Postgres** | 20 tables — every row the app owns | Yes, and it is the only thing you must back up besides the PAT key |
+| **Postgres** | 21 tables — every row the app owns | Yes, and it is the only thing you must back up besides the PAT key |
 | **Qdrant** | Code chunks as vectors, **with the chunk text in the payload** | Yes, but it is rebuildable by re-indexing |
 | **Redis** | Login rate-limit counters, and the per-user grant cache | No, and that is fine — a lost lockout resets, and a lost grant snapshot is re-read from Postgres |
 | **Kafka** | Job messages on 12 topics | Yes, but the reconcile sweep recovers anything lost |

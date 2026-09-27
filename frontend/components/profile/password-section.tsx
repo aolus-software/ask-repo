@@ -38,11 +38,10 @@ export function PasswordSection({ resetEnabled }: { resetEnabled: boolean }) {
         method: "POST",
         body: JSON.stringify({ email: user.email }),
       }),
-    onSuccess: () =>
-      toast.success("If mail can reach you, a reset link is on its way."),
+    onSuccess: () => toast.success("If mail can reach you, a reset link is on its way"),
     onError: (error) => {
       if (isApiError(error) && error.code === "RATE_LIMITED") {
-        toast.success("If mail can reach you, a reset link is on its way.");
+        toast.success("If mail can reach you, a reset link is on its way");
         return;
       }
       toast.error(
@@ -55,7 +54,9 @@ export function PasswordSection({ resetEnabled }: { resetEnabled: boolean }) {
     event.preventDefault();
     change.mutate(values, {
       onSuccess: () => {
-        toast.success("Password changed. Your other sessions were signed out.");
+        toast.success("Password changed", {
+          description: "Your other sessions were signed out",
+        });
         setValues(EMPTY);
       },
     });
@@ -78,7 +79,7 @@ export function PasswordSection({ resetEnabled }: { resetEnabled: boolean }) {
         />
       </FormPage>
       {resetEnabled ? (
-        <div className="mx-auto flex max-w-3xl items-center justify-between gap-4">
+        <div className="flex items-center justify-between gap-4">
           <p className="text-muted-foreground text-sm">
             Forgotten your current password? We can email you a link instead.
           </p>

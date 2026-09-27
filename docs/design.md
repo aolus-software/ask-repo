@@ -129,6 +129,7 @@ inside a card is `space-y-4`; between cards, `gap-6`.
 | Filter/toolbar grid | `grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-4` — four cells including the search box. A screen carrying four or more filters passes `columns={5}` to `ListToolbar` for `lg:grid-cols-5`; `/settings/audit` is the one that does. Filters are passed as sibling cells, never wrapped in a grid of their own, or they divide one cell between them |
 | Button group | `gap-2` |
 | Page section gap | `gap-6` |
+| Input with a leading icon | `pl-9` — the one value off the scale. It clears a `left-3 size-4` icon (0.75rem + 1rem) plus a 0.5rem gap to the text, which no on-scale value does. Used by `ListToolbar`'s search box and the conversation rail's search |
 
 ## Component inventory
 
@@ -147,7 +148,7 @@ add a row (and install it with `npx shadcn@latest add <name>`) when a new screen
 | Both refinement chats | `sheet` — the drawer `RefinementDrawer` is built on |
 | Roles | `table`, `badge`, `checkbox`, `dialog`, `dropdown-menu`, `field`, `input`, `separator` |
 | Audit trail | `table`, `badge`, `combobox`, `dialog`, `card`, `separator`, `skeleton`, `alert` |
-| Notifications | `popover`, `scroll-area` (bell), `switch` (`/settings/notifications`) |
+| Notifications | `popover`, `scroll-area` (bell), `switch` (`/profile#notifications`) |
 | Lists (all) | `pagination`, `input-group` |
 
 `form` is deliberately absent: shadcn's `form` component wraps **react-hook-form**, which

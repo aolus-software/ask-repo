@@ -17,14 +17,16 @@ access. This way a caller has to branch on `unrestricted` deliberately, and an e
 import uuid
 from collections.abc import Iterable
 from dataclasses import dataclass, field
-from typing import Self
+from typing import Protocol, Self
 
 from fastapi import status
 
+from app.config import Settings
 from app.core.errors import AppError, ErrorCode
 from app.core.middleware import AuthenticatedUser, ProjectGrant
 from app.core.permissions import Permission
 from app.live.events import LiveEvent
+from app.models.project import Project, ProjectStatus
 from app.repositories.membership import MembershipRepository
 
 
@@ -115,6 +117,68 @@ def require_permission(
             status.HTTP_403_FORBIDDEN,
             ErrorCode.INSUFFICIENT_ROLE,
             f"Your role on this project ({grant.role}) does not allow that.",
+        )
+
+
+class ProjectReader(Protocol):
+    """The narrow shape `require_readable_project` needs from a project repository.
+
+    A `Protocol` rather than importing `ProjectRepository` directly: that module
+    already imports `ProjectScope` from this one (it is what turns a claim's
+    lease query into a scoped one), so importing it back here would be a cycle.
+    Every caller today passes a real `ProjectRepository`, which satisfies this
+    shape without any change on its side.
+    """
+
+    async def get(self, project_id: uuid.UUID) -> Project | None: ...
+
+
+async def require_readable_project(
+    projects: ProjectReader, project_id: uuid.UUID, actor: AuthenticatedUser
+) -> Project:
+    """Load a project the caller may see, or raise `404`.
+
+    Five services resolved this identically before it moved here
+    (`conversation.py`, `mock_data_dataset.py`, `checklist_module.py`,
+    `indexed_path.py`, `project.py`) — the same `404`-not-`403` reasoning
+    `require_permission` carries: once projects are not shared, a project this
+    caller holds no membership on must be indistinguishable from one that does
+    not exist at all.
+    """
+    scope = resolve_project_scope(actor)
+    project = await projects.get(project_id)
+    if project is None or not (scope.unrestricted or project.id in scope.ids):
+        raise AppError(status.HTTP_404_NOT_FOUND, ErrorCode.PROJECT_NOT_FOUND, "Project not found.")
+    return project
+
+
+def require_answerable(project: Project, settings: Settings) -> None:
+    """Refuse to answer or generate from an index that is absent or built by
+    another model.
+
+    Three services ran this identically before it moved here
+    (`checklist_module.py`, `conversation.py`, `mock_data_dataset.py`). The
+    embedding check is the one that would otherwise fail silently
+    (`.claude/rules/rag.md`): swap one 768-dimensional model for another and the
+    vector store accepts the query happily, returning nearest neighbours in a
+    space this collection was never built in. Retrieval becomes noise, the
+    answers stay fluent and cited, and nothing anywhere reports an error.
+    """
+    if project.status != ProjectStatus.READY.value or not project.embedding_collection:
+        raise AppError(
+            status.HTTP_409_CONFLICT,
+            ErrorCode.PROJECT_NOT_READY,
+            "This project is not indexed yet. Wait for indexing to finish.",
+        )
+    if project.embedding_model != settings.embedding_model:
+        raise AppError(
+            status.HTTP_409_CONFLICT,
+            ErrorCode.EMBEDDING_MODEL_CHANGED,
+            (
+                f"This project was indexed with {project.embedding_model!r} but this "
+                f"instance now embeds with {settings.embedding_model!r}. Reindex "
+                "the project, or change the embedding model back."
+            ),
         )
 
 

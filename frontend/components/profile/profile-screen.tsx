@@ -70,7 +70,7 @@ export function ProfileScreen({ resetEnabled }: { resetEnabled: boolean }) {
   }
 
   return (
-    <div className="mx-auto w-full max-w-5xl">
+    <div className="mx-auto w-full max-w-3xl">
       <PageHeader title="Profile" description="Your account, sessions and settings." />
       <Tabs
         orientation="vertical"

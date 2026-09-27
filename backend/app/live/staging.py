@@ -48,11 +48,6 @@ def set_live_publisher(publisher: LivePublisher) -> None:
     _publisher = publisher
 
 
-def get_live_publisher() -> LivePublisher:
-    """The process-wide publisher."""
-    return _publisher
-
-
 def stage_live_event(session: AsyncSession | Session, live_event: LiveEvent) -> None:
     """Queue an event to publish if, and only if, this session's transaction commits.
 

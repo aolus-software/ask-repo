@@ -120,7 +120,9 @@ CONFIRMED list. A SUSPECT later disproved is marked refuted, not deleted.
 ## Document layout
 
 1. **Header block** — sweep date, what was swept, ground-truth docs used, severity legend, and
-   an explicit read-only statement ("nothing below has been fixed").
+   an explicit read-only statement ("nothing below has been fixed"). Then an **"Open findings"**
+   table covering every sweep, one row per open finding with its number, severity and date
+   raised, so the report's current state can be read at a glance without reading each sweep.
 2. **Top priorities** — a numbered list ordered security → data integrity → correctness →
    hygiene/doc, each one line pointing at its section. This is the part the owner actually
    reads; write it last, and in the plainest language in the document.
@@ -132,19 +134,33 @@ CONFIRMED list. A SUSPECT later disproved is marked refuted, not deleted.
 Finding numbers are permanent identifiers — commits, branches, and follow-up conversations cite
 them. **Never renumber** an existing finding; new ones append.
 
-## Resolved findings stay, marked
+## Resolved findings move to the solved log, marked and verbatim
 
-When a finding is fixed, do **not** delete it in the change that fixes it:
+The two reports, `docs/audit-findings.md` and `docs/ui-audit-findings.md`, carry only **open**
+findings, each sweep's verified-correct notes, and an "Open findings" table at the top. A fixed
+finding moves to `docs/audit-finding-solved-logs.md`, under its report and the sweep that raised
+it. It is never deleted.
+
+When a finding is fixed:
 
 - Append `— ✅ RESOLVED <YYYY-MM-DD>` to its heading.
 - Add a short quote block at the top saying what changed and in which branch, and **keep the
   original text below** under "Original finding follows." The next auditor needs to see the
   pattern that was wrong, not just that it went away.
-- Add a one-line entry to the header block's resolved note so the summary stays readable.
-- Say plainly when a fix is *partial*, or when a related finding survives it.
+- Say plainly when a fix is *partial*, or when a related finding survives it. A partial fix
+  whose remainder is still open stays in the report until the remainder is fixed, or the
+  remainder is filed as its own finding that cites the original.
+- Move the block to the solved log **verbatim**, changing only its heading level so it nests
+  under its sweep, and remove its row from the report's "Open findings" table. Moving it in the
+  same change that marks it resolved keeps the report from ever showing a fixed finding as open.
 
-Pruning long-resolved items into a single "prior sweeps (see git history)" line is fine on a
-later sweep, once the document gets unwieldy.
+**The number survives the move.** Commits and conversations cite `§9.1` and `§U7.1`, so a moved
+finding keeps its number, and a number is never reused, even once its finding has moved. A
+report citing a resolved finding by number says the number is in the log, rather than
+re-explaining it.
+
+A sweep's original "Top priorities" list moves with its findings once every item in it is
+resolved. It stays with that sweep as history, under a heading saying so.
 
 ## Audits do not fix things
 

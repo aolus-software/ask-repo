@@ -73,7 +73,11 @@ export function AuditEventFacts({ event }: { event: AuditEventResponse }) {
           {event.outcome === "failure" ? "Failure" : "Success"}
         </Field>
         <Field label="Source IP">
-          {event.ipAddress ?? <span className="text-muted-foreground">—</span>}
+          {event.ipAddress ? (
+            <span className="font-mono">{event.ipAddress}</span>
+          ) : (
+            <span className="text-muted-foreground">—</span>
+          )}
         </Field>
       </dl>
 

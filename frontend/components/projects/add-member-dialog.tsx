@@ -98,7 +98,9 @@ export function AddMemberDialog({
       onSubmit={handleSubmit}
     >
       <Field>
-        <FieldLabel htmlFor="add-member-user">User</FieldLabel>
+        <FieldLabel htmlFor="add-member-user">
+          User <span className="text-danger">*</span>
+        </FieldLabel>
         <Combobox
           items={candidates}
           value={selectedUser}
@@ -130,7 +132,9 @@ export function AddMemberDialog({
       </Field>
 
       <Field>
-        <FieldLabel htmlFor="add-member-role">Role</FieldLabel>
+        <FieldLabel htmlFor="add-member-role">
+          Role <span className="text-danger">*</span>
+        </FieldLabel>
         <Select
           value={role}
           onValueChange={(value: string | null | undefined) => {

@@ -88,13 +88,15 @@ deduplication boundary" → `.claude/rules/ingestion.md`.
   for.
 - **[`../CONTRIBUTING.md`](../CONTRIBUTING.md)** — conventions, check commands, and what is out of
   scope.
-- **[`ui-audit-findings.md`](ui-audit-findings.md)** — the standing record of frontend
-  inconsistency, written by `/audit-ui`. Read-only findings (`U1`–`U12`); nothing in it has been
-  fixed unless a heading says so.
-- **[`audit-findings.md`](audit-findings.md)** — the standing record of backend and architecture
-  findings, written by `/audit-flow`: access control, scoping, ingestion and SSRF, soft delete
-  against the vector store, secrets, the response contract, jobs, and code health. Read-only
-  findings (`§1`–`§9`); nothing in it has been fixed unless a heading says so.
+- **[`ui-audit-findings.md`](ui-audit-findings.md)** — the standing record of **open** frontend
+  inconsistency, written by `/audit-ui` (`U1`–`U12`), with each sweep's verified-correct notes.
+- **[`audit-findings.md`](audit-findings.md)** — the standing record of **open** backend and
+  architecture findings, written by `/audit-flow`: access control, scoping, ingestion and SSRF,
+  soft delete against the vector store, secrets, the response contract, jobs, and code health
+  (`§1`–`§9`), with each sweep's verified-correct notes.
+- **[`audit-finding-solved-logs.md`](audit-finding-solved-logs.md)** — every finding from both
+  reports that has been fixed, moved there verbatim with its resolution note. Finding numbers
+  are permanent, so a `§9.1` or `§U7.1` cited in a commit resolves here.
 
 ---
 

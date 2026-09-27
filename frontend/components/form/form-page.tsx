@@ -20,7 +20,7 @@ import { cn } from "@/lib/utils";
  * forms and prose). A form mounted on the shell-less auth background — the forced
  * password change, next to the narrow sign-in card it follows — passes `"narrow"`
  * instead, so the two screens do not double in width between them
- * (`docs/ui-audit-findings.md` §U5.3).
+ * (`docs/audit-finding-solved-logs.md` §U5.3).
  */
 const WIDTHS = { default: "max-w-3xl", narrow: "max-w-sm" } as const;
 

@@ -11,7 +11,7 @@ export interface MockDataStreamHandlers {
   onCitations: (citations: CitationPayload[]) => void;
   onToken: (text: string) => void;
   onChangeSet: (changeSet: MockDataChangeSetEventPayload) => void;
-  /** The same `status` phase the Ask screen shows (`docs/ui-audit-findings.md` §U8.2). */
+  /** The same `status` phase the Ask screen shows (`docs/audit-finding-solved-logs.md` §U8.2). */
   onPhase?: (phase: string) => void;
 }
 

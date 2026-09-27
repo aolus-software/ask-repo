@@ -3,7 +3,7 @@ import { cn } from "@/lib/utils";
 import type { ProjectResponse } from "@/lib/api/types";
 
 /**
- * One stat tile, one size, used by every caller (`docs/ui-audit-findings.md` §U10.3) —
+ * One stat tile, one size, used by every caller (`docs/audit-finding-solved-logs.md` §U10.3) —
  * previously two hand-rolled copies that disagreed with each other's value size.
  */
 function Stat({

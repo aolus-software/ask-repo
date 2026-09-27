@@ -41,12 +41,10 @@ READS = "ordinary read — the trail records what changed"
 PROPOSAL = "refinement-chat turn — a proposal is not a row; the apply is audited"
 CALL_LOG = "the ask route — PRD §2.5 keeps per-call records out of this table by name"
 NO_ACTOR = "ingestion outcome — no actor; projects.status holds the result"
-# Exemption 5. Declared here ahead of the routes it covers: `/notifications` and
-# `/notification-preferences` (Task 10) both write state that is private to one
-# user, describes no shared resource, and whose rate tracks attention rather than
-# change — see the rule for why that makes it a flooding risk. Neither route exists
-# on this branch yet, so this constant has no (method, path) entry in ROUTE_EVENTS
-# to attach to; Task 10 adds those entries pointing at this same reason.
+# Exemption 5. `/notifications` and `/notification-preferences` both write state
+# that is private to one user, describes no shared resource, and whose rate tracks
+# attention rather than change — see the rule for why that makes it a flooding
+# risk. Their (method, path) entries in ROUTE_EVENTS point at this same reason.
 NOTIFICATION_STATE = "a user's own notification state — private, non-shared, attention-rate"
 # Exemption 6. Email delivery has no route — a background task or the worker sends it —
 # so no ROUTE_EVENTS entry points here. Declared so the rule's six exemptions and this

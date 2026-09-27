@@ -45,14 +45,10 @@ import {
 } from "@/hooks/use-checklist-mutations";
 import { useProject } from "@/hooks/use-projects";
 import { fieldError, isApiError } from "@/lib/api/errors";
-import type {
-  ChecklistItemKind,
-  ChecklistItemResponse,
-  ChecklistItemStatus,
-} from "@/lib/api/types";
+import type { ChecklistItemKind, ChecklistItemResponse } from "@/lib/api/types";
 import { PERMISSION, can } from "@/lib/can";
 import { groupByFeature } from "@/lib/checklist/operations";
-import type { StatusTone } from "@/lib/status";
+import { checklistItemResultLabel, checklistItemResultTone } from "@/lib/status";
 
 const COLUMN_COUNT = 6;
 
@@ -65,25 +61,6 @@ function reportFailure(error: unknown): void {
 export const KIND_LABELS: Record<ChecklistItemKind, string> = {
   positive: "Positive",
   negative: "Negative",
-};
-
-const RESULT_LABELS: Record<ChecklistItemStatus, string> = {
-  untested: "Untested",
-  pass: "Pass",
-  fail: "Fail",
-  blocked: "Blocked",
-};
-
-/**
- * `blocked` is a warning, not a danger. "Could not run this" is a different finding
- * from "this behaved wrongly", and colouring them alike is how a blocked test ends up
- * recorded as a failure and the pass rate stops meaning anything.
- */
-const RESULT_TONES: Record<ChecklistItemStatus, StatusTone> = {
-  untested: "neutral",
-  pass: "success",
-  fail: "danger",
-  blocked: "warning",
 };
 
 interface Draft {
@@ -248,8 +225,8 @@ export function ItemGrid({
                     <TableCell className="min-w-44">
                       <div className="flex flex-col gap-1">
                         <StatusBadge
-                          tone={RESULT_TONES[item.status]}
-                          label={RESULT_LABELS[item.status]}
+                          tone={checklistItemResultTone(item.status)}
+                          label={checklistItemResultLabel(item.status)}
                           className="w-fit"
                         />
                         {item.currentResult ? (

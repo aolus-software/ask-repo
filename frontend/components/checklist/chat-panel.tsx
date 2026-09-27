@@ -8,6 +8,7 @@ import { Answer } from "@/components/ask/answer";
 import { AssistantTurn } from "@/components/ask/assistant-turn";
 import { Composer } from "@/components/ask/composer";
 import { GroundingNotice } from "@/components/ask/grounding-notice";
+import { InterruptedNote } from "@/components/ask/interrupted-note";
 import { MessageList } from "@/components/ask/message-list";
 import { Sources } from "@/components/ask/sources";
 import { EmptyState } from "@/components/feedback/empty-state";
@@ -28,6 +29,11 @@ interface TurnState {
   groundingWarnings: string[];
   text: string;
   isStreaming: boolean;
+  /** `interrupted` is the stream simply ending with no terminator — a client
+   * disconnect, not a failure (`.claude/rules/rag.md`), so it renders as the same
+   * quiet note the Ask screen uses, never the destructive `Alert` a real `error`
+   * gets (`docs/audit-finding-solved-logs.md` §U8.6). */
+  terminal: "done" | "error" | "interrupted" | null;
   errorMessage: string | null;
   /**
    * The stored turn has landed in the messages query.
@@ -49,6 +55,7 @@ function initialTurnState(): TurnState {
     groundingWarnings: [],
     text: "",
     isStreaming: true,
+    terminal: null,
     errorMessage: null,
     reconciled: false,
   };
@@ -173,12 +180,14 @@ export function ChatPanel({
           current = {
             ...current,
             isStreaming: false,
+            terminal: "error",
             errorMessage: result.error.message,
           };
         } else if (result.done) {
           current = {
             ...current,
             isStreaming: false,
+            terminal: "done",
             citedIndexes: result.done.citedIndexes,
             groundingWarnings: result.done.groundingWarnings ?? [],
           };
@@ -186,11 +195,12 @@ export function ChatPanel({
           // No terminator arrived: the connection dropped. The backend has already
           // persisted the partial turn under a "disconnected" finishReason -- what
           // streamed above is kept, not discarded (the shielded write this exists
-          // for, `.claude/rules/rag.md`).
+          // for, `.claude/rules/rag.md`). Nothing failed, so this is `interrupted`,
+          // not `error` (§U8.6) -- the quiet note, not the destructive Alert.
           current = {
             ...current,
             isStreaming: false,
-            errorMessage: "The connection dropped. What arrived above is kept.",
+            terminal: "interrupted",
           };
         }
       } catch (error) {
@@ -205,6 +215,7 @@ export function ChatPanel({
         current = {
           ...current,
           isStreaming: false,
+          terminal: "error",
           errorMessage: error instanceof Error ? error.message : "The reply stopped.",
         };
       } finally {
@@ -289,7 +300,11 @@ export function ChatPanel({
               (`.claude/rules/rag.md`), so this is the only place they are shown. */}
           <GroundingNotice warnings={turn.groundingWarnings} />
 
-          {turn.errorMessage ? (
+          {turn.terminal === "interrupted" && !turn.reconciled ? (
+            <InterruptedNote />
+          ) : null}
+
+          {turn.terminal === "error" ? (
             <Alert variant="destructive" className="mt-4">
               <AlertTitle>The reply stopped</AlertTitle>
               <AlertDescription>{turn.errorMessage}</AlertDescription>

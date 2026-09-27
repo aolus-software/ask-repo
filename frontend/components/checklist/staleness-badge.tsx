@@ -11,7 +11,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
  * The advice lives in a tooltip rather than the badge itself: a badge is a fixed-height
  * pill that cannot wrap, and "Reindexed since — consider regenerating" was several
  * times the width of the status badge it sits beside on every screen it appears
- * (`docs/ui-audit-findings.md` §U11.2).
+ * (`docs/audit-finding-solved-logs.md` §U11.2).
  *
  * Semantic tokens only. No `dark:` utility: the token already knows what dark means.
  */

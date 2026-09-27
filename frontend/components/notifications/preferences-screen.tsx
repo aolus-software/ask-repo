@@ -1,9 +1,11 @@
 "use client";
 
 import { useState } from "react";
+import { toast } from "sonner";
 
 import { EmptyState } from "@/components/feedback/empty-state";
 import { ListError } from "@/components/feedback/list-error";
+import { FormError } from "@/components/form/form-error";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
@@ -94,11 +96,20 @@ export function PreferencesScreen() {
         )}
       </Card>
 
+      {/* This form has no fields the backend can name, so a failure gets the
+          form-level Alert rather than a per-field error (`forms.md` §4). */}
+      <FormError error={save.error} />
+
       <div className="mt-4 flex justify-end">
         <Button
           disabled={draft === null || save.isPending}
           onClick={() => {
-            save.mutate(items, { onSuccess: () => setDraft(null) });
+            save.mutate(items, {
+              onSuccess: () => {
+                toast.success("Preferences saved");
+                setDraft(null);
+              },
+            });
           }}
         >
           Save preferences

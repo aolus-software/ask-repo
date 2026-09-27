@@ -161,7 +161,7 @@ export function MemberTable({
   // collapsing them is worst: every project keeps at least one owner, so "no rows" can
   // only mean the request failed -- yet it reads as "access was revoked from everyone"
   // to the person who opened this tab to check exactly that
-  // (`docs/ui-audit-findings.md` §U7.4).
+  // (`docs/audit-finding-solved-logs.md` §U7.4).
   if (query.isError) {
     return <ListError error={query.error} onRetry={() => query.refetch()} />;
   }

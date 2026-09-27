@@ -6,7 +6,7 @@ import { CenteredMessage } from "@/components/feedback/centered-message";
  * An empty list shows this with the primary action, never a bare "No results".
  *
  * `size="compact"` drops the icon and title for a narrow surface — a chat panel, a
- * sidebar rail — where the full treatment does not fit (`docs/ui-audit-findings.md`
+ * sidebar rail — where the full treatment does not fit (`docs/audit-finding-solved-logs.md`
  * §U2.2).
  */
 export function EmptyState({

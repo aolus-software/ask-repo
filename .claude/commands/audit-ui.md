@@ -292,7 +292,9 @@ aspect of how it is written** — the five blocks in order (**Where** / **What t
 this can happen** / **What it costs** / **What we should do**), plain language over jargon,
 CONFIRMED vs SUSPECT honesty, the severity legend, the header block, "Top priorities" written
 last and in the plainest language, stable numbering that is never reused, and how a resolved
-finding is marked rather than deleted. **Read it before writing.**
+finding is marked and moved to `docs/audit-finding-solved-logs.md` rather than deleted. **Read it
+before writing.** Re-check the open findings in the report; read the solved log only to
+check whether a resolved finding has regressed.
 
 Two adaptations for this report specifically:
 

@@ -6,6 +6,11 @@ import { toast } from "sonner";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 
 import {
+  OperationCountsLine,
+  OperationGroups,
+  countOperations,
+} from "@/components/change-sets/operation-groups";
+import {
   OperationRationale,
   OperationRow,
 } from "@/components/change-sets/operation-row";
@@ -125,12 +130,40 @@ export function MockDataChangeSetPanel({
   }
 
   const hasChecked = Object.values(checked).some(Boolean);
+  const counts = countOperations(changeSet.operations);
+
+  function renderRow(operation: MockDataChangeOperation) {
+    const orphaned = isOrphaned(operation, records);
+    return (
+      <OperationRow
+        key={operation.id}
+        checked={Boolean(checked[operation.id])}
+        onToggle={() => toggle(operation.id)}
+        orphaned={orphaned}
+      >
+        <p className="font-medium capitalize">{operation.op}</p>
+        {orphaned ? (
+          <p className="text-sm">
+            This record no longer exists — this change will be skipped
+          </p>
+        ) : operation.op === "update" ? (
+          <p className="text-sm">{fieldMapText(operation.changes ?? {})}</p>
+        ) : operation.op === "add" ? (
+          <p className="text-sm">{fieldMapText(operation.fields ?? {})}</p>
+        ) : null}
+        <div className="mt-2">
+          <OperationRationale rationale={operation.rationale} />
+        </div>
+      </OperationRow>
+    );
+  }
 
   return (
     <Card>
       <CardHeader>
         <CardTitle>Proposed mock data changes</CardTitle>
         <CardDescription>{changeSet.summary}</CardDescription>
+        <OperationCountsLine counts={counts} />
       </CardHeader>
       <CardContent className="space-y-4">
         {skippedCount !== null ? (
@@ -142,33 +175,7 @@ export function MockDataChangeSetPanel({
           </Alert>
         ) : null}
 
-        <div className="divide-y">
-          {changeSet.operations.map((operation) => {
-            const orphaned = isOrphaned(operation, records);
-            return (
-              <OperationRow
-                key={operation.id}
-                checked={Boolean(checked[operation.id])}
-                onToggle={() => toggle(operation.id)}
-                orphaned={orphaned}
-              >
-                <p className="font-medium capitalize">{operation.op}</p>
-                {orphaned ? (
-                  <p className="text-sm">
-                    This record no longer exists — this change will be skipped
-                  </p>
-                ) : operation.op === "update" ? (
-                  <p className="text-sm">{fieldMapText(operation.changes ?? {})}</p>
-                ) : operation.op === "add" ? (
-                  <p className="text-sm">{fieldMapText(operation.fields ?? {})}</p>
-                ) : null}
-                <div className="mt-2">
-                  <OperationRationale rationale={operation.rationale} />
-                </div>
-              </OperationRow>
-            );
-          })}
-        </div>
+        <OperationGroups operations={changeSet.operations} renderRow={renderRow} />
 
         <Separator />
         <FormError error={applyMutation.error} />

@@ -1,7 +1,7 @@
 import { cn } from "@/lib/utils";
 
 /**
- * One page header, used by every screen (`docs/ui-audit-findings.md` §U2.1) — a list
+ * One page header, used by every screen (`docs/audit-finding-solved-logs.md` §U2.1) — a list
  * screen's title-plus-action row, a detail screen's title-plus-badge-plus-actions row,
  * and the sticky title bar a streaming conversation pins under the navbar.
  *

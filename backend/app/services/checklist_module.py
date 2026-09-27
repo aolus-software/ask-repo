@@ -156,7 +156,7 @@ class ChecklistModuleService:
         self, payload: ChecklistModuleCreateRequest, *, actor: AuthenticatedUser
     ) -> ChecklistModuleResponse:
         """Name a module against a project the caller may read. Gated on `module.create`."""
-        project = await self._require_readable_project(payload.project_id, actor)
+        project = await access.require_readable_project(self.projects, payload.project_id, actor)
         access.require_permission(actor, project.id, Permission.MODULE_CREATE)
         self._require_indexed(project)
         source_path = payload.source_path.strip().strip("/")
@@ -209,7 +209,7 @@ class ChecklistModuleService:
             source_path = payload.source_path.strip().strip("/")
             # Only a re-point needs an index. A rename has to keep working whatever
             # state the project is in, and there is nothing to validate a name against.
-            project = await self._require_readable_project(module.project_id, actor)
+            project = await access.require_readable_project(self.projects, module.project_id, actor)
             self._require_indexed(project)
             await self._require_path_indexed(project, source_path)
             module.source_path = source_path
@@ -292,7 +292,7 @@ class ChecklistModuleService:
         (spec 4.1). Gated on `generate.run`.
         """
         module = await self._require_readable(module_id, actor)
-        project = await self._require_readable_project(module.project_id, actor)
+        project = await access.require_readable_project(self.projects, module.project_id, actor)
         access.require_permission(actor, project.id, Permission.GENERATE_RUN)
         self._require_indexed(project)
         self._require_a_stable_index(project)
@@ -376,8 +376,8 @@ class ChecklistModuleService:
         who spoke rather than who may speak (spec 2.4).
         """
         module = await self._require_readable(module_id, actor)
-        project = await self._require_readable_project(module.project_id, actor)
-        self._require_answerable(project)
+        project = await access.require_readable_project(self.projects, module.project_id, actor)
+        access.require_answerable(project, self.settings)
 
         user_message = ChecklistMessage(
             id=uuid.uuid4(),
@@ -424,32 +424,6 @@ class ChecklistModuleService:
             change_set_id=uuid.uuid4(),
             created_by=actor.id,
         )
-
-    def _require_answerable(self, project: Project) -> None:
-        """Refuse to answer from an index that is absent or built by another model.
-
-        The embedding check is the one that would otherwise fail silently: swap one
-        768-dimensional model for another and Qdrant accepts the query happily,
-        returning nearest neighbours in a space the collection was never built in.
-        Retrieval becomes noise, the answers stay fluent and cited, and nothing
-        anywhere reports an error (`.claude/rules/rag.md`).
-        """
-        if project.status != ProjectStatus.READY.value or not project.embedding_collection:
-            raise AppError(
-                status.HTTP_409_CONFLICT,
-                ErrorCode.PROJECT_NOT_READY,
-                "This project is not indexed yet. Wait for indexing to finish.",
-            )
-        if project.embedding_model != self.settings.embedding_model:
-            raise AppError(
-                status.HTTP_409_CONFLICT,
-                ErrorCode.EMBEDDING_MODEL_CHANGED,
-                (
-                    f"This project was indexed with {project.embedding_model!r} but this "
-                    f"instance now embeds with {self.settings.embedding_model!r}. Reindex "
-                    "the project, or change the embedding model back."
-                ),
-            )
 
     async def _summaries(
         self, rows: builtins.list[ChecklistModule]
@@ -515,18 +489,6 @@ class ChecklistModuleService:
                 "Checklist module not found.",
             )
         return module
-
-    async def _require_readable_project(
-        self, project_id: uuid.UUID, actor: AuthenticatedUser
-    ) -> Project:
-        """The project, if it is in the caller's scope."""
-        scope = access.resolve_project_scope(actor)
-        project = await self.projects.get(project_id)
-        if project is None or not (scope.unrestricted or project.id in scope.ids):
-            raise AppError(
-                status.HTTP_404_NOT_FOUND, ErrorCode.PROJECT_NOT_FOUND, "Project not found."
-            )
-        return project
 
     @staticmethod
     def _require_indexed(project: Project) -> None:

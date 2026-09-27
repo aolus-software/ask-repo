@@ -21,6 +21,7 @@ import { useActivity, useMemberships } from "@/hooks/use-profile";
 import type { ActivityEntry, MembershipSummary } from "@/lib/api/types";
 import { auditEventLabel } from "@/lib/audit";
 import { formatAbsolute, formatRelative } from "@/lib/dates";
+import { auditOutcomeLabel, auditOutcomeTone } from "@/lib/status";
 
 const PAGE_SIZE = 20;
 
@@ -91,14 +92,16 @@ export function ActivitySection() {
                     </TableCell>
                     <TableCell>
                       <StatusBadge
-                        tone={item.outcome === "failure" ? "danger" : "success"}
-                        label={item.outcome === "failure" ? "Failure" : "Success"}
+                        tone={auditOutcomeTone(item.outcome)}
+                        label={auditOutcomeLabel(item.outcome)}
                       />
                     </TableCell>
                     <TableCell className="text-sm">
                       {targetCell(item, memberships.data)}
                     </TableCell>
-                    <TableCell className="text-sm">{item.ipAddress ?? "—"}</TableCell>
+                    <TableCell className="font-mono text-sm">
+                      {item.ipAddress ?? "—"}
+                    </TableCell>
                     <TableCell
                       className="text-sm"
                       title={formatAbsolute(item.createdAt)}

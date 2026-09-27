@@ -47,7 +47,7 @@ function DeleteRecordButton({ moduleId, id }: { moduleId: string; id: string }) 
         <Trash2 className="size-4" />
       </Button>
       {/* Every other destructive action in the app confirms first — this was the one
-          exception (`docs/ui-audit-findings.md` §U5.1). */}
+          exception (`docs/audit-finding-solved-logs.md` §U5.1). */}
       <ConfirmDialog
         open={confirming}
         onOpenChange={setConfirming}

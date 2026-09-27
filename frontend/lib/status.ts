@@ -1,4 +1,9 @@
-import type { ChecklistModuleStatus, ProjectStatus } from "@/lib/api/types";
+import type {
+  AuditOutcome,
+  ChecklistItemStatus,
+  ChecklistModuleStatus,
+  ProjectStatus,
+} from "@/lib/api/types";
 
 /**
  * The single status → colour mapping (`.claude/rules/design-system.md` §5). A badge,
@@ -6,7 +11,7 @@ import type { ChecklistModuleStatus, ProjectStatus } from "@/lib/api/types";
  * picks a colour of its own.
  *
  * `info` has one job in this app: a role or a neutral advisory that is not a status at
- * all (`docs/ui-audit-findings.md` §U1.2, §U4.1) — never a project or module state.
+ * all (`docs/audit-finding-solved-logs.md` §U1.2, §U4.1) — never a project or module state.
  */
 export type StatusTone = "success" | "warning" | "danger" | "neutral" | "info";
 
@@ -43,7 +48,7 @@ export function isTerminalStatus(status: ProjectStatus): boolean {
  * Same mapping, same file, for the checklist module's own status vocabulary — moved
  * here from `components/checklist/module-status-badge.tsx` so both status domains are
  * provably named in one module rather than one in `lib/` and one in `components/`
- * (`docs/ui-audit-findings.md` §U4.1).
+ * (`docs/audit-finding-solved-logs.md` §U4.1).
  */
 const MODULE_TONES: Record<ChecklistModuleStatus, StatusTone> = {
   empty: "neutral",
@@ -69,4 +74,50 @@ export function checklistModuleStatusTone(status: ChecklistModuleStatus): Status
 
 export function checklistModuleStatusLabel(status: ChecklistModuleStatus): string {
   return MODULE_LABELS[status];
+}
+
+/**
+ * A checklist item's recorded result — a third status domain, moved here from
+ * `components/checklist/item-grid.tsx` so it is provably named in one module
+ * rather than re-derived at the next call site that needs this state's colour
+ * (`docs/audit-finding-solved-logs.md` §U4.4).
+ *
+ * `blocked` is a warning, not a danger. "Could not run this" is a different finding
+ * from "this behaved wrongly", and colouring them alike is how a blocked test ends up
+ * recorded as a failure and the pass rate stops meaning anything.
+ */
+const RESULT_TONES: Record<ChecklistItemStatus, StatusTone> = {
+  untested: "neutral",
+  pass: "success",
+  fail: "danger",
+  blocked: "warning",
+};
+
+const RESULT_LABELS: Record<ChecklistItemStatus, string> = {
+  untested: "Untested",
+  pass: "Pass",
+  fail: "Fail",
+  blocked: "Blocked",
+};
+
+export function checklistItemResultTone(status: ChecklistItemStatus): StatusTone {
+  return RESULT_TONES[status];
+}
+
+export function checklistItemResultLabel(status: ChecklistItemStatus): string {
+  return RESULT_LABELS[status];
+}
+
+/**
+ * The audit trail's two-value outcome domain (`docs/audit-finding-solved-logs.md` §U4.6).
+ * Every row is `success` or `failure`; a badge showing it must never pick the
+ * colour at the call site, the same rule the project and module mappings above
+ * already follow.
+ */
+export function auditOutcomeTone(outcome: AuditOutcome): StatusTone {
+  return outcome === "failure" ? "danger" : "success";
+}
+
+export function auditOutcomeLabel(outcome: AuditOutcome): string {
+  return outcome === "failure" ? "Failure" : "Success";
 }

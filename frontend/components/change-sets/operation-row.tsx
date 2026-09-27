@@ -5,7 +5,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 /**
  * One row in a change-set review list: a checkbox, dimmed when its target has
  * already left the underlying collection. Shared between the checklist and
- * mock-data change-set panels (`docs/ui-audit-findings.md` §U8.3) — both review an
+ * mock-data change-set panels (`docs/audit-finding-solved-logs.md` §U8.3) — both review an
  * `add`/`update`/`remove` proposal list against a resource that may have moved out
  * from under it since the proposal was generated, and a reviewer who has learned to
  * read one should not have to relearn the other.

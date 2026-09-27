@@ -6,6 +6,11 @@ import { toast } from "sonner";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 
 import {
+  OperationCountsLine,
+  OperationGroups,
+  countOperations,
+} from "@/components/change-sets/operation-groups";
+import {
   OperationRationale,
   OperationRow,
 } from "@/components/change-sets/operation-row";
@@ -22,7 +27,6 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Separator } from "@/components/ui/separator";
 import { apiFetch } from "@/lib/api/client";
 import { endpoints } from "@/lib/api/endpoints";
 import type {
@@ -31,7 +35,6 @@ import type {
   ChecklistChangeSetResponse,
   ChecklistItemResponse,
 } from "@/lib/api/types";
-import { summariseOperations } from "@/lib/checklist/operations";
 import { keys } from "@/lib/query/keys";
 
 /** camelCase field name -> the label shown on a Changed row. Unknown keys fall back to the key itself. */
@@ -155,20 +158,78 @@ export function ChangeSetPanel({
     );
   }
 
-  const counts = summariseOperations(changeSet.operations);
-  const added = changeSet.operations.filter((operation) => operation.op === "add");
-  const updated = changeSet.operations.filter((operation) => operation.op === "update");
-  const removed = changeSet.operations.filter((operation) => operation.op === "remove");
+  const counts = countOperations(changeSet.operations);
   const hasChecked = Object.values(checked).some(Boolean);
+
+  function renderRow(operation: ChangeOperation) {
+    const orphaned = isOrphaned(operation, items);
+    const item = targetItem(operation, items);
+
+    return (
+      <OperationRow
+        key={operation.id}
+        checked={Boolean(checked[operation.id])}
+        onToggle={() => toggle(operation.id)}
+        orphaned={orphaned}
+      >
+        {operation.op === "add" ? (
+          <>
+            <div className="flex flex-wrap items-center gap-2">
+              <p className="font-medium">{operation.testName}</p>
+              {/* Badged before the reviewer decides, not after: knowing which
+                  proposals are failure cases is most of what tells them
+                  whether the set is worth accepting. */}
+              {operation.kind === "negative" ? (
+                <Badge
+                  variant="outline"
+                  className="text-warning border-warning/60 text-xs font-normal"
+                >
+                  Negative
+                </Badge>
+              ) : null}
+            </div>
+            <p className="text-muted-foreground text-sm">{operation.feature}</p>
+            {operation.expectedResult ? (
+              <p className="mt-1 text-sm">{operation.expectedResult}</p>
+            ) : null}
+          </>
+        ) : orphaned || !item ? (
+          <p className="text-sm">
+            This test case no longer exists — this change will be skipped
+          </p>
+        ) : operation.op === "update" ? (
+          <>
+            <p className="font-medium">{item.testName}</p>
+            <div className="mt-1 space-y-1">
+              {Object.entries(operation.changes ?? {}).map(([field, next]) => (
+                <p key={field} className="text-sm">
+                  <span className="text-muted-foreground">{fieldLabel(field)}: </span>
+                  {oldFieldValue(item, field)}
+                  <span className="text-muted-foreground"> → </span>
+                  {next}
+                </p>
+              ))}
+            </div>
+          </>
+        ) : (
+          <>
+            <p className="font-medium">{item.testName}</p>
+            <p className="text-muted-foreground text-sm">{item.feature}</p>
+          </>
+        )}
+        <div className="mt-2">
+          <OperationRationale rationale={operation.rationale} />
+        </div>
+      </OperationRow>
+    );
+  }
 
   return (
     <Card>
       <CardHeader>
         <CardTitle>Proposed changes</CardTitle>
         <CardDescription>{changeSet.summary}</CardDescription>
-        <p className="text-muted-foreground text-sm">
-          {counts.added} added, {counts.updated} changed, {counts.removed} removed
-        </p>
+        <OperationCountsLine counts={counts} />
       </CardHeader>
       <CardContent className="space-y-4">
         {skippedCount !== null ? (
@@ -180,127 +241,7 @@ export function ChangeSetPanel({
           </Alert>
         ) : null}
 
-        {added.length > 0 ? (
-          <div>
-            <h3 className="text-primary text-sm font-medium">Added</h3>
-            <Separator className="mt-2" />
-            <div className="divide-y">
-              {added.map((operation) => (
-                <OperationRow
-                  key={operation.id}
-                  checked={Boolean(checked[operation.id])}
-                  onToggle={() => toggle(operation.id)}
-                  orphaned={false}
-                >
-                  <div className="flex flex-wrap items-center gap-2">
-                    <p className="font-medium">{operation.testName}</p>
-                    {/* Badged before the reviewer decides, not after: knowing which
-                        proposals are failure cases is most of what tells them
-                        whether the set is worth accepting. */}
-                    {operation.kind === "negative" ? (
-                      <Badge
-                        variant="outline"
-                        className="text-warning border-warning/60 text-xs font-normal"
-                      >
-                        Negative
-                      </Badge>
-                    ) : null}
-                  </div>
-                  <p className="text-muted-foreground text-sm">{operation.feature}</p>
-                  {operation.expectedResult ? (
-                    <p className="mt-1 text-sm">{operation.expectedResult}</p>
-                  ) : null}
-                  <div className="mt-2">
-                    <OperationRationale rationale={operation.rationale} />
-                  </div>
-                </OperationRow>
-              ))}
-            </div>
-          </div>
-        ) : null}
-
-        {updated.length > 0 ? (
-          <div>
-            <h3 className="text-muted-foreground text-sm font-medium">Changed</h3>
-            <Separator className="mt-2" />
-            <div className="divide-y">
-              {updated.map((operation) => {
-                const orphaned = isOrphaned(operation, items);
-                const item = targetItem(operation, items);
-                return (
-                  <OperationRow
-                    key={operation.id}
-                    checked={Boolean(checked[operation.id])}
-                    onToggle={() => toggle(operation.id)}
-                    orphaned={orphaned}
-                  >
-                    {orphaned || !item ? (
-                      <p className="text-sm">
-                        This test case no longer exists — this change will be skipped
-                      </p>
-                    ) : (
-                      <>
-                        <p className="font-medium">{item.testName}</p>
-                        <div className="mt-1 space-y-1">
-                          {Object.entries(operation.changes ?? {}).map(
-                            ([field, next]) => (
-                              <p key={field} className="text-sm">
-                                <span className="text-muted-foreground">
-                                  {fieldLabel(field)}:{" "}
-                                </span>
-                                {oldFieldValue(item, field)}
-                                <span className="text-muted-foreground"> → </span>
-                                {next}
-                              </p>
-                            ),
-                          )}
-                        </div>
-                      </>
-                    )}
-                    <div className="mt-2">
-                      <OperationRationale rationale={operation.rationale} />
-                    </div>
-                  </OperationRow>
-                );
-              })}
-            </div>
-          </div>
-        ) : null}
-
-        {removed.length > 0 ? (
-          <div>
-            <h3 className="text-danger text-sm font-medium">Removed</h3>
-            <Separator className="mt-2" />
-            <div className="divide-y">
-              {removed.map((operation) => {
-                const orphaned = isOrphaned(operation, items);
-                const item = targetItem(operation, items);
-                return (
-                  <OperationRow
-                    key={operation.id}
-                    checked={Boolean(checked[operation.id])}
-                    onToggle={() => toggle(operation.id)}
-                    orphaned={orphaned}
-                  >
-                    {orphaned || !item ? (
-                      <p className="text-sm">
-                        This test case no longer exists — this change will be skipped
-                      </p>
-                    ) : (
-                      <>
-                        <p className="font-medium">{item.testName}</p>
-                        <p className="text-muted-foreground text-sm">{item.feature}</p>
-                      </>
-                    )}
-                    <div className="mt-2">
-                      <OperationRationale rationale={operation.rationale} />
-                    </div>
-                  </OperationRow>
-                );
-              })}
-            </div>
-          </div>
-        ) : null}
+        <OperationGroups operations={changeSet.operations} renderRow={renderRow} />
 
         <FormError error={applyMutation.error} />
       </CardContent>

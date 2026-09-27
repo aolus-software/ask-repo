@@ -133,8 +133,20 @@ def test_nothing_outside_access_reads_a_live_events_recipients() -> None:
 
 def test_no_module_compares_created_by_to_an_actor() -> None:
     """`created_by` is attribution. After Phase 2.1 it gates nothing — the six inline
-    gates it used to drive are now `require_permission` calls."""
-    pattern = re.compile(r"created_by\s*[!=]=\s*actor\.id|actor\.id\s*[!=]=\s*\w+\.created_by")
+    gates it used to drive are now `require_permission` calls.
+
+    The pattern matches `created_by` compared (`==` or `!=`) against *any* dotted
+    identifier expression on either side — not only one literally named `actor` — so
+    a gate written as `current_user.id != project.created_by` or
+    `user.id == record.created_by` is caught just as surely as the six sites Phase
+    2.1 actually removed. `\\w+(?:\\.\\w+)*` is deliberately not `\\w+` alone: a bare
+    identifier would miss the common shape where the comparison is against an
+    attribute access rather than a local variable.
+    """
+    identifier = r"\w+(?:\.\w+)*"
+    pattern = re.compile(
+        rf"created_by\s*[!=]=\s*{identifier}|{identifier}\s*[!=]=\s*\w+\.created_by"
+    )
     offenders = [
         path.relative_to(APP)
         for path in _python_files()

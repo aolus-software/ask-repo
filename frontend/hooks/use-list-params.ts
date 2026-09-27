@@ -16,7 +16,7 @@ const NO_EXTRA_PARAMS: readonly string[] = [];
  * `extraParams` names additional query-string keys (e.g. `projectId`) that a screen
  * filters by beyond the common `search`/`page` pair — added so a screen with its own
  * filter does not have to reimplement this hook from scratch
- * (`docs/ui-audit-findings.md` §U3.2). Each named key is read into `params` and
+ * (`docs/audit-finding-solved-logs.md` §U3.2). Each named key is read into `params` and
  * written back through `setParam`, following the same reset-page-on-change rule as
  * `setSearch`.
  */

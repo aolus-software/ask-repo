@@ -171,7 +171,7 @@ class IndexedPathService:
         readiness check and not the stability check, the same split the question and
         chat paths make (`.claude/rules/ingestion.md`).
         """
-        project = await self._require_readable(project_id, actor)
+        project = await access.require_readable_project(self.projects, project_id, actor)
         self._require_indexed(project)
         paths = await self.reader.paths_for(project)
 
@@ -195,16 +195,6 @@ class IndexedPathService:
             entries=path_tree.children_of(paths, directory),
             truncated=False,
         )
-
-    async def _require_readable(self, project_id: uuid.UUID, actor: AuthenticatedUser) -> Project:
-        """The project, if the access resolver returns it. A miss is `404`."""
-        scope = access.resolve_project_scope(actor)
-        project = await self.projects.get(project_id)
-        if project is None or not (scope.unrestricted or project.id in scope.ids):
-            raise AppError(
-                status.HTTP_404_NOT_FOUND, ErrorCode.PROJECT_NOT_FOUND, "Project not found."
-            )
-        return project
 
     @staticmethod
     def _require_indexed(project: Project) -> None:

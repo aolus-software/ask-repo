@@ -171,7 +171,7 @@ What shipped:
   different connection lifecycle with different failure modes, and polling an integer is honest at
   this scale. The interval is a frontend constant, not a setting.
 
-  **Amendment, 2026-09-27 (in progress) — a per-user stream now exists, for job status.** The
+  **Amendment, 2026-09-27 (shipped, PR #52) — a per-user stream now exists, for job status.** The
   per-user SSE stream this entry ruled out for notifications alone turns out to be worth building
   for a different reason: `GET /events` (issue #48) exists to push project status/reindex and
   checklist/mock-data generation state to open screens instead of a 3-second poll, and the bell
@@ -927,7 +927,7 @@ Those costs are real, and the M1 design spec (`docs/superpowers/specs/2026-08-25
 
 Redis stays in the stack for login rate limiting only. It does not back the queue.
 
-**A fourth topic, `askrepo.live.events` (2026-09-27, in progress), carries hints rather than
+**A fourth topic, `askrepo.live.events` (2026-09-27, shipped), carries hints rather than
 jobs.** One partition, `retention.ms` of one hour, and no consumer group: every API process
 assigns itself the whole topic and reads from the end, because nothing here needs history or
 per-message acknowledgement — a dropped or duplicated hint costs a delayed screen refresh, and
@@ -1001,12 +1001,12 @@ Most of this seam already exists and is not part of the milestone. §5's chat ro
 
 **Phase 1.1 — module path picker (shipped, 2026-09-08).** Not a milestone of its own: one generalization pass over what M4 already shipped, so a user who has never seen the repository's directory structure can point a checklist module at a path. It added `GET /projects/{id}/indexed-paths` and the `400 MODULE_PATH_NOT_INDEXED` refusal at create and re-point time. See §2.1.
 
-**M0 amendment — profile page (in progress, 2026-09-26).** Not a milestone of its own: one page
+**M0 amendment — profile page (shipped, 2026-09-26).** Not a milestone of its own: one page
 over what M0, Phase 2.2 and Phase 2.3 already shipped — account and memberships, own sessions
 with revoke, own audit activity, notification preferences, and password change. Also fixed
 password change revoking the caller's own session. See §4.0.
 
-**Phase 2.3 amendment — live updates (in progress, 2026-09-27).** Not a milestone of its own: job
+**Phase 2.3 amendment — live updates (shipped, 2026-09-27).** Not a milestone of its own: job
 status and the bell pushed over one per-user SSE stream fed by Kafka, with polling as the
 fallback. See §2.1.
 

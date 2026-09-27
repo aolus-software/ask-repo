@@ -238,6 +238,18 @@ bucket by prepending an entry.
 If you do expose the API directly, it needs its own vhost, its origin in `CORS_ORIGINS`, and
 the hop count adjusted.
 
+**Streaming has to pass through unbuffered.** The answer stream and the live-updates stream
+(`GET /events`) are both server-sent events. Caddy forwards them as they arrive, and so does
+Next, which relays the API's `X-Accel-Buffering: no` untouched. A proxy added in front that holds responses until they
+finish breaks both. The answer stream then arrives in one lump at the end. The live stream never
+delivers anything, but still holds a server-side task open for up to
+`LIVE_EVENTS_MAX_STREAM_MINUTES`. If you cannot turn buffering off on that proxy, set
+`LIVE_EVENTS_ENABLED=false` in `infra/.env`. Every screen falls back to polling, which it does
+anyway whenever the stream is unavailable. Behind a proxy with a short idle timeout, lower
+`LIVE_EVENTS_HEARTBEAT_SECONDS` instead. Both variables are passed through by
+`docker-compose.prod.yml`, along with the other two live-update settings and both retention
+windows. [`configuration.md`](configuration.md) describes each one.
+
 ---
 
 ## 5. First boot

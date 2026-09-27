@@ -72,7 +72,7 @@ describe("PasswordSection", () => {
 
     await waitFor(() =>
       expect(toastSuccess).toHaveBeenCalledWith(
-        "If mail can reach you, a reset link is on its way.",
+        "If mail can reach you, a reset link is on its way",
       ),
     );
     expect(toastError).not.toHaveBeenCalled();
@@ -93,7 +93,7 @@ describe("PasswordSection", () => {
 
     await waitFor(() =>
       expect(toastSuccess).toHaveBeenCalledWith(
-        "If mail can reach you, a reset link is on its way.",
+        "If mail can reach you, a reset link is on its way",
       ),
     );
     expect(toastError).not.toHaveBeenCalled();
