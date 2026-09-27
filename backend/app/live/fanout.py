@@ -2,7 +2,9 @@
 
 Every open `/events` stream registers a bounded queue; each event goes to all of them. A
 client too slow to keep up is not given an unbounded backlog: its queue is emptied and one
-`resync` marker put in its place, telling it to refetch everything.
+`resync` marker put in its place, telling it to refetch everything. While the resync marker
+is unread in a queue, further events are dropped because the refetch triggered by the marker
+covers them; delivery resumes once the marker is read and the queue is empty.
 """
 
 import asyncio
@@ -47,9 +49,12 @@ class LiveEventFanout:
         for queue in self._queues:
             queue_id = id(queue)
 
-            # Skip queues in resync mode; they're waiting for client to reconnect
+            # Skip this event only if resync marker is still unread in the queue;
+            # once consumed (queue empty), delivery resumes because the refetch covered it.
             if queue_id in self._in_resync:
-                continue
+                if not queue.empty():
+                    continue  # resync still unread; this event is covered by its refetch
+                self._in_resync.discard(queue_id)
 
             try:
                 queue.put_nowait(live_event)

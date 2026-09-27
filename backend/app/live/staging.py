@@ -54,7 +54,8 @@ def get_live_publisher() -> LivePublisher:
 def stage_live_event(session: AsyncSession | Session, live_event: LiveEvent) -> None:
     """Queue an event to publish if, and only if, this session's transaction commits.
 
-    A repeat of the same event in one transaction is kept once.
+    A repeat of the same event in one transaction is kept once. Begins a transaction if none
+    is open, so rollback events fire reliably.
     """
     # Ensure a transaction is open so that a later rollback triggers after_soft_rollback;
     # a rollback with no open transaction fires no event and staged events would leak.

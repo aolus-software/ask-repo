@@ -29,3 +29,16 @@ async def test_leaving_the_context_unsubscribes() -> None:
     async with fanout.subscribe():
         assert fanout.subscriber_count == 1
     assert fanout.subscriber_count == 0
+
+
+async def test_delivery_resumes_once_the_resync_marker_is_read() -> None:
+    fanout = LiveEventFanout()
+    async with fanout.subscribe() as queue:
+        for _ in range(QUEUE_SIZE + 1):
+            fanout.deliver(project_event(uuid.uuid4()))
+        assert queue.get_nowait() == RESYNC
+
+        later = project_event(uuid.uuid4())
+        fanout.deliver(later)
+
+        assert queue.get_nowait() == later
