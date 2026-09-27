@@ -247,6 +247,41 @@ route that writes. What the rows hold is in [`data.md`](data.md#audit).
 
 ---
 
+## Feedback on model output
+
+`PUT /feedback/{targetType}/{targetId}` (`.claude/rules/feedback.md`) records one user's
+thumbs-up/down judgement on a model-authored output — an Ask answer, a refinement-chat reply, or
+a checklist/mock-data change set. `FeedbackService.put` resolves the target, then runs **exactly
+the read check that subject already has** — `ConversationRepository.get_for_owner` for a message,
+`ChecklistModuleRepository.get_in_scope` for the other four target types — and raises the single
+`404 FEEDBACK_TARGET_NOT_FOUND` on any miss: a nonexistent id, a user-role message, someone else's
+conversation, a module outside scope. No new permission and no admin bypass for a conversation.
+On success it upserts a row in `feedback` (one live vote per `(user, target_type, target_id)`) and
+commits; there is no audit event — the seventh named exemption
+(`.claude/rules/audit-trail.md`).
+
+The inline read is `myFeedback`, the caller's own vote embedded on message and change-set reads in
+all three chats, loaded in `my_feedback_map` as one extra query per list rather than a request per
+row.
+
+The admin read is separate and narrower on purpose: `GET /feedback` and `GET /feedback/summary`
+sit behind `AdminUser`, resolve the caller's `resolve_project_scope` exactly like every other
+project-scoped read, and return `FeedbackAdminRead`/`FeedbackSummary` — the aggregate and the
+free-text note, **never a user field of any kind**. Nothing here joins to `messages`,
+`conversations`, or a change set's body.
+
+Two lifecycle hooks keep feedback consistent with the resource it judges, both in the same
+transaction as the event that triggers them: deleting a conversation clears the `note` (not the
+rating or reason codes) on the feedback attached to its messages, and deleting a project
+soft-deletes that project's feedback rows, like every other project-owned row.
+
+**Nothing feedback-authored ever reaches a model.** A vote and its note are evidence for an
+administrator to read and act on by hand — editing `app/rag/prompts.py` — never text concatenated
+into a prompt; doing so would make user-authored content an instruction, which is exactly what
+`.claude/rules/rag.md` forbids for retrieved code. See `.claude/rules/feedback.md`.
+
+---
+
 ## The notification fan-out path
 
 Nine call sites — the two ingestion outcomes, the two checklist and two mock-data generators,

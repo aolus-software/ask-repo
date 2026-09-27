@@ -286,6 +286,47 @@ the opposite ordering from the audit write above, because a lost notification is
 working rather than an accepted, logged gap. See `.claude/rules/notifications.md` and
 [`architecture.md`](architecture.md#the-notification-fan-out-path).
 
+### Feedback
+
+`feedback` — one row per `(user, target)`. `docs/PRD.md` §2.1, Phase 2.5, Stage 1; mechanism in
+`.claude/rules/feedback.md`.
+
+| Column | Holds |
+| --- | --- |
+| `user_id`, `project_id` | The voter and the project the target belongs to. `user_id` is never serialized on any admin route |
+| `target_type`, `target_id` | What was judged — one of five values (`message`, `checklist_message`, `mock_data_message`, `checklist_change_set`, `mock_data_change_set`). `target_id` is deliberately **not** a foreign key — polymorphic across five tables; the service proves the target exists and is visible before writing |
+| `feature` | Which producer made the output (`answer`, `refine_checklist`, `generate_checklist`, …), derived server-side from the target, never accepted from the client |
+| `rating` | `up` \| `down` |
+| `reason_codes` | `text[]`, validated against the catalogue in `app/core/feedback.py`; empty allowed for `up` only |
+| `note` | `varchar(500)`, nullable — the user's own words, bounded for storage, not politeness |
+| `prompt_version` | First 12 hex characters of a SHA-256 over the prompt strings, stamped at the moment the vote is **cast**, not when the output was generated |
+| `created_at`, `updated_at` | `TimestampMixin` |
+| `deleted_at` | `SoftDeleteMixin` — used by project deletion only; withdrawing a vote hard-deletes the row instead |
+
+A partial unique index, `uq_feedback_user_target` on `(user_id, target_type, target_id) WHERE
+deleted_at IS NULL`, is what makes a second `PUT` an update in place rather than a second row.
+Two check constraints: `rating IN ('up', 'down')`, and `rating = 'up' OR
+cardinality(reason_codes) > 0` — a `down` vote cannot skip the reason. Three more non-unique
+indexes: `(project_id, created_at)` and `(feature, created_at)` back the admin aggregate, and
+`ix_feedback_target` on `(target_type, target_id)` backs the lookups that aggregate has nothing
+to do with — `myFeedback` (`mine_for_targets`), withdrawing a vote (`delete_mine`), and clearing
+notes when their conversation is deleted (`clear_notes_for_conversation`), all of which filter by
+subject rather than by project or feature.
+
+| Event | Effect on feedback |
+| --- | --- |
+| Conversation deleted | Rows on its messages keep `rating`, `reason_codes`, `feature`, `project_id`; `note` set to `NULL`, in the same transaction |
+| Project deleted | That project's rows soft-deleted in the same operation |
+| Change set discarded, applied, or superseded | Unchanged — the subject still exists |
+| User withdraws a vote | Row hard-deleted |
+| User deactivated | Unchanged, consistent with memberships |
+| `FEEDBACK_RETENTION_DAYS` elapsed (default `0`, keep forever) | Hard-deleted by the worker's 60-second tick |
+
+Recording, revising or withdrawing a vote records **no** audit event — the seventh named
+exemption in `.claude/rules/audit-trail.md`: it describes no change to a shared resource, the
+`feedback` table is itself the record, and its write rate is proportional to attention. See
+[`architecture.md`](architecture.md#feedback-on-model-output).
+
 ---
 
 ## Three storage rules

@@ -13,6 +13,24 @@ client can have received it, so it is recorded under Changed and allowed in a `M
 
 ## [Unreleased]
 
+### Added
+
+- **User feedback on model output** (`docs/PRD.md` §2.1, phase 2.5, stage 1, issue #55): a
+  thumbs-up/down vote, with an optional reason code and note, on every model-authored output —
+  an Ask answer, a checklist or mock-data refinement reply, and a checklist or mock-data change
+  set. `PUT /feedback/{targetType}/{targetId}` (upsert the caller's own vote) and
+  `DELETE /feedback/{targetType}/{targetId}` (withdraw it, `204`); `GET /feedback` and
+  `GET /feedback/summary` (admin-only aggregate and notes, never the voter).
+- `myFeedback` on conversation detail, on the checklist and mock-data refinement chats, and on
+  checklist/mock-data change-set reads — the caller's own vote, loaded with the list.
+- `ErrorCode.FEEDBACK_TARGET_NOT_FOUND` (404, every write-side miss) and
+  `ErrorCode.FEEDBACK_REASON_NOT_APPLICABLE` (400, a reason code that does not apply to the
+  target type).
+- `FEEDBACK_RETENTION_DAYS` (default `0`, keep forever).
+- Thumbs on every answer, chat reply and change-set card, and the admin-only
+  `/settings/feedback` screen: down-vote rate per feature and per prompt version, a reason-code
+  breakdown, and the notes list.
+
 ## [2.2.0] — 2026-09-27
 
 Notifications (`docs/PRD.md` §2.1, phase 2.3), optional mail with self-service password reset

@@ -426,7 +426,7 @@ route does not return, which is the one-error-shape rule failing silently rather
 
 ## Rules
 
-Seventeen rule files in `.claude/rules/`. Read the ones your change touches.
+Eighteen rule files in `.claude/rules/`. Read the ones your change touches.
 
 | Rule | Read it when |
 | --- | --- |
@@ -443,9 +443,10 @@ Seventeen rule files in `.claude/rules/`. Read the ones your change touches.
 | `mail.md` | Anything under `app/mail/`, the password reset service, or the email half of notifications — composer signatures, subjects and body content, claiming before send, and delivery retries |
 | `navigation.md` | Sidebar, breadcrumbs, or adding a route |
 | `frontend-bff.md` | Any `proxy.ts`, the `app/api/[...path]` API proxy, `/api/auth/*`, or session/refresh code — cookies, the refresh split, SSE piping |
-| `audit-trail.md` | Any write or export in any service — what must record an audit event, the six exemptions, and the two content bans. **Adding a mutating route means adding an event in the same change** |
+| `audit-trail.md` | Any write or export in any service — what must record an audit event, the seven exemptions, and the two content bans. **Adding a mutating route means adding an event in the same change** |
 | `notifications.md` | Anything under `app/core/notifications.py`, `app/services/notification_fanout.py`, or a fan-out call site — recipient resolution, the before-commit/after-commit straddle with audit, and the preference-snapshot rule |
 | `live-events.md` | Anything under `app/live/`, `GET /events`, a status write the frontend shows, or `components/live/` — ids only, stage never publish, visibility in `access.py`, polling stays the fallback |
+| `feedback.md` | Anything under `app/core/feedback.py`, the feedback model/repository/service/router, `myFeedback`, or `components/output-feedback/` — never reaches a model, voter anonymous to admins, one 404 |
 | `audit-findings.md` | Writing an audit report |
 
 Seven commands in `.claude/commands/`: `audit-flow.md` (read-only sweep, writes
@@ -475,7 +476,7 @@ App Router, React 19, Tailwind CSS 4 (CSS-first `@theme`, no `tailwind.config.js
 The routes that exist are `/login`, `/forgot-password`, `/reset-password`, `/change-password`, `/` (dashboard),
 `/projects`, `/projects/[id]`, `/ask`, `/ask/[conversationId]`, `/settings/users`,
 `/settings/roles`, `/settings/roles/[id]`, `/settings/audit`, `/settings/audit/[eventId]`,
-`/notifications`, `/settings/notifications`, `/profile`,
+`/notifications`, `/settings/notifications`, `/profile`, `/settings/feedback`,
 `/checklist`, and `/checklist/[moduleId]` — the last
 of which now carries a Mock Data tab beside the checklist grid, no new route of its own.
 `/projects/[id]` likewise carries a Members tab rather than a route. `/settings/notifications`
