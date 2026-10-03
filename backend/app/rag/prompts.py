@@ -239,6 +239,34 @@ triggers it and what it produces. These are what a test plan needs in order to c
 anything beyond the happy path, and they are the easiest thing to skim past.\
 """
 
+# Appended to the reduce and propose system messages, because both write rows into the
+# same checklist. The reader is any manual tester, including one new to testing who has
+# never opened the repository: a row describes what a person does and sees. The file it
+# came from travels in `citation_paths` -- shown as sources -- and never in the text.
+# Translate, never drop: a behaviour the code calls "silently returns" is still a test.
+TESTER_LANGUAGE = """\
+Write every `feature`, `test_name` and `expected_result` for a manual tester who has \
+never seen the source code and may be new to testing. They work through the \
+application's screens, so describe what a person does and what they see.
+
+Never write any of these into those three fields:
+  - a file name, a path or a line number;
+  - a function, method, class, variable or database table name;
+  - an HTTP method, a URL path, a status code or a request payload;
+  - an exception name, an error-code constant or a translation key;
+  - code, or any term only a developer would know.
+
+Translate each observation into what the person experiences -- never leave one out \
+because it is described in code terms. "Raises NotFoundException" becomes "the page \
+says the user could not be found". "422 with validation.IS_EMAIL" becomes "the form \
+refuses the email address and says it is not valid". When the code quietly does \
+nothing, say what the person notices: "the same confirmation message is shown, and no \
+email arrives".
+
+The files an expectation came from go in `citation_paths`, and only there. The \
+tester's sources panel shows them; the expectation itself never mentions a file.\
+"""
+
 REDUCE_SYSTEM = """\
 You are writing a manual test plan for a module of an application, from observations \
 about its source files.
@@ -247,8 +275,9 @@ Group the tests by feature. Every test needs THREE separate fields, and they are
 different things -- never collapse them into one:
   - `test_name`: a short label, a few words. "Rejects a wrong password". Not a \
 sentence, and not the outcome. Never empty.
-  - `expected_result`: what a correct implementation should do, specifically. "401 \
-with code INVALID_CREDENTIALS".
+  - `expected_result`: what the tester should see when the application behaves \
+correctly, specifically. "The sign-in is refused and the page says the email or \
+password is wrong".
   - `kind`: exactly "positive" or "negative". "positive" means the feature does what \
 it should with valid input. "negative" means it REFUSES what it should refuse, or \
 degrades safely -- missing or malformed input, a value out of range, a duplicate, an \
@@ -272,8 +301,8 @@ nothing about what happens when it is misused. Both halves, for every feature.
 Answer `kind` with the single word and nothing else. Do not explain the choice \
 there; the `rationale` field is where reasoning goes.
 
-Base every expectation on an observation you were given, and cite the file it came \
-from.
+Base every expectation on an observation you were given, and list the file it came \
+from in `citation_paths`.
 
 You have NOT run this application and you must never write what actually happens. A \
 human tester records that. Propose expectations only.
@@ -364,7 +393,8 @@ def build_reduce_prompt(
     partial_paths: list[str] | None = None,
     skipped_paths: list[str] | None = None,
 ) -> list[BaseMessage]:
-    """One call: every file's observations plus the module's existing items."""
+    """One call: every file's observations plus the module's existing items, with
+    `TESTER_LANGUAGE` appended, so rows are written for a tester, not a developer."""
     partial_note = (
         f"\nFiles read only partially: {', '.join(partial_paths)}. Do not claim coverage "
         "of what you could not read.\n"
@@ -378,7 +408,7 @@ def build_reduce_prompt(
         else ""
     )
     return [
-        SystemMessage(content=REDUCE_SYSTEM),
+        SystemMessage(content=f"{REDUCE_SYSTEM}\n\n{TESTER_LANGUAGE}"),
         HumanMessage(
             content=(
                 f"Module: {module_name}\n{partial_note}{skipped_note}\n"
@@ -392,9 +422,10 @@ def build_reduce_prompt(
 def build_propose_prompt(
     *, module_name: str, answer: str, existing: list[ExistingItem]
 ) -> list[BaseMessage]:
-    """One call after a chat turn: does this exchange change the checklist?"""
+    """One call after a chat turn: does this exchange change the checklist, with
+    `TESTER_LANGUAGE` appended, so rows are written for a tester, not a developer."""
     return [
-        SystemMessage(content=PROPOSE_SYSTEM),
+        SystemMessage(content=f"{PROPOSE_SYSTEM}\n\n{TESTER_LANGUAGE}"),
         HumanMessage(
             content=(
                 f"Module: {module_name}\n\n"

@@ -7,8 +7,10 @@ existing items -- and `tests/test_rag_model_integration.py` (marker `model`) is 
 holds it to its behaviour. Run `uv run pytest -m model` after editing either prompt.
 """
 
+from app.checklist.model_output import ProposedOperation
 from app.checklist.source import ModuleFile
 from app.rag.prompts import (
+    TESTER_LANGUAGE,
     ExistingItem,
     build_map_prompt,
     build_propose_prompt,
@@ -109,3 +111,54 @@ def test_reduce_prompt_names_files_skipped_by_the_cap() -> None:
         )[-1].content
     )
     assert "app/auth/legacy.py" in body
+
+
+def test_reduce_prompt_writes_for_a_tester_who_has_never_seen_the_code() -> None:
+    """A checklist is read by testers who may be new to testing and have never opened
+    the repository. The model must be told to describe what a person does and sees,
+    and told where the file reference goes instead -- "cite the file" is what put
+    `(src/...:139-147)` at the end of every generated row."""
+    system = str(build_reduce_prompt(module_name="Auth", observations=[], existing=[])[0].content)
+
+    assert system.endswith(TESTER_LANGUAGE)
+    assert "citation_paths" in system
+    assert "INVALID_CREDENTIALS" not in system
+    assert "cite the file" not in system
+
+
+def test_propose_prompt_holds_chat_proposals_to_the_same_language() -> None:
+    """The refinement chat writes into the same checklist. Its answer is technical by
+    design; the rows it proposes must not be."""
+    system = str(
+        build_propose_prompt(module_name="Auth", answer="See users.service.ts.", existing=[])[
+            0
+        ].content
+    )
+
+    assert system.endswith(TESTER_LANGUAGE)
+
+
+def test_tester_language_names_every_banned_category() -> None:
+    lowered = TESTER_LANGUAGE.lower()
+    for phrase in (
+        "file name",
+        "line number",
+        "function",
+        "class",
+        "http method",
+        "status code",
+        "exception",
+        "error-code",
+        "translation key",
+    ):
+        assert phrase in lowered, phrase
+
+
+def test_the_schema_does_not_teach_status_codes() -> None:
+    """Field descriptions reach the model inside the structured-output schema, so a
+    technical example there undoes the prompt."""
+    expected = ProposedOperation.model_fields["expected_result"].description or ""
+
+    assert "INVALID_CREDENTIALS" not in expected
+    assert "status code" not in expected.lower()
+    assert ProposedOperation.model_fields["citation_paths"].description
