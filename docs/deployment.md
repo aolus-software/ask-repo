@@ -188,6 +188,23 @@ which is what to watch for.
 against a hosted model provider instead, drop `--profile ollama` from `COMPOSE_PROD` in the
 `Makefile` and point `EMBEDDING_BASE_URL` and `CHAT_BASE_URL` elsewhere.
 
+**The `langfuse` profile** (the AI call log) is off by default and opt-in. See "The AI call log"
+below and [`langfuse.md`](langfuse.md); the short version is `make up-prod LANGFUSE=1`.
+
+### The AI call log
+
+Opt-in, and off unless `LANGFUSE_ENABLED=true`. **[`langfuse.md`](langfuse.md) is the page for
+it** — setup, the secrets, the proxy, outbound network access and retention. What matters at
+deploy time, in short:
+
+- **Size the box for it.** Langfuse's five containers need about 4 cores and 16 GiB on their own,
+  on top of everything above — and together with Phase 3's Neo4j if you will run it
+  (`docs/PRD.md` §2.1).
+- **Start it with `make up-prod LANGFUSE=1`, never a hand-run `docker compose --profile
+  langfuse`.** The Make target refuses unset or development secrets first; the compose file
+  cannot.
+- **Set a retention TTL.** Langfuse keeps every call record forever unless you add one.
+
 ---
 
 ## 4. Terminate TLS with Caddy

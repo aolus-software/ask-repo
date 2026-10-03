@@ -28,7 +28,13 @@ class _StubGenerator:
         self.calls: list[tuple[uuid.UUID, uuid.UUID, str, int]] = []
 
     async def run(
-        self, *, dataset_id: uuid.UUID, job_id: uuid.UUID, worker_id: str, count: int
+        self,
+        *,
+        dataset_id: uuid.UUID,
+        job_id: uuid.UUID,
+        worker_id: str,
+        count: int,
+        attempt: int = 0,
     ) -> None:
         self.calls.append((dataset_id, job_id, worker_id, count))
         if self.raises is not None:

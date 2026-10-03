@@ -23,6 +23,7 @@ from app.config import Settings
 from app.core import access
 from app.core.audit import AuditEntry, AuditEventType, AuditRecorder
 from app.core.errors import AppError, ErrorCode
+from app.core.feedback import FeedbackTarget
 from app.core.middleware import AuthenticatedUser
 from app.core.permissions import Permission
 from app.live.events import mock_data_event
@@ -67,6 +68,7 @@ from app.schemas.mock_data import (
     MockDataMessageResponse,
     MockDataRecordResponse,
 )
+from app.services.feedback import my_feedback_map
 from app.services.mock_data_export import build_mock_data_json, build_mock_data_workbook
 
 logger = logging.getLogger(__name__)
@@ -197,7 +199,18 @@ class MockDataDatasetService:
         """This module's mock-data change sets, newest first."""
         await self._require_readable_module(module_id, actor)
         rows = await self.change_sets.list_for_module(module_id, limit=MAX_CHANGE_SETS)
-        return [MockDataChangeSetResponse.model_validate(row) for row in rows]
+        mine = await my_feedback_map(
+            self.session,
+            actor=actor,
+            target_type=FeedbackTarget.MOCK_DATA_CHANGE_SET,
+            target_ids=[row.id for row in rows],
+        )
+        return [
+            MockDataChangeSetResponse.model_validate(row).model_copy(
+                update={"my_feedback": mine.get(row.id)}
+            )
+            for row in rows
+        ]
 
     async def messages(
         self, module_id: uuid.UUID, *, actor: AuthenticatedUser
@@ -205,7 +218,18 @@ class MockDataDatasetService:
         """The module's mock-data chat. Readable by every authenticated user."""
         await self._require_readable_module(module_id, actor)
         rows = await self.messages_repository.list_for_module(module_id, limit=MAX_CHAT_MESSAGES)
-        return [MockDataMessageResponse.model_validate(row) for row in rows]
+        mine = await my_feedback_map(
+            self.session,
+            actor=actor,
+            target_type=FeedbackTarget.MOCK_DATA_MESSAGE,
+            target_ids=[row.id for row in rows],
+        )
+        return [
+            MockDataMessageResponse.model_validate(row).model_copy(
+                update={"my_feedback": mine.get(row.id)}
+            )
+            for row in rows
+        ]
 
     async def export_json(self, module_id: uuid.UUID, *, actor: AuthenticatedUser) -> bytes:
         """Every applied record of one module, as a JSON array of field maps."""

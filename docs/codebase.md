@@ -145,19 +145,20 @@ backend/app/
 │
 ├── api/
 │   ├── deps.py        shared dependencies (CurrentUser, AdminUser, service factories)
-│   └── routes/        19 routers, 81 routes
+│   └── routes/        20 routers, 85 routes
 │
-├── core/              cross-cutting: access, audit, crypto, errors, grant_cache, logging,
-│                      middleware, notifications, passwords, permissions, rate_limit,
+├── core/              cross-cutting: access, audit, crypto, errors, feedback, grant_cache,
+│                      logging, middleware, notifications, passwords, permissions, rate_limit,
 │                      repo_url, role_seed, security
 ├── db/session.py      engine + sessionmaker
-├── models/            11 modules, 21 tables
-├── repositories/      20 repositories — the only place SQL is written
+├── models/            12 modules, 22 tables
+├── repositories/      21 repositories — the only place SQL is written
 ├── schemas/           request/response shapes, all on ApiModel
-├── services/          19 services — business rules and authorization,
+├── services/          20 services — business rules and authorization,
 │                      plus path_tree.py: pure tree shaping, no I/O
 │
 ├── ingestion/         cloner, walker, chunker, embedder/, vector_store, pipeline
+├── observability/     the AI call log: features, record, recorder, trace_ids, langfuse_sink
 ├── queue/             topics, producer, consumer, retry, protocol, checklist, mock_data
 ├── rag/               retriever, chat, prompts, answerer, grounding, capability, errors
 │   └── graph/         build.py, nodes.py, state.py
@@ -182,6 +183,19 @@ backend/app/
 `app/api/routes/events.py` mounts it as `GET /events`. See `.claude/rules/live-events.md` for the
 full file list this feature touches outside `app/live/`, including `live_event_visible_to` in
 `app/core/access.py`.
+
+### The `observability/` modules
+
+| Module | Holds |
+| --- | --- |
+| `features.py` | `CallFeature`, the four metadata keys, and `call_config` / `scope_config` — scope as inherited metadata |
+| `record.py` | `CallStart`, `CallRecord` (no field can hold content) and the two-method `CallSink` protocol |
+| `recorder.py` | `CallRecorder` — the LangChain callback that turns the call lifecycle into start and end records |
+| `trace_ids.py` | `trace_id_for` and `trace_url` — a trace id derived from the subject's own id, never stored |
+| `langfuse_sink.py` | `LangfuseSink`, `CallLog` and `build_call_log` — the only module that imports `langfuse`, and only when enabled |
+
+See `.claude/rules/call-log.md`. Langfuse itself is five containers behind an opt-in Compose
+profile; the development stack is unchanged without `LANGFUSE=1`.
 
 ### The RBAC modules
 
@@ -229,7 +243,7 @@ frontend/
 ├── components/
 │   ├── ui/              shadcn on the Base UI base (30 components)
 │   ├── ask/ checklist/ mock-data/ projects/ roles/ users/   feature components
-│   ├── form/ feedback/ layout/                       shared shells
+│   ├── form/ feedback/ output-feedback/ layout/              shared shells
 ├── hooks/               React Query hooks
 ├── lib/                 api client, query keys, SSE parser, auth/session
 └── proxy.ts             route protection + refresh on navigation
@@ -280,6 +294,7 @@ Full reference: [`design.md`](design.md).
 | **Change how retrieval works** | `app/rag/retriever.py`. Both filters are mandatory — see [`rag.md`](rag.md) |
 | **Change a prompt** | `app/rag/prompts.py`, then run `uv run pytest -m model`. No ordinary test can catch a bad prompt |
 | **Add a graph node** | `app/rag/graph/nodes.py` + wire it in `build.py`. It must degrade, never block. Test it with the `run_node` harness |
+| **Add a model call** | `config=call_config(CallFeature.X)` on the call, and a `CallFeature` value if it is a new kind. `tests/test_call_sites_tagged.py` fails otherwise — see [`llm.md`](llm.md) "The call log" |
 | **Add a background job** | A topic trio in `app/queue/topics.py`, a handler, a consumer in `worker.py`, and a lease on the row |
 | **Add a screen** | `page.tsx` + `*-screen.tsx`, a hook in `hooks/`, nav entry per [`design.md`](design.md) |
 | **Add a UI component** | `npx shadcn@latest add <name>` into `components/ui/`. Do not hand-write one that shadcn ships |
@@ -301,10 +316,10 @@ Run everything CI runs with `make check`: ruff, prettier, mypy, pytest, vitest.
 
 ## The rule files
 
-`.claude/rules/` holds 17 rule files that encode conventions this page only summarises —
+`.claude/rules/` holds 19 rule files that encode conventions this page only summarises —
 `router.md`, `persistence.md`, `response-api.md`, `rag.md`, `ingestion.md`, `notifications.md`,
-`design-system.md`, `forms.md`, `navigation.md`, `frontend-bff.md`, and others. They are written
-for coding agents
+`design-system.md`, `forms.md`, `navigation.md`, `frontend-bff.md`, `feedback.md`, `call-log.md`, and others.
+They are written for coding agents
 but are the most precise statement of each convention, and worth reading before a change in the
 area they cover.
 

@@ -164,6 +164,20 @@ fails with `{"request": "Field required"}` — naming nothing that appears in th
 
 Extra filters go on a subclass of `ListQuery` (see `ConversationListQuery`), never beside it.
 
+## Every model call passes a feature config
+
+Every `.ainvoke(` and `.astream(` on a chat model in this path passes
+`config=call_config(CallFeature.X)` — `classify`, `grade`, `answer`, `history_answer`,
+`propose_checklist`, `propose_mock_data`, and `capability_probe` for the boot probe. The call log
+(`.claude/rules/call-log.md`) attaches its recorder once, in `build_chat_model`, but only the
+config says *which feature* a call was; an untagged call is recorded as `untagged` and its cost
+cannot be attributed. `tests/test_call_sites_tagged.py` fails on a call site that omits it.
+
+The run's scope (the assistant message id that seeds the trace, the project id) is passed once on
+`graph.astream` in `Answerer` as `scope_config(...)`, and travels as inherited metadata. It is
+never added to `TurnState` and never stored in a context variable — the async-generator `anext`
+may run in a fresh task, so a variable set in one could not be reset in another.
+
 ## The graph degrades, and the grader never blocks
 
 Every node in `app/rag/graph/` falls back rather than failing the turn. `classify`

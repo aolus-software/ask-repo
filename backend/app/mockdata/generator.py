@@ -15,6 +15,7 @@ import logging
 import uuid
 from dataclasses import replace
 from datetime import UTC, datetime
+from typing import Any
 
 from langchain_core.language_models import BaseChatModel
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -29,6 +30,7 @@ from app.mockdata.model_output import ProposedMockDataSet
 from app.mockdata.operations import stored_mock_data_operation
 from app.models.checklist import ChangeSetOrigin, ChangeSetStatus
 from app.models.mock_data import MockDataChangeSet, MockDataDatasetStatus
+from app.observability.features import CallFeature, call_config
 from app.rag.errors import TerminalChatError, classify_chat_error
 from app.rag.prompts import ExistingRecord, build_mock_data_generate_prompt
 from app.repositories.checklist_module import ChecklistModuleRepository
@@ -93,9 +95,16 @@ class MockDataGenerator:
         self.change_sets = MockDataChangeSetRepository(session)
         self.modules = ChecklistModuleRepository(session)
         self.projects = ProjectRepository(session)
+        self._scope: dict[str, Any] = {}
 
     async def run(
-        self, *, dataset_id: uuid.UUID, job_id: uuid.UUID, worker_id: str, count: int
+        self,
+        *,
+        dataset_id: uuid.UUID,
+        job_id: uuid.UUID,
+        worker_id: str,
+        count: int,
+        attempt: int = 0,
     ) -> None:
         """Generate one dataset's change set, renewing the lease throughout.
 
@@ -104,6 +113,9 @@ class MockDataGenerator:
         consumer routes them onto the ladder; the dataset's `failed` status and
         scrubbed `error` are written by the consumer's failure path, not here.
         """
+        # Minted first: the id seeds the call log's trace, so the model call groups
+        # under the change set it ends up writing.
+        change_set_id = uuid.uuid4()
         dataset = await self.datasets.get(dataset_id)
         if dataset is None:
             raise TerminalIngestionError(f"mock data dataset {dataset_id} is gone")
@@ -118,6 +130,11 @@ class MockDataGenerator:
         # ORM object.
         project_name = project.name
         module_name = module.name
+        self._scope = {
+            "trace_seed": str(change_set_id),
+            "project_id": project.id,
+            "attempt": attempt,
+        }
 
         renewal = asyncio.create_task(self._renew(dataset_id=dataset_id, worker_id=worker_id))
         try:
@@ -159,7 +176,7 @@ class MockDataGenerator:
         summary = proposal.summary or f"{len(operations)} proposed record(s)"
 
         change_set = MockDataChangeSet(
-            id=uuid.uuid4(),
+            id=change_set_id,
             checklist_module_id=module.id,
             origin=ChangeSetOrigin.GENERATION.value,
             summary=summary,
@@ -290,7 +307,8 @@ class MockDataGenerator:
                     existing=existing,
                     partial_paths=source.partial_paths,
                     skipped_paths=source.skipped_paths,
-                )
+                ),
+                config=call_config(CallFeature.GENERATE_MOCK_DATA, **self._scope),
             )
         except Exception as error:
             # Same pattern as `ChecklistGenerator._observe`: classify by exception

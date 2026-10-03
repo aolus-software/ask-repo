@@ -236,6 +236,57 @@ closed**. If that close is skipped, later answers queue behind a slot nobody hol
 
 ---
 
+## The call log
+
+Every chat-model call can be recorded — tokens, timing, model, outcome, which feature made it —
+in a self-hosted Langfuse. It is **off by default** (`LANGFUSE_ENABLED=false`), and the rules that
+bound it are in `.claude/rules/call-log.md`. In short: **it records what a call cost, never what
+it said.**
+
+**One door.** `build_chat_model` takes `callbacks=` and passes it to the provider class it builds,
+so the API process and the worker record through the same recorder, and the capability probe,
+both generators and every answer-graph node are covered without a call site doing anything but
+tagging itself. The factory still returns the raw `ChatOllama` / `ChatOpenAI` / `ChatAnthropic`.
+
+**The recorder, not Langfuse's handler.** `CallRecorder` (`app/observability/recorder.py`) is a
+LangChain callback that reads the call lifecycle and ignores the prompt and the completion: its
+output is a `CallStart` when the call begins and a `CallRecord` when it ends or errors, and
+neither dataclass has a field that could hold content. Usage comes from the response's
+`usage_metadata`, so a streamed `astream` call and a `with_structured_output` call are both
+measured without asking the provider twice and without `include_raw=True`. A failed call records
+`error_class` — the exception's class name, never its message, because provider error text can echo
+the request.
+
+**Two phases, because the SDK cannot backdate.** `CallSink` has `started(run_id, CallStart)` and
+`record(run_id, CallRecord)`. `LangfuseSink` opens a generation observation at the start and ends
+it at the record, so Langfuse's own start time, end time and latency are the real ones — its public
+`start_observation` accepts no start time, so recording only at the end would have stamped every
+call with the moment it finished.
+
+**Features.** Each call passes `config=call_config(CallFeature.X)`: `classify`, `grade`, `answer`,
+`history_answer`, `propose_checklist`, `propose_mock_data`, `map`, `reduce`, `generate_mock_data`,
+`capability_probe`, and `untagged` for one that forgot. `tests/test_call_sites_tagged.py` fails on
+a call site that omits it. The feature is the dimension feedback shares, so "is the expensive
+reduce step worth it" can be asked of both.
+
+**Trace grouping.** An Ask or refinement turn is one trace, seeded with the assistant message id
+(minted in `prepare_turn`, like a change-set id); a generation run is one trace seeded with the
+change set id it ends up writing — 201 generations in one trace, not 201 traces. The trace id is
+`sha256(seed)[:16]` in hex, the same function the SDK's `create_trace_id(seed=...)` uses, so the
+admin feedback screen computes `traceUrl` from the target id and nothing stores a trace id. The
+scope — seed, project id, and on a worker job the 0-based Kafka delivery `attempt` — is set once on
+the graph run or the job and carried by LangChain's inherited metadata; see
+[`langgraph.md`](langgraph.md) for why it is not in the graph state or a context variable.
+
+**Failure.** Tracing never fails a call: the recorder never raises, every sink error is logged at
+`WARNING`, and both processes flush the client on shutdown. **Cost** comes from Langfuse's
+maintained price table for hosted models; a local model shows token counts and no cost.
+
+Infrastructure and operator duties are in [`deployment.md`](deployment.md) and
+[`../SECURITY.md`](../SECURITY.md).
+
+---
+
 ## What a hosted answerer costs you
 
 [`PRD.md`](PRD.md) §1 describes a self-hosted, single-tenant tool on an organization's own
@@ -244,14 +295,11 @@ network. **A hosted answerer sends retrieved source code to a third party on eve
 That is a deliberate trade an operator makes per instance, not a default. If it is not
 acceptable, run the chat model locally — the seam exists so both are possible.
 
-**Nothing here measures what it costs.** No code path reads token usage: not the answer stream,
-not the map call this page's generation diagram runs once per file, not the reduce. So an
-instance can tell you which provider it is configured for and not how many tokens it has spent
-with it, and the per-run bound (`CHECKLIST_MAX_FILES_PER_JOB`) caps one generation rather than
-cumulative usage. A per-call record of tokens, timing, model and outcome is specified in
-[`PRD.md`](PRD.md) §2.1 — including the two reasons it is more than a column: the answer path
-streams, where usage is reported only when explicitly asked for, and `with_structured_output`
-discards the raw response that carries it.
+**What it costs is measured, and only if the operator opts in.** The AI call log (below) records
+tokens, timing, model and outcome for every call; without it an instance can tell you which
+provider it is configured for and not how many tokens it has spent with it. The per-run bound
+(`CHECKLIST_MAX_FILES_PER_JOB`) caps one generation rather than cumulative usage, and the call log
+is what makes cumulative usage visible at all.
 
 ---
 
@@ -259,5 +307,5 @@ discards the raw response that carries it.
 
 - [`langgraph.md`](langgraph.md) — how these calls are sequenced into an answer
 - [`rag.md`](rag.md) — what goes into the prompt, and why excerpts are untrusted
-- [`configuration.md`](configuration.md) — every `CHAT_*` and `EMBEDDING_*` setting
+- [`configuration.md`](configuration.md) — every `CHAT_*`, `EMBEDDING_*` and `LANGFUSE_*` setting
 - [`PRD.md`](PRD.md) §6 — the provider-abstraction rationale

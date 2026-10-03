@@ -13,6 +13,57 @@ client can have received it, so it is recorded under Changed and allowed in a `M
 
 ## [Unreleased]
 
+### Added
+
+- **User feedback on model output** (`docs/PRD.md` §2.1, phase 2.5, stage 1, issue #55): a
+  thumbs-up/down vote, with an optional reason code and note, on every model-authored output —
+  an Ask answer, a checklist or mock-data refinement reply, and a checklist or mock-data change
+  set. `PUT /feedback/{targetType}/{targetId}` (upsert the caller's own vote) and
+  `DELETE /feedback/{targetType}/{targetId}` (withdraw it, `204`); `GET /feedback` and
+  `GET /feedback/summary` (admin-only aggregate and notes, never the voter).
+- `myFeedback` on conversation detail, on the checklist and mock-data refinement chats, and on
+  checklist/mock-data change-set reads — the caller's own vote, loaded with the list.
+- `ErrorCode.FEEDBACK_TARGET_NOT_FOUND` (404, every write-side miss) and
+  `ErrorCode.FEEDBACK_REASON_NOT_APPLICABLE` (400, a reason code that does not apply to the
+  target type).
+- `FEEDBACK_RETENTION_DAYS` (default `0`, keep forever).
+- Thumbs on every answer, chat reply and change-set card, and the admin-only
+  `/settings/feedback` screen: down-vote rate per feature and per prompt version, a reason-code
+  breakdown, and the notes list.
+
+- **The AI call log** (`docs/PRD.md` §2.1, phase 2.5, stage 2, issue #25): every chat-model call
+  — each answer-graph node, both generators and the capability probe — records its feature,
+  provider, model, timing, token counts, outcome and retry attempt to a self-hosted Langfuse.
+  **Never a prompt, a completion, a question, a message or a user id**: the record has no field
+  that could hold one, and a failed call carries the error's class, never its message. Off by
+  default.
+- The `langfuse` Compose profile (development and production): `langfuse-web`, `langfuse-worker`,
+  `langfuse-clickhouse`, `langfuse-redis` and `langfuse-minio`, with `TELEMETRY_ENABLED=false` and
+  `CHECKPOINT_DISABLE=1`. `make infra LANGFUSE=1` and `make up-prod LANGFUSE=1` start it;
+  `make langfuse-db` creates its database on the existing Postgres. Plan for 4 cores and 16 GiB.
+  `docs/langfuse.md` covers setup, how the backend connects, deploying to production, accounts,
+  the egress paths and a ClickHouse TTL for retention.
+- Langfuse self-registration is off: `langfuse-web` runs with `AUTH_DISABLE_SIGNUP=true` in both
+  compose files (`LANGFUSE_AUTH_DISABLE_SIGNUP` in `infra/.env`, default `true`), so the only
+  account is the one `LANGFUSE_INIT_USER_*` creates.
+- `LANGFUSE_ENABLED` (default `false`), `LANGFUSE_BASE_URL`, `LANGFUSE_PUBLIC_KEY`,
+  `LANGFUSE_SECRET_KEY`, `LANGFUSE_PROJECT_ID` and `LANGFUSE_UI_URL`. Enabling it without both
+  keys stops the instance at boot.
+- `.claude/rules/call-log.md`.
+
+### Changed
+
+- `GET /feedback`'s `traceUrl` is now populated: a link to the Langfuse trace of the output a
+  vote judges, for change-set votes and for checklist and mock-data chat replies, when
+  `LANGFUSE_ENABLED` is on. It stays `null` for an Ask answer — a trace's second-precision times
+  would let an administrator match a vote to its voter — and for a change set that has been
+  deleted.
+- `GET /feedback`'s `FeedbackAdminRead` reports `createdOn`, the UTC **day** a vote was cast,
+  in place of `createdAt`; `updatedAt` is dropped. A second-precision timestamp could be matched
+  against the audit trail's `conversation.created` row for the same actor and project to
+  identify the voter. The list is now ordered within a day by `id`, not by `created_at`, so
+  paging order cannot leak the same sequence back out.
+
 ## [2.2.0] — 2026-09-27
 
 Notifications (`docs/PRD.md` §2.1, phase 2.3), optional mail with self-service password reset

@@ -5,6 +5,7 @@ import uuid
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.feedback import FeedbackFeature, FeedbackRating, FeedbackTarget
 from app.core.permissions import OWNER_NAME
 from app.core.security import hash_password
 from app.models.checklist import (
@@ -19,7 +20,8 @@ from app.models.checklist import (
     ChecklistModule,
     ChecklistModuleStatus,
 )
-from app.models.conversation import Conversation, MessageRole
+from app.models.conversation import Conversation, Message, MessageRole
+from app.models.feedback import Feedback
 from app.models.membership import ProjectMembership, Role
 from app.models.mock_data import MockDataChangeSet, MockDataMessage, MockDataRecord
 from app.models.project import Project, ProjectStatus
@@ -260,6 +262,57 @@ async def create_checklist_message(
     session.add(message)
     await session.flush()
     return message
+
+
+async def create_message(
+    session: AsyncSession,
+    *,
+    conversation_id: uuid.UUID,
+    role: MessageRole = MessageRole.ASSISTANT,
+    content: str = "An answer.",
+) -> Message:
+    """One Ask turn. Assistant by default, since that is what feedback judges."""
+    message = Message(
+        id=uuid.uuid4(),
+        conversation_id=conversation_id,
+        role=role.value,
+        content=content,
+        finish_reason="stop" if role is MessageRole.ASSISTANT else None,
+    )
+    session.add(message)
+    await session.flush()
+    return message
+
+
+async def create_feedback(
+    session: AsyncSession,
+    *,
+    user_id: uuid.UUID,
+    project_id: uuid.UUID,
+    target_type: FeedbackTarget = FeedbackTarget.MESSAGE,
+    target_id: uuid.UUID | None = None,
+    rating: FeedbackRating = FeedbackRating.DOWN,
+    reason_codes: tuple[str, ...] = ("other",),
+    note: str | None = None,
+    feature: FeedbackFeature = FeedbackFeature.ANSWER,
+    prompt_version: str = "000000000000",
+) -> Feedback:
+    """A feedback row written directly, bypassing the service's target checks."""
+    row = Feedback(
+        id=uuid.uuid4(),
+        user_id=user_id,
+        project_id=project_id,
+        target_type=target_type.value,
+        target_id=target_id or uuid.uuid4(),
+        feature=feature.value,
+        rating=rating.value,
+        reason_codes=list(reason_codes),
+        note=note,
+        prompt_version=prompt_version,
+    )
+    session.add(row)
+    await session.flush()
+    return row
 
 
 async def create_mock_data_record(

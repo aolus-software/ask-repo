@@ -15,7 +15,7 @@ class _RaisingBound:
     def __init__(self, exception: Exception) -> None:
         self._exception = exception
 
-    async def ainvoke(self, prompt: str) -> object:
+    async def ainvoke(self, prompt: str, config: object = None) -> object:
         raise self._exception
 
 
@@ -30,7 +30,7 @@ class _RaisingChatModel:
 
 
 class _RespondingBound:
-    async def ainvoke(self, prompt: str) -> object:
+    async def ainvoke(self, prompt: str, config: object = None) -> object:
         return TrivialProbeSchema(answer="ok")
 
 
@@ -82,7 +82,9 @@ async def test_the_worker_bounds_its_calls_by_the_generation_timeout(
     seen: dict[str, object] = {}
     fake = cast(BaseChatModel, _RespondingChatModel())
 
-    def record(settings: Settings, *, timeout_seconds: int | None = None) -> BaseChatModel:
+    def record(
+        settings: Settings, *, timeout_seconds: int | None = None, callbacks: object = None
+    ) -> BaseChatModel:
         seen["timeout_seconds"] = timeout_seconds
         return fake
 

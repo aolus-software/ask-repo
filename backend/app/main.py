@@ -16,6 +16,7 @@ from app.api.routes import (
     checklist_modules,
     conversations,
     events,
+    feedback,
     health,
     index,
     me,
@@ -42,6 +43,7 @@ from app.live.kafka import (
     KafkaLivePublisher,
 )
 from app.live.staging import NullPublisher, set_live_publisher
+from app.observability.langfuse_sink import build_call_log
 from app.queue.producer import KafkaIngestionQueue, ensure_topics
 from app.queue.topics import ALL_CHECKLIST_TOPICS, ALL_MOCK_DATA_TOPICS
 from app.rag.capability import probe_structured_output
@@ -72,7 +74,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     # suite builds the real app, so the conversation dependencies must find them on
     # app.state even when the broker is skipped.
     app.state.embedder = build_embedder(settings)
-    app.state.chat_model = build_chat_model(settings)
+    app.state.call_log = build_call_log(settings)
+    app.state.chat_model = build_chat_model(settings, callbacks=app.state.call_log.callbacks)
     # One permit pool for the whole process. Ollama serialises inference internally,
     # so uncapped concurrency makes every answer slower rather than the queue shorter
     # (`docs/PRD.md` §9).
@@ -163,6 +166,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             await queue.stop()
         except Exception:
             logger.warning("ingestion queue failed to stop", exc_info=True)
+        app.state.call_log.shutdown()  # swallows its own errors
 
 
 def create_app() -> FastAPI:
@@ -219,6 +223,7 @@ def create_app() -> FastAPI:
     app.include_router(audit_events.router)
     app.include_router(notifications.router)
     app.include_router(notification_preferences.router)
+    app.include_router(feedback.router)
     app.include_router(events.router)
 
     return app

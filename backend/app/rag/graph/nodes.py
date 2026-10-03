@@ -24,6 +24,7 @@ from app.checklist.operations import stored_operation
 from app.mockdata.model_output import ProposedMockDataSet
 from app.mockdata.operations import stored_mock_data_operation
 from app.models.conversation import FinishReason
+from app.observability.features import CallFeature, call_config
 from app.rag.graph.state import Classification, EvidenceVerdict, Intent, TurnState
 from app.rag.grounding import OUT_OF_SCOPE_ANSWER
 from app.rag.prompts import (
@@ -93,7 +94,8 @@ def build_classify(chat_model: BaseChatModel, *, enabled: bool) -> Node:
                 result = await chat_model.with_structured_output(Classification).ainvoke(
                     CLASSIFY_PROMPT.format_messages(
                         history=to_langchain_history(state["history"]), question=question
-                    )
+                    ),
+                    config=call_config(CallFeature.CLASSIFY),
                 )
         except Exception:
             logger.warning("Classification failed; retrieving on the raw question", exc_info=True)
@@ -184,7 +186,8 @@ def build_grade(chat_model: BaseChatModel, *, enabled: bool) -> Node:
                 result = await chat_model.with_structured_output(EvidenceVerdict).ainvoke(
                     GRADE_PROMPT.format_messages(
                         context=format_spans(state["spans"]), question=state["question"]
-                    )
+                    ),
+                    config=call_config(CallFeature.GRADE),
                 )
         except Exception:
             logger.warning(
@@ -258,7 +261,9 @@ def build_generate(chat_model: BaseChatModel, *, timeout_seconds: float) -> Node
         parts: list[str] = []
         try:
             async with asyncio.timeout(timeout_seconds):
-                async for chunk in chat_model.astream(messages):
+                async for chunk in chat_model.astream(
+                    messages, config=call_config(CallFeature.ANSWER)
+                ):
                     text = text_of(chunk)
                     if text:
                         parts.append(text)
@@ -301,7 +306,9 @@ def build_answer_from_history(chat_model: BaseChatModel, *, timeout_seconds: flo
         parts: list[str] = []
         try:
             async with asyncio.timeout(timeout_seconds):
-                async for chunk in chat_model.astream(messages):
+                async for chunk in chat_model.astream(
+                    messages, config=call_config(CallFeature.HISTORY_ANSWER)
+                ):
                     text = text_of(chunk)
                     if text:
                         parts.append(text)
@@ -367,7 +374,8 @@ def build_propose_changes(chat_model: BaseChatModel, *, enabled: bool) -> Node:
                     module_name=state["module_name"],
                     answer=state["answer"],
                     existing=state["existing_items"],
-                )
+                ),
+                config=call_config(CallFeature.PROPOSE_CHECKLIST),
             )
         except Exception:
             logger.exception("proposing checklist changes failed; proposing nothing")
@@ -435,7 +443,8 @@ def build_propose_mock_data_changes(chat_model: BaseChatModel, *, enabled: bool)
                     module_name=state["module_name"],
                     answer=state["answer"],
                     existing=state["existing_records"],
-                )
+                ),
+                config=call_config(CallFeature.PROPOSE_MOCK_DATA),
             )
         except Exception:
             logger.exception("proposing mock-data changes failed; proposing nothing")

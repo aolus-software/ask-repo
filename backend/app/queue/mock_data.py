@@ -38,7 +38,13 @@ class GenerationRunner(Protocol):
     """The unit of work a mock-data message triggers."""
 
     async def run(
-        self, *, dataset_id: uuid.UUID, job_id: uuid.UUID, worker_id: str, count: int
+        self,
+        *,
+        dataset_id: uuid.UUID,
+        job_id: uuid.UUID,
+        worker_id: str,
+        count: int,
+        attempt: int = 0,
     ) -> None:
         """Generate one dataset's proposed change set."""
         ...
@@ -75,6 +81,7 @@ async def handle_mock_data_message(
             job_id=message.job_id,
             worker_id=worker_id,
             count=message.count,
+            attempt=message.attempt,
         )
     except (TerminalIngestionError, TerminalChatError) as error:
         logger.warning(

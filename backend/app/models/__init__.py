@@ -15,6 +15,7 @@ from app.models.checklist import (
     ChecklistModuleStatus,
 )
 from app.models.conversation import Conversation, FinishReason, Message, MessageRole
+from app.models.feedback import Feedback
 from app.models.membership import ProjectMembership, Role, RolePermission
 from app.models.mock_data import (
     MockDataChangeSet,
@@ -42,6 +43,7 @@ __all__ = [
     "ChecklistModule",
     "ChecklistModuleStatus",
     "Conversation",
+    "Feedback",
     "FinishReason",
     "Message",
     "MessageRole",

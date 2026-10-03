@@ -37,8 +37,9 @@ Read these in order the first time. Roughly two hours end to end.
 | Page | Use it when |
 | --- | --- |
 | **[`installation.md`](installation.md)** | Setting up locally. Three paths — everything in Docker, datastores only in Docker, or no `make` at all — plus first login and troubleshooting |
-| **[`configuration.md`](configuration.md)** | Any question about a setting. All 80 backend settings, the frontend variable, and the Compose `.env`, each with what it does and what to change before production |
+| **[`configuration.md`](configuration.md)** | Any question about a setting. All 104 backend settings, the frontend variable, and the Compose `.env`, each with what it does and what to change before production |
 | **[`deployment.md`](deployment.md)** | Running it for a team. Production images, TLS with Caddy, secrets, first boot, backups |
+| **[`langfuse.md`](langfuse.md)** | Turning on the AI call log. Setup for development and production, reading the traces, outbound network access, retention, troubleshooting |
 
 ---
 
@@ -49,7 +50,7 @@ Read these in order the first time. Roughly two hours end to end.
 | **[`design.md`](design.md)** | Writing any UI. Tokens, typography, layout geometry, spacing, the component inventory |
 | **[`notifications.md`](notifications.md)** | What gets notified, to whom, and the one setting that governs how long a notification is kept |
 | **[`codebase.md`](codebase.md)** | Adding a route, a table, a setting, a screen, or a background job |
-| **[`../.claude/rules/`](../.claude/rules/)** | 17 rule files with the precise convention for each area — routers, persistence, RAG, ingestion, forms, navigation, the frontend BFF, notifications, live updates. Written for coding agents, but the most exact statement of each rule |
+| **[`../.claude/rules/`](../.claude/rules/)** | 19 rule files with the precise convention for each area — routers, persistence, RAG, ingestion, forms, navigation, the frontend BFF, notifications, live updates, the call log. Written for coding agents, but the most exact statement of each rule |
 
 ---
 

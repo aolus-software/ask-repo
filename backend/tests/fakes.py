@@ -286,7 +286,7 @@ class _BoundStructured:
         self._parent = parent
         self._schema = schema
 
-    async def ainvoke(self, messages: list[BaseMessage]) -> object:
+    async def ainvoke(self, messages: list[BaseMessage], config: object = None) -> object:
         return self._parent._next(self._schema, messages)
 
 

@@ -105,6 +105,33 @@ A few properties are your responsibility, not the code's:
   network boundary the instance otherwise relies on — this is not a new threat, since any
   user could already read the same content through the UI, but it is a new place the content
   can end up.
+- **If you enable the AI call log (Phase 2.5), Langfuse is a second system with its own login,
+  its own secrets, and three egress paths.** It is off by default (`LANGFUSE_ENABLED=false`) and
+  adds five containers when on.
+  - *A second login.* Langfuse authenticates separately and does not go through the access
+    resolver in `app/core/access.py`. Whoever holds a Langfuse account sees the instance's model
+    traffic as numbers — tokens, timing, model, outcome, which feature, which project id, never a
+    prompt, a completion, a question or a user id. That is instance-wide, not per project. Decide
+    who gets an account (the intended readers are the same administrators), and keep the Langfuse
+    web port on the internal network. Self-registration is off (`AUTH_DISABLE_SIGNUP=true`, via
+    `LANGFUSE_AUTH_DISABLE_SIGNUP`), so the only account is the one `LANGFUSE_INIT_USER_*` creates;
+    adding a colleague means lifting it briefly, which `docs/langfuse.md` walks through. Ask-answer feedback is deliberately **not** linked to its
+    trace, because a trace's second-precision times would let an administrator match a vote to its
+    voter (`docs/PRD.md` §2.1).
+  - *New secrets.* `LANGFUSE_SALT`, `LANGFUSE_ENCRYPTION_KEY`, `LANGFUSE_NEXTAUTH_SECRET`, the
+    ClickHouse, MinIO and Redis passwords, the initial user's password, and the project's
+    `LANGFUSE_PUBLIC_KEY` / `LANGFUSE_SECRET_KEY` (the API and worker send with them). Keep them
+    out of logs, version control and backup dumps, like `PAT_ENCRYPTION_KEY`. In production they
+    have no defaults, but Compose cannot enforce that (it interpolates services whose profile is
+    off), so `make up-prod LANGFUSE=1` checks them first, rejecting unset values and the development placeholders. **A hand-run
+    `docker compose --profile langfuse` skips that check** and starts with empty secrets.
+  - *Egress.* Self-hosted Langfuse reaches out by default. The Compose profile closes two:
+    `TELEMETRY_ENABLED=false` (usage ping to Langfuse) and `CHECKPOINT_DISABLE=1` (the Prisma
+    version check). The third is not a setting: image pulls from `docker.langfuse.com`. On a
+    network with no outbound access, mirror the images into your own registry. Managed Langfuse
+    Cloud is out of scope — it would send every traced call outside the network.
+  - *Retention.* Langfuse's own retention setting is Enterprise-only, so an instance that never
+    sets a ClickHouse TTL keeps every call record forever. See `docs/langfuse.md`.
 - **Choose an audit retention window deliberately.** `AUDIT_RETENTION_DAYS` defaults to `0`,
   which means *keep every audit row forever* — a safe default for a fresh instance, and not a
   recommendation for every instance. The table's write rate is proportional to QA activity, not

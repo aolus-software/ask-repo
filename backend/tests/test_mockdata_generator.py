@@ -242,7 +242,7 @@ async def test_a_classifiable_model_failure_is_reraised_as_its_classified_type(
     await _index(store, project_id=project.id, path="app/features/project/models.py")
 
     class _NamedFailureBound:
-        async def ainvoke(self, messages: list[object]) -> object:
+        async def ainvoke(self, messages: list[object], config: object = None) -> object:
             raise type("RateLimitError", (Exception,), {})("provider said no")
 
     class _NamedFailureChatModel:

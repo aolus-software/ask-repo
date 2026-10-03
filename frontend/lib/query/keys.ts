@@ -2,6 +2,7 @@ import type {
   AuditEventListParams,
   ChecklistItemListParams,
   ChecklistModuleListParams,
+  FeedbackListParams,
   ListParams,
   NotificationListParams,
 } from "@/lib/api/types";
@@ -84,5 +85,11 @@ export const keys = {
       ["notifications", "list", params] as const,
     unreadCount: () => ["notifications", "unread-count"] as const,
     preferences: () => ["notifications", "preferences"] as const,
+  },
+  feedback: {
+    all: ["feedback"] as const,
+    list: (params: FeedbackListParams) => ["feedback", "list", params] as const,
+    summary: (params: Partial<FeedbackListParams>) =>
+      ["feedback", "summary", params] as const,
   },
 };

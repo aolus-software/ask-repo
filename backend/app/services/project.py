@@ -35,6 +35,7 @@ from app.repositories.checklist_item import ChecklistItemRepository
 from app.repositories.checklist_message import ChecklistMessageRepository
 from app.repositories.checklist_module import ChecklistModuleRepository
 from app.repositories.conversation import ConversationRepository
+from app.repositories.feedback import FeedbackRepository
 from app.repositories.membership import MembershipRepository
 from app.repositories.mock_data_change_set import MockDataChangeSetRepository
 from app.repositories.mock_data_dataset import MockDataDatasetRepository
@@ -349,6 +350,10 @@ class ProjectService:
                 mock_data_datasets,
                 project.id,
             )
+
+        # A project's feedback goes with the project it judged, like every other
+        # project-owned row. Soft, and in the same transaction as the rest.
+        await FeedbackRepository(self.session).soft_delete_for_project(project.id)
 
         if project.embedding_collection:
             store = self.store_factory(project.embedding_collection)

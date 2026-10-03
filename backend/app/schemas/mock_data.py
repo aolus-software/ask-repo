@@ -18,6 +18,7 @@ from app.models.mock_data import MockDataDatasetStatus
 from app.schemas.base import ApiModel
 from app.schemas.checklist import MAX_PROSE_CHARS
 from app.schemas.conversation import CitationPayload, StreamEvent
+from app.schemas.feedback import MyFeedback
 
 MIN_GENERATION_COUNT = 1
 MAX_GENERATION_COUNT = 50
@@ -100,6 +101,9 @@ class MockDataChangeSetResponse(ApiModel):
     resolved_at: datetime | None
     created_by: uuid.UUID
     created_at: datetime
+    # The caller's own vote, and only theirs — never another reviewer's
+    # (`.claude/rules/feedback.md`). Filled by the list reads; null elsewhere.
+    my_feedback: MyFeedback | None = None
 
 
 class MockDataChangeSetApplyRequest(ApiModel):
@@ -139,6 +143,9 @@ class MockDataMessageResponse(ApiModel):
     finish_reason: FinishReason | None
     created_by: uuid.UUID
     created_at: datetime
+    # The caller's own vote, and only theirs — never another reviewer's
+    # (`.claude/rules/feedback.md`). Filled by the list reads; null elsewhere.
+    my_feedback: MyFeedback | None = None
 
 
 class MockDataChangeSetEvent(StreamEvent):

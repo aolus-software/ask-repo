@@ -2,6 +2,8 @@ import type {
   AuditEventListParams,
   ChecklistItemListParams,
   ChecklistModuleListParams,
+  FeedbackListParams,
+  FeedbackTargetType,
   ListParams,
   NotificationListParams,
 } from "@/lib/api/types";
@@ -106,6 +108,12 @@ export const endpoints = {
     markRead: (id: string) => `/notifications/${id}/read`,
     preferences: "/notification-preferences",
   },
+  feedback: {
+    vote: (targetType: FeedbackTargetType, targetId: string) =>
+      `/feedback/${targetType}/${targetId}`,
+    list: "/feedback",
+    summary: "/feedback/summary",
+  },
 } as const;
 
 /**
@@ -205,6 +213,21 @@ export function auditEventListQueryString(params: AuditEventListParams): string 
   if (params.outcome) search.set("outcome", params.outcome);
   if (params.occurredFrom) search.set("occurredFrom", params.occurredFrom);
   if (params.occurredTo) search.set("occurredTo", params.occurredTo);
+  const qs = search.toString();
+  return qs ? `?${qs}` : "";
+}
+
+/** `listQueryString` plus the feedback screen's own filters. No free-text search on
+ * this route — the caller never sends `search`. */
+export function feedbackListQueryString(params: Partial<FeedbackListParams>): string {
+  const search = new URLSearchParams(listQueryString(params).replace(/^\?/, ""));
+  if (params.projectId) search.set("projectId", params.projectId);
+  if (params.feature) search.set("feature", params.feature);
+  if (params.rating) search.set("rating", params.rating);
+  if (params.reasonCode) search.set("reasonCode", params.reasonCode);
+  if (params.promptVersion) search.set("promptVersion", params.promptVersion);
+  if (params.createdFrom) search.set("createdFrom", params.createdFrom);
+  if (params.createdTo) search.set("createdTo", params.createdTo);
   const qs = search.toString();
   return qs ? `?${qs}` : "";
 }

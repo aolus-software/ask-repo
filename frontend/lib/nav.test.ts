@@ -31,6 +31,7 @@ describe("visibleNavTree", () => {
       "/settings/users",
       "/settings/roles",
       "/settings/audit",
+      "/settings/feedback",
     ]);
   });
 

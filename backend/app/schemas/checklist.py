@@ -25,6 +25,7 @@ from app.models.checklist import (
 from app.models.conversation import FinishReason, MessageRole
 from app.schemas.base import ApiModel
 from app.schemas.conversation import CitationPayload, StreamEvent
+from app.schemas.feedback import MyFeedback
 from app.schemas.pagination import ListQuery
 
 MAX_TEST_NAME_CHARS = 500
@@ -232,6 +233,9 @@ class ChecklistChangeSetResponse(ApiModel):
     resolved_at: datetime | None
     created_by: uuid.UUID
     created_at: datetime
+    # The caller's own vote, and only theirs — never another reviewer's
+    # (`.claude/rules/feedback.md`). Filled by the list reads; null elsewhere.
+    my_feedback: MyFeedback | None = None
 
 
 class ChangeSetApplyRequest(ApiModel):
@@ -277,6 +281,9 @@ class ChecklistMessageResponse(ApiModel):
     finish_reason: FinishReason | None
     created_by: uuid.UUID
     created_at: datetime
+    # The caller's own vote, and only theirs — never another reviewer's
+    # (`.claude/rules/feedback.md`). Filled by the list reads; null elsewhere.
+    my_feedback: MyFeedback | None = None
 
 
 class ChangeSetEvent(StreamEvent):

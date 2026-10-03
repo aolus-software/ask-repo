@@ -353,9 +353,10 @@ See [`CONTRIBUTING.md`](CONTRIBUTING.md). Bug reports and feature requests go th
 - [`docs/data.md`](docs/data.md) — every table, leases, soft delete, and what each store holds
 - [`docs/installation.md`](docs/installation.md) — step-by-step local setup, all three paths, and troubleshooting
 - [`docs/deployment.md`](docs/deployment.md) — running it for a team: production images, TLS, secrets, backups
+- [`docs/langfuse.md`](docs/langfuse.md) — turning on the optional AI call log: setup, reading traces, retention
 - [`docs/configuration.md`](docs/configuration.md) — every setting, what it does, and what to change before production
 - [`docs/design.md`](docs/design.md) — design tokens, typography, layout geometry, component inventory
 - [`backend/README.md`](backend/README.md) — API setup, routes, configuration
 - [`frontend/README.md`](frontend/README.md) — UI setup and scripts
 - [`CLAUDE.md`](CLAUDE.md) — architecture notes and the conventions that bite, for AI agents and humans alike
-- [`.claude/rules/`](.claude/rules) — the enforceable conventions (Python, persistence, API contract, ingestion, RAG, audit trail, notifications, live events, mail, design system, forms, navigation)
+- [`.claude/rules/`](.claude/rules) — the enforceable conventions (Python, persistence, API contract, ingestion, RAG, audit trail, notifications, live events, the AI call log, mail, design system, forms, navigation)

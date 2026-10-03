@@ -416,6 +416,22 @@ membership or a deactivated account is caught within one heartbeat, not just on 
 | --- | --- | --- | --- |
 | `GET` | `/events` | any user | `ready`, then `invalidate` (`{kind, id, projectId}`) per visible change, and `resync` when this connection's backlog was dropped. `503 LIVE_EVENTS_UNAVAILABLE` when the feature is disabled or the hub is down — poll instead |
 
+### Feedback
+
+A thumbs-up/down vote on any model-authored output — an Ask answer, a checklist or mock-data
+refinement reply, or a checklist/mock-data change set. The two write routes use exactly the read
+check each target already has (conversation ownership for a message, project scope for
+everything else) and answer every miss with the same `404`, so the route cannot be used to probe
+whether an id exists. The two read routes are admin-only, instance-wide, and never name the
+voter. No route here records an audit event — exemption 7 in `.claude/rules/audit-trail.md`.
+
+| Method | Path | Auth | Description |
+| --- | --- | --- | --- |
+| `PUT` | `/feedback/{targetType}/{targetId}` | any user | Record or revise the caller's own vote. Body: `rating` (`up`/`down`), `reasonCodes` (required, non-empty, for `down`), optional `note` (≤500 chars). `200 FeedbackRead`. `404 FEEDBACK_TARGET_NOT_FOUND` for a missing target, a user-role message, someone else's conversation, or a module outside scope. `400 FEEDBACK_REASON_NOT_APPLICABLE` for a reason code that does not apply to this target type. `422` for an unknown code, a `down` with no code, or a note over 500 characters |
+| `DELETE` | `/feedback/{targetType}/{targetId}` | any user | Withdraw the caller's own vote. `204`, idempotent — withdrawing a vote that does not exist is also `204` |
+| `GET` | `/feedback/summary` | admin | Counts by `feature` × `rating`, by reason code, and by `promptVersion`. Filters: `projectId`, `feature`, `rating`, `reasonCode`, `promptVersion`, `createdFrom`/`createdTo` |
+| `GET` | `/feedback` | admin | A page of individual votes with their notes, newest first, same filters as the summary. Carries no user field of any kind, and `createdOn` is a bare UTC day — no time, no `updatedAt` — since a second-precision timestamp could be matched against the audit trail's `conversation.created` row to identify the voter |
+
 ## Layout
 
 ```
@@ -449,12 +465,14 @@ backend/
 │   │       ├── audit_events.py # GET /audit-events, GET /audit-events/{id} (admin, reads only)
 │   │       ├── notifications.py # /notifications list + unread-count + mark-read(-all)
 │   │       ├── notification_preferences.py # GET/PUT /notification-preferences
-│   │       └── events.py   # GET /events — the live-update SSE stream
+│   │       ├── events.py   # GET /events — the live-update SSE stream
+│   │       └── feedback.py # /feedback — vote on model output + the admin aggregate
 │   ├── core/
 │   │   ├── access.py     # resolve_project_scope + require_permission — the only two
 │   │   ├── audit.py      # the 37-event catalogue, the per-event field allowlist, AuditRecorder
 │   │   ├── crypto.py     # SecretBox (PAT encryption at rest) + scrub
 │   │   ├── errors.py     # AppError, ErrorCode, exception handlers
+│   │   ├── feedback.py   # the feedback catalogue — target types, reason codes, feature mapping
 │   │   ├── grant_cache.py # Redis read-through cache for a user's project grants
 │   │   ├── logging.py    # the one log format, shared by all four processes
 │   │   ├── middleware.py # AuthContextMiddleware — identity, grants, password-change gate

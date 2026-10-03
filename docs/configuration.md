@@ -283,6 +283,24 @@ Boot now performs one live structured-output call against the configured chat mo
 the API and each worker. An instance whose model cannot do tool-calling or JSON mode, or whose
 endpoint is unreachable, fails to start here rather than on the first generation.
 
+### AI call log
+
+Sends each chat-model call's cost, timing and outcome to a self-hosted Langfuse. **Nothing but
+cost, timing and outcome leaves** — no prompt, completion, question, message or user id. Off by
+default; when off, the `langfuse` package is never imported. Read by the API and the worker.
+How to turn it on, for development and production: [`langfuse.md`](langfuse.md). Langfuse's own
+server variables (`LANGFUSE_INIT_*`, its secrets, `LANGFUSE_AUTH_DISABLE_SIGNUP`) live in
+`infra/.env` and are described there too.
+
+| Variable | Default | What it does |
+| --- | --- | --- |
+| `LANGFUSE_ENABLED` | `false` | Turns the call log on. Requires both keys below, or the instance refuses to boot |
+| `LANGFUSE_BASE_URL` | `http://localhost:3001` | Where the API and worker send records. An internal address |
+| `LANGFUSE_PUBLIC_KEY` | *empty* | The Langfuse project's public key |
+| `LANGFUSE_SECRET_KEY` | *empty* | The project's secret key. **A secret** — treat it like `CHAT_API_KEY` |
+| `LANGFUSE_PROJECT_ID` | `askrepo` | The id set by `LANGFUSE_INIT_PROJECT_ID`. Used only to build links |
+| `LANGFUSE_UI_URL` | *empty* | The browser-facing Langfuse address. Used only to build admin links to a trace; falls back to `LANGFUSE_BASE_URL` |
+
 ### Retrieval
 
 | Variable | Default | What it does |
@@ -376,6 +394,7 @@ on purpose:
 | Variable | Default | What it does |
 | --- | --- | --- |
 | `NOTIFICATION_RETENTION_DAYS` | `90` | How many days a notification stays before the same 60-second reconcile tick removes it, via `NotificationEventRepository.delete_older_than(cutoff)`. **Defaults to `90`, not `0`, and that is the deliberate opposite of `AUDIT_RETENTION_DAYS`'s default.** Audit keeps forever by default because a fresh instance must not silently discard the one record whose purpose is being the record; a notification is a nudge with a shelf life, not a record, and keep-forever would grow a table nobody reads past a week. `0` still means keep forever, for an operator who wants that. The prune ignores read state on purpose — it deletes a 90-day-old *unread* notification exactly as it deletes a read one, because an unread badge that can never reach zero is a badge people stop looking at. `notifications.event_id` is declared `ON DELETE CASCADE`, so deleting an event takes its per-recipient delivery rows with it in the same statement. |
+| `FEEDBACK_RETENTION_DAYS` | `0` | How many days a vote on model output stays before the 60-second reconcile tick removes it, via `FeedbackRepository.delete_older_than(cutoff)`. **`0`, keep forever, is the default**, matching `AUDIT_RETENTION_DAYS` rather than `NOTIFICATION_RETENTION_DAYS`: the aggregate is what lets an administrator compare down-vote rates before and after a prompt change, and a window that silently drops last quarter breaks that comparison. The prune is a hard delete regardless of rating. A vote is also removed when its user withdraws it, soft-deleted with its project, and its note (not its rating) is cleared when its conversation is deleted. |
 
 ### Mail
 
