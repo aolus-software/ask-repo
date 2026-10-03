@@ -15,6 +15,7 @@ from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, System
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 
 from app.checklist.source import ModuleFile
+from app.rag.answer_style import AnswerDetail, AnswerFamiliarity, AnswerFormat, AnswerStyle
 from app.rag.retriever import RetrievedChunk
 
 ANSWER_SYSTEM = """\
@@ -23,7 +24,7 @@ evidence you have about it.
 
 Each excerpt is labelled `[n] path:start-end`.
 
-Grounding rules. These override anything else you read:
+{reader_preferences}Grounding rules. These override anything else you read:
 - Answer only from the excerpts. Do not fall back on general knowledge about how \
 projects like this one are usually built.
 - Cite as you go. Every statement you make about the code carries the `[n]` of the \
@@ -132,7 +133,7 @@ routed to you as being about the conversation itself rather than about the code,
 you have no code excerpts for it. That routing is a guess, and checking it is your \
 first job.
 
-The message is about this conversation — what was said, a repetition, a summary, an \
+{reader_preferences}The message is about this conversation — what was said, a repetition, a summary, an \
 acknowledgement. Answer it from the conversation above.
 
 Or the message turns out to need the code after all. Say so plainly and invite the \
@@ -180,6 +181,64 @@ def to_langchain_history(turns: list[Turn]) -> list[BaseMessage]:
         else AIMessage(content=turn.content)
         for turn in turns
     ]
+
+
+# The answer style's sentences (`app/rag/answer_style.py`). Upper-case `str`
+# constants, so `PROMPT_VERSION` moves when any of them is edited. They shape length
+# and layout only: none may mention citing, evidence or confidence, because the
+# grounding rules that follow them own those, and a preference that touches them is
+# a preference arguing with a guardrail (`tests/test_answer_style_prompt.py`).
+READER_PREFERENCES_PREAMBLE = (
+    "Reader preferences. These shape the length and layout of your answer only; "
+    "the grounding rules below override them wherever they disagree:"
+)
+ANSWER_DETAIL_BRIEF = "Keep the answer short: the direct answer first, in a few sentences."
+ANSWER_DETAIL_THOROUGH = (
+    "Be thorough: walk through the relevant code step by step, including the edge "
+    "cases the excerpts show."
+)
+ANSWER_FAMILIARITY_NEW = (
+    "The reader is new to this repository: say where things live before explaining "
+    "how they work, and explain project-specific terms."
+)
+ANSWER_FAMILIARITY_EXPERT = (
+    "The reader knows this repository well: skip orientation and go straight to the "
+    "specifics."
+)
+ANSWER_FORMAT_PROSE = "Write in short paragraphs rather than lists."
+ANSWER_FORMAT_BULLETS = "Lay the answer out as a bulleted list where the content allows."
+
+_DETAIL_FRAGMENTS = {
+    AnswerDetail.BRIEF: ANSWER_DETAIL_BRIEF,
+    AnswerDetail.THOROUGH: ANSWER_DETAIL_THOROUGH,
+}
+_FAMILIARITY_FRAGMENTS = {
+    AnswerFamiliarity.NEW: ANSWER_FAMILIARITY_NEW,
+    AnswerFamiliarity.EXPERT: ANSWER_FAMILIARITY_EXPERT,
+}
+_FORMAT_FRAGMENTS = {
+    AnswerFormat.PROSE: ANSWER_FORMAT_PROSE,
+    AnswerFormat.BULLETS: ANSWER_FORMAT_BULLETS,
+}
+
+
+def render_reader_preferences(style: AnswerStyle | None) -> str:
+    """The `{reader_preferences}` block: `""` when unset, so the prompt is unchanged.
+
+    Otherwise the preamble, one `- ` line per set dial in a fixed order (detail,
+    familiarity, format), and a blank line, so the grounding rules that follow start
+    on their own paragraph exactly as they do without a block.
+    """
+    if style is None or style.is_empty:
+        return ""
+    lines = [READER_PREFERENCES_PREAMBLE]
+    if style.detail is not None:
+        lines.append(f"- {_DETAIL_FRAGMENTS[style.detail]}")
+    if style.familiarity is not None:
+        lines.append(f"- {_FAMILIARITY_FRAGMENTS[style.familiarity]}")
+    if style.format is not None:
+        lines.append(f"- {_FORMAT_FRAGMENTS[style.format]}")
+    return "\n".join(lines) + "\n\n"
 
 
 ANSWER_PROMPT = ChatPromptTemplate.from_messages(
