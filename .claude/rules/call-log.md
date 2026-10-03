@@ -109,7 +109,10 @@ mirror (`docs/langfuse.md`). Managed Langfuse Cloud is out of scope whatever it 
 
 ## 8. Retention is a ClickHouse TTL the operator sets
 
-Langfuse's automated retention is Enterprise-only, and there is no AskRepo setting for it: the
-data lives in Langfuse's store, not ours. `docs/langfuse.md` documents the lever, a ClickHouse
-`MODIFY TTL` on the traces, observations and scores tables. An instance that never sets one keeps
-every call forever, and `SECURITY.md` says so under the operator's responsibilities.
+Langfuse's automated retention is Enterprise-only (the open-source build refuses a non-zero
+period without the `data-retention` entitlement), and there is no AskRepo setting for it: the data
+lives in Langfuse's store, not ours. `docs/langfuse.md` documents the lever, a ClickHouse
+`MODIFY TTL`, and it must name **`events_full` and `events_core`** — Langfuse v4 runs in
+events-only mode and writes neither `traces` nor `observations`, so a TTL on those alone deletes
+nothing while looking like retention is set. An instance that never sets one keeps every call
+forever, and `SECURITY.md` says so under the operator's responsibilities.

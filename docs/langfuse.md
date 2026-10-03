@@ -62,7 +62,7 @@ the backend that same pair, and whether that happens on its own depends on how t
 
 **A missing key stops the process at boot**, with `LANGFUSE_ENABLED requires LANGFUSE_PUBLIC_KEY
 and LANGFUSE_SECRET_KEY`. Wrong keys or a wrong address do not — they show up as `WARNING` lines
-and an empty Traces page.
+and an empty tracing view.
 
 ---
 
@@ -140,7 +140,8 @@ You only need to do it once per Postgres volume.
 ## Check it works
 
 1. Ask a question on the Ask screen, or run a checklist generation.
-2. In Langfuse, open the **askrepo** project and go to **Traces**. Data appears **15–30 seconds**
+2. In Langfuse, open the **askrepo** project and open the tracing view, under **Observability** in
+   the sidebar. Set the time range to cover the call. Data appears **15–30 seconds**
    after a call ends — the SDK sends in batches, and Langfuse processes them in the background.
 3. Open a trace. Each model call is one *generation* inside it, named after its feature.
 
@@ -365,15 +366,25 @@ The Python SDK in the API and worker sends only to `LANGFUSE_BASE_URL`.
 
 ### Retention
 
-**Without a retention setting, Langfuse keeps every call record forever.** Its automated retention
-is an Enterprise feature, and AskRepo has no setting for it because the data is in Langfuse's store,
-not AskRepo's. On the open-source build the lever is a ClickHouse TTL on the tables that grow:
+**Without a retention setting, Langfuse keeps every call record forever.** Its built-in retention
+is an Enterprise feature: the open-source build answers a non-zero retention period with `403`,
+because only the `self-hosted:enterprise` plan carries the `data-retention` entitlement. AskRepo
+has no setting for it either, because the data is in Langfuse's store, not AskRepo's. On the
+open-source build the lever is a ClickHouse TTL.
 
-| Table | Time column |
-| --- | --- |
-| `traces` | `timestamp` |
-| `observations` | `start_time` |
-| `scores` | `timestamp` |
+**Langfuse v4 writes calls to the `events_*` tables, not to `traces` and `observations`.** A v4
+instance runs in *events-only* mode: `traces` and `observations` stay empty, and its
+`/api/public/traces` endpoint answers that it is unavailable in this mode. A TTL on the old tables
+alone therefore deletes nothing. The tables that grow:
+
+| Table | Time column | Holds |
+| --- | --- | --- |
+| `events_full` | `start_time` | Every call, as written |
+| `events_core` | `start_time` | A slimmer copy of `events_full`, filled by the `events_core_mv` materialized view |
+| `traces`, `observations`, `scores` | `timestamp`, `start_time`, `timestamp` | Empty in events-only mode. A TTL costs nothing and covers an instance that still writes them |
+
+Both `events_*` tables need the TTL: the materialized view copies rows into `events_core` and
+never deletes them, so expiring `events_full` alone leaves the copy behind.
 
 For 90 days, against the `default` database the compose file creates, with the ClickHouse
 credentials exported from `infra/.env`:
@@ -381,18 +392,20 @@ credentials exported from `infra/.env`:
 ```bash
 docker compose -f infra/docker-compose.prod.yml exec langfuse-clickhouse \
   clickhouse-client --user "$LANGFUSE_CLICKHOUSE_USER" --password "$LANGFUSE_CLICKHOUSE_PASSWORD" --multiquery \
-  --query "ALTER TABLE traces MODIFY TTL toDateTime(timestamp) + INTERVAL 90 DAY;
+  --query "ALTER TABLE events_full MODIFY TTL toDateTime(start_time) + INTERVAL 90 DAY;
+           ALTER TABLE events_core MODIFY TTL toDateTime(start_time) + INTERVAL 90 DAY;
+           ALTER TABLE traces MODIFY TTL toDateTime(timestamp) + INTERVAL 90 DAY;
            ALTER TABLE observations MODIFY TTL toDateTime(start_time) + INTERVAL 90 DAY;
            ALTER TABLE scores MODIFY TTL toDateTime(timestamp) + INTERVAL 90 DAY"
 ```
 
-ClickHouse deletes expired rows when it merges parts, not at the moment they expire.
+ClickHouse deletes expired rows when it merges parts, not at the moment they expire. Both
+`events_*` tables are partitioned by month, so a whole month leaves once its last row expires.
 
-**Check the table list against your version first.** The table and column names above come from
-Langfuse's ClickHouse migrations, not from a running instance. Newer releases add `events_*`
-tables keyed on `start_time`, and `event_log` and `blob_storage_file_log` carry `created_at`. Run
-`SHOW TABLES` and `DESCRIBE TABLE <name>` against your pinned version, and give every table that
-holds call data the same TTL.
+**Check the table list after an upgrade.** These names come from the ClickHouse migrations in the
+pinned `langfuse:4` image (`/app/packages/shared/clickhouse/migrations`). A later release can add
+a table, and a TTL does not follow data into a table it was never set on. Run `SHOW TABLES` and
+`DESCRIBE TABLE <name>`, and give every table that holds call data the same TTL.
 
 The TTL does not reach MinIO — event payloads sit in the `langfuse` bucket, so set a bucket
 lifecycle rule there — or the `langfuse` Postgres database.
