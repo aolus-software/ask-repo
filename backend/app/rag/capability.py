@@ -11,6 +11,7 @@ generation.
 from langchain_core.language_models import BaseChatModel
 from pydantic import BaseModel
 
+from app.observability.features import CallFeature, call_config
 from app.rag.errors import TerminalChatError, classify_chat_error
 
 
@@ -29,7 +30,10 @@ async def probe_structured_output(chat_model: BaseChatModel) -> None:
     """
     model = chat_model.with_structured_output(TrivialProbeSchema)
     try:
-        result = await model.ainvoke("Reply with any short string in the `answer` field.")
+        result = await model.ainvoke(
+            "Reply with any short string in the `answer` field.",
+            config=call_config(CallFeature.CAPABILITY_PROBE),
+        )
     except Exception as error:
         raise classify_chat_error(error) or TerminalChatError(
             f"chat model probe failed: {type(error).__name__}"

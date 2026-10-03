@@ -23,6 +23,7 @@ from langchain_core.language_models import BaseChatModel
 from app.config import Settings
 from app.core.errors import ErrorCode
 from app.models.conversation import FinishReason
+from app.observability.features import scope_config
 from app.rag.graph import build_answer_graph
 from app.rag.graph.state import Intent, TurnState
 from app.rag.grounding import NO_CONTEXT_ANSWER, WEAK_EVIDENCE, grounding_warnings
@@ -132,7 +133,12 @@ class Answerer:
             }
 
             final: TurnState | None = None
-            async for mode, chunk in self.graph.astream(state, stream_mode=["custom", "values"]):
+            scope = scope_config(
+                trace_seed=str(message_id) if message_id else None, project_id=project_id
+            )
+            async for mode, chunk in self.graph.astream(
+                state, stream_mode=["custom", "values"], config=scope
+            ):
                 if mode == "custom":
                     assert isinstance(chunk, StreamEvent)
                     yield chunk

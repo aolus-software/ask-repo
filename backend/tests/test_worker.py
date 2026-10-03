@@ -15,7 +15,7 @@ class _RaisingBound:
     def __init__(self, exception: Exception) -> None:
         self._exception = exception
 
-    async def ainvoke(self, prompt: str) -> object:
+    async def ainvoke(self, prompt: str, config: object = None) -> object:
         raise self._exception
 
 
@@ -30,7 +30,7 @@ class _RaisingChatModel:
 
 
 class _RespondingBound:
-    async def ainvoke(self, prompt: str) -> object:
+    async def ainvoke(self, prompt: str, config: object = None) -> object:
         return TrivialProbeSchema(answer="ok")
 
 

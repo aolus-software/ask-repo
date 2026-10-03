@@ -914,7 +914,7 @@ async def test_propose_node_falls_back_rather_than_failing_the_turn() -> None:
         def with_structured_output(self, schema: type) -> "_Exploding":
             return self
 
-        async def ainvoke(self, messages: object) -> object:
+        async def ainvoke(self, messages: object, config: object = None) -> object:
             raise RuntimeError("model down")
 
     events, state = await run_node(
@@ -936,7 +936,7 @@ async def test_propose_node_does_not_swallow_a_disconnect() -> None:
         def with_structured_output(self, schema: type) -> "_Cancelling":
             return self
 
-        async def ainvoke(self, messages: object) -> object:
+        async def ainvoke(self, messages: object, config: object = None) -> object:
             raise asyncio.CancelledError()
 
     # When the model raises CancelledError, the node should propagate it, not catch it
@@ -1086,7 +1086,7 @@ async def test_propose_mock_data_node_falls_back_rather_than_failing_the_turn() 
         def with_structured_output(self, schema: type) -> "_Exploding":
             return self
 
-        async def ainvoke(self, messages: object) -> object:
+        async def ainvoke(self, messages: object, config: object = None) -> object:
             raise RuntimeError("model down")
 
     events, state = await run_node(
@@ -1108,7 +1108,7 @@ async def test_propose_mock_data_node_does_not_swallow_a_disconnect() -> None:
         def with_structured_output(self, schema: type) -> "_Cancelling":
             return self
 
-        async def ainvoke(self, messages: object) -> object:
+        async def ainvoke(self, messages: object, config: object = None) -> object:
             raise asyncio.CancelledError()
 
     # Called directly rather than through `run_node` for the reason the checklist

@@ -47,7 +47,9 @@ class GenerationRunner(Protocol):
     store.
     """
 
-    async def run(self, *, module_id: uuid.UUID, job_id: uuid.UUID, worker_id: str) -> None:
+    async def run(
+        self, *, module_id: uuid.UUID, job_id: uuid.UUID, worker_id: str, attempt: int = 0
+    ) -> None:
         """Generate one module's proposed change set."""
         ...
 
@@ -83,7 +85,12 @@ async def handle_checklist_message(
     await session.commit()
 
     try:
-        await generator.run(module_id=message.module_id, job_id=message.job_id, worker_id=worker_id)
+        await generator.run(
+            module_id=message.module_id,
+            job_id=message.job_id,
+            worker_id=worker_id,
+            attempt=message.attempt,
+        )
     except (TerminalIngestionError, TerminalChatError) as error:
         # `module.error` is read back by every authenticated user on this shared
         # instance (`app/schemas/checklist.py`'s `ChecklistModuleResponse.error`), and

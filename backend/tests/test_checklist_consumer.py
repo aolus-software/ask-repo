@@ -24,7 +24,9 @@ class _Generator:
         self.error = error
         self.calls: list[uuid.UUID] = []
 
-    async def run(self, *, module_id: uuid.UUID, job_id: uuid.UUID, worker_id: str) -> None:
+    async def run(
+        self, *, module_id: uuid.UUID, job_id: uuid.UUID, worker_id: str, attempt: int = 0
+    ) -> None:
         self.calls.append(module_id)
         if self.error is not None:
             raise self.error

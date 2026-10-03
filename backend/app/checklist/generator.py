@@ -11,6 +11,7 @@ import logging
 import uuid
 from dataclasses import replace
 from datetime import UTC, datetime
+from typing import Any
 
 from langchain_core.language_models import BaseChatModel
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -29,6 +30,7 @@ from app.models.checklist import (
     ChecklistChangeSet,
     ChecklistModuleStatus,
 )
+from app.observability.features import CallFeature, call_config
 from app.rag.errors import TerminalChatError, classify_chat_error
 from app.rag.prompts import (
     ExistingItem,
@@ -89,8 +91,11 @@ class ChecklistGenerator:
         self.items = ChecklistItemRepository(session)
         self.change_sets = ChecklistChangeSetRepository(session)
         self.projects = ProjectRepository(session)
+        self._scope: dict[str, Any] = {}
 
-    async def run(self, *, module_id: uuid.UUID, job_id: uuid.UUID, worker_id: str) -> None:
+    async def run(
+        self, *, module_id: uuid.UUID, job_id: uuid.UUID, worker_id: str, attempt: int = 0
+    ) -> None:
         """Generate one module's change set, renewing the lease throughout.
 
         The caller has already claimed the module. Failures propagate as
@@ -99,6 +104,9 @@ class ChecklistGenerator:
         written by the consumer's failure path, not here, so a retryable failure does
         not leave the row claiming the module is broken (`.claude/rules/ingestion.md`).
         """
+        # Minted first: the id seeds the call log's trace, so every model call this
+        # run makes groups under the change set it ends up writing.
+        change_set_id = uuid.uuid4()
         module = await self.modules.get(module_id)
         if module is None:
             raise TerminalIngestionError(f"checklist module {module_id} is gone")
@@ -111,6 +119,11 @@ class ChecklistGenerator:
         # objects are in then.
         project_name = project.name
         module_name = module.name
+        self._scope = {
+            "trace_seed": str(change_set_id),
+            "project_id": project.id,
+            "attempt": attempt,
+        }
 
         renewal = asyncio.create_task(self._renew(module_id=module_id, worker_id=worker_id))
         try:
@@ -145,7 +158,7 @@ class ChecklistGenerator:
             operations, source=source, max_files=self.settings.checklist_max_files_per_job
         )
         change_set = ChecklistChangeSet(
-            id=uuid.uuid4(),
+            id=change_set_id,
             module_id=module_id,
             origin=ChangeSetOrigin.GENERATION.value,
             summary=summary,
@@ -280,7 +293,9 @@ class ChecklistGenerator:
         """One call for one file: what it exposes, raises, returns, and validates."""
         model = self.chat_model.with_structured_output(FileObservations)
         try:
-            result = await model.ainvoke(build_map_prompt(file))
+            result = await model.ainvoke(
+                build_map_prompt(file), config=call_config(CallFeature.MAP, **self._scope)
+            )
         except Exception as error:
             raise classify_chat_error(error) or error from error
         if not isinstance(result, FileObservations):
@@ -325,7 +340,8 @@ class ChecklistGenerator:
                     existing=existing,
                     partial_paths=source.partial_paths,
                     skipped_paths=source.skipped_paths,
-                )
+                ),
+                config=call_config(CallFeature.REDUCE, **self._scope),
             )
         except Exception as error:
             raise classify_chat_error(error) or error from error

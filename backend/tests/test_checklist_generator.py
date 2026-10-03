@@ -73,7 +73,7 @@ class _RaisingBound:
     def __init__(self, schema: type) -> None:
         self._schema = schema
 
-    async def ainvoke(self, messages: list[object]) -> object:
+    async def ainvoke(self, messages: list[object], config: object = None) -> object:
         if self._schema is FileObservations:
             raise TerminalIngestionError("the map step failed")
         raise AssertionError("the reduce step should never be reached")
@@ -83,7 +83,7 @@ class _NamedFailureBound:
     def __init__(self, exception_class: type[Exception]) -> None:
         self._exception_class = exception_class
 
-    async def ainvoke(self, messages: list[object]) -> object:
+    async def ainvoke(self, messages: list[object], config: object = None) -> object:
         raise self._exception_class("provider said no")
 
 
@@ -460,7 +460,7 @@ class _OrphanDetectingBound:
         self._slow_path = slow_path
         self._outcomes = outcomes
 
-    async def ainvoke(self, messages: list[BaseMessage]) -> object:
+    async def ainvoke(self, messages: list[BaseMessage], config: object = None) -> object:
         if self._schema is not FileObservations:
             raise AssertionError("the reduce step should never be reached")
         content = str(messages[-1].content)
@@ -654,7 +654,7 @@ async def test_files_beyond_the_cap_are_skipped_not_mapped(db_session: AsyncSess
         def __init__(self, schema: type) -> None:
             self._schema = schema
 
-        async def ainvoke(self, messages: list[BaseMessage]) -> object:
+        async def ainvoke(self, messages: list[BaseMessage], config: object = None) -> object:
             if self._schema is FileObservations:
                 map_calls.append(str(messages[-1].content))
                 return FileObservations(behaviours=[])

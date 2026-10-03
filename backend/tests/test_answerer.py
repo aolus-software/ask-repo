@@ -10,6 +10,7 @@ from pydantic import BaseModel
 
 from app.config import Settings
 from app.models.conversation import FinishReason
+from app.observability.recorder import CallRecorder
 from app.rag.answerer import Answerer, cited_indexes
 from app.rag.graph.state import Classification, EvidenceVerdict, Intent
 from app.rag.grounding import NO_CONTEXT, NO_CONTEXT_ANSWER, UNKNOWN_PATHS
@@ -24,6 +25,7 @@ from app.schemas.conversation import (
     TokenEvent,
 )
 from tests.fakes import ScriptedChatModel
+from tests.test_call_recorder import ListSink
 from tests.test_retriever import _span
 
 
@@ -463,3 +465,33 @@ async def test_a_non_proposing_answerer_emits_no_change_set() -> None:
         )
     ]
     assert not any(type(event).__name__ == "ChangeSetEvent" for event in events)
+
+
+async def test_the_graph_scope_reaches_the_answer_call() -> None:
+    """The message id and project id ride the graph's inherited metadata to the node's
+    call. `ScriptedChatModel`'s structured calls never reach the model, so the one
+    record is the streamed answer."""
+    sink = ListSink()
+    recorder = CallRecorder(sink, provider="test", model="test-model")
+    model = ScriptedChatModel(
+        tokens=["a", "b"],
+        structured_results=_codebase_question_script(),
+        callbacks=[recorder],
+    )
+    message_id = uuid.uuid4()
+    project_id = uuid.uuid4()
+
+    _ = [
+        event
+        async for event in build(model).answer(
+            question="how does it work",
+            history=[],
+            project_id=project_id,
+            generation=0,
+            message_id=message_id,
+        )
+    ]
+
+    assert [call.feature for call in sink.calls] == ["answer"]
+    assert sink.calls[0].trace_seed == str(message_id)
+    assert sink.calls[0].project_id == project_id
