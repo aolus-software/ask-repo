@@ -1,14 +1,33 @@
 """Admin feedback reads: admin-only, filtered through the scope, never naming a voter."""
 
 import re
+import uuid
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from datetime import datetime
 
+from fastapi import FastAPI
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.feedback import FeedbackRating
+from app.config import get_settings
+from app.core.feedback import FeedbackFeature, FeedbackRating, FeedbackTarget
+from app.models.checklist import ChangeSetOrigin
+from app.models.conversation import Message, MessageRole
+from app.observability.trace_ids import trace_url
 from app.schemas.feedback import FeedbackAdminRead
-from tests.factories import create_feedback, create_project, create_user
+from tests.factories import (
+    create_checklist_change_set,
+    create_checklist_message,
+    create_checklist_module,
+    create_conversation,
+    create_feedback,
+    create_message,
+    create_mock_data_change_set,
+    create_mock_data_message,
+    create_project,
+    create_user,
+)
 
 # No `pytestmark = pytest.mark.asyncio`: this repo runs pytest-asyncio in "auto" mode
 # (`asyncio_mode = "auto"` in pyproject.toml), so an `async def test_...` needs no
@@ -117,3 +136,113 @@ async def test_summary_counts_votes_reasons_and_prompt_versions(
     assert body["byFeature"] == [{"feature": "answer", "up": 1, "down": 1}]
     assert body["byReason"] == [{"feature": "answer", "reasonCode": "wrong_file_cited", "count": 1}]
     assert body["byPromptVersion"] == [{"promptVersion": "aaaaaaaaaaaa", "up": 1, "down": 1}]
+
+
+@asynccontextmanager
+async def _langfuse(app: FastAPI, *, enabled: bool) -> AsyncIterator[None]:
+    settings = get_settings().model_copy(
+        update={
+            "langfuse_enabled": enabled,
+            "langfuse_public_key": "pk",
+            "langfuse_secret_key": "sk",
+            "langfuse_ui_url": "http://lf.internal",
+            "langfuse_project_id": "askrepo",
+        }
+    )
+    app.dependency_overrides[get_settings] = lambda: settings
+    try:
+        yield
+    finally:
+        app.dependency_overrides.pop(get_settings, None)
+
+
+def _link(seed: object) -> str:
+    return trace_url(ui_url="http://lf.internal", project_id="askrepo", seed=str(seed))
+
+
+async def _seed_votes(db_session: AsyncSession) -> dict[str, uuid.UUID]:
+    """One vote per kind of target; returns the ids the links are seeded by."""
+    voter = await create_user(db_session)
+    project = await create_project(db_session)
+    module = await create_checklist_module(db_session, project_id=project.id)
+    gen = await create_checklist_change_set(db_session, module_id=module.id, created_by=voter.id)
+    chat_msg = await create_checklist_message(
+        db_session, module_id=module.id, created_by=voter.id, role=MessageRole.ASSISTANT
+    )
+    chat = await create_checklist_change_set(
+        db_session, module_id=module.id, created_by=voter.id, origin=ChangeSetOrigin.CHAT
+    )
+    chat.message_id = chat_msg.id
+    mock_gen = await create_mock_data_change_set(
+        db_session, module_id=module.id, created_by=voter.id
+    )
+    mock_msg = await create_mock_data_message(
+        db_session, module_id=module.id, created_by=voter.id, role=MessageRole.ASSISTANT
+    )
+    ask_msg_id = (await _ask_message(db_session, project.id, voter.id)).id
+    votes = [
+        (FeedbackTarget.CHECKLIST_CHANGE_SET, gen.id, FeedbackFeature.GENERATE_CHECKLIST),
+        (FeedbackTarget.CHECKLIST_CHANGE_SET, chat.id, FeedbackFeature.PROPOSE_CHECKLIST),
+        (FeedbackTarget.CHECKLIST_MESSAGE, chat_msg.id, FeedbackFeature.ANSWER),
+        (FeedbackTarget.MOCK_DATA_CHANGE_SET, mock_gen.id, FeedbackFeature.GENERATE_MOCK_DATA),
+        (FeedbackTarget.MOCK_DATA_MESSAGE, mock_msg.id, FeedbackFeature.ANSWER),
+        (FeedbackTarget.MESSAGE, ask_msg_id, FeedbackFeature.ANSWER),
+    ]
+    for target_type, target_id, feature in votes:
+        await create_feedback(
+            db_session,
+            user_id=voter.id,
+            project_id=project.id,
+            target_type=target_type,
+            target_id=target_id,
+            feature=feature,
+        )
+    await db_session.commit()
+    return {
+        "gen": gen.id,
+        "chat_msg": chat_msg.id,
+        "chat": chat.id,
+        "mock_gen": mock_gen.id,
+        "mock_msg": mock_msg.id,
+        "ask": ask_msg_id,
+    }
+
+
+async def _ask_message(
+    db_session: AsyncSession, project_id: uuid.UUID, user_id: uuid.UUID
+) -> Message:
+    conversation = await create_conversation(db_session, project_id=project_id, user_id=user_id)
+    return await create_message(
+        db_session, conversation_id=conversation.id, role=MessageRole.ASSISTANT
+    )
+
+
+async def test_trace_links_follow_each_targets_seed(
+    app_with_queue: FastAPI, client_for_admin: AsyncClient, db_session: AsyncSession
+) -> None:
+    ids = await _seed_votes(db_session)
+
+    async with _langfuse(app_with_queue, enabled=True):
+        response = await client_for_admin.get("/feedback")
+
+    links: dict[str, list[str | None]] = {i["targetType"]: [] for i in response.json()["items"]}
+    for item in response.json()["items"]:
+        links[item["targetType"]].append(item["traceUrl"])
+    assert _link(ids["gen"]) in links["checklist_change_set"]
+    assert _link(ids["chat_msg"]) in links["checklist_change_set"]  # chat: its message id
+    assert _link(ids["chat"]) not in links["checklist_change_set"]
+    assert links["checklist_message"] == [_link(ids["chat_msg"])]
+    assert links["mock_data_change_set"] == [_link(ids["mock_gen"])]
+    assert links["mock_data_message"] == [_link(ids["mock_msg"])]
+    assert links["message"] == [None]  # day-only decision: no Ask link
+
+
+async def test_trace_links_are_null_when_langfuse_is_off(
+    app_with_queue: FastAPI, client_for_admin: AsyncClient, db_session: AsyncSession
+) -> None:
+    await _seed_votes(db_session)
+
+    async with _langfuse(app_with_queue, enabled=False):
+        response = await client_for_admin.get("/feedback")
+
+    assert [i["traceUrl"] for i in response.json()["items"]] == [None] * 6

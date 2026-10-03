@@ -9,7 +9,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query, Response, status
 
-from app.api.deps import AdminUser, CurrentUser, SessionDep
+from app.api.deps import AdminUser, CurrentUser, SessionDep, SettingsDep
 from app.core.feedback import FeedbackTarget
 from app.schemas.errors import ERROR_RESPONSES
 from app.schemas.feedback import (
@@ -26,9 +26,9 @@ from app.services.feedback import FeedbackService
 router = APIRouter(prefix="/feedback", tags=["Feedback"])
 
 
-def get_feedback_service(session: SessionDep) -> FeedbackService:
-    """Provide the service with a request-scoped session."""
-    return FeedbackService(session)
+def get_feedback_service(session: SessionDep, settings: SettingsDep) -> FeedbackService:
+    """Provide the service with a request-scoped session and the settings."""
+    return FeedbackService(session, settings)
 
 
 FeedbackServiceDep = Annotated[FeedbackService, Depends(get_feedback_service)]

@@ -19,6 +19,7 @@ from datetime import UTC
 from fastapi import status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import Settings
 from app.core import access
 from app.core.errors import AppError, ErrorCode
 from app.core.feedback import (
@@ -30,7 +31,11 @@ from app.core.feedback import (
     reasons_for,
 )
 from app.core.middleware import AuthenticatedUser
+from app.models.checklist import ChangeSetOrigin, ChecklistChangeSet
 from app.models.conversation import MessageRole
+from app.models.feedback import Feedback
+from app.models.mock_data import MockDataChangeSet
+from app.observability.trace_ids import trace_url
 from app.rag.prompt_version import PROMPT_VERSION
 from app.repositories.checklist_change_set import ChecklistChangeSetRepository
 from app.repositories.checklist_message import ChecklistMessageRepository
@@ -68,8 +73,9 @@ def _not_found() -> AppError:
 
 
 class FeedbackService:
-    def __init__(self, session: AsyncSession) -> None:
+    def __init__(self, session: AsyncSession, settings: Settings) -> None:
         self.session = session
+        self.settings = settings
         self._feedback = FeedbackRepository(session)
 
     async def put(
@@ -142,6 +148,8 @@ class FeedbackService:
             offset=(query.page - 1) * query.limit,
             filters=self._filters(query, actor),
         )
+        seeds = await self._trace_seeds([row for row, _ in rows])
+        ui_url = self.settings.langfuse_ui_url or self.settings.langfuse_base_url
         items = [
             FeedbackAdminRead(
                 id=row.id,
@@ -154,12 +162,63 @@ class FeedbackService:
                 note=row.note,
                 prompt_version=row.prompt_version,
                 created_on=row.created_at.astimezone(UTC).date(),
+                trace_url=(
+                    trace_url(
+                        ui_url=ui_url,
+                        project_id=self.settings.langfuse_project_id,
+                        seed=seeds[row.id],
+                    )
+                    if row.id in seeds
+                    else None
+                ),
             )
             for row, project_name in rows
         ]
         return PaginatedResponse[FeedbackAdminRead].build(
             items, page=query.page, limit=query.limit, total_count=total
         )
+
+    async def _trace_seeds(self, rows: Sequence[Feedback]) -> dict[uuid.UUID, str]:
+        """Feedback row id -> the seed its Langfuse trace was derived from.
+
+        Empty when Langfuse is off. A row with no entry gets no link: an Ask `message`
+        vote is excluded on purpose (a trace link plus the audit trail's second-precision
+        `conversation.created` would name the voter, `.claude/rules/feedback.md` rule 2),
+        and a change set that cannot be loaded is never guessed at.
+        """
+        if not self.settings.langfuse_enabled:
+            return {}
+        seeds: dict[uuid.UUID, str] = {}
+        by_target: dict[FeedbackTarget, dict[uuid.UUID, uuid.UUID]] = defaultdict(dict)
+        for row in rows:
+            target_type = FeedbackTarget(row.target_type)
+            if target_type in (FeedbackTarget.CHECKLIST_MESSAGE, FeedbackTarget.MOCK_DATA_MESSAGE):
+                seeds[row.id] = str(row.target_id)
+            elif target_type in (
+                FeedbackTarget.CHECKLIST_CHANGE_SET,
+                FeedbackTarget.MOCK_DATA_CHANGE_SET,
+            ):
+                by_target[target_type][row.id] = row.target_id
+        for target_type, wanted in by_target.items():
+            ids = set(wanted.values())
+            loaded: dict[uuid.UUID, ChecklistChangeSet | MockDataChangeSet]
+            if target_type is FeedbackTarget.CHECKLIST_CHANGE_SET:
+                checklist_sets = await ChecklistChangeSetRepository(self.session).get_many(ids)
+                loaded = {cs.id: cs for cs in checklist_sets}
+            else:
+                mock_sets = await MockDataChangeSetRepository(self.session).get_many(ids)
+                loaded = {cs.id: cs for cs in mock_sets}
+            for row_id, change_set_id in wanted.items():
+                change_set = loaded.get(change_set_id)
+                if change_set is None:
+                    continue
+                # A chat turn's trace is seeded by its assistant message, a generation
+                # run's by the change set it wrote.
+                if change_set.origin == ChangeSetOrigin.CHAT.value and change_set.message_id:
+                    seeds[row_id] = str(change_set.message_id)
+                elif change_set.origin == ChangeSetOrigin.GENERATION.value:
+                    seeds[row_id] = str(change_set.id)
+        return seeds
 
     async def summary(
         self, query: FeedbackSummaryQuery, *, actor: AuthenticatedUser
