@@ -181,3 +181,18 @@ def test_extra_model_kwargs_default_to_no_extra_body() -> None:
     model = build_chat_model(settings_for("openai"))
     assert isinstance(model, ChatOpenAI)
     assert model.extra_body is None
+
+
+def test_a_passed_recorder_is_attached_for_every_provider() -> None:
+    """The call log rides the constructor, so the factory still returns the provider class."""
+    from langchain_core.callbacks import BaseCallbackHandler
+
+    handler = BaseCallbackHandler()
+    for provider, cls in (
+        ("ollama", ChatOllama),
+        ("openai", ChatOpenAI),
+        ("anthropic", ChatAnthropic),
+    ):
+        model = build_chat_model(settings_for(provider), callbacks=[handler])
+        assert isinstance(model, cls)
+        assert model.callbacks == [handler]

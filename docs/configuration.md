@@ -283,6 +283,21 @@ Boot now performs one live structured-output call against the configured chat mo
 the API and each worker. An instance whose model cannot do tool-calling or JSON mode, or whose
 endpoint is unreachable, fails to start here rather than on the first generation.
 
+### AI call log
+
+Sends each chat-model call's cost, timing and outcome to a self-hosted Langfuse. **Nothing but
+cost, timing and outcome leaves** — no prompt, completion, question, message or user id. Off by
+default; when off, the `langfuse` package is never imported. Read by the API and the worker.
+
+| Variable | Default | What it does |
+| --- | --- | --- |
+| `LANGFUSE_ENABLED` | `false` | Turns the call log on. Requires both keys below, or the instance refuses to boot |
+| `LANGFUSE_BASE_URL` | `http://localhost:3001` | Where the API and worker send records. An internal address |
+| `LANGFUSE_PUBLIC_KEY` | *empty* | The Langfuse project's public key |
+| `LANGFUSE_SECRET_KEY` | *empty* | The project's secret key. **A secret** — treat it like `CHAT_API_KEY` |
+| `LANGFUSE_PROJECT_ID` | `askrepo` | The id set by `LANGFUSE_INIT_PROJECT_ID`. Used only to build links |
+| `LANGFUSE_UI_URL` | *empty* | The browser-facing Langfuse address. Used only to build admin links to a trace; falls back to `LANGFUSE_BASE_URL` |
+
 ### Retrieval
 
 | Variable | Default | What it does |

@@ -194,6 +194,20 @@ class Settings(BaseSettings):
     # provider error like any other, not a new failure mode.
     chat_extra_model_kwargs: dict[str, Any] = Field(default_factory=dict)
 
+    # --- AI call log (Phase 2.5 Stage 2) --------------------------------------------
+    # Off by default: when false the langfuse package is never imported. See
+    # docs/configuration.md and .claude/rules/call-log.md — nothing but a call's cost,
+    # timing and outcome is ever sent.
+    langfuse_enabled: bool = False
+    # Where the API and worker send records — an internal address.
+    langfuse_base_url: str = "http://localhost:3001"
+    langfuse_public_key: str | None = None
+    langfuse_secret_key: str | None = None
+    # The Langfuse project id created by LANGFUSE_INIT_PROJECT_ID; used only to build links.
+    langfuse_project_id: str = "askrepo"
+    # The browser-facing Langfuse address for trace links; defaults to langfuse_base_url.
+    langfuse_ui_url: str | None = None
+
     # Retrieval. Every bound is `ge=`-guarded for the same reason
     # `embedding_batch_size` is: a zero does not fail, it silently sends an empty
     # context and the model answers from memory in the same confident tone.
@@ -305,6 +319,15 @@ class Settings(BaseSettings):
                 raise ValueError(f"{name.upper()} must be set when MAIL_ENABLED=true")
         if not self.app_base_url.startswith(("https://", "http://")):
             raise ValueError("APP_BASE_URL must be an absolute http(s) URL")
+        return self
+
+    @model_validator(mode="after")
+    def _validate_call_log_configuration(self) -> Self:
+        """Fail fast when LANGFUSE_ENABLED=true but a key is missing."""
+        if self.langfuse_enabled and not (self.langfuse_public_key and self.langfuse_secret_key):
+            raise ValueError(
+                "LANGFUSE_ENABLED requires LANGFUSE_PUBLIC_KEY and LANGFUSE_SECRET_KEY"
+            )
         return self
 
 

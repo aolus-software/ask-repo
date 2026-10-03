@@ -11,6 +11,9 @@ one place this differs from the embedder it otherwise mirrors. `astream` and
 doubles; a protocol wrapping two methods would buy indirection and cost those fakes.
 """
 
+from collections.abc import Sequence
+
+from langchain_core.callbacks import BaseCallbackHandler
 from langchain_core.language_models import BaseChatModel
 
 from app.config import Settings
@@ -30,7 +33,12 @@ before the code that knows it is terminal ever sees it.
 """
 
 
-def build_chat_model(settings: Settings, *, timeout_seconds: int | None = None) -> BaseChatModel:
+def build_chat_model(
+    settings: Settings,
+    *,
+    timeout_seconds: int | None = None,
+    callbacks: Sequence[BaseCallbackHandler] | None = None,
+) -> BaseChatModel:
     """The chat model this instance is configured to use.
 
     **Every provider gets `chat_timeout_seconds`, and that is not decoration.** The
@@ -59,7 +67,12 @@ def build_chat_model(settings: Settings, *, timeout_seconds: int | None = None) 
     `chat_extra_model_kwargs` is a separate, narrower escape hatch -- forwarded as
     `extra_body` on the `openai` branch only, for self-hosted OpenAI-compatible servers
     whose thinking toggle isn't `reasoning_effort`.
+
+    `callbacks` carries the call log's recorder (`app/observability/`). It rides the
+    constructor's `callbacks=` rather than a `with_config` wrapper, so the factory still
+    returns the provider class and nothing downstream sees a different type.
     """
+    handlers = list(callbacks) if callbacks else None
     timeout = timeout_seconds if timeout_seconds is not None else settings.chat_timeout_seconds
     reasoning_off = settings.chat_reasoning == "off"
 
@@ -74,6 +87,7 @@ def build_chat_model(settings: Settings, *, timeout_seconds: int | None = None) 
             # takes one and passes it to httpx.
             client_kwargs={"timeout": timeout},
             reasoning=False if reasoning_off else None,
+            callbacks=handlers,
         )
 
     if settings.chat_provider == "anthropic":
@@ -91,6 +105,7 @@ def build_chat_model(settings: Settings, *, timeout_seconds: int | None = None) 
             max_retries=PROVIDER_RETRIES,
             stop=None,
             thinking={"type": "disabled"} if reasoning_off else None,
+            callbacks=handlers,
         )
 
     from langchain_openai import ChatOpenAI
@@ -104,4 +119,5 @@ def build_chat_model(settings: Settings, *, timeout_seconds: int | None = None) 
         max_retries=PROVIDER_RETRIES,
         reasoning_effort="none" if reasoning_off else None,
         extra_body=dict(settings.chat_extra_model_kwargs) or None,
+        callbacks=handlers,
     )

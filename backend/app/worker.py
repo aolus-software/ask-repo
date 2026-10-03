@@ -29,6 +29,7 @@ from app.live.staging import NullPublisher, set_live_publisher
 from app.mail.outbox import mail_loop
 from app.mail.sender import SmtpMailSender
 from app.mockdata.generator import MockDataGenerator
+from app.observability.langfuse_sink import CallLog, build_call_log
 from app.queue.checklist import ChecklistConsumer
 from app.queue.consumer import IngestionConsumer
 from app.queue.mock_data import MockDataConsumer
@@ -230,7 +231,7 @@ async def reconcile_loop(
             logger.exception("reconcile tick failed")
 
 
-async def _build_chat_model(settings: Settings) -> BaseChatModel:
+async def _build_chat_model(settings: Settings, call_log: CallLog | None = None) -> BaseChatModel:
     """The answering model, confirmed capable of structured output before anything
     is built on top of it (`docs/PRD.md` §6). Extracted so the ordering guarantee --
     a bad model blocks before the ingestion pipeline is ever constructed -- is a
@@ -238,7 +239,11 @@ async def _build_chat_model(settings: Settings) -> BaseChatModel:
     """
     # Generation, not conversation: bounded by `generation_timeout_seconds`, which
     # is the longer of the two on purpose (`app/rag/chat.py`).
-    chat_model = build_chat_model(settings, timeout_seconds=settings.generation_timeout_seconds)
+    chat_model = build_chat_model(
+        settings,
+        timeout_seconds=settings.generation_timeout_seconds,
+        callbacks=call_log.callbacks if call_log else None,
+    )
     await probe_structured_output(chat_model)
     return chat_model
 
@@ -301,7 +306,8 @@ async def main() -> None:
 
     # Confirmed capable of structured output before the ingestion pipeline -- or the
     # checklist generator that answers with it -- is ever built (`docs/PRD.md` §6).
-    chat_model = await _build_chat_model(settings)
+    call_log = build_call_log(settings)
+    chat_model = await _build_chat_model(settings, call_log)
     store_factory = build_store_factory(settings)
 
     def build_pipeline(session: AsyncSession) -> IngestionPipeline:
@@ -429,6 +435,7 @@ async def main() -> None:
             await producer.stop()
         except Exception:
             logger.warning("ingestion producer failed to stop", exc_info=True)
+        call_log.shutdown()  # swallows its own errors
 
 
 if __name__ == "__main__":
