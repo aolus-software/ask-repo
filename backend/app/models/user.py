@@ -37,3 +37,10 @@ class User(Base, TimestampMixin, SoftDeleteMixin):
         Boolean, nullable=False, server_default=text("true")
     )
     last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # The answer style (`app/rag/answer_style.py`). Each holds only a non-default
+    # value; `NULL` is "no preference" and renders no sentence. Strings, not a
+    # Postgres ENUM, like every other catalogue value here: a new member needs no
+    # migration.
+    answer_detail: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    answer_familiarity: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    answer_format: Mapped[str | None] = mapped_column(String(16), nullable=True)
