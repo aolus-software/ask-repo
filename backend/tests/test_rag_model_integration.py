@@ -36,6 +36,7 @@ from app.rag.prompts import (
     ANSWER_PROMPT,
     CLASSIFY_PROMPT,
     ExistingItem,
+    build_propose_prompt,
     build_reduce_prompt,
     format_spans,
 )
@@ -309,3 +310,106 @@ async def test_reduce_proposes_both_kinds_not_only_one(
     assert ChecklistItemKind.POSITIVE in kinds, (
         f"no positive test proposed for a success and two validations; raw kinds were {raw}"
     )
+
+
+# What a tester who has never opened the repository cannot read. Each is something the
+# old prompt produced in a real generation (spec §0).
+TECHNICAL = {
+    "source file": re.compile(r"\b[\w./-]+\.(py|ts|tsx|js|java|go|rb)\b"),
+    "line range": re.compile(r":\d+-\d+"),
+    "HTTP route": re.compile(r"\b(GET|POST|PUT|PATCH|DELETE)\s+/"),
+    "status code": re.compile(r"\b[1-5]\d\d\b"),
+    "camelCase identifier": re.compile(r"\b[a-z]+[A-Z][A-Za-z]*\b"),
+    "snake_case identifier": re.compile(r"\b[a-z]+_[a-z_]+\b"),
+    "UPPER_SNAKE constant": re.compile(r"\b[A-Z]{2,}_[A-Z_]+\b"),
+    "exception name": re.compile(r"Exception\b"),
+}
+
+
+def _technical_terms(text: str) -> list[str]:
+    return [name for name, pattern in TECHNICAL.items() if pattern.search(text)]
+
+
+def _assert_plain(result: ProposedChangeSet) -> None:
+    for operation in result.operations:
+        for field in (operation.feature, operation.test_name, operation.expected_result):
+            found = _technical_terms(field)
+            assert not found, f"{found} in {field!r}"
+
+
+async def test_reduce_writes_for_a_tester_who_has_never_seen_the_code(
+    settings: Settings,
+) -> None:
+    """The rows a newcomer to testing has to execute. A model reading code-shaped
+    observations must translate them into what a person does and sees -- and must
+    still produce the test for a behaviour the code calls "silently returns", rather
+    than dropping it as unobservable."""
+    model = build_chat_model(settings).with_structured_output(ProposedChangeSet)
+    result = await model.ainvoke(
+        build_reduce_prompt(
+            module_name="Users",
+            observations=[
+                (
+                    "src/users/users.service.ts",
+                    "findOne raises NotFoundException when the user id does not exist",
+                    139,
+                    147,
+                ),
+                (
+                    "src/users/dto/create-user.dto.ts",
+                    "POST /users with a malformed email fails with 422 and i18n key "
+                    "validation.IS_EMAIL",
+                    20,
+                    24,
+                ),
+                (
+                    "src/users/users.service.ts",
+                    "sendForgotPasswordEmail silently returns when no user has the email",
+                    265,
+                    269,
+                ),
+                (
+                    "src/users/users.controller.ts",
+                    "POST /users with a valid name, email and strong password returns 201",
+                    40,
+                    61,
+                ),
+            ],
+            existing=[],
+        )
+    )
+
+    assert isinstance(result, ProposedChangeSet)
+    assert result.operations
+    _assert_plain(result)
+    assert any(operation.citation_paths for operation in result.operations), (
+        "no operation kept its source in citation_paths"
+    )
+    mentions_reset = [
+        operation
+        for operation in result.operations
+        if "password" in f"{operation.test_name} {operation.expected_result}".lower()
+    ]
+    assert mentions_reset, "the 'silently returns' behaviour was dropped, not translated"
+
+
+async def test_a_chat_proposal_from_a_technical_answer_is_plain(settings: Settings) -> None:
+    """The chat's answer is technical and cited by design; the row it proposes must
+    not inherit that vocabulary."""
+    model = build_chat_model(settings).with_structured_output(ProposedChangeSet)
+    result = await model.ainvoke(
+        build_propose_prompt(
+            module_name="Users",
+            answer=(
+                "There is no test for a missing user. `usersService.findOne` raises "
+                "`NotFoundException` when the id does not exist [1], which the "
+                "controller maps to a 404 (src/users/users.service.ts:139-147). You "
+                "should add a negative test for it."
+            ),
+            existing=[],
+        )
+    )
+
+    assert isinstance(result, ProposedChangeSet)
+    assert result.operations, "the answer asked for a test and none was proposed"
+    _assert_plain(result)
