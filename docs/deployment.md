@@ -217,7 +217,7 @@ Neo4j if you will run it (`docs/PRD.md` §2.1).
 ClickHouse, MinIO, Redis and initial-user credentials have no production defaults. The production
 file reads them as `${VAR:-}` rather than `${VAR:?}`, because Compose interpolates services whose
 profile is off and `:?` would stop every deployment that does not run Langfuse. The check lives in
-the Makefile instead (`langfuse-require-prod`, run before `make up-prod LANGFUSE=1`). **A
+the Makefile instead (`langfuse-require-prod`, run before `make up-prod LANGFUSE=1`), which refuses an unset secret and also the development placeholders (`dev-insecure-change-me`, the `pk-lf-dev-askrepo`/`sk-lf-dev-askrepo` keys, an all-zero `LANGFUSE_ENCRYPTION_KEY`), naming the variable and never its value. **A
 hand-run `docker compose -f docker-compose.prod.yml --profile langfuse up` skips it** and starts
 with empty secrets; use the Make target. The images are pinned in `docker-compose.prod.yml`:
 `langfuse` and `langfuse-worker` at `4.50.0`, ClickHouse at `25.12`. The MinIO image

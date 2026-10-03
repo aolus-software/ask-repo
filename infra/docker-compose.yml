@@ -83,11 +83,12 @@ x-app-env: &app-env
   FEEDBACK_RETENTION_DAYS: ${FEEDBACK_RETENTION_DAYS:-0}
   # The call log (Phase 2.5). Shared, not API-only: the API and the worker both make
   # model calls and both send records. The keys are the project's headless-init keys, so
-  # one pair in infra/.env configures both ends. Off unless LANGFUSE_ENABLED=true.
+  # one pair in infra/.env configures both ends. The defaults are the same dev keys
+  # langfuse-web initialises with; change one default and change the other. Off unless LANGFUSE_ENABLED=true.
   LANGFUSE_ENABLED: ${LANGFUSE_ENABLED:-false}
   LANGFUSE_BASE_URL: ${LANGFUSE_BASE_URL:-http://langfuse-web:3000}
-  LANGFUSE_PUBLIC_KEY: ${LANGFUSE_INIT_PROJECT_PUBLIC_KEY:-}
-  LANGFUSE_SECRET_KEY: ${LANGFUSE_INIT_PROJECT_SECRET_KEY:-}
+  LANGFUSE_PUBLIC_KEY: ${LANGFUSE_INIT_PROJECT_PUBLIC_KEY:-pk-lf-dev-askrepo}
+  LANGFUSE_SECRET_KEY: ${LANGFUSE_INIT_PROJECT_SECRET_KEY:-sk-lf-dev-askrepo}
   LANGFUSE_PROJECT_ID: ${LANGFUSE_INIT_PROJECT_ID:-askrepo}
   LANGFUSE_UI_URL: ${LANGFUSE_UI_URL:-http://localhost:3001}
 

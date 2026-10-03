@@ -121,7 +121,7 @@ A few properties are your responsibility, not the code's:
     `LANGFUSE_PUBLIC_KEY` / `LANGFUSE_SECRET_KEY` (the API and worker send with them). Keep them
     out of logs, version control and backup dumps, like `PAT_ENCRYPTION_KEY`. In production they
     have no defaults, but Compose cannot enforce that (it interpolates services whose profile is
-    off), so `make up-prod LANGFUSE=1` checks them first. **A hand-run
+    off), so `make up-prod LANGFUSE=1` checks them first, rejecting unset values and the development placeholders. **A hand-run
     `docker compose --profile langfuse` skips that check** and starts with empty secrets.
   - *Egress.* Self-hosted Langfuse reaches out by default. The Compose profile closes two:
     `TELEMETRY_ENABLED=false` (usage ping to Langfuse) and `CHECKPOINT_DISABLE=1` (the Prisma

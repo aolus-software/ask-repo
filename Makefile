@@ -162,10 +162,13 @@ langfuse-db-prod: ## Create the langfuse database on the production postgres (id
 # stop every deployment that does not run Langfuse. The check lives here instead.
 langfuse-require-prod:
 ifdef LANGFUSE
-	@set -a; [ -f infra/.env ] && . ./infra/.env; set +a; missing=""; \
+	@set -a; [ -f infra/.env ] && . ./infra/.env; set +a; missing=""; dev=""; \
 	for v in LANGFUSE_SALT LANGFUSE_ENCRYPTION_KEY LANGFUSE_NEXTAUTH_SECRET LANGFUSE_CLICKHOUSE_PASSWORD LANGFUSE_MINIO_ROOT_PASSWORD LANGFUSE_REDIS_AUTH LANGFUSE_INIT_PROJECT_PUBLIC_KEY LANGFUSE_INIT_PROJECT_SECRET_KEY LANGFUSE_INIT_USER_EMAIL LANGFUSE_INIT_USER_PASSWORD; do \
-	  eval "val=\$${$$v}"; [ -n "$$val" ] || missing="$$missing $$v"; done; \
-	[ -z "$$missing" ] || { echo "LANGFUSE=1 needs these set in infra/.env:$$missing"; exit 1; }
+	  eval "val=\$${$$v}"; \
+	  if [ -z "$$val" ]; then missing="$$missing $$v"; \
+	  else case "$$val" in dev-insecure-change-me|pk-lf-dev-askrepo|sk-lf-dev-askrepo|0000000000000000000000000000000000000000000000000000000000000000) dev="$$dev $$v";; esac; fi; done; \
+	[ -z "$$missing" ] || { echo "LANGFUSE=1 needs these set in infra/.env:$$missing"; exit 1; }; \
+	[ -z "$$dev" ] || { echo "LANGFUSE=1 refuses the development placeholder for:$$dev (set a real value in infra/.env)"; exit 1; }
 endif
 
 redis-cli: ## Open a redis-cli shell on the running redis
