@@ -113,7 +113,9 @@ A few properties are your responsibility, not the code's:
     traffic as numbers — tokens, timing, model, outcome, which feature, which project id, never a
     prompt, a completion, a question or a user id. That is instance-wide, not per project. Decide
     who gets an account (the intended readers are the same administrators), and keep the Langfuse
-    web port on the internal network. Ask-answer feedback is deliberately **not** linked to its
+    web port on the internal network. Self-registration is off (`AUTH_DISABLE_SIGNUP=true`, via
+    `LANGFUSE_AUTH_DISABLE_SIGNUP`), so the only account is the one `LANGFUSE_INIT_USER_*` creates;
+    adding a colleague means lifting it briefly, which `docs/langfuse.md` walks through. Ask-answer feedback is deliberately **not** linked to its
     trace, because a trace's second-precision times would let an administrator match a vote to its
     voter (`docs/PRD.md` §2.1).
   - *New secrets.* `LANGFUSE_SALT`, `LANGFUSE_ENCRYPTION_KEY`, `LANGFUSE_NEXTAUTH_SECRET`, the
@@ -129,7 +131,7 @@ A few properties are your responsibility, not the code's:
     network with no outbound access, mirror the images into your own registry. Managed Langfuse
     Cloud is out of scope — it would send every traced call outside the network.
   - *Retention.* Langfuse's own retention setting is Enterprise-only, so an instance that never
-    sets a ClickHouse TTL keeps every call record forever. See `docs/deployment.md`.
+    sets a ClickHouse TTL keeps every call record forever. See `docs/langfuse.md`.
 - **Choose an audit retention window deliberately.** `AUDIT_RETENTION_DAYS` defaults to `0`,
   which means *keep every audit row forever* — a safe default for a fresh instance, and not a
   recommendation for every instance. The table's write rate is proportional to QA activity, not

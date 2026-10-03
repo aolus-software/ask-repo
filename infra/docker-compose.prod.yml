@@ -373,6 +373,9 @@ services:
       <<: *langfuse-env
       NEXTAUTH_SECRET: ${LANGFUSE_NEXTAUTH_SECRET:-}
       CHECKPOINT_DISABLE: "1"
+      # No self-registration: the LANGFUSE_INIT_USER_* account is the only one that exists
+      # until an admin briefly lifts this to let a colleague sign up (docs/langfuse.md).
+      AUTH_DISABLE_SIGNUP: ${LANGFUSE_AUTH_DISABLE_SIGNUP:-true}
       LANGFUSE_INIT_ORG_ID: ${LANGFUSE_INIT_ORG_ID:-askrepo}
       LANGFUSE_INIT_ORG_NAME: ${LANGFUSE_INIT_ORG_NAME:-AskRepo}
       LANGFUSE_INIT_PROJECT_ID: ${LANGFUSE_INIT_PROJECT_ID:-askrepo}

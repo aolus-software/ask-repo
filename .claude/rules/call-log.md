@@ -104,12 +104,12 @@ the provider imports in `app/rag/chat.py` do.
 Self-hosted Langfuse reaches out by default, and the Compose profile shuts what an environment
 variable can shut: `TELEMETRY_ENABLED=false` on web and worker, `CHECKPOINT_DISABLE=1` on web. The
 third path, image pulls from `docker.langfuse.com`, is not a setting — it is the operator's to
-mirror (`docs/deployment.md`). Managed Langfuse Cloud is out of scope whatever it costs
+mirror (`docs/langfuse.md`). Managed Langfuse Cloud is out of scope whatever it costs
 (`docs/PRD.md` §2.1): it would make every traced call an egress of the code the prompt carried.
 
 ## 8. Retention is a ClickHouse TTL the operator sets
 
 Langfuse's automated retention is Enterprise-only, and there is no AskRepo setting for it: the
-data lives in Langfuse's store, not ours. `docs/deployment.md` documents the lever, a ClickHouse
+data lives in Langfuse's store, not ours. `docs/langfuse.md` documents the lever, a ClickHouse
 `MODIFY TTL` on the traces, observations and scores tables. An instance that never sets one keeps
 every call forever, and `SECURITY.md` says so under the operator's responsibilities.

@@ -364,8 +364,8 @@ inherit that. **What crosses the boundary is the content of `CallRecord` and not
 feature, provider, model, timing, token counts, outcome, the error's class, the project id, the
 attempt, the prompt version and a trace seed. No prompt, completion, question, message or user id
 exists in the record to send (`.claude/rules/call-log.md`). Langfuse's UI has its own login and
-does not go through `app/core/access.py`; `SECURITY.md` records that. Sizing, egress and
-retention are in [`deployment.md`](deployment.md). How a call is tagged, grouped and priced is in
+does not go through `app/core/access.py`; `SECURITY.md` records that. Setup, sizing, egress and
+retention are in [`langfuse.md`](langfuse.md). How a call is tagged, grouped and priced is in
 [`llm.md`](llm.md) "The call log".
 
 ---

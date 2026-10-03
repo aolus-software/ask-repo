@@ -288,6 +288,9 @@ endpoint is unreachable, fails to start here rather than on the first generation
 Sends each chat-model call's cost, timing and outcome to a self-hosted Langfuse. **Nothing but
 cost, timing and outcome leaves** — no prompt, completion, question, message or user id. Off by
 default; when off, the `langfuse` package is never imported. Read by the API and the worker.
+How to turn it on, for development and production: [`langfuse.md`](langfuse.md). Langfuse's own
+server variables (`LANGFUSE_INIT_*`, its secrets, `LANGFUSE_AUTH_DISABLE_SIGNUP`) live in
+`infra/.env` and are described there too.
 
 | Variable | Default | What it does |
 | --- | --- | --- |

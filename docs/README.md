@@ -39,6 +39,7 @@ Read these in order the first time. Roughly two hours end to end.
 | **[`installation.md`](installation.md)** | Setting up locally. Three paths — everything in Docker, datastores only in Docker, or no `make` at all — plus first login and troubleshooting |
 | **[`configuration.md`](configuration.md)** | Any question about a setting. All 104 backend settings, the frontend variable, and the Compose `.env`, each with what it does and what to change before production |
 | **[`deployment.md`](deployment.md)** | Running it for a team. Production images, TLS with Caddy, secrets, first boot, backups |
+| **[`langfuse.md`](langfuse.md)** | Turning on the AI call log. Setup for development and production, reading the traces, outbound network access, retention, troubleshooting |
 
 ---
 

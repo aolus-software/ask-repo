@@ -41,7 +41,11 @@ client can have received it, so it is recorded under Changed and allowed in a `M
   `langfuse-clickhouse`, `langfuse-redis` and `langfuse-minio`, with `TELEMETRY_ENABLED=false` and
   `CHECKPOINT_DISABLE=1`. `make infra LANGFUSE=1` and `make up-prod LANGFUSE=1` start it;
   `make langfuse-db` creates its database on the existing Postgres. Plan for 4 cores and 16 GiB.
-  `docs/deployment.md` documents the egress paths and a ClickHouse TTL for retention.
+  `docs/langfuse.md` covers setup, how the backend connects, deploying to production, accounts,
+  the egress paths and a ClickHouse TTL for retention.
+- Langfuse self-registration is off: `langfuse-web` runs with `AUTH_DISABLE_SIGNUP=true` in both
+  compose files (`LANGFUSE_AUTH_DISABLE_SIGNUP` in `infra/.env`, default `true`), so the only
+  account is the one `LANGFUSE_INIT_USER_*` creates.
 - `LANGFUSE_ENABLED` (default `false`), `LANGFUSE_BASE_URL`, `LANGFUSE_PUBLIC_KEY`,
   `LANGFUSE_SECRET_KEY`, `LANGFUSE_PROJECT_ID` and `LANGFUSE_UI_URL`. Enabling it without both
   keys stops the instance at boot.

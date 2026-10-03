@@ -353,6 +353,7 @@ See [`CONTRIBUTING.md`](CONTRIBUTING.md). Bug reports and feature requests go th
 - [`docs/data.md`](docs/data.md) — every table, leases, soft delete, and what each store holds
 - [`docs/installation.md`](docs/installation.md) — step-by-step local setup, all three paths, and troubleshooting
 - [`docs/deployment.md`](docs/deployment.md) — running it for a team: production images, TLS, secrets, backups
+- [`docs/langfuse.md`](docs/langfuse.md) — turning on the optional AI call log: setup, reading traces, retention
 - [`docs/configuration.md`](docs/configuration.md) — every setting, what it does, and what to change before production
 - [`docs/design.md`](docs/design.md) — design tokens, typography, layout geometry, component inventory
 - [`backend/README.md`](backend/README.md) — API setup, routes, configuration

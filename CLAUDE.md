@@ -33,6 +33,7 @@ file outranks the one that went stale.
 | The answer graph and the SSE contract | [`docs/langgraph.md`](docs/langgraph.md) |
 | Every setting | [`docs/configuration.md`](docs/configuration.md) |
 | What gets notified, to whom, and the one setting | [`docs/notifications.md`](docs/notifications.md) |
+| Turning on and running the AI call log (Langfuse) | [`docs/langfuse.md`](docs/langfuse.md) |
 
 **All four datastores are read** — Postgres, Redis, Qdrant and Kafka. The worker reads a chat
 model as well as an embedder: checklist and mock-data generation each run a model in that
