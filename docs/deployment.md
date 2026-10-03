@@ -188,6 +188,16 @@ which is what to watch for.
 against a hosted model provider instead, drop `--profile ollama` from `COMPOSE_PROD` in the
 `Makefile` and point `EMBEDDING_BASE_URL` and `CHAT_BASE_URL` elsewhere.
 
+**The `langfuse` profile** (the AI call log) is off by default and opt-in with
+`make up-prod LANGFUSE=1`: five more containers (`langfuse-web`, `langfuse-worker`,
+`langfuse-clickhouse`, `langfuse-redis`, `langfuse-minio`), roughly 16 GiB, a `langfuse` database
+on the existing Postgres, and the UI on `127.0.0.1:3001` for Caddy to front. Its secrets
+(`LANGFUSE_SALT`, `LANGFUSE_ENCRYPTION_KEY`, `LANGFUSE_NEXTAUTH_SECRET`, and the ClickHouse,
+MinIO, Redis and initial-user credentials) have no defaults; compose cannot enforce that with
+`${VAR:?}` because it interpolates services whose profile is off, so `make up-prod LANGFUSE=1`
+checks them first. Telemetry and the version check are disabled, but images still come from
+`docker.langfuse.com`: mirror them on a network with no outbound access.
+
 ---
 
 ## 4. Terminate TLS with Caddy

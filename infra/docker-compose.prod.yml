@@ -101,6 +101,51 @@ x-app-env: &app-env
   AUDIT_RETENTION_DAYS: ${AUDIT_RETENTION_DAYS:-0}
   NOTIFICATION_RETENTION_DAYS: ${NOTIFICATION_RETENTION_DAYS:-90}
   FEEDBACK_RETENTION_DAYS: ${FEEDBACK_RETENTION_DAYS:-0}
+  # The call log (Phase 2.5). Shared, not API-only: the API and the worker both make
+  # model calls and both send records. The keys are the project's headless-init keys, so
+  # one pair in infra/.env configures both ends. Off unless LANGFUSE_ENABLED=true.
+  LANGFUSE_ENABLED: ${LANGFUSE_ENABLED:-false}
+  LANGFUSE_BASE_URL: ${LANGFUSE_BASE_URL:-http://langfuse-web:3000}
+  LANGFUSE_PUBLIC_KEY: ${LANGFUSE_INIT_PROJECT_PUBLIC_KEY:-}
+  LANGFUSE_SECRET_KEY: ${LANGFUSE_INIT_PROJECT_SECRET_KEY:-}
+  LANGFUSE_PROJECT_ID: ${LANGFUSE_INIT_PROJECT_ID:-askrepo}
+  LANGFUSE_UI_URL: ${LANGFUSE_UI_URL:-http://localhost:3001}
+
+x-langfuse-env: &langfuse-env
+  # Names mirror upstream's docker-compose.yml (langfuse/langfuse, v4); only the hosts differ.
+  # Both egress paths are shut: TELEMETRY_ENABLED=false stops the usage ping to Langfuse,
+  # and CHECKPOINT_DISABLE (web, below) stops the version check. The third path is not an
+  # env var: images come from docker.langfuse.com, so on a network with no outbound
+  # access, mirror the five images into your own registry and change `image:` below.
+  NEXTAUTH_URL: ${LANGFUSE_UI_URL:-http://localhost:3001}
+  DATABASE_URL: postgresql://${POSTGRES_USER:-askrepo}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in infra/.env}@postgres:5432/langfuse
+  SALT: ${LANGFUSE_SALT:-}
+  ENCRYPTION_KEY: ${LANGFUSE_ENCRYPTION_KEY:-}
+  TELEMETRY_ENABLED: "false"
+  CLICKHOUSE_MIGRATION_URL: clickhouse://langfuse-clickhouse:9000
+  CLICKHOUSE_URL: http://langfuse-clickhouse:8123
+  CLICKHOUSE_USER: ${LANGFUSE_CLICKHOUSE_USER:-clickhouse}
+  CLICKHOUSE_PASSWORD: ${LANGFUSE_CLICKHOUSE_PASSWORD:-}
+  CLICKHOUSE_CLUSTER_ENABLED: "false"
+  LANGFUSE_S3_EVENT_UPLOAD_BUCKET: langfuse
+  LANGFUSE_S3_EVENT_UPLOAD_REGION: auto
+  LANGFUSE_S3_EVENT_UPLOAD_ACCESS_KEY_ID: ${LANGFUSE_MINIO_ROOT_USER:-minio}
+  LANGFUSE_S3_EVENT_UPLOAD_SECRET_ACCESS_KEY: ${LANGFUSE_MINIO_ROOT_PASSWORD:-}
+  LANGFUSE_S3_EVENT_UPLOAD_ENDPOINT: http://langfuse-minio:9000
+  LANGFUSE_S3_EVENT_UPLOAD_FORCE_PATH_STYLE: "true"
+  LANGFUSE_S3_EVENT_UPLOAD_PREFIX: events/
+  # Media upload is never used here (the SDK sends text only), so the endpoint stays
+  # on the internal MinIO and MinIO publishes no port.
+  LANGFUSE_S3_MEDIA_UPLOAD_BUCKET: langfuse
+  LANGFUSE_S3_MEDIA_UPLOAD_REGION: auto
+  LANGFUSE_S3_MEDIA_UPLOAD_ACCESS_KEY_ID: ${LANGFUSE_MINIO_ROOT_USER:-minio}
+  LANGFUSE_S3_MEDIA_UPLOAD_SECRET_ACCESS_KEY: ${LANGFUSE_MINIO_ROOT_PASSWORD:-}
+  LANGFUSE_S3_MEDIA_UPLOAD_ENDPOINT: http://langfuse-minio:9000
+  LANGFUSE_S3_MEDIA_UPLOAD_FORCE_PATH_STYLE: "true"
+  LANGFUSE_S3_MEDIA_UPLOAD_PREFIX: media/
+  REDIS_HOST: langfuse-redis
+  REDIS_PORT: "6379"
+  REDIS_AUTH: ${LANGFUSE_REDIS_AUTH:-}
 
 services:
   postgres:
@@ -294,6 +339,106 @@ services:
     #   make pull-models-prod
     profiles: ["ollama"]
 
+  # ── Langfuse — the AI call log (docs/PRD.md §2.1, Phase 2.5) ─────────────────
+  # Behind the `langfuse` profile, so nothing below starts unless asked:
+  # `make infra LANGFUSE=1`. Five containers and roughly 16 GiB, which is why it is
+  # opt-in. It shares this stack's Postgres (database `langfuse`, created by
+  # `make langfuse-db`) but has its own Redis: the app's Redis fails open and Langfuse's
+  # queue must not, and Langfuse needs `noeviction`, which the app's Redis does not set.
+  langfuse-worker:
+    image: docker.langfuse.com/langfuse/langfuse-worker:4.50.0
+    restart: unless-stopped
+    <<: *logging
+    depends_on: &langfuse-depends-on
+      postgres:
+        condition: service_healthy
+      langfuse-minio:
+        condition: service_healthy
+      langfuse-redis:
+        condition: service_healthy
+      langfuse-clickhouse:
+        condition: service_healthy
+    environment:
+      <<: *langfuse-env
+    profiles: ["langfuse"]
+
+  langfuse-web:
+    image: docker.langfuse.com/langfuse/langfuse:4.50.0
+    restart: unless-stopped
+    <<: *logging
+    depends_on: *langfuse-depends-on
+    ports:
+      - "127.0.0.1:3001:3000"
+    environment:
+      <<: *langfuse-env
+      NEXTAUTH_SECRET: ${LANGFUSE_NEXTAUTH_SECRET:-}
+      CHECKPOINT_DISABLE: "1"
+      LANGFUSE_INIT_ORG_ID: ${LANGFUSE_INIT_ORG_ID:-askrepo}
+      LANGFUSE_INIT_ORG_NAME: ${LANGFUSE_INIT_ORG_NAME:-AskRepo}
+      LANGFUSE_INIT_PROJECT_ID: ${LANGFUSE_INIT_PROJECT_ID:-askrepo}
+      LANGFUSE_INIT_PROJECT_NAME: ${LANGFUSE_INIT_PROJECT_NAME:-AskRepo}
+      LANGFUSE_INIT_PROJECT_PUBLIC_KEY: ${LANGFUSE_INIT_PROJECT_PUBLIC_KEY:-}
+      LANGFUSE_INIT_PROJECT_SECRET_KEY: ${LANGFUSE_INIT_PROJECT_SECRET_KEY:-}
+      LANGFUSE_INIT_USER_EMAIL: ${LANGFUSE_INIT_USER_EMAIL:-}
+      LANGFUSE_INIT_USER_NAME: ${LANGFUSE_INIT_USER_NAME:-Admin}
+      LANGFUSE_INIT_USER_PASSWORD: ${LANGFUSE_INIT_USER_PASSWORD:-}
+    profiles: ["langfuse"]
+
+  langfuse-clickhouse:
+    image: docker.io/clickhouse/clickhouse-server:25.12
+    restart: unless-stopped
+    <<: *logging
+    user: "101:101"
+    environment:
+      CLICKHOUSE_DB: default
+      CLICKHOUSE_USER: ${LANGFUSE_CLICKHOUSE_USER:-clickhouse}
+      CLICKHOUSE_PASSWORD: ${LANGFUSE_CLICKHOUSE_PASSWORD:-}
+    volumes:
+      - langfuse_clickhouse_data:/var/lib/clickhouse
+      - langfuse_clickhouse_logs:/var/log/clickhouse-server
+    healthcheck:
+      test: wget --no-verbose --tries=1 --spider http://localhost:8123/ping || exit 1
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 1s
+    profiles: ["langfuse"]
+
+  langfuse-minio:
+    image: cgr.dev/chainguard/minio
+    restart: unless-stopped
+    <<: *logging
+    entrypoint: sh
+    # Creates the `langfuse` bucket before starting the server.
+    command: -c 'mkdir -p /data/langfuse && minio server --address ":9000" --console-address ":9001" /data'
+    environment:
+      MINIO_ROOT_USER: ${LANGFUSE_MINIO_ROOT_USER:-minio}
+      MINIO_ROOT_PASSWORD: ${LANGFUSE_MINIO_ROOT_PASSWORD:-}
+    volumes:
+      - langfuse_minio_data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 1s
+      timeout: 5s
+      retries: 5
+      start_period: 1s
+    profiles: ["langfuse"]
+
+  langfuse-redis:
+    image: docker.io/redis:7
+    restart: unless-stopped
+    <<: *logging
+    # noeviction is upstream's setting (a queue must never lose a job to memory pressure).
+    command: ["redis-server", "--requirepass", "${LANGFUSE_REDIS_AUTH:-}", "--maxmemory-policy", "noeviction"]
+    volumes:
+      - langfuse_redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 3s
+      timeout: 10s
+      retries: 10
+    profiles: ["langfuse"]
+
   frontend:
     build:
       context: ../frontend
@@ -321,4 +466,8 @@ volumes:
   redis_data:
   kafka_data:
   ollama_models:
+  langfuse_clickhouse_data:
+  langfuse_clickhouse_logs:
+  langfuse_minio_data:
+  langfuse_redis_data:
   repo_scratch:

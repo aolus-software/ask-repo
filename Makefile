@@ -23,19 +23,24 @@
 # box where that is the right answer. Opt back in with any non-empty value:
 #   make infra OLLAMA_IN_DOCKER=1
 OLLAMA_PROFILE := $(if $(OLLAMA_IN_DOCKER),--profile ollama,)
-COMPOSE := docker compose -f infra/docker-compose.yml $(OLLAMA_PROFILE)
+#
+# Langfuse (the AI call log) is opt-in the same way: five more containers and ~16 GiB,
+# so `make infra LANGFUSE=1` starts them and a bare `make infra` is unchanged.
+LANGFUSE_PROFILE := $(if $(LANGFUSE),--profile langfuse,)
+COMPOSE := docker compose -f infra/docker-compose.yml $(OLLAMA_PROFILE) $(LANGFUSE_PROFILE)
 
 # The production stack is a STANDALONE file, never layered onto the development one:
 # Compose merges `volumes` by target path rather than replacing the list, so
 # `-f … -f …` would keep the dev bind-mounts of the working copy over /app.
-COMPOSE_PROD := docker compose -f infra/docker-compose.prod.yml --profile ollama
+COMPOSE_PROD := docker compose -f infra/docker-compose.prod.yml --profile ollama $(LANGFUSE_PROFILE)
 
 BACKEND  := backend
 FRONTEND := frontend
 
 # Datastore services — the ones you run in Docker while developing the apps locally.
 # Ollama is not among them: it runs on the host. See OLLAMA_PROFILE above.
-DATASTORES := postgres qdrant redis kafka $(if $(OLLAMA_IN_DOCKER),ollama,)
+LANGFUSE_SERVICES := langfuse-clickhouse langfuse-redis langfuse-minio langfuse-worker langfuse-web
+DATASTORES := postgres qdrant redis kafka $(if $(OLLAMA_IN_DOCKER),ollama,) $(if $(LANGFUSE),$(LANGFUSE_SERVICES),)
 
 # Where the host model server is expected to answer. Only the preflight check reads
 # this — the apps get their endpoint from EMBEDDING_BASE_URL / CHAT_BASE_URL.
@@ -57,7 +62,7 @@ OLLAMA_URL ?= http://localhost:11434
         up down restart logs ps compose-config rebuild \
         setup-prod build-prod rebuild-prod compose-config-prod \
         up-prod down-prod restart-prod logs-prod ps-prod \
-        migrate-prod seed-prod psql-prod pull-models-prod backup-prod \
+        migrate-prod seed-prod psql-prod pull-models-prod langfuse-db langfuse-db-prod langfuse-require-prod backup-prod \
         clean clean-backend clean-frontend
 
 ## ─── Help ──────────────────────────────────────────────────────────────────
@@ -79,9 +84,13 @@ setup-frontend: ## Install frontend dependencies
 
 ## ─── Datastores ────────────────────────────────────────────────────────────
 
-infra: ## Start postgres + qdrant + redis + kafka (detached), wait until healthy
+infra: ## Start postgres + qdrant + redis + kafka (detached), wait until healthy; LANGFUSE=1 adds the call log
+ifdef LANGFUSE
+	$(COMPOSE) up -d --wait postgres
+	@$(MAKE) --no-print-directory langfuse-db
+endif
 	$(COMPOSE) up -d --wait $(DATASTORES)
-	@echo "postgres :5432   qdrant :6333   redis :6379   kafka :9092"
+	@echo "postgres :5432   qdrant :6333   redis :6379   kafka :9092$(if $(LANGFUSE),   langfuse http://localhost:3001,)"
 	@$(MAKE) --no-print-directory ollama-check
 
 infra-stop: ## Stop the datastores, keep their data
@@ -141,6 +150,23 @@ docker-stop-kafka: ## Stop kafka
 
 psql: ## Open a psql shell on the running postgres
 	$(COMPOSE) exec postgres psql -U askrepo -d askrepo
+
+langfuse-db: ## Create the langfuse database on the existing postgres (idempotent)
+	$(COMPOSE) exec -T postgres sh -c 'psql -U "$$POSTGRES_USER" -tc "SELECT 1 FROM pg_database WHERE datname = '\''langfuse'\''" | grep -q 1 || createdb -U "$$POSTGRES_USER" langfuse'
+
+langfuse-db-prod: ## Create the langfuse database on the production postgres (idempotent)
+	$(COMPOSE_PROD) exec -T postgres sh -c 'psql -U "$$POSTGRES_USER" -tc "SELECT 1 FROM pg_database WHERE datname = '\''langfuse'\''" | grep -q 1 || createdb -U "$$POSTGRES_USER" langfuse'
+
+# The prod compose file cannot use `${VAR:?}` for the Langfuse secrets: Compose
+# interpolates the whole file even for services whose profile is off, so that would
+# stop every deployment that does not run Langfuse. The check lives here instead.
+langfuse-require-prod:
+ifdef LANGFUSE
+	@set -a; [ -f infra/.env ] && . ./infra/.env; set +a; missing=""; \
+	for v in LANGFUSE_SALT LANGFUSE_ENCRYPTION_KEY LANGFUSE_NEXTAUTH_SECRET LANGFUSE_CLICKHOUSE_PASSWORD LANGFUSE_MINIO_ROOT_PASSWORD LANGFUSE_REDIS_AUTH LANGFUSE_INIT_PROJECT_PUBLIC_KEY LANGFUSE_INIT_PROJECT_SECRET_KEY LANGFUSE_INIT_USER_EMAIL LANGFUSE_INIT_USER_PASSWORD; do \
+	  eval "val=\$${$$v}"; [ -n "$$val" ] || missing="$$missing $$v"; done; \
+	[ -z "$$missing" ] || { echo "LANGFUSE=1 needs these set in infra/.env:$$missing"; exit 1; }
+endif
 
 redis-cli: ## Open a redis-cli shell on the running redis
 	$(COMPOSE) exec redis redis-cli
@@ -320,7 +346,11 @@ migrate-prod: ## Apply migrations (a deploy step, not a container start command)
 seed-prod: ## Create the bootstrap admins (idempotent)
 	$(COMPOSE_PROD) run --rm backend python -m app.cli seed-admins
 
-up-prod: ## Start the production stack (detached), wait until healthy
+up-prod: langfuse-require-prod ## Start the production stack (detached), wait until healthy; LANGFUSE=1 adds the call log
+ifdef LANGFUSE
+	$(COMPOSE_PROD) up -d --wait postgres
+	@$(MAKE) --no-print-directory langfuse-db-prod
+endif
 	$(COMPOSE_PROD) up -d --wait
 	@echo "frontend 127.0.0.1:3000   api 127.0.0.1:8000   — put Caddy in front, see docs/deployment.md"
 
