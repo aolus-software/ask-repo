@@ -1,5 +1,8 @@
 """Admin feedback reads: admin-only, filtered through the scope, never naming a voter."""
 
+import re
+from datetime import datetime
+
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -38,6 +41,12 @@ async def test_the_list_shows_notes_and_projects_but_no_voter(
     assert item["projectName"] == "payments"
     assert item["note"] == "Wrong file entirely."
     assert item["traceUrl"] is None
+    # The vote's day, never its time: a second-precision timestamp plus the audit
+    # trail's `conversation.created` row (same actor, same project, seconds apart)
+    # would let an admin match a vote to whoever asked the question.
+    assert re.fullmatch(r"\d{4}-\d{2}-\d{2}", item["createdOn"])
+    assert "createdAt" not in item
+    assert "updatedAt" not in item
     serialized = response.text
     assert str(voter.id) not in serialized
     assert "voter@example.com" not in serialized
@@ -47,6 +56,16 @@ async def test_the_list_shows_notes_and_projects_but_no_voter(
 def test_the_admin_schema_has_no_user_field() -> None:
     fields = set(FeedbackAdminRead.model_fields)
     assert not {f for f in fields if "user" in f or "email" in f or "actor" in f or "name" == f}
+
+
+def test_the_admin_schema_carries_no_time_of_day() -> None:
+    """`created_on` is a bare date; nothing on this schema is finer-grained than a
+    day, which is what keeps it useless for matching against the audit trail's
+    second-precision `conversation.created` rows."""
+    for name, field in FeedbackAdminRead.model_fields.items():
+        assert field.annotation not in (datetime, datetime | None), (
+            f"{name} carries a time, not just a day"
+        )
 
 
 async def test_filters_narrow_the_list(

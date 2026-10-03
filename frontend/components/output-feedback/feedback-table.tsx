@@ -12,7 +12,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import type { FeedbackAdminRead } from "@/lib/api/types";
-import { formatAbsolute, formatRelative } from "@/lib/dates";
+import { formatDay } from "@/lib/dates";
 
 /**
  * Column order: when, project, feature, vote, reasons, note, prompt version, and a
@@ -47,11 +47,8 @@ export function FeedbackTable({
           ) : (
             rows.map((row) => (
               <TableRow key={row.id}>
-                <TableCell
-                  className="text-muted-foreground text-sm"
-                  title={formatAbsolute(row.createdAt)}
-                >
-                  {formatRelative(row.createdAt)}
+                <TableCell className="text-muted-foreground text-sm">
+                  {formatDay(row.createdOn)}
                 </TableCell>
                 <TableCell className="text-sm">{row.projectName}</TableCell>
                 <TableCell className="text-sm">{FEATURE_LABELS[row.feature]}</TableCell>

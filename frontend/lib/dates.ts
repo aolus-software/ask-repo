@@ -24,3 +24,13 @@ export function formatRelative(iso: string): string {
 export function formatAbsolute(iso: string | null): string | undefined {
   return iso ? new Date(iso).toISOString() : undefined;
 }
+
+/**
+ * A bare calendar day (`YYYY-MM-DD`, no time component) rendered for display.
+ * `Date.parse` on a date-only ISO string is UTC midnight, so this reads the
+ * `YYYY-MM-DD` segment back out directly rather than routing through a `Date` and
+ * risking the browser's local timezone shifting it to the adjacent day.
+ */
+export function formatDay(isoDate: string): string {
+  return isoDate.slice(0, 10);
+}

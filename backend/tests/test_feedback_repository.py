@@ -344,3 +344,34 @@ async def test_page_filters_by_created_to_includes_the_whole_selected_day(
     )
 
     assert total == 1
+
+
+async def test_page_orders_within_a_day_by_id_not_time(db_session: AsyncSession) -> None:
+    """Two votes cast the same UTC day must not come back ordered by the time of
+    day they were cast — that would leak the sequence back to an admin as page
+    position instead of a printed clock time, which is exactly what dropping the
+    time from `FeedbackAdminRead` was for."""
+    user = await create_user(db_session)
+    project = await create_project(db_session)
+    early = await create_feedback(db_session, user_id=user.id, project_id=project.id, note="early")
+    late = await create_feedback(db_session, user_id=user.id, project_id=project.id, note="late")
+    now = datetime.now(UTC)
+    today_midnight = datetime(now.year, now.month, now.day, tzinfo=UTC)
+    # Give the row cast earlier in the day the *larger* id, and the row cast later
+    # the *smaller* id, so ordering by id vs. ordering by timestamp disagree.
+    smaller_id, larger_id = sorted((uuid.uuid4(), uuid.uuid4()))
+    await db_session.execute(
+        update(Feedback)
+        .where(Feedback.id == early.id)
+        .values(id=larger_id, created_at=today_midnight + timedelta(hours=1))
+    )
+    await db_session.execute(
+        update(Feedback)
+        .where(Feedback.id == late.id)
+        .values(id=smaller_id, created_at=today_midnight + timedelta(hours=20))
+    )
+
+    rows, total = await FeedbackRepository(db_session).page(limit=10, offset=0, filters={})
+
+    assert total == 2
+    assert [row.note for row, _ in rows] == ["early", "late"]

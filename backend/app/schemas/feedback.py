@@ -1,7 +1,7 @@
 """Wire shapes for `/feedback`. All `ApiModel`, so the wire is camelCase."""
 
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 
 from pydantic import Field, ValidationInfo, field_validator
 
@@ -70,7 +70,17 @@ class FeedbackSummaryQuery(FeedbackFilterFields):
 
 class FeedbackAdminRead(ApiModel):
     """One vote as an administrator sees it. **No user field of any kind** — a note
-    with a name attached is most of the way to reading a private conversation."""
+    with a name attached is most of the way to reading a private conversation.
+
+    Carries the vote's **day only**, never a time. `conversation.created` in the
+    audit trail (`.claude/rules/audit-trail.md`) records a second-precision
+    timestamp for the same actor and project, so a second-precision `created_at`
+    here would let an admin match an `answer` vote to whoever opened that
+    conversation seconds earlier. `updated_at` is dropped entirely for the same
+    reason — a revision time is exactly as identifying as a creation time. This is
+    an accepted, narrower leak than it prevents: on a one-member project the voter
+    is identifiable regardless, day-only or not.
+    """
 
     id: uuid.UUID
     project_id: uuid.UUID
@@ -81,8 +91,7 @@ class FeedbackAdminRead(ApiModel):
     reason_codes: list[ReasonCode]
     note: str | None
     prompt_version: str
-    created_at: datetime
-    updated_at: datetime
+    created_on: date
     # Stage 2 (Langfuse) fills this; until then, and whenever Langfuse is off, null.
     trace_url: str | None = None
 

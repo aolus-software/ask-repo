@@ -31,6 +31,14 @@ client can have received it, so it is recorded under Changed and allowed in a `M
   `/settings/feedback` screen: down-vote rate per feature and per prompt version, a reason-code
   breakdown, and the notes list.
 
+### Changed
+
+- `GET /feedback`'s `FeedbackAdminRead` reports `createdOn`, the UTC **day** a vote was cast,
+  in place of `createdAt`; `updatedAt` is dropped. A second-precision timestamp could be matched
+  against the audit trail's `conversation.created` row for the same actor and project to
+  identify the voter. The list is now ordered within a day by `id`, not by `created_at`, so
+  paging order cannot leak the same sequence back out.
+
 ## [2.2.0] — 2026-09-27
 
 Notifications (`docs/PRD.md` §2.1, phase 2.3), optional mail with self-service password reset

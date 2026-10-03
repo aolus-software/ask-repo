@@ -28,6 +28,19 @@ most of the way to reading a private conversation. Nothing on `/feedback` joins 
 `conversations`, or a change set's body. The popover tells the user, in fixed text, who can read
 their note.
 
+**Admin reads carry the vote's day, never its time, and are ordered within a day by id, not
+timestamp.** `conversation.created` in the audit trail (`.claude/rules/audit-trail.md`) already
+gives an administrator a second-precision timestamp for the same actor and the same project —
+the conversation a user opened seconds before casting an `answer` vote. A second-precision
+`created_at`/`updated_at` on `FeedbackAdminRead` would let that timestamp be matched against the
+vote and name the voter, so `FeedbackAdminRead.created_on` is a bare UTC date and
+`updated_at` is dropped entirely — a revision time leaks the same way a creation time does.
+`FeedbackRepository.page` orders by the UTC day and then by `id` (a random UUID), never by the
+full `created_at`, because ordering within a day by timestamp would leak the same sequence back
+out as page position instead of a printed clock time. This is a mitigation, not a guarantee: on
+a project with exactly one member, that member is the voter regardless of how coarse the
+timestamp is — day-only narrows the set of suspects, it does not always widen it past one.
+
 ## 3. Every write-side miss is one `404`
 
 `FEEDBACK_TARGET_NOT_FOUND` for a missing id, a user-role message, someone else's conversation,

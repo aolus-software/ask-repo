@@ -186,13 +186,18 @@ class FeedbackRepository(BaseRepository[Feedback]):
 
         Joined against a live project only: a `PUT` racing a project's soft delete
         must not surface that project's row on this admin screen afterwards.
+
+        Ordered by the UTC **day** of `created_at`, then by `id` — never by the full
+        timestamp within a day. The admin read (`FeedbackAdminRead.created_on`)
+        already withholds time-of-day; ordering by the timestamp anyway would leak
+        the same sequence back out as position on the page, one vote after another
+        instead of a printed time.
         """
         on_clause = and_(Project.id == Feedback.project_id, Project.deleted_at.is_(None))
         statement = _apply(select(Feedback, Project.name).join(Project, on_clause), filters)
+        day = func.date(func.timezone("UTC", Feedback.created_at))
         rows = await self.session.execute(
-            statement.order_by(Feedback.created_at.desc(), Feedback.id.desc())
-            .limit(limit)
-            .offset(offset)
+            statement.order_by(day.desc(), Feedback.id.desc()).limit(limit).offset(offset)
         )
         count = await self.session.execute(
             _apply(select(func.count(Feedback.id)).join(Project, on_clause), filters)

@@ -14,6 +14,7 @@ import uuid
 from collections import defaultdict
 from collections.abc import Sequence
 from dataclasses import dataclass
+from datetime import UTC
 
 from fastapi import status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -152,8 +153,7 @@ class FeedbackService:
                 reason_codes=[ReasonCode(code) for code in row.reason_codes],
                 note=row.note,
                 prompt_version=row.prompt_version,
-                created_at=row.created_at,
-                updated_at=row.updated_at,
+                created_on=row.created_at.astimezone(UTC).date(),
             )
             for row, project_name in rows
         ]

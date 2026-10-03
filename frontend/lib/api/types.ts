@@ -114,8 +114,10 @@ export interface FeedbackAdminRead {
   reasonCodes: FeedbackReasonCode[];
   note: string | null;
   promptVersion: string;
-  createdAt: string;
-  updatedAt: string;
+  /** ISO `YYYY-MM-DD`, the UTC day the vote was cast — never a time. See
+   * `.claude/rules/feedback.md` §2: a second-precision timestamp plus the audit
+   * trail's `conversation.created` row could identify the voter. */
+  createdOn: string;
   traceUrl: string | null;
 }
 

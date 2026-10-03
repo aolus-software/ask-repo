@@ -313,6 +313,13 @@ to do with — `myFeedback` (`mine_for_targets`), withdrawing a vote (`delete_mi
 notes when their conversation is deleted (`clear_notes_for_conversation`), all of which filter by
 subject rather than by project or feature.
 
+**The stored `created_at` is full precision; the admin read is not.** `FeedbackAdminRead`
+narrows it to `created_on`, the UTC **day** the vote was cast, and drops `updated_at` entirely
+— a second-precision timestamp could be matched against the audit trail's `conversation.created`
+row for the same actor and project, seconds apart, and identify the voter. `page()` orders
+within a day by `id`, never by the timestamp, for the same reason: ordering by time would leak
+the same sequence back out as page position. See `.claude/rules/feedback.md` §2.
+
 | Event | Effect on feedback |
 | --- | --- |
 | Conversation deleted | Rows on its messages keep `rating`, `reason_codes`, `feature`, `project_id`; `note` set to `NULL`, in the same transaction |
