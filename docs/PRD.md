@@ -754,6 +754,7 @@ This replaces the QA List that shipped at M4 earlier — a browsable store of sa
 - **Every write to the checklist is a reviewed change set.** Generation and the refinement chat both produce a *pending* list of `add`/`update`/`remove` operations, each with the rationale that argued for it. Applying is the only path that writes a row. A model that could write directly into a shared test plan would put unreviewed assertions in front of a tester who has no way to tell them from reviewed ones.
 - **The generator enumerates; it does not search.** It scrolls every indexed chunk under the module's path rather than running a top-k query, because top-k cannot report what it left out — and a test plan that silently omits a file is worse than one that names the files it covered.
 - **`current_result` is only ever a human's observation.** AskRepo has not run the application, so it never fills that column in, not even as a suggestion. A generated row always arrives `untested` with an empty result.
+- **Written for any tester.** Generated test names and expected results describe what a person does in the application and what they see — never the code: no file paths or line numbers, no function or class names, no HTTP methods, routes or status codes, no exception names, error-code constants or translation keys. The checklist is for general QA, including someone new to testing who has never opened the repository. The files an expectation came from are its `citations`, shown as sources, never repeated in the text. Both the generator and the module chat's proposals follow this; the chat's own answers stay technical, since they are a conversation about the code. See `docs/superpowers/specs/2026-10-03-plain-language-checklist-design.md`.
 - **The module chat is shared, deliberately inverting §4.2.** A conversation is private; this chat is the justification record for a shared document, so every member of the project can read it and the UI says so before anyone types. Membership bounds who that is (§4.1); within the team it is not private.
 - **Editing a test is gated; recording a result is not.** Changing `feature`, `test_name`, `expected_result` or `notes` requires the `item.edit` permission — an editor or an owner. Recording `current_result` and `status` requires only `result.record`, which every role including `viewer` holds, because a viewer is a tester. The gap is the point: otherwise the cheapest way to make a failing test pass is to edit the expectation.
 - **A module is an entity; a feature is a string.** Modules are rows a user creates and points at a path. Features are a grouping column on the item, because the model discovers them and a table of them would need a reconciliation step every generation.
@@ -808,7 +809,7 @@ class ChecklistItem(BaseModel):
     project_id: UUID                    # denormalised; the grid and export filter on it
     feature: str                        # "Login"
     test_name: str                      # "Rejects a wrong password"
-    expected_result: str                # "401 with code INVALID_CREDENTIALS"
+    expected_result: str                # "The sign-in is refused and the page says the email or password is wrong"
     current_result: str | None          # a human's observation; AskRepo never writes it
     status: Literal["untested", "pass", "fail", "blocked"]
     notes: str | None

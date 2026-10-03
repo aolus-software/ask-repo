@@ -108,6 +108,11 @@ Two features, and that is nearly all of it.
 `CLASSIFY_PROMPT`, `GRADE_PROMPT`, `HISTORY_ANSWER_PROMPT`, plus the generation prompts
 (`MAP_FILE_SYSTEM`, `REDUCE_SYSTEM`, `PROPOSE_SYSTEM`, and the mock-data pair).
 
+The reduce and propose system messages both end with `TESTER_LANGUAGE`, which holds every
+generated row to plain language for a manual tester — no paths, code names, HTTP details or
+error codes — and sends the file reference to `citation_paths` instead. The map step stays
+technical on purpose: its observations are input to the reduce step, never shown to a tester.
+
 Keeping them in one module matters more than it looks: **no ordinary test can catch a prompt
 that routes or cites wrongly**, because every other test drives a `ScriptedChatModel`. That is
 what `uv run pytest -m model` exists for — it needs a real served model. Run it after touching
