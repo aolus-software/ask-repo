@@ -358,4 +358,4 @@ See [`CONTRIBUTING.md`](CONTRIBUTING.md). Bug reports and feature requests go th
 - [`backend/README.md`](backend/README.md) — API setup, routes, configuration
 - [`frontend/README.md`](frontend/README.md) — UI setup and scripts
 - [`CLAUDE.md`](CLAUDE.md) — architecture notes and the conventions that bite, for AI agents and humans alike
-- [`.claude/rules/`](.claude/rules) — the enforceable conventions (Python, persistence, API contract, ingestion, RAG, audit trail, notifications, live events, mail, design system, forms, navigation)
+- [`.claude/rules/`](.claude/rules) — the enforceable conventions (Python, persistence, API contract, ingestion, RAG, audit trail, notifications, live events, the AI call log, mail, design system, forms, navigation)

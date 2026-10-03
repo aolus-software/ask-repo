@@ -128,6 +128,23 @@ and removes two model calls per question.
 
 ---
 
+## Scope for the call log is inherited metadata
+
+Each node passes its own `config=call_config(CallFeature.X)`, and the run's scope — the trace seed
+(the assistant message id), the project id — is passed **once**, as `config=scope_config(...)` on
+`graph.astream` in `Answerer`. LangChain's inherited metadata carries it to every model call
+beneath, so classify, grade and answer land in one trace without any node knowing the seed.
+
+It is deliberately **not** in `TurnState` and not a context variable. The state is what the
+nodes reason about, and a node that read the seed would be coupled to the call log. A context
+variable fails for a reason that only shows up in the worst place: the graph's events are pulled
+through an async generator whose `anext` may run in a fresh task, so a variable set in one task
+cannot be reset in another — and the failure arrives during the shielded cleanup on a client
+disconnect. `tests/test_answerer.py` (`test_the_graph_scope_reaches_the_answer_call`) pins that the seed reaches the call. See
+`.claude/rules/call-log.md` rule 4 and [`llm.md`](llm.md) "The call log".
+
+---
+
 ## One graph, three call sites
 
 The same graph serves the Ask screen and both refinement chats. The difference is one

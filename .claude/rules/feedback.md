@@ -54,6 +54,19 @@ No answer text, no change-set body, no prompt. Deleting a conversation nulls its
 counts survive); deleting a project soft-deletes its feedback. `feature` and `project_id` are
 derived server-side from the target, never accepted from a request.
 
-## 5. Recording a vote is not audited
+## 5. `traceUrl` links a vote to its Langfuse trace, except for Ask answers
+
+`FeedbackAdminRead.trace_url` is built from the target's own id with
+`app/observability/trace_ids.py`, the same seed function the call log uses, so nothing stores a
+trace id. It is `null` when `LANGFUSE_ENABLED` is off, and **always `null` for a `message` vote on
+the Ask screen**: a trace carries second-precision start and end times, which would let an
+administrator match a vote to its voter through `conversation.created` — the exact leak rule 2's
+day-only `created_on` closes. Checklist and mock-data chat replies and both kinds of change set
+are shared documents, so they link: a chat reply seeds on its change set's `message_id`, a
+generation change set on its own id. A change set `get_many` cannot load (soft-deleted) gets
+`null` rather than a guessed seed. Seeds are fetched one query per change-set table, never one per
+row. See `.claude/rules/call-log.md` rule 6.
+
+## 6. Recording a vote is not audited
 
 Exemption 7 in `.claude/rules/audit-trail.md`. Do not add an `AuditEventType` for it.

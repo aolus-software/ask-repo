@@ -31,8 +31,29 @@ client can have received it, so it is recorded under Changed and allowed in a `M
   `/settings/feedback` screen: down-vote rate per feature and per prompt version, a reason-code
   breakdown, and the notes list.
 
+- **The AI call log** (`docs/PRD.md` §2.1, phase 2.5, stage 2, issue #25): every chat-model call
+  — each answer-graph node, both generators and the capability probe — records its feature,
+  provider, model, timing, token counts, outcome and retry attempt to a self-hosted Langfuse.
+  **Never a prompt, a completion, a question, a message or a user id**: the record has no field
+  that could hold one, and a failed call carries the error's class, never its message. Off by
+  default.
+- The `langfuse` Compose profile (development and production): `langfuse-web`, `langfuse-worker`,
+  `langfuse-clickhouse`, `langfuse-redis` and `langfuse-minio`, with `TELEMETRY_ENABLED=false` and
+  `CHECKPOINT_DISABLE=1`. `make infra LANGFUSE=1` and `make up-prod LANGFUSE=1` start it;
+  `make langfuse-db` creates its database on the existing Postgres. Plan for 4 cores and 16 GiB.
+  `docs/deployment.md` documents the egress paths and a ClickHouse TTL for retention.
+- `LANGFUSE_ENABLED` (default `false`), `LANGFUSE_BASE_URL`, `LANGFUSE_PUBLIC_KEY`,
+  `LANGFUSE_SECRET_KEY`, `LANGFUSE_PROJECT_ID` and `LANGFUSE_UI_URL`. Enabling it without both
+  keys stops the instance at boot.
+- `.claude/rules/call-log.md`.
+
 ### Changed
 
+- `GET /feedback`'s `traceUrl` is now populated: a link to the Langfuse trace of the output a
+  vote judges, for change-set votes and for checklist and mock-data chat replies, when
+  `LANGFUSE_ENABLED` is on. It stays `null` for an Ask answer — a trace's second-precision times
+  would let an administrator match a vote to its voter — and for a change set that has been
+  deleted.
 - `GET /feedback`'s `FeedbackAdminRead` reports `createdOn`, the UTC **day** a vote was cast,
   in place of `createdAt`; `updatedAt` is dropped. A second-precision timestamp could be matched
   against the audit trail's `conversation.created` row for the same actor and project to

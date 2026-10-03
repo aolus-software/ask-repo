@@ -52,6 +52,7 @@ The `Makefile` at the root wraps everything; `make help` lists all targets.
 ```bash
 make setup            # install backend + frontend dependencies
 make infra            # start postgres + qdrant + redis + kafka, wait until healthy
+make infra LANGFUSE=1 # the same, plus the opt-in AI call log (five Langfuse containers)
 make pull-models      # pull the embedding + chat models into the HOST ollama
 make dev              # both dev servers + the worker (needs `make infra` and `ollama serve`)
 make check            # lint + format-check + typecheck + test, as CI would
@@ -139,6 +140,17 @@ There is a second opt-in marker, `model`, for `tests/test_rag_model_integration.
 served chat model rather than a broker, and it is what keeps the prompts honest. Everything else
 drives `ScriptedChatModel`, so no ordinary test can catch a prompt that routes or cites wrongly
 — run `uv run pytest -m model` after editing anything in `app/rag/prompts.py`.
+
+### Every model call is recorded, and never its content
+
+Mechanism: [`docs/llm.md`](docs/llm.md) and `.claude/rules/call-log.md`.
+
+`build_chat_model` attaches one `CallRecorder` callback, and every call passes
+`config=call_config(CallFeature.X)`, so tokens, timing, model, outcome and feature reach a
+self-hosted Langfuse — a `CallRecord` has no field that could hold a prompt, a completion or a
+user id. Langfuse is **opt-in**: `LANGFUSE_ENABLED` is `false`, the five containers sit behind the
+`langfuse` Compose profile (`make infra LANGFUSE=1`), and with it off the `langfuse` package is
+never imported. Tracing never fails a model call.
 
 ### Configuration flows one way
 
@@ -426,7 +438,7 @@ route does not return, which is the one-error-shape rule failing silently rather
 
 ## Rules
 
-Eighteen rule files in `.claude/rules/`. Read the ones your change touches.
+Nineteen rule files in `.claude/rules/`. Read the ones your change touches.
 
 | Rule | Read it when |
 | --- | --- |
@@ -446,6 +458,7 @@ Eighteen rule files in `.claude/rules/`. Read the ones your change touches.
 | `audit-trail.md` | Any write or export in any service — what must record an audit event, the seven exemptions, and the two content bans. **Adding a mutating route means adding an event in the same change** |
 | `notifications.md` | Anything under `app/core/notifications.py`, `app/services/notification_fanout.py`, or a fan-out call site — recipient resolution, the before-commit/after-commit straddle with audit, and the preference-snapshot rule |
 | `live-events.md` | Anything under `app/live/`, `GET /events`, a status write the frontend shows, or `components/live/` — ids only, stage never publish, visibility in `access.py`, polling stays the fallback |
+| `call-log.md` | Anything under `app/observability/`, the `callbacks=` in `app/rag/chat.py`, a `config=call_config(...)` at a model call site, or the `langfuse` Compose profile — no content in a record, the error's class only, scope as inherited metadata, tracing never fails a call, no trace link for Ask votes |
 | `feedback.md` | Anything under `app/core/feedback.py`, the feedback model/repository/service/router, `myFeedback`, or `components/output-feedback/` — never reaches a model, voter anonymous to admins, one 404 |
 | `audit-findings.md` | Writing an audit report |
 

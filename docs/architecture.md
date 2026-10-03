@@ -342,6 +342,34 @@ update, never a failed write, and the safety poll every screen keeps running is 
 
 ---
 
+## The AI call log: five more processes, and only metadata crosses
+
+Opt-in (`LANGFUSE_ENABLED`, off by default). When on, the API process and the worker each hold one
+`CallRecorder` callback on their chat model and send a **start** and an **end** record per model
+call to a self-hosted Langfuse over HTTP; they flush on shutdown. Nothing is added to the request
+path beyond a callback that never raises.
+
+```
+backend ─┐                       ┌─ langfuse-web ──── langfuse database (on the existing Postgres)
+         ├─ CallStart/CallRecord ─┤       │
+worker  ─┘   (metadata only)      └─ langfuse-worker ─ clickhouse (traces) · langfuse-redis (queue,
+                                                       noeviction) · langfuse-minio (event blobs)
+```
+
+Five containers behind the `langfuse` Compose profile — `langfuse-web`, `langfuse-worker`,
+`langfuse-clickhouse`, `langfuse-redis`, `langfuse-minio` — plus a `langfuse` **database** on the
+existing Postgres, created by `make langfuse-db`. The Redis is a second one, never the one
+`app/core/rate_limit.py` reads: Langfuse needs `noeviction`, and the rate limiter's keys must not
+inherit that. **What crosses the boundary is the content of `CallRecord` and nothing else** —
+feature, provider, model, timing, token counts, outcome, the error's class, the project id, the
+attempt, the prompt version and a trace seed. No prompt, completion, question, message or user id
+exists in the record to send (`.claude/rules/call-log.md`). Langfuse's UI has its own login and
+does not go through `app/core/access.py`; `SECURITY.md` records that. Sizing, egress and
+retention are in [`deployment.md`](deployment.md). How a call is tagged, grouped and priced is in
+[`llm.md`](llm.md) "The call log".
+
+---
+
 ## Configuration and identity
 
 **Configuration flows one way**: environment → `.env` → the defaults in `Settings`
@@ -415,7 +443,7 @@ Both exist because the alternative is failing illegibly, minutes into a job:
 
 - [`data.md`](data.md) — what is in each store, and the table relationships
 - [`rag.md`](rag.md) — clone → chunk → embed → retrieve, end to end
-- [`llm.md`](llm.md) — how a model is chosen, called, and bounded
+- [`llm.md`](llm.md) — how a model is chosen, called, bounded, and recorded
 - [`langgraph.md`](langgraph.md) — the answer graph and the SSE contract
 - [`codebase.md`](codebase.md) — the layering, and where to add code
 - [`installation.md`](installation.md) — getting it running locally

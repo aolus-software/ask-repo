@@ -188,15 +188,79 @@ which is what to watch for.
 against a hosted model provider instead, drop `--profile ollama` from `COMPOSE_PROD` in the
 `Makefile` and point `EMBEDDING_BASE_URL` and `CHAT_BASE_URL` elsewhere.
 
-**The `langfuse` profile** (the AI call log) is off by default and opt-in with
-`make up-prod LANGFUSE=1`: five more containers (`langfuse-web`, `langfuse-worker`,
-`langfuse-clickhouse`, `langfuse-redis`, `langfuse-minio`), roughly 16 GiB, a `langfuse` database
-on the existing Postgres, and the UI on `127.0.0.1:3001` for Caddy to front. Its secrets
-(`LANGFUSE_SALT`, `LANGFUSE_ENCRYPTION_KEY`, `LANGFUSE_NEXTAUTH_SECRET`, and the ClickHouse,
-MinIO, Redis and initial-user credentials) have no defaults; compose cannot enforce that with
-`${VAR:?}` because it interpolates services whose profile is off, so `make up-prod LANGFUSE=1`
-checks them first. Telemetry and the version check are disabled, but images still come from
-`docker.langfuse.com`: mirror them on a network with no outbound access.
+**The `langfuse` profile** (the AI call log) is off by default and opt-in. See "The AI call log"
+below; the short version is `make up-prod LANGFUSE=1`.
+
+### The AI call log
+
+Mechanism: [`llm.md`](llm.md) "The call log" and `.claude/rules/call-log.md`. It records what each
+model call cost, never what it said, in a self-hosted Langfuse. Leave `LANGFUSE_ENABLED=false`
+and none of this applies.
+
+**The profile.** Five containers behind the `langfuse` Compose profile: `langfuse-web`,
+`langfuse-worker`, `langfuse-clickhouse`, `langfuse-redis` (a second Redis, `noeviction`, never the
+one the rate limiter reads) and `langfuse-minio`. Their database is a `langfuse` **database** on
+the existing Postgres, created by `make langfuse-db` — not by a Postgres init script, because an
+init script only runs against a fresh volume and every existing deployment would never get it.
+Development: `make infra LANGFUSE=1` runs `langfuse-db` and starts the five. Production:
+`make up-prod LANGFUSE=1` does the same (`langfuse-db-prod`), with the UI on `127.0.0.1:3001` for
+Caddy to front. `LANGFUSE_INIT_*` creates the organization, project, keys and first user on first
+boot, so there is no manual setup; put the same project keys in `infra/.env` and the API and worker
+pick them up.
+
+**Sizing.** Plan for **4 cores and 16 GiB** for the Langfuse stack on its own — ClickHouse is the
+heavy part and fails to start without memory. That is on top of what Postgres, Qdrant, Redis,
+Kafka and the model server already need, so size the box for both, and together with Phase 3's
+Neo4j if you will run it (`docs/PRD.md` §2.1).
+
+**Secrets.** `LANGFUSE_SALT`, `LANGFUSE_ENCRYPTION_KEY`, `LANGFUSE_NEXTAUTH_SECRET` and the
+ClickHouse, MinIO, Redis and initial-user credentials have no production defaults. The production
+file reads them as `${VAR:-}` rather than `${VAR:?}`, because Compose interpolates services whose
+profile is off and `:?` would stop every deployment that does not run Langfuse. The check lives in
+the Makefile instead (`langfuse-require-prod`, run before `make up-prod LANGFUSE=1`). **A
+hand-run `docker compose -f docker-compose.prod.yml --profile langfuse up` skips it** and starts
+with empty secrets; use the Make target. The images are pinned in `docker-compose.prod.yml`:
+`langfuse` and `langfuse-worker` at `4.50.0`, ClickHouse at `25.12`. The MinIO image
+(`cgr.dev/chainguard/minio`) and `redis:7` follow upstream's own tags and are not pinned to a
+patch, so re-check them when you bump.
+
+**Three egress paths, and how each is closed.** Self-hosted Langfuse reaches out by default.
+
+| Path | What goes | Closed by |
+| --- | --- | --- |
+| Usage ping | Anonymous usage statistics to Langfuse | `TELEMETRY_ENABLED=false` on `langfuse-web` and `langfuse-worker`, set in the compose file |
+| Version check | The web image's Prisma CLI calls `checkpoint.prisma.io` | `CHECKPOINT_DISABLE=1` on `langfuse-web`, set in the compose file |
+| Image pulls | Nothing sent, but the images come from `docker.langfuse.com` | Not a setting. On a network with no outbound access, mirror the five images into your own registry and change `image:` |
+
+**Retention is yours to set.** Langfuse's automated retention is Enterprise-only, and AskRepo has
+no setting for it — the data is in Langfuse's store. Without a TTL every call record is kept
+forever. The lever on the open-source build is a ClickHouse TTL on the three tables that grow:
+
+| Table | Time column |
+| --- | --- |
+| `traces` | `timestamp` |
+| `observations` | `start_time` |
+| `scores` | `timestamp` |
+
+A worked example for 90 days, run against the `default` database (the one the compose file
+creates), with the ClickHouse credentials exported from `infra/.env`:
+
+```bash
+docker compose -f infra/docker-compose.prod.yml exec langfuse-clickhouse \
+  clickhouse-client --user "$LANGFUSE_CLICKHOUSE_USER" --password "$LANGFUSE_CLICKHOUSE_PASSWORD" --multiquery \
+  --query "ALTER TABLE traces MODIFY TTL toDateTime(timestamp) + INTERVAL 90 DAY;
+           ALTER TABLE observations MODIFY TTL toDateTime(start_time) + INTERVAL 90 DAY;
+           ALTER TABLE scores MODIFY TTL toDateTime(timestamp) + INTERVAL 90 DAY"
+```
+
+ClickHouse deletes expired rows when it merges parts, not at the instant of expiry. The column
+names above are from Langfuse's ClickHouse migrations (`traces`, `observations` and `scores` are
+each partitioned by month on that column); a later Langfuse release can add tables — newer ones
+add `events_*` tables keyed on `start_time`, and `event_log` and `blob_storage_file_log` carry
+`created_at` — so run `SHOW TABLES` and `DESCRIBE TABLE <name>` against your pinned version
+before relying on the list, and give any table that holds call data the same treatment. The TTL
+does not reach MinIO (event payloads in the `langfuse` bucket — set a bucket lifecycle rule) or
+the `langfuse` Postgres database.
 
 ---
 
