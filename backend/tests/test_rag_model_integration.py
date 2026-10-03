@@ -385,12 +385,18 @@ async def test_reduce_writes_for_a_tester_who_has_never_seen_the_code(
     assert any(operation.citation_paths for operation in result.operations), (
         "no operation kept its source in citation_paths"
     )
+    # Key on reset-specific words, not just "password": the fourth observation has "strong password"
+    # in a success case, so a row containing "password" exists regardless of whether the
+    # "silently returns" behavior was actually translated to a test.
     mentions_reset = [
         operation
         for operation in result.operations
-        if "password" in f"{operation.test_name} {operation.expected_result}".lower()
+        if any(
+            word in f"{operation.test_name} {operation.expected_result}".lower()
+            for word in ("reset", "forgot", "recover")
+        )
     ]
-    assert mentions_reset, "the 'silently returns' behaviour was dropped, not translated"
+    assert mentions_reset, "the forgot-password or reset behavior was dropped, not translated"
 
 
 async def test_a_chat_proposal_from_a_technical_answer_is_plain(settings: Settings) -> None:
