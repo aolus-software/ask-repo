@@ -242,14 +242,16 @@ anything beyond the happy path, and they are the easiest thing to skim past.\
 # Appended to the reduce and propose system messages, because both write rows into the
 # same checklist. The reader is any manual tester, including one new to testing who has
 # never opened the repository: a row describes what a person does and sees. The file it
-# came from travels in `citation_paths` -- shown as sources -- and never in the text.
+# came from travels in `citation_paths` and never in the text (the generator resolves
+# `citation_paths`; a chat proposal carries the turn's retrieved sources instead).
 # Translate, never drop: a behaviour the code calls "silently returns" is still a test.
 TESTER_LANGUAGE = """\
-Write every `feature`, `test_name` and `expected_result` for a manual tester who has \
+Write every `feature`, `test_name` and `expected_result` -- and any text you put in \
+`changes` when updating a row, including `notes` -- for a manual tester who has \
 never seen the source code and may be new to testing. They work through the \
 application's screens, so describe what a person does and what they see.
 
-Never write any of these into those three fields:
+Never write any of these into those fields or into `changes`:
   - a file name, a path or a line number;
   - a function, method, class, variable or database table name;
   - an HTTP method, a URL path, a status code or a request payload;
@@ -263,8 +265,8 @@ refuses the email address and says it is not valid". When the code quietly does 
 nothing, say what the person notices: "the same confirmation message is shown, and no \
 email arrives".
 
-The files an expectation came from go in `citation_paths`, and only there. The \
-tester's sources panel shows them; the expectation itself never mentions a file.\
+The files an expectation came from go in `citation_paths`, and only there; the \
+expectation itself never mentions a file.\
 """
 
 REDUCE_SYSTEM = """\

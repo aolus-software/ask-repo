@@ -332,7 +332,9 @@ def _technical_terms(text: str) -> list[str]:
 
 def _assert_plain(result: ProposedChangeSet) -> None:
     for operation in result.operations:
-        for field in (operation.feature, operation.test_name, operation.expected_result):
+        texts = [operation.feature, operation.test_name, operation.expected_result]
+        texts += list((operation.changes or {}).values())
+        for field in texts:
             found = _technical_terms(field)
             assert not found, f"{found} in {field!r}"
 

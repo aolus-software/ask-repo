@@ -63,7 +63,9 @@ client can have received it, so it is recorded under Changed and allowed in a `M
   against the audit trail's `conversation.created` row for the same actor and project to
   identify the voter. The list is now ordered within a day by `id`, not by `created_at`, so
   paging order cannot leak the same sequence back out.
-- Generated QA Checklist test cases — from generation and from the module chat — are written in plain language for any tester: no file paths, code names, HTTP details or error codes. Sources stay in the sources panel. Existing rows are not rewritten.
+- Generated QA Checklist test cases — from generation and from the module chat — are written in
+  plain language for any tester: no file paths, code names, HTTP details or error codes. Sources
+  stay in the sources panel. Existing rows are not rewritten.
 
 ## [2.2.0] — 2026-09-27
 

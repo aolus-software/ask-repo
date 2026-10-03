@@ -154,6 +154,11 @@ def test_tester_language_names_every_banned_category() -> None:
         assert phrase in lowered, phrase
 
 
+def test_tester_language_covers_update_text_in_changes() -> None:
+    assert "`changes`" in TESTER_LANGUAGE
+    assert "`notes`" in TESTER_LANGUAGE
+
+
 def test_the_schema_does_not_teach_status_codes() -> None:
     """Field descriptions reach the model inside the structured-output schema, so a
     technical example there undoes the prompt."""
