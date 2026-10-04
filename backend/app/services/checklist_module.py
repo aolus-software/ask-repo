@@ -38,7 +38,6 @@ from app.models.checklist import (
     ChecklistModuleStatus,
 )
 from app.models.conversation import FinishReason, MessageRole
-from app.models.project import Project, ProjectStatus
 from app.queue.protocol import ChecklistQueue
 from app.queue.topics import ChecklistJobMessage
 from app.rag.answerer import Answerer
@@ -75,8 +74,8 @@ from app.schemas.conversation import (
     encode_event,
 )
 from app.schemas.pagination import PaginatedResponse
-from app.services import path_tree
 from app.services.feedback import my_feedback_map
+from app.services.index_guards import require_indexed, require_path_indexed, require_stable_index
 from app.services.indexed_path import IndexedPathReader
 
 logger = logging.getLogger(__name__)
@@ -160,9 +159,9 @@ class ChecklistModuleService:
         """Name a module against a project the caller may read. Gated on `module.create`."""
         project = await access.require_readable_project(self.projects, payload.project_id, actor)
         access.require_permission(actor, project.id, Permission.MODULE_CREATE)
-        self._require_indexed(project)
+        require_indexed(project)
         source_path = payload.source_path.strip().strip("/")
-        await self._require_path_indexed(project, source_path)
+        await require_path_indexed(self.indexed_paths, project, source_path)
         module = await self.modules.add(
             ChecklistModule(
                 id=uuid.uuid4(),
@@ -212,8 +211,8 @@ class ChecklistModuleService:
             # Only a re-point needs an index. A rename has to keep working whatever
             # state the project is in, and there is nothing to validate a name against.
             project = await access.require_readable_project(self.projects, module.project_id, actor)
-            self._require_indexed(project)
-            await self._require_path_indexed(project, source_path)
+            require_indexed(project)
+            await require_path_indexed(self.indexed_paths, project, source_path)
             module.source_path = source_path
         # `updated_at`'s `onupdate=func.now()` is a server-side expression: an ORM
         # UPDATE does not fetch it back via RETURNING the way an INSERT does, so it is
@@ -296,8 +295,8 @@ class ChecklistModuleService:
         module = await self._require_readable(module_id, actor)
         project = await access.require_readable_project(self.projects, module.project_id, actor)
         access.require_permission(actor, project.id, Permission.GENERATE_RUN)
-        self._require_indexed(project)
-        self._require_a_stable_index(project)
+        require_indexed(project)
+        require_stable_index(project)
 
         if module.status == ChecklistModuleStatus.GENERATING.value:
             raise AppError(
@@ -513,74 +512,6 @@ class ChecklistModuleService:
                 "Checklist module not found.",
             )
         return module
-
-    @staticmethod
-    def _require_indexed(project: Project) -> None:
-        """There has to be an index to enumerate.
-
-        No embedding-model check, deliberately -- see `request_generation`.
-        """
-        if project.status != ProjectStatus.READY.value or not project.embedding_collection:
-            raise AppError(
-                status.HTTP_409_CONFLICT,
-                ErrorCode.PROJECT_NOT_READY,
-                "This project is not indexed yet. Wait for indexing to finish.",
-            )
-
-    async def _require_path_indexed(self, project: Project, source_path: str) -> None:
-        """Refuse a `source_path` that matches nothing in the project's index.
-
-        This is the point of phase 1.1 (`docs/PRD.md` §2.1). Without it a typo'd path
-        returns `201` and the mistake surfaces later and silently, when the background
-        generation cannot match anything under it -- tolerable for someone who already
-        knows the tree, a wall for someone whose first contact with the repository is
-        AskRepo itself.
-
-        `400`, not `422`: the string is well-formed and passed schema validation, so
-        this is "semantically invalid input" as `.claude/rules/response-api.md` defines
-        it. `MODULE_PATH_NOT_INDEXED` rather than a new code, because generation
-        already reports this exact condition under this exact name and a second code
-        would make the frontend branch on two.
-
-        **The generate-time check stays.** A reindex can drop the files a module was
-        pointed at, so a path valid at creation can stop being indexed while the module
-        lives on; removing the later check would turn that into a run that scrolls
-        nothing and proposes an empty checklist.
-        """
-        paths = await self.indexed_paths.paths_for(project)
-        if not path_tree.covers(paths, source_path):
-            raise AppError(
-                status.HTTP_400_BAD_REQUEST,
-                ErrorCode.MODULE_PATH_NOT_INDEXED,
-                (
-                    f"Nothing under {source_path!r} is indexed for this project. "
-                    "Pick a path from the repository tree."
-                ),
-            )
-
-    @staticmethod
-    def _require_a_stable_index(project: Project) -> None:
-        """Refuse to generate while a reindex is in flight.
-
-        A reindex keeps `status` at `ready` and raises `reindex_in_progress` instead
-        (`ProjectRepository.claim`), so `_require_indexed` passes throughout one. A
-        generation started in that window scrolls the *current* generation, stamps
-        `indexed_generation` with it, and then the reindex flips the pointer and
-        deletes the points underneath it -- leaving a module that reports `stale`
-        immediately after being regenerated, built from an index that no longer
-        exists. `_summaries` is right to call it stale; the defect is having let the
-        run start.
-
-        Only the generation paths take this. Asking a question and refining by chat
-        read the live generation and stamp nothing, and a reindex can run for twenty
-        minutes -- silencing Q&A for that long would cost far more than it saves.
-        """
-        if project.reindex_in_progress:
-            raise AppError(
-                status.HTTP_409_CONFLICT,
-                ErrorCode.PROJECT_NOT_READY,
-                "This project is being re-indexed. Wait for that to finish, then generate.",
-            )
 
 
 @dataclass(frozen=True, slots=True)
