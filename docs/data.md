@@ -400,7 +400,9 @@ Two consequences that are not visible from any single file:
   and applies it.
 - **`status` and `current_result` are outside what an operation may write.** The apply path runs
   an explicit column allowlist rather than `setattr`, because `operations` originates in a
-  model's output and an unchecked key would let it claim an observation nobody made.
+  model's output and an unchecked key would let it claim an observation nobody made. An `update`'s
+  `changes` keys are canonicalised to camelCase when stored and again on apply (a model may write
+  `expected_result`); a key outside the allowlist is dropped with a warning either way.
 
 There is **one pending change set per module** at a time, deliberately: concurrent refinement is
 out of scope, and the UI disables Generate and the composer while one is waiting rather than

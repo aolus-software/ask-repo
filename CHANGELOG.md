@@ -72,6 +72,13 @@ client can have received it, so it is recorded under Changed and allowed in a `M
   plain language for any tester: no file paths, code names, HTTP details or error codes. Sources
   stay in the sources panel. Existing rows are not rewritten.
 
+### Fixed
+
+- A chat-proposed checklist edit written with snake_case field names (`expected_result`), or with
+  its new text outside `changes`, no longer applies as a silent no-op. Keys are canonicalised to
+  camelCase when the operation is stored and again on apply, so change sets already pending are
+  covered too; the update allowlist is unchanged.
+
 ## [2.2.0] — 2026-09-27
 
 Notifications (`docs/PRD.md` §2.1, phase 2.3), optional mail with self-service password reset

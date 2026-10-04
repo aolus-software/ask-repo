@@ -19,7 +19,7 @@ from app.models.checklist import (
     ChecklistModuleStatus,
 )
 from app.repositories.checklist_item import ChecklistItemRepository
-from app.schemas.checklist import ChangeSetApplyRequest
+from app.schemas.checklist import ChangeSetApplyRequest, ChecklistItemResponse
 from app.services.checklist_change_set import ChecklistChangeSetService
 from tests.conftest import GrantMembership
 from tests.factories import (
@@ -454,6 +454,63 @@ async def test_update_rejects_forbidden_fields_in_the_allowlist(
 
     updated = result.items[0]
     assert updated.expected_result == "401 INVALID_CREDENTIALS"
+    assert updated.current_result == "Observed 400"
+    assert updated.status is ChecklistItemStatus.FAIL
+
+
+async def _apply_update_changes(
+    db_session: AsyncSession, grant_membership: GrantMembership, changes: dict[str, str]
+) -> ChecklistItemResponse:
+    module = await create_checklist_module(db_session)
+    item = await create_checklist_item(
+        db_session,
+        module_id=module.id,
+        project_id=module.project_id,
+        created_by=module.created_by,
+        current_result="Observed 400",
+        status=ChecklistItemStatus.FAIL,
+    )
+    change_set = await create_checklist_change_set(
+        db_session,
+        module_id=module.id,
+        operations=[
+            {
+                "op": "update",
+                "id": str(uuid.uuid4()),
+                "itemId": str(item.id),
+                "changes": changes,
+                "rationale": "Pre-fix row.",
+            }
+        ],
+    )
+    service = ChecklistChangeSetService(
+        db_session, Settings(), recorder=AuditRecorder(get_sessionmaker())
+    )
+    reviewer = await create_user(db_session)
+    await grant_membership(reviewer.id, module.project_id, EDITOR_NAME)
+    result = await service.apply(
+        change_set.id, ChangeSetApplyRequest(), actor=await authenticated(db_session, reviewer)
+    )
+    return result.items[0]
+
+
+async def test_apply_accepts_snake_case_keys_from_a_stored_change_set(
+    db_session: AsyncSession, grant_membership: GrantMembership
+) -> None:
+    updated = await _apply_update_changes(db_session, grant_membership, {"expected_result": "X"})
+
+    assert updated.expected_result == "X"
+
+
+async def test_snake_case_forbidden_keys_write_nothing(
+    db_session: AsyncSession, grant_membership: GrantMembership
+) -> None:
+    updated = await _apply_update_changes(
+        db_session,
+        grant_membership,
+        {"current_result": "Malicious", "created_by": str(uuid.uuid4()), "status": "pass"},
+    )
+
     assert updated.current_result == "Observed 400"
     assert updated.status is ChecklistItemStatus.FAIL
 
