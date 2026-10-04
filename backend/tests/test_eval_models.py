@@ -85,7 +85,27 @@ async def _only_result_id(db_session: AsyncSession) -> uuid.UUID:
 
 async def test_a_result_is_unique_per_run_and_pair(db_session: AsyncSession) -> None:
     eval_set = await _set(db_session)
-    run_id, pair_id = uuid.uuid4(), uuid.uuid4()
+    pair = EvalPair(
+        id=uuid.uuid4(),
+        set_id=eval_set.id,
+        position=0,
+        question_type="locate",
+        question="Where is login?",
+        reference_answer="app/auth/login.py",
+        source_file="app/auth/login.py",
+        start_line=1,
+        end_line=2,
+    )
+    run = EvalRun(
+        id=uuid.uuid4(),
+        set_id=eval_set.id,
+        project_id=eval_set.project_id,
+        status=EvalRunStatus.RUNNING.value,
+        created_by=eval_set.created_by,
+    )
+    db_session.add_all([pair, run])
+    await db_session.flush()
+    run_id, pair_id = run.id, pair.id
     for _ in range(2):
         db_session.add(
             EvalResult(

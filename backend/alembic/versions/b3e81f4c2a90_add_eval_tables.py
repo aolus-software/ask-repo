@@ -41,6 +41,12 @@ def upgrade() -> None:
             "updated_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()
         ),
         sa.Column("deleted_at", sa.DateTime(timezone=True), nullable=True),
+        sa.ForeignKeyConstraint(
+            ["project_id"], ["projects.id"], name=op.f("fk_eval_sets_project_id_projects")
+        ),
+        sa.ForeignKeyConstraint(
+            ["created_by"], ["users.id"], name=op.f("fk_eval_sets_created_by_users")
+        ),
     )
     op.create_index("ix_eval_sets_project_id", "eval_sets", ["project_id"])
 
@@ -63,6 +69,9 @@ def upgrade() -> None:
             "updated_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()
         ),
         sa.Column("deleted_at", sa.DateTime(timezone=True), nullable=True),
+        sa.ForeignKeyConstraint(
+            ["set_id"], ["eval_sets.id"], name=op.f("fk_eval_pairs_set_id_eval_sets")
+        ),
     )
     op.create_index("ix_eval_pairs_set_id", "eval_pairs", ["set_id"])
 
@@ -98,6 +107,15 @@ def upgrade() -> None:
             "updated_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()
         ),
         sa.Column("deleted_at", sa.DateTime(timezone=True), nullable=True),
+        sa.ForeignKeyConstraint(
+            ["set_id"], ["eval_sets.id"], name=op.f("fk_eval_runs_set_id_eval_sets")
+        ),
+        sa.ForeignKeyConstraint(
+            ["project_id"], ["projects.id"], name=op.f("fk_eval_runs_project_id_projects")
+        ),
+        sa.ForeignKeyConstraint(
+            ["created_by"], ["users.id"], name=op.f("fk_eval_runs_created_by_users")
+        ),
     )
     op.create_index("ix_eval_runs_set_id", "eval_runs", ["set_id"])
     op.create_index("ix_eval_runs_project_id", "eval_runs", ["project_id"])
@@ -125,6 +143,12 @@ def upgrade() -> None:
             "updated_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.func.now()
         ),
         sa.Column("deleted_at", sa.DateTime(timezone=True), nullable=True),
+        sa.ForeignKeyConstraint(
+            ["run_id"], ["eval_runs.id"], name=op.f("fk_eval_results_run_id_eval_runs")
+        ),
+        sa.ForeignKeyConstraint(
+            ["pair_id"], ["eval_pairs.id"], name=op.f("fk_eval_results_pair_id_eval_pairs")
+        ),
     )
     op.create_index("ix_eval_results_run_id", "eval_results", ["run_id"])
     op.create_index(
