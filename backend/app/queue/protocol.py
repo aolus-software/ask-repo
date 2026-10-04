@@ -19,9 +19,11 @@ from typing import Protocol
 
 from app.queue.topics import (
     CHECKLIST_TOPIC,
+    EVAL_TOPIC,
     INGEST_TOPIC,
     MOCK_DATA_TOPIC,
     ChecklistJobMessage,
+    EvalJobMessage,
     IngestionMessage,
     JobMessage,
     MockDataJobMessage,
@@ -74,6 +76,18 @@ class MockDataQueue(Protocol):
         ...
 
 
+class EvalQueue(Protocol):
+    """Somewhere to put an eval job so a worker picks it up.
+
+    A fourth protocol for the same reason as the others: an eval job on another
+    family's topic is read by a consumer that cannot parse it.
+    """
+
+    async def enqueue_eval(self, message: EvalJobMessage) -> None:
+        """Publish an eval job. Raises on failure."""
+        ...
+
+
 class InMemoryIngestionQueue:
     """Test double. Records what it was handed and never fails.
 
@@ -96,6 +110,10 @@ class InMemoryIngestionQueue:
     async def enqueue_mock_data(self, message: MockDataJobMessage) -> None:
         """Record the job, on the mock-data generate topic."""
         await self.produce_to(MOCK_DATA_TOPIC, message)
+
+    async def enqueue_eval(self, message: EvalJobMessage) -> None:
+        """Record the job, on the eval topic."""
+        await self.produce_to(EVAL_TOPIC, message)
 
     async def produce_to(self, topic: str, message: JobMessage) -> None:
         """Record the job and the topic it was routed to."""

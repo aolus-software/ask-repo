@@ -3,8 +3,9 @@
 Everything under `app/live/` (`kinds.py`, `events.py`, `staging.py`, `fanout.py`, `bus.py`,
 `kafka.py`), `app/api/routes/events.py`, `live_event_visible_to` in `app/core/access.py`, the
 staging call sites in `ProjectRepository`, `ChecklistModuleRepository`,
-`MockDataDatasetRepository`, `ProjectService`, `ChecklistModuleService`,
-`MockDataDatasetService`, `ChecklistChangeSetService`/`MockDataChangeSetService`, and
+`MockDataDatasetRepository`, `EvalSetRepository`, `EvalRunRepository`, `ProjectService`,
+`ChecklistModuleService`, `MockDataDatasetService`, `EvalService`,
+`ChecklistChangeSetService`/`MockDataChangeSetService`, and
 `NotificationFanout._write`, plus `frontend/components/live/`, `frontend/lib/live/` and
 `frontend/hooks/use-live-events.ts`. Read `notifications.md` alongside this — the two systems
 share a shape (stage inside a transaction, decide who through one resolver) and diverge on
@@ -56,9 +57,15 @@ copy that call site will not be so lucky, and nothing will tell them.
 
 ## 3. Every state write the frontend displays stages an event
 
+`LiveKind` (`app/live/kinds.py`) names six kinds: `project`, `checklist_module`, `mock_data`,
+`notification`, `eval_set` and `eval_run`. Both eval kinds are project-scoped and follow
+`resolve_project_scope` in `live_event_visible_to`, so neither needed a new branch there.
+
 A project's status, lease, reindex flag or soft delete; a checklist module's or mock-data
 dataset's claim, release, `mark_in_review`, `defer`, `claim_stranded`, the service write that
-moves it to `generating`, and the apply/discard that returns it; a notification fan-out —
+moves it to `generating`, and the apply/discard that returns it; an eval set's or run's request,
+claim, release, `defer`, `claim_stranded`, completion and soft delete, and a pair's exclusion
+(staged as an `eval_set` event); a notification fan-out —
 each of these stages exactly one `LiveEvent` of the right kind and id, in the repository or
 service method that writes the state, never in a route (the same layering
 `.claude/rules/router.md` requires for everything else a route touches).

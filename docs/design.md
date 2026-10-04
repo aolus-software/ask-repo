@@ -70,8 +70,8 @@ shows on the few screens that are not — which is how it survives review. The A
 screen is the one to check a palette change against, since it renders questions, code, sources
 and the conversation rail directly on `bg-background`.
 
-**Status colours are semantic.** A project's `status` maps to `success` / `warning` / `danger`,
-never to a hand-picked green. That mapping lives in one place so a badge, a row, and a detail
+**Status colours are semantic.** A project's `status` — and an eval set's, an eval run's and a
+verdict — maps to `success` / `warning` / `danger`, never to a hand-picked green. That mapping lives in one place so a badge, a row, and a detail
 header cannot disagree.
 
 ## Typography
@@ -149,6 +149,8 @@ add a row (and install it with `npx shadcn@latest add <name>`) when a new screen
 | Roles | `table`, `badge`, `checkbox`, `dialog`, `dropdown-menu`, `field`, `input`, `separator` |
 | Audit trail | `table`, `badge`, `combobox`, `dialog`, `card`, `separator`, `skeleton`, `alert` |
 | Notifications | `popover`, `scroll-area` (bell), `switch` (`/profile#notifications`) |
+| Eval harness | `alert`, `badge`, `button`, `field`, `input`, `select`, `sheet`, `skeleton`, `switch`, `table` |
+| Answer style | `radio-group` (`/profile#answer-style`) |
 | Lists (all) | `pagination`, `input-group` |
 
 `form` is deliberately absent: shadcn's `form` component wraps **react-hook-form**, which

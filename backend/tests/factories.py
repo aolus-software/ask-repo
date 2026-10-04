@@ -1,6 +1,7 @@
 """Row builders shared by the project tests."""
 
 import uuid
+from datetime import UTC, datetime
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -21,6 +22,7 @@ from app.models.checklist import (
     ChecklistModuleStatus,
 )
 from app.models.conversation import Conversation, Message, MessageRole
+from app.models.eval import EvalPair, EvalRun, EvalSet, EvalSetStatus
 from app.models.feedback import Feedback
 from app.models.membership import ProjectMembership, Role
 from app.models.mock_data import MockDataChangeSet, MockDataMessage, MockDataRecord
@@ -383,3 +385,70 @@ async def create_mock_data_message(
     session.add(message)
     await session.flush()
     return message
+
+
+async def create_eval_set(
+    session: AsyncSession,
+    *,
+    project_id: uuid.UUID | None = None,
+    created_by: uuid.UUID | None = None,
+    name: str = "Baseline",
+    status: EvalSetStatus = EvalSetStatus.READY,
+    pair_count: int = 0,
+) -> EvalSet:
+    """A set against `project_id`, or against a freshly created project."""
+    if created_by is None:
+        created_by = (await create_user(session)).id
+    if project_id is None:
+        project_id = (await create_project(session, created_by=created_by)).id
+    eval_set = EvalSet(
+        id=uuid.uuid4(),
+        project_id=project_id,
+        name=name,
+        requested_count=10,
+        mix="balanced",
+        status=status.value,
+        pair_count=pair_count,
+        created_by=created_by,
+    )
+    session.add(eval_set)
+    await session.flush()
+    return eval_set
+
+
+async def create_eval_pair(
+    session: AsyncSession, *, set_id: uuid.UUID, position: int = 0, excluded: bool = False
+) -> EvalPair:
+    """A pair in `set_id`, optionally already excluded."""
+    pair = EvalPair(
+        id=uuid.uuid4(),
+        set_id=set_id,
+        position=position,
+        question_type="explain",
+        question=f"What does function {position} do?",
+        reference_answer=f"It does thing {position}.",
+        source_file="backend/app/config.py",
+        start_line=1,
+        end_line=20,
+        excluded_at=datetime.now(UTC) if excluded else None,
+    )
+    session.add(pair)
+    await session.flush()
+    return pair
+
+
+async def create_eval_run(
+    session: AsyncSession,
+    *,
+    set_id: uuid.UUID,
+    project_id: uuid.UUID,
+    created_by: uuid.UUID,
+    status: str = "done",
+) -> EvalRun:
+    """A run of `set_id`."""
+    run = EvalRun(
+        id=uuid.uuid4(), set_id=set_id, project_id=project_id, status=status, created_by=created_by
+    )
+    session.add(run)
+    await session.flush()
+    return run

@@ -46,6 +46,22 @@ describe("keysToInvalidate", () => {
       ["mock-data"],
       ["mock-data-change-sets"],
       keys.notifications.all,
+      keys.eval.all,
+    ]);
+  });
+
+  it("refetches a set's list and detail for an eval_set event", () => {
+    expect(keysToInvalidate({ kind: "eval_set", id: "s1", projectId: "p1" })).toEqual([
+      keys.eval.sets("p1"),
+      keys.eval.set("s1"),
+    ]);
+  });
+
+  it("refetches the run, every run list and the set list for an eval_run event", () => {
+    expect(keysToInvalidate({ kind: "eval_run", id: "r1", projectId: "p1" })).toEqual([
+      keys.eval.run("r1"),
+      keys.eval.allRuns,
+      keys.eval.sets("p1"),
     ]);
   });
 

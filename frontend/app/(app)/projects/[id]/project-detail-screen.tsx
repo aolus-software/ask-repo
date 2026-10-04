@@ -2,7 +2,7 @@
 
 import { MessagesSquare, UserPlus } from "lucide-react";
 import Link from "next/link";
-import { useState } from "react";
+import { useState, useSyncExternalStore } from "react";
 
 import { DetailError } from "@/components/feedback/detail-error";
 import { JobFailureAlert } from "@/components/feedback/job-failure-alert";
@@ -10,6 +10,8 @@ import { NotFound } from "@/components/feedback/not-found";
 import { ProjectStatusBadge } from "@/components/feedback/status-badge";
 import { PageHeader } from "@/components/layout/page-header";
 import { AddMemberDialog } from "@/components/projects/add-member-dialog";
+import { EvalSetTable } from "@/components/eval/eval-set-table";
+import { GenerateEvalSetDialog } from "@/components/eval/generate-eval-set-dialog";
 import { MemberTable } from "@/components/projects/member-table";
 import { ProjectRowActions } from "@/components/projects/project-row-actions";
 import { ProjectStats } from "@/components/projects/project-stats";
@@ -23,9 +25,23 @@ import { useProject } from "@/hooks/use-projects";
 import { can, PERMISSION } from "@/lib/can";
 import { statusLabel } from "@/lib/status";
 
+function subscribeToHash(onChange: () => void) {
+  window.addEventListener("hashchange", onChange);
+  return () => window.removeEventListener("hashchange", onChange);
+}
+
 export function ProjectDetailScreen({ id }: { id: string }) {
   const query = useProject(id);
   const [addingMember, setAddingMember] = useState(false);
+  // A `#members` / `#eval` link (the eval breadcrumb) opens that tab. The server
+  // snapshot is empty so the first client render agrees with the server's.
+  const hash = useSyncExternalStore(
+    subscribeToHash,
+    () => window.location.hash.slice(1),
+    () => "",
+  );
+  const [picked, setPicked] = useState<string | null>(null);
+  const tab = picked ?? hash;
 
   if (query.isLoading) {
     return (
@@ -54,6 +70,13 @@ export function ProjectDetailScreen({ id }: { id: string }) {
   const isWorking = project.status === "cloning" || project.status === "indexing";
   const canReadMembers = can(project, PERMISSION.MEMBERSHIP_READ);
   const canGrantMembers = can(project, PERMISSION.MEMBERSHIP_GRANT);
+  const canReadEval = can(project, PERMISSION.EVAL_READ);
+
+  // A hash naming a tab this caller cannot see falls back to Overview.
+  const visibleTab =
+    (tab === "members" && canReadMembers) || (tab === "eval" && canReadEval)
+      ? tab
+      : "overview";
 
   return (
     <div className="mx-auto w-full max-w-7xl space-y-6">
@@ -81,10 +104,11 @@ export function ProjectDetailScreen({ id }: { id: string }) {
         }
       />
 
-      <Tabs defaultValue="overview">
+      <Tabs value={visibleTab} onValueChange={(next) => setPicked(String(next))}>
         <TabsList>
           <TabsTrigger value="overview">Overview</TabsTrigger>
           {canReadMembers ? <TabsTrigger value="members">Members</TabsTrigger> : null}
+          {canReadEval ? <TabsTrigger value="eval">Eval</TabsTrigger> : null}
         </TabsList>
 
         <TabsContent value="overview" className="space-y-6">
@@ -144,6 +168,26 @@ export function ProjectDetailScreen({ id }: { id: string }) {
               open={addingMember}
               onOpenChange={setAddingMember}
             />
+          </TabsContent>
+        ) : null}
+
+        {canReadEval ? (
+          <TabsContent value="eval" className="space-y-4">
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <h2 className="text-xl font-semibold tracking-tight">Eval</h2>
+                <p className="text-muted-foreground text-sm">
+                  Generated questions with reference answers, run against this project.
+                </p>
+              </div>
+              <GenerateEvalSetDialog
+                projectId={project.id}
+                permissions={project.permissions}
+              />
+            </div>
+            <Card className="p-0">
+              <EvalSetTable projectId={project.id} />
+            </Card>
           </TabsContent>
         ) : null}
       </Tabs>

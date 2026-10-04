@@ -30,6 +30,8 @@ class CallFeature(StrEnum):
     MAP = "map"
     REDUCE = "reduce"
     GENERATE_MOCK_DATA = "generate_mock_data"
+    EVAL_GENERATE = "eval_generate"
+    EVAL_JUDGE = "eval_judge"
     CAPABILITY_PROBE = "capability_probe"
     UNTAGGED = "untagged"
 

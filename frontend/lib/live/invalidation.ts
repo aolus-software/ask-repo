@@ -2,7 +2,13 @@ import type { QueryKey } from "@tanstack/react-query";
 
 import { keys } from "@/lib/query/keys";
 
-export type LiveKind = "project" | "checklist_module" | "mock_data" | "notification";
+export type LiveKind =
+  | "project"
+  | "checklist_module"
+  | "mock_data"
+  | "notification"
+  | "eval_set"
+  | "eval_run";
 
 /** The `invalidate` event's payload. Ids only — the refetch is what shows the change. */
 export interface InvalidatePayload {
@@ -29,6 +35,18 @@ export function keysToInvalidate(payload: InvalidatePayload): QueryKey[] {
       return [
         keys.mockData.detail(payload.id),
         keys.mockDataChangeSets.forModule(payload.id),
+      ];
+    case "eval_set":
+      // `projectId` is the set's project; a payload without one cannot name the list.
+      return [
+        ...(payload.projectId ? [keys.eval.sets(payload.projectId)] : []),
+        keys.eval.set(payload.id),
+      ];
+    case "eval_run":
+      return [
+        keys.eval.run(payload.id),
+        keys.eval.allRuns,
+        ...(payload.projectId ? [keys.eval.sets(payload.projectId)] : []),
       ];
     case "notification":
       return [keys.notifications.all];
@@ -66,4 +84,5 @@ export const ALL_LIVE_KEYS: QueryKey[] = [
   ["mock-data"],
   ["mock-data-change-sets"],
   keys.notifications.all,
+  keys.eval.all,
 ];

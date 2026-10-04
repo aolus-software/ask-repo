@@ -23,7 +23,7 @@ def system_text(context: str) -> str:
     beats a cast in every test below.
     """
     content = ANSWER_PROMPT.format_messages(
-        context=context, history=[], question="q", evidence_note=""
+        context=context, history=[], question="q", evidence_note="", reader_preferences=""
     )[0].content
     assert isinstance(content, str)
     return content
@@ -169,6 +169,7 @@ def test_the_answer_prompt_renders_with_an_empty_evidence_note() -> None:
         history=[],
         question="what is x?",
         evidence_note="",
+        reader_preferences="",
     )
 
     assert len(messages) == 2

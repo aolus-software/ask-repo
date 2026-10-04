@@ -7,7 +7,7 @@ import re
 from pathlib import Path
 
 APP = Path(__file__).resolve().parents[1] / "app"
-MODEL_FACING = ("rag", "checklist", "mockdata")
+MODEL_FACING = ("rag", "checklist", "mockdata", "eval")
 _FEEDBACK_PACKAGES = "core|models|repositories|services|schemas"
 # Catches both `from app.<pkg>.feedback import ...` / `import app.<pkg>.feedback`
 # (the feedback module itself) and `from app.<pkg> import feedback` (the package,

@@ -54,6 +54,7 @@ class AuditEventType(StrEnum):
     USER_UPDATED = "user.updated"
     USER_DEACTIVATED = "user.deactivated"
     USER_PASSWORD_RESET = "user.password.reset"
+    USER_ANSWER_STYLE_UPDATED = "user.answer_style.updated"
     # --- projects -----------------------------------------------------------
     PROJECT_CREATED = "project.created"
     PROJECT_REINDEX_REQUESTED = "project.reindex.requested"
@@ -86,6 +87,11 @@ class AuditEventType(StrEnum):
     MOCK_DATA_CHANGE_SET_DISCARDED = "mock_data_change_set.discarded"
     MOCK_DATA_RECORD_DELETED = "mock_data_record.deleted"
     MOCK_DATA_EXPORTED = "mock_data.exported"
+    # --- eval ---------------------------------------------------------------
+    EVAL_SET_GENERATION_REQUESTED = "eval_set.generation.requested"
+    EVAL_SET_DELETED = "eval_set.deleted"
+    EVAL_PAIR_UPDATED = "eval_pair.updated"
+    EVAL_RUN_REQUESTED = "eval_run.requested"
     # --- conversations ------------------------------------------------------
     # Metadata only: no title, no message, no per-question row. See spec §1.4 and
     # `.claude/rules/audit-trail.md` — this is a deliberate narrowing of what
@@ -105,6 +111,11 @@ CHANGED_FIELDS: dict[AuditEventType, frozenset[str]] = {
     # allowlist entry with no producer reads as documentation and is wrong in the
     # misleading direction (`.claude/rules/audit-trail.md`).
     AuditEventType.USER_UPDATED: frozenset({"name", "isAdmin"}),
+    # The caller's own answer style (`PUT /me/answer-style`). Enum values only -- no
+    # content can reach these keys, because no free text exists to reach them.
+    AuditEventType.USER_ANSWER_STYLE_UPDATED: frozenset(
+        {"answerDetail", "answerFamiliarity", "answerFormat"}
+    ),
     AuditEventType.PROJECT_CREATED: frozenset({"name", "repoUrlHost", "branch"}),
     AuditEventType.PROJECT_DELETED: frozenset({"name", "repoUrlHost"}),
     AuditEventType.MEMBERSHIP_GRANTED: frozenset({"roleName"}),
@@ -131,6 +142,13 @@ CHANGED_FIELDS: dict[AuditEventType, frozenset[str]] = {
     # `currentResultChanged` is the boolean substitute.
     AuditEventType.CHECKLIST_ITEM_RESULT_RECORDED: frozenset({"status", "currentResultChanged"}),
     AuditEventType.CHECKLIST_ITEM_DELETED: frozenset({"feature", "testName"}),
+    AuditEventType.EVAL_SET_GENERATION_REQUESTED: frozenset(
+        {"name", "sourcePath", "requestedCount", "mix"}
+    ),
+    AuditEventType.EVAL_SET_DELETED: frozenset({"name", "sourcePath"}),
+    # Exclusion only -- a pair's question and reference are model-authored and derived
+    # from a private repository, which the content ban forbids storing here.
+    AuditEventType.EVAL_PAIR_UPDATED: frozenset({"excluded"}),
 }
 
 # Immutable context that is not a change: flat keys beside `changed`.
@@ -185,6 +203,10 @@ CONTEXT_KEYS: dict[AuditEventType, frozenset[str]] = {
     AuditEventType.MOCK_DATA_RECORD_DELETED: frozenset({"position"}),
     AuditEventType.MOCK_DATA_EXPORTED: frozenset({"format", "rowCount"}),
     AuditEventType.CONVERSATION_DELETED: frozenset({"messageCount"}),
+    AuditEventType.EVAL_SET_DELETED: frozenset({"pairCount", "runCount"}),
+    # A run's answers and judge reasons are model output about a private repository and
+    # never reach this table; the count of pairs it will answer is all it records.
+    AuditEventType.EVAL_RUN_REQUESTED: frozenset({"pairCount"}),
 }
 
 type ChangedValue = str | bool | int | float | list[str] | None

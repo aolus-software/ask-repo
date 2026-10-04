@@ -39,6 +39,8 @@ class Permission(StrEnum):
 
     MOCKDATA_READ = "mockdata.read"
     MOCKDATA_EDIT = "mockdata.edit"
+    EVAL_READ = "eval.read"
+    EVAL_RUN = "eval.run"
 
     MEMBERSHIP_READ = "membership.read"
     MEMBERSHIP_GRANT = "membership.grant"
@@ -79,6 +81,7 @@ PERMISSION_GROUPS: tuple[PermissionGroup, ...] = (
         ),
     ),
     PermissionGroup("Mock data", (Permission.MOCKDATA_READ, Permission.MOCKDATA_EDIT)),
+    PermissionGroup("Eval", (Permission.EVAL_READ, Permission.EVAL_RUN)),
     PermissionGroup(
         "Membership",
         (
@@ -103,6 +106,7 @@ _VIEWER: frozenset[Permission] = frozenset(
         Permission.QUESTION_ASK,
         Permission.CHECKLIST_READ,
         Permission.MOCKDATA_READ,
+        Permission.EVAL_READ,
         Permission.MEMBERSHIP_READ,
         Permission.RESULT_RECORD,
     }
@@ -116,6 +120,7 @@ _EDITOR: frozenset[Permission] = _VIEWER | {
     Permission.CHANGESET_APPLY,
     Permission.ITEM_EDIT,
     Permission.MOCKDATA_EDIT,
+    Permission.EVAL_RUN,
 }
 
 _OWNER: frozenset[Permission] = _EDITOR | {

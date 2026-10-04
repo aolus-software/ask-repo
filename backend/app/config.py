@@ -108,6 +108,15 @@ class Settings(BaseSettings):
     mock_data_max_files_per_job: int = Field(default=200, ge=1)
     mock_data_export_max_rows: int = 5000
 
+    # The eval harness (docs/PRD.md §2.1 Phase 2.6). Its own topic family, like the
+    # checklist's and mock data's. One partition is the instance-wide concurrency cap:
+    # one eval job at a time, expressed as topology. See docs/configuration.md.
+    kafka_eval_topic: str = "askrepo.eval.jobs"
+    kafka_eval_partitions: int = Field(default=1, ge=1)
+    eval_scroll_page_size: int = Field(default=256, ge=1)
+    # Pairs answered and judged at once inside one run.
+    eval_answer_concurrency: int = Field(default=2, ge=1)
+
     # Live updates (issue #48). `GET /events` streams id-only invalidations fed by this
     # topic; off, the route answers 503 and every client polls. See docs/configuration.md.
     live_events_enabled: bool = True

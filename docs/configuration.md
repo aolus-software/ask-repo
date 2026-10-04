@@ -352,6 +352,15 @@ your `.env` rather than assuming it carried over.
 | `MOCK_DATA_SCROLL_PAGE_SIZE` | `256` | Points fetched per Qdrant scroll page while enumerating a module's files for schema detection. |
 | `MOCK_DATA_MAX_FILES_PER_JOB` | `200` | Files read per generation run before the rest are reported skipped. Unlike the checklist generator this is a single model call over the concatenated (capped) source, not a map-reduce — schema-shaped code is typically small relative to a whole module. |
 
+### Eval harness
+
+| Variable | Default | What it does |
+| --- | --- | --- |
+| `KAFKA_EVAL_TOPIC` | `askrepo.eval.jobs` | The topic eval generation and eval run jobs are published to. Its own topic and retry ladder, so a long eval does not sit in the queue a reindex or a checklist run is waiting in. |
+| `KAFKA_EVAL_PARTITIONS` | `1` | Partitions on that topic. One consumer owns a partition, so `1` means one eval job at a time across the instance — the concurrency cap expressed as topology. Raise only alongside worker replicas. |
+| `EVAL_SCROLL_PAGE_SIZE` | `256` | Points fetched per Qdrant scroll page while the generator enumerates a project's indexed files. It bounds memory per page, not the total. |
+| `EVAL_ANSWER_CONCURRENCY` | `2` | Pairs answered and judged at once inside one run. Each is a chat call or two against a server that may serialise inference, so too high makes every pair slower rather than the run finishing sooner. |
+
 ### Live updates
 
 Issue #48. `GET /events` streams id-only invalidations — never a name or a status value — fed

@@ -1,6 +1,6 @@
 # RAG Rules
 
-Everything under `app/rag/`, plus `app/services/conversation.py`,
+Everything under `app/rag/` (including `app/rag/answer_style.py`), plus `app/services/conversation.py`,
 `app/api/routes/conversations.py`, the refinement-chat half of
 `app/services/checklist_module.py` and `app/api/routes/checklist_modules.py`, and the
 refinement-chat half of `app/services/mock_data_dataset.py` and
@@ -163,6 +163,24 @@ and the flattening stops: the model starts demanding a literal `?query=`, and ev
 fails with `{"request": "Field required"}` — naming nothing that appears in the signature.
 
 Extra filters go on a subclass of `ListQuery` (see `ConversationListQuery`), never beside it.
+
+## The reader-preference slot is bounded, project-authored and private
+
+A user's answer style (`app/rag/answer_style.py`) renders into `{reader_preferences}` in
+`ANSWER_SYSTEM` and `HISTORY_ANSWER_SYSTEM`. Three things hold it, and each fails silently
+when broken:
+
+- **Every sentence is a constant in `app/rag/prompts.py`, never user text.** That is what
+  makes prompt injection by preference impossible rather than mitigated, and what puts the
+  sentences under `PROMPT_VERSION`. Adding free text is a PRD decision (§2.1), not a field.
+- **The slot precedes the grounding rules, and no fragment touches them.** No fragment may
+  mention citing, evidence, confidence or guessing (`tests/test_answer_style_prompt.py`).
+  An unset style renders `""` and the prompt is byte-identical to the default one — which
+  is what the eval harness relies on.
+- **Ask only.** `Answerer` raises on a style alongside a `propose_target`, and only
+  `app/services/conversation.py` passes one (`tests/test_answer_style_scope.py`). A
+  refinement chat or a generation run shaped by one user's preferences would make a shared
+  document depend on who pressed the button.
 
 ## Every model call passes a feature config
 

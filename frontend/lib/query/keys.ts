@@ -18,6 +18,7 @@ export const keys = {
   profile: {
     all: ["profile"] as const,
     memberships: ["profile", "memberships"] as const,
+    answerStyle: ["profile", "answer-style"] as const,
     sessions: ["profile", "sessions"] as const,
     activity: (params: ListParams) => ["profile", "activity", params] as const,
   },
@@ -65,6 +66,14 @@ export const keys = {
   },
   mockDataMessages: {
     forModule: (moduleId: string) => ["mock-data-messages", moduleId] as const,
+  },
+  eval: {
+    all: ["eval"] as const,
+    sets: (projectId: string) => ["eval", "sets", projectId] as const,
+    set: (id: string) => ["eval", "set", id] as const,
+    allRuns: ["eval", "runs"] as const,
+    runs: (setId: string) => ["eval", "runs", setId] as const,
+    run: (id: string) => ["eval", "run", id] as const,
   },
   roles: {
     all: ["roles"] as const,

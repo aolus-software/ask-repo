@@ -16,6 +16,7 @@ from typing import Literal, TypedDict
 from pydantic import BaseModel, Field
 
 from app.models.conversation import FinishReason, Intent
+from app.rag.answer_style import AnswerStyle
 from app.rag.prompts import ExistingItem, ExistingRecord, Turn
 from app.rag.retriever import RetrievedChunk
 
@@ -97,3 +98,8 @@ class TurnState(TypedDict):
     existing_records: list[ExistingRecord]
     record_operations: list[dict[str, object]]
     record_change_summary: str
+    # The caller's answer style, Ask route only (`Answerer` refuses it alongside a
+    # `propose_target`). Reasoning input the two generation nodes render into their
+    # system message -- unlike the call log's scope, which is bookkeeping about the
+    # run and stays out of the state (`.claude/rules/call-log.md` rule 4).
+    answer_style: AnswerStyle | None

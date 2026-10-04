@@ -2,4 +2,6 @@
 
 from typing import Literal
 
-LiveKind = Literal["project", "checklist_module", "mock_data", "notification"]
+LiveKind = Literal[
+    "project", "checklist_module", "mock_data", "notification", "eval_set", "eval_run"
+]

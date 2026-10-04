@@ -13,6 +13,24 @@ client can have received it, so it is recorded under Changed and allowed in a `M
 
 ## [Unreleased]
 
+### Changed
+
+- **`POST /projects/{id}/reindex` now answers `409 EVAL_RUN_IN_PROGRESS` while one of the
+  project's eval runs is `running`.** A reindex deletes the generation a run is reading, so its
+  remaining pairs would score against nothing and the run would still finish `done`. The refusal
+  comes before the reindex flag is raised and before the publish, writes no audit event, and
+  reuses the existing error code (no new member). Starting a run and requesting a reindex now
+  serialise on the project row, so neither can slip past the other.
+
+### Fixed
+
+- **A stale duplicate job could re-claim a finished eval set or run.** A reconcile-sweep copy
+  carries a fresh job id, so the claim's job-id check could not refuse it; the claim now also
+  requires the row to still be `generating` / `running`. A re-claimed `ready` set appended a second
+  batch of pairs at duplicate positions, and a re-claimed `done` run restarted and cleared its
+  error. A lease heartbeat on a soft-deleted eval set or run now fails, so the job abandons, and
+  deleting an eval set takes the same row lock a run start does.
+
 ### Added
 
 - **User feedback on model output** (`docs/PRD.md` §2.1, phase 2.5, stage 1, issue #55): a
@@ -50,6 +68,33 @@ client can have received it, so it is recorded under Changed and allowed in a `M
   `LANGFUSE_SECRET_KEY`, `LANGFUSE_PROJECT_ID` and `LANGFUSE_UI_URL`. Enabling it without both
   keys stops the instance at boot.
 - `.claude/rules/call-log.md`.
+- **Per-user answer style** (`docs/PRD.md` §2.1, phase 2.6, #22): `GET`/`PUT /me/answer-style`,
+  three dials (detail, familiarity, format) on the profile's new Answer style tab, applied to
+  your own Ask answers only — never to the QA Checklist or Mock Data. Each dial maps to a fixed
+  sentence in `app/rag/prompts.py`; no user text reaches a prompt.
+- Audit event `user.answer_style.updated`.
+- **The synthetic Q&A eval harness** (`docs/PRD.md` §2.1, phase 2.6): generate a fixed set of 10,
+  25 or 50 question and reference-answer pairs from a project's indexed code (optionally under one
+  path, `explain` and `locate` questions only), then run the set through the real answer graph as
+  often as you like. Each run records two signals side by side: whether first-pass retrieval
+  found the pair's source file, and an LLM judge's `correct` / `partial` / `wrong` verdict. A run
+  answers with no persona, writes no conversation, and is stamped with the prompt version, the
+  chat and embedding models and the project generation it read. Excluding a pair is the only
+  curation; two runs compare on the pairs both answered. The project page gains an Eval tab and
+  a set opens at `/projects/[id]/eval/[setId]`.
+- Eight routes: `POST`/`GET /projects/{id}/eval-sets`, `GET`/`DELETE /eval-sets/{id}`,
+  `PUT /eval-pairs/{id}/excluded`, `POST`/`GET /eval-sets/{id}/runs` and `GET /eval-runs/{id}`.
+- Permissions `eval.read` (viewer, editor, owner) and `eval.run` (editor, owner). Run
+  `python -m app.cli restore-system-roles` after migrating so cached grants pick them up; custom
+  roles gain neither.
+- `ErrorCode.EVAL_SET_NOT_FOUND` and `ErrorCode.EVAL_RUN_NOT_FOUND` (404),
+  `ErrorCode.EVAL_SET_NOT_READY` and `ErrorCode.EVAL_RUN_IN_PROGRESS` (409).
+- Audit events `eval_set.generation.requested`, `eval_set.deleted`, `eval_pair.updated` and
+  `eval_run.requested`. None carries a question, reference, answer or judge reason.
+- Call features `eval_generate` and `eval_judge`; live event kinds `eval_set` and `eval_run`.
+- `KAFKA_EVAL_TOPIC` (`askrepo.eval.jobs`, with its own retry and dead-letter topics),
+  `KAFKA_EVAL_PARTITIONS` (`1`), `EVAL_SCROLL_PAGE_SIZE` (`256`) and `EVAL_ANSWER_CONCURRENCY`
+  (`2`).
 
 ### Changed
 
@@ -63,6 +108,19 @@ client can have received it, so it is recorded under Changed and allowed in a `M
   against the audit trail's `conversation.created` row for the same actor and project to
   identify the voter. The list is now ordered within a day by `id`, not by `created_at`, so
   paging order cannot leak the same sequence back out.
+- Generated QA Checklist test cases — from generation and from the module chat — are written in
+  plain language for any tester: no file paths, code names, HTTP details or error codes. Sources
+  stay in the sources panel. Existing rows are not rewritten.
+- The `409 PROJECT_NOT_READY` message for a re-index in progress now ends "…then try again." (it
+  said "…then generate."), because eval runs take the same guard. The code and status are
+  unchanged.
+
+### Fixed
+
+- A chat-proposed checklist edit written with snake_case field names (`expected_result`), or with
+  its new text outside `changes`, no longer applies as a silent no-op. Keys are canonicalised to
+  camelCase when the operation is stored and again on apply, so change sets already pending are
+  covered too; the update allowlist is unchanged.
 
 ## [2.2.0] — 2026-09-27
 

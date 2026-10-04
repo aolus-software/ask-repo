@@ -188,10 +188,10 @@ class ScriptedChatModel(BaseChatModel):
     # different call kinds (structured-output calls vs. the streamed answer call),
     # and merging them would make a reader's assertion depend on knowing which
     # entries came from which method.
-    _captured_stream_messages: list[object] = PrivateAttr(default_factory=list)
+    _captured_stream_messages: list[list[BaseMessage]] = PrivateAttr(default_factory=list)
 
     @property
-    def captured_stream_messages(self) -> list[object]:
+    def captured_stream_messages(self) -> list[list[BaseMessage]]:
         """Every `messages` list passed to `_astream`, in call order."""
         return list(self._captured_stream_messages)
 

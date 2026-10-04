@@ -29,15 +29,23 @@ import pytest
 from app.checklist.model_output import ProposedChangeSet
 from app.checklist.operations import _narrow_kind
 from app.config import Settings
+from app.eval.model_output import GeneratedPair, JudgeVerdict
+from app.eval.sampling import SampledChunk, names_its_file
 from app.models.checklist import ChecklistItemKind
+from app.models.eval import EvalQuestionType
+from app.rag.answer_style import AnswerDetail, AnswerStyle
 from app.rag.chat import build_chat_model
 from app.rag.graph.state import Classification
 from app.rag.prompts import (
     ANSWER_PROMPT,
     CLASSIFY_PROMPT,
     ExistingItem,
+    build_eval_judge_prompt,
+    build_eval_pair_prompt,
+    build_propose_prompt,
     build_reduce_prompt,
     format_spans,
+    render_reader_preferences,
 )
 from app.rag.retriever import RetrievedChunk
 
@@ -187,7 +195,11 @@ async def test_the_answer_carries_citation_labels(settings: Settings) -> None:
     for question in ANSWERABLE:
         message = await model.ainvoke(
             ANSWER_PROMPT.format_messages(
-                context=context, history=[], question=question, evidence_note=""
+                context=context,
+                history=[],
+                question=question,
+                evidence_note="",
+                reader_preferences="",
             )
         )
         answer = str(message.content)
@@ -309,3 +321,192 @@ async def test_reduce_proposes_both_kinds_not_only_one(
     assert ChecklistItemKind.POSITIVE in kinds, (
         f"no positive test proposed for a success and two validations; raw kinds were {raw}"
     )
+
+
+# What a tester who has never opened the repository cannot read. Each is something the
+# old prompt produced in a real generation (spec §0).
+TECHNICAL = {
+    "source file": re.compile(r"\b[\w./-]+\.(py|ts|tsx|js|java|go|rb)\b"),
+    "line range": re.compile(r":\d+-\d+"),
+    "HTTP route": re.compile(r"\b(GET|POST|PUT|PATCH|DELETE)\s+/"),
+    "status code": re.compile(r"\b[1-5]\d\d\b"),
+    "camelCase identifier": re.compile(r"\b[a-z]+[A-Z][A-Za-z]*\b"),
+    "snake_case identifier": re.compile(r"\b[a-z]+_[a-z_]+\b"),
+    "UPPER_SNAKE constant": re.compile(r"\b[A-Z]{2,}_[A-Z_]+\b"),
+    "exception name": re.compile(r"Exception\b"),
+}
+
+
+def _technical_terms(text: str) -> list[str]:
+    return [name for name, pattern in TECHNICAL.items() if pattern.search(text)]
+
+
+def _assert_plain(result: ProposedChangeSet) -> None:
+    for operation in result.operations:
+        texts = [operation.feature, operation.test_name, operation.expected_result]
+        texts += list((operation.changes or {}).values())
+        for field in texts:
+            found = _technical_terms(field)
+            assert not found, f"{found} in {field!r}"
+
+
+async def test_reduce_writes_for_a_tester_who_has_never_seen_the_code(
+    settings: Settings,
+) -> None:
+    """The rows a newcomer to testing has to execute. A model reading code-shaped
+    observations must translate them into what a person does and sees -- and must
+    still produce the test for a behaviour the code calls "silently returns", rather
+    than dropping it as unobservable."""
+    model = build_chat_model(settings).with_structured_output(ProposedChangeSet)
+    result = await model.ainvoke(
+        build_reduce_prompt(
+            module_name="Users",
+            observations=[
+                (
+                    "src/users/users.service.ts",
+                    "findOne raises NotFoundException when the user id does not exist",
+                    139,
+                    147,
+                ),
+                (
+                    "src/users/dto/create-user.dto.ts",
+                    "POST /users with a malformed email fails with 422 and i18n key "
+                    "validation.IS_EMAIL",
+                    20,
+                    24,
+                ),
+                (
+                    "src/users/users.service.ts",
+                    "sendForgotPasswordEmail silently returns when no user has the email",
+                    265,
+                    269,
+                ),
+                (
+                    "src/users/users.controller.ts",
+                    "POST /users with a valid name, email and strong password returns 201",
+                    40,
+                    61,
+                ),
+            ],
+            existing=[],
+        )
+    )
+
+    assert isinstance(result, ProposedChangeSet)
+    assert result.operations
+    _assert_plain(result)
+    assert any(operation.citation_paths for operation in result.operations), (
+        "no operation kept its source in citation_paths"
+    )
+    # Key on reset-specific words, not just "password": the fourth observation has "strong password"
+    # in a success case, so a row containing "password" exists regardless of whether the
+    # "silently returns" behavior was actually translated to a test.
+    mentions_reset = [
+        operation
+        for operation in result.operations
+        if any(
+            word in f"{operation.test_name} {operation.expected_result}".lower()
+            for word in ("reset", "forgot", "recover")
+        )
+    ]
+    assert mentions_reset, "the forgot-password or reset behavior was dropped, not translated"
+
+
+async def test_a_chat_proposal_from_a_technical_answer_is_plain(settings: Settings) -> None:
+    """The chat's answer is technical and cited by design; the row it proposes must
+    not inherit that vocabulary."""
+    model = build_chat_model(settings).with_structured_output(ProposedChangeSet)
+    result = await model.ainvoke(
+        build_propose_prompt(
+            module_name="Users",
+            answer=(
+                "There is no test for a missing user. `usersService.findOne` raises "
+                "`NotFoundException` when the id does not exist [1], which the "
+                "controller maps to a 404 (src/users/users.service.ts:139-147). You "
+                "should add a negative test for it."
+            ),
+            existing=[],
+        )
+    )
+
+    assert isinstance(result, ProposedChangeSet)
+    assert result.operations, "the answer asked for a test and none was proposed"
+    _assert_plain(result)
+
+
+async def test_brief_answers_are_shorter_than_thorough_ones_and_both_cite(
+    settings: Settings,
+) -> None:
+    """The dials have to change something, and must not change citing.
+
+    A dial whose sentence the model ignores is a setting that lies to the user; one
+    that costs the citation is a preference that beat a guardrail.
+    """
+    model = build_chat_model(settings)
+    question = "How does the retry consumer wait until a job is due?"
+
+    async def answer(detail: AnswerDetail) -> str:
+        message = await model.ainvoke(
+            ANSWER_PROMPT.format_messages(
+                context=format_spans(SPANS),
+                history=[],
+                question=question,
+                evidence_note="",
+                reader_preferences=render_reader_preferences(AnswerStyle(detail=detail)),
+            )
+        )
+        return str(message.content)
+
+    brief = await answer(AnswerDetail.BRIEF)
+    thorough = await answer(AnswerDetail.THOROUGH)
+
+    assert len(brief) < len(thorough), f"brief={len(brief)} thorough={len(thorough)}"
+    assert CITATION_LABEL.search(brief), brief
+    assert CITATION_LABEL.search(thorough), thorough
+
+
+LOGIN_CHUNK = SampledChunk(
+    file_path="app/auth/login.py",
+    start_line=30,
+    end_line=44,
+    symbol="authenticate",
+    content=(
+        "def authenticate(email: str, password: str) -> User:\n"
+        "    user = users.get_by_email(email)\n"
+        "    if user is None or not bcrypt.checkpw(password, user.password_hash):\n"
+        "        raise AppError(401, 'INVALID_CREDENTIALS')\n"
+        "    return user"
+    ),
+)
+
+
+async def test_a_locate_question_does_not_name_its_file(settings: Settings) -> None:
+    model = build_chat_model(settings).with_structured_output(GeneratedPair)
+    pair = await model.ainvoke(
+        build_eval_pair_prompt(chunk=LOGIN_CHUNK, question_type=EvalQuestionType.LOCATE)
+    )
+    assert isinstance(pair, GeneratedPair)
+    assert pair.question.strip() and pair.reference_answer.strip()
+    assert not names_its_file(pair.question, LOGIN_CHUNK.file_path), pair.question
+
+
+async def test_the_judge_accepts_the_reference_and_rejects_a_wrong_location(
+    settings: Settings,
+) -> None:
+    judge = build_chat_model(settings).with_structured_output(JudgeVerdict)
+    question = "Where is a wrong password refused at sign-in?"
+    reference = "In `authenticate` in app/auth/login.py, which raises INVALID_CREDENTIALS."
+
+    same = await judge.ainvoke(
+        build_eval_judge_prompt(question=question, reference=reference, answer=reference)
+    )
+    other = await judge.ainvoke(
+        build_eval_judge_prompt(
+            question=question,
+            reference=reference,
+            answer="It is handled in `check_session` in app/auth/session.py.",
+        )
+    )
+
+    assert isinstance(same, JudgeVerdict) and same.verdict == "correct", same
+    assert isinstance(other, JudgeVerdict) and other.verdict == "wrong", other

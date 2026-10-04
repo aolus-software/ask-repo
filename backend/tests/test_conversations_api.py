@@ -13,8 +13,10 @@ from app.ingestion.embedder import FakeEmbedder
 from app.ingestion.vector_store import InMemoryVectorStore
 from app.models.project import ProjectStatus
 from app.models.user import User
+from app.rag.prompts import ANSWER_FAMILIARITY_NEW, READER_PREFERENCES_PREAMBLE
 from tests.conftest import GrantMembership
 from tests.factories import create_conversation, create_project, create_user
+from tests.fakes import ScriptedChatModel
 
 
 def sse_events(body: str) -> list[tuple[str, dict[str, object]]]:
@@ -394,3 +396,49 @@ async def test_search_does_not_leak_another_users_conversation(
     response = await authed_client.get("/conversations", params={"search": "lease"})
 
     assert response.json()["totalCount"] == 0
+
+
+async def test_the_callers_answer_style_reaches_the_answer_prompt(
+    authed_client: AsyncClient,
+    authed_user: User,
+    grant_membership: GrantMembership,
+    db_session: AsyncSession,
+    vector_store: InMemoryVectorStore,
+    chat_model: ScriptedChatModel,
+) -> None:
+    authed_user.answer_familiarity = "new"
+    await db_session.commit()
+    owner = await create_user(db_session)
+    project_id = await seed_ready_project(db_session, vector_store, owner.id)
+    await grant_membership(authed_user.id, project_id, VIEWER_NAME)
+    conversation_id = await own_conversation(authed_client, project_id)
+
+    response = await authed_client.post(
+        f"/conversations/{conversation_id}/messages",
+        json={"question": "how is the repo url validated?"},
+    )
+
+    assert response.status_code == 200
+    system = chat_model.captured_stream_messages[-1][0].content
+    assert ANSWER_FAMILIARITY_NEW in system
+
+
+async def test_a_user_with_no_style_gets_the_default_prompt(
+    authed_client: AsyncClient,
+    authed_user: User,
+    grant_membership: GrantMembership,
+    db_session: AsyncSession,
+    vector_store: InMemoryVectorStore,
+    chat_model: ScriptedChatModel,
+) -> None:
+    owner = await create_user(db_session)
+    project_id = await seed_ready_project(db_session, vector_store, owner.id)
+    await grant_membership(authed_user.id, project_id, VIEWER_NAME)
+    conversation_id = await own_conversation(authed_client, project_id)
+
+    await authed_client.post(
+        f"/conversations/{conversation_id}/messages",
+        json={"question": "how is the repo url validated?"},
+    )
+
+    assert READER_PREFERENCES_PREAMBLE not in chat_model.captured_stream_messages[-1][0].content

@@ -11,10 +11,10 @@ Read [`architecture.md`](architecture.md) first for why there are four.
 
 | Store | Holds | Survives a restart? |
 | --- | --- | --- |
-| **Postgres** | 21 tables — every row the app owns | Yes, and it is the only thing you must back up besides the PAT key |
+| **Postgres** | 26 tables — every row the app owns | Yes, and it is the only thing you must back up besides the PAT key |
 | **Qdrant** | Code chunks as vectors, **with the chunk text in the payload** | Yes, but it is rebuildable by re-indexing |
 | **Redis** | Login rate-limit counters, and the per-user grant cache | No, and that is fine — a lost lockout resets, and a lost grant snapshot is re-read from Postgres |
-| **Kafka** | Job messages on 12 topics | Yes, but the reconcile sweep recovers anything lost |
+| **Kafka** | Job messages on 16 topics | Yes, but the reconcile sweep recovers anything lost |
 | **Disk** (`/data/repos`) | The cloned working copy, **deleted after indexing** | No. It is scratch space, not a volume to preserve |
 
 Two of these are commonly assumed wrong. **Redis is not the job queue** — Kafka is; it holds
@@ -28,7 +28,7 @@ copy is deleted after indexing, so there is no file to re-read at query time.
 
 ## The Postgres tables
 
-Twenty-one tables in eight groups. Every one of them except `refresh_tokens`, `password_reset_tokens`, `messages`,
+Twenty-six tables in nine groups. Every one of them except `refresh_tokens`, `password_reset_tokens`, `messages`,
 `audit_events`, `notification_events` and `notifications` carries `created_at`, `updated_at` and
 `deleted_at`.
 
@@ -63,6 +63,11 @@ erDiagram
     checklist_modules ||--o{ mock_data_records : ""
     checklist_modules ||--o{ mock_data_change_sets : ""
     checklist_modules ||--o{ mock_data_messages : ""
+    projects ||--o{ eval_sets : ""
+    eval_sets ||--o{ eval_pairs : ""
+    eval_sets ||--o{ eval_runs : ""
+    eval_runs ||--o{ eval_results : ""
+    eval_pairs ||--o{ eval_results : ""
     users ||--o{ audit_events : "acted (nullable)"
     projects ||--o{ audit_events : "scoped to (nullable)"
     users ||--o{ notification_events : "acted (nullable)"
@@ -76,7 +81,7 @@ erDiagram
 
 | Table | Notable columns |
 | --- | --- |
-| `users` | `email` (partial unique index where not deleted), `password_hash`, `is_admin`, `must_change_password`, `last_login_at` |
+| `users` | `email` (partial unique index where not deleted), `password_hash`, `is_admin`, `must_change_password`, `last_login_at`, `answer_detail`, `answer_familiarity`, `answer_format` (the Ask answer style, Phase 2.6: nullable text columns holding `brief`/`thorough`, `new`/`expert` and `prose`/`bullets`; `NULL` = no preference; migration `a7c3e19d5b42`) |
 | `refresh_tokens` | `token_hash`, `family_id`, `issued_at`, `expires_at`, `used_at`, `revoked_at`, `revoked_reason`, `user_agent` (255), `ip_address` (45) |
 | `password_reset_tokens` | `id`, `user_id`, `token_hash`, `created_at`, `expires_at`, `used_at`, `revoked_at`, `sent_at` (hard-deleted if expired or used > 24h ago) |
 
@@ -189,6 +194,27 @@ the checklist's four exactly, keyed by `checklist_module_id`. They are deliberat
 tables with their own status and lease**, so a mock-data generation failing does not mark the
 checklist failed, and one lease does not block the other.
 
+### Eval harness
+
+| Table | Holds |
+| --- | --- |
+| `eval_sets` | A frozen set of synthetic pairs for a project or one `source_path`: `requested_count` (10, 25 or 50), `mix`, `status`, the lease, `pair_count` and the `indexed_generation` it was generated from |
+| `eval_pairs` | One `question` and `reference_answer` grounded in one chunk, with `source_file`, its line range, `question_type` (`explain` or `locate`), `position`, and `excluded_at` |
+| `eval_runs` | One pass of a set through the answer graph: `status`, the lease, the tallies (`pairs_answered`, `hits`, `correct`, `partial`, `wrong`, `errors`) and the stamp — `prompt_version`, `chat_provider`, `chat_model`, `judge_model`, `embedding_model`, `project_generation` |
+| `eval_results` | One row per pair per run: `retrieval_hit`, `verdict` (`correct` / `partial` / `wrong` / `error`), `judge_reason`, the `answer` as streamed, `grounding_warnings` and `retrieval_attempts` |
+
+A set is `generating` → `ready` / `failed` and a run is `running` → `done` / `failed`. The request
+writes the first status directly, as mock-data generation does, so there is no `pending` state and
+`claim_stranded` sweeps one status. Each table carries the foreign keys the other groups do
+(`eval_results` to both `eval_runs` and `eval_pairs`), and at most one live result exists per
+`(run_id, pair_id)`.
+
+**The answer is stored, deliberately.** A verdict nobody can inspect is a number nobody can act
+on. It has a chat message's lifecycle — it sits in Postgres and is deleted with the project — and
+it never reaches the audit trail, the call log or a log line. A set is shared content of record:
+every holder of `eval.read` on the project sees the same sets, runs and answers. **No Qdrant point
+belongs to an eval table**, so the soft-delete-versus-Qdrant rule has nothing extra to do here.
+
 ### Audit
 
 `audit_events` is one row per thing somebody did. It is the only table outside both mixins, for
@@ -207,9 +233,9 @@ Four non-partial indexes — `created_at`, `actor_user_id`, `event_type`, `proje
 them is partial because there is no `deleted_at` to filter, which is the one place this table
 diverges from every other group above.
 
-**The catalogue is a `StrEnum` in `app/core/audit.py`, not a table** — 40 event types across auth
-(including session revoke, added with the profile page), accounts, projects, RBAC, password reset,
-checklist modules and items, change sets, mock data, exports and conversations. Existence lives in
+**The catalogue is a `StrEnum` in `app/core/audit.py`, not a table** — 45 event types across auth
+(including session revoke, added with the profile page), accounts (including `user.answer_style.updated`, which allowlists `answerDetail`, `answerFamiliarity` and `answerFormat`), projects, RBAC, password reset,
+checklist modules and items, change sets, mock data, the eval harness (`eval_set.generation.requested`, `eval_set.deleted`, `eval_pair.updated`, `eval_run.requested`), exports and conversations. Existence lives in
 code for the reason `app/core/permissions.py` gives for the
 permission catalogue: if it lived in a table, deleting a row would orphan every write site that
 names it. Which operations must record one is a rule rather than a list —
@@ -221,7 +247,7 @@ reduced to its host by `urlsplit().hostname`, which excludes the userinfo a PAT 
 content (no prompt, no message, no source excerpt, and **`target_label` is `NULL` for a
 conversation**, because its title derives from the user's first question).
 
-**`details` is one envelope** for all 40 events:
+**`details` is one envelope** for all 45 events:
 
 ```json
 {
@@ -350,8 +376,8 @@ So deleting a project soft-deletes the row **and hard-deletes its points, in the
 operation** — and the vector delete runs *before* the commit, so if Qdrant refuses, the row
 stays visible rather than becoming a soft-deleted project whose content is still queryable.
 
-Deleting a project also sweeps its conversations, checklist and mock data. Not scoped by owner:
-a project has members, so the conversations belong to several people and all of them go.
+Deleting a project also sweeps its conversations, checklist, mock data and eval sets, pairs, runs and results. Not scoped by owner:
+a project has members, so the conversations belong to several people and all of them go. Deleting an eval set soft-deletes its pairs, runs and results in the same transaction, and is refused with `409 EVAL_RUN_IN_PROGRESS` while a run is live.
 
 ### 2. The lease is the deduplication boundary
 
@@ -400,7 +426,9 @@ Two consequences that are not visible from any single file:
   and applies it.
 - **`status` and `current_result` are outside what an operation may write.** The apply path runs
   an explicit column allowlist rather than `setattr`, because `operations` originates in a
-  model's output and an unchecked key would let it claim an observation nobody made.
+  model's output and an unchecked key would let it claim an observation nobody made. An `update`'s
+  `changes` keys are canonicalised to camelCase when stored and again on apply (a model may write
+  `expected_result`); a key outside the allowlist is dropped with a warning either way.
 
 There is **one pending change set per module** at a time, deliberately: concurrent refinement is
 out of scope, and the UI disables Generate and the composer while one is waiting rather than

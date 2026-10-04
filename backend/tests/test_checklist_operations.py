@@ -218,3 +218,44 @@ def test_kind_is_absent_on_an_update_or_remove() -> None:
 
     assert stored is not None
     assert stored["kind"] is None
+
+
+def _update(
+    *, changes: dict[str, str] | None = None, expected_result: str = ""
+) -> ProposedOperation:
+    return ProposedOperation(
+        kind="positive",
+        op="update",
+        item_id=str(uuid.uuid4()),
+        rationale="r",
+        changes=changes or {},
+        expected_result=expected_result,
+    )
+
+
+def test_an_update_changes_keys_are_canonicalised_to_camel_case() -> None:
+    result = stored_operation(_update(changes={"expected_result": "X", "test_name": "Y"}))
+
+    assert result is not None
+    assert result["changes"] == {"expectedResult": "X", "testName": "Y"}
+
+
+def test_an_update_with_empty_changes_folds_in_its_top_level_text() -> None:
+    result = stored_operation(_update(expected_result="X"))
+
+    assert result is not None
+    assert result["changes"] == {"expectedResult": "X"}
+
+
+def test_non_empty_changes_win_over_top_level_text() -> None:
+    result = stored_operation(_update(changes={"notes": "N"}, expected_result="ignored"))
+
+    assert result is not None
+    assert result["changes"] == {"notes": "N"}
+
+
+def test_an_unknown_changes_key_is_kept_unmapped() -> None:
+    result = stored_operation(_update(changes={"current_result": "pass", "status": "pass"}))
+
+    assert result is not None
+    assert result["changes"] == {"current_result": "pass", "status": "pass"}

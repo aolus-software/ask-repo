@@ -86,12 +86,19 @@ class StubQueue:
     instances: ClassVar[list["StubQueue"]] = []
 
     def __init__(
-        self, *, bootstrap_servers: str, topic: str, checklist_topic: str, mock_data_topic: str
+        self,
+        *,
+        bootstrap_servers: str,
+        topic: str,
+        checklist_topic: str,
+        mock_data_topic: str,
+        eval_topic: str,
     ) -> None:
         self.bootstrap_servers = bootstrap_servers
         self.topic = topic
         self.checklist_topic = checklist_topic
         self.mock_data_topic = mock_data_topic
+        self.eval_topic = eval_topic
         self.started = False
         self.stopped = False
         StubQueue.instances.append(self)
@@ -193,6 +200,7 @@ async def test_enqueue_publishes_to_the_ingest_topic(monkeypatch: pytest.MonkeyP
         topic=INGEST_TOPIC,
         checklist_topic=CHECKLIST_TOPIC,
         mock_data_topic="askrepo.mock-data.generate",
+        eval_topic="askrepo.eval.jobs",
     )
     await queue.start()
     sent = message()
@@ -214,6 +222,7 @@ async def test_the_producer_is_idempotent(monkeypatch: pytest.MonkeyPatch) -> No
         topic=INGEST_TOPIC,
         checklist_topic=CHECKLIST_TOPIC,
         mock_data_topic="askrepo.mock-data.generate",
+        eval_topic="askrepo.eval.jobs",
     ).start()
 
     assert stub.kwargs["enable_idempotence"] is True
@@ -229,6 +238,7 @@ async def test_produce_to_targets_the_topic_it_is_given(monkeypatch: pytest.Monk
         topic=INGEST_TOPIC,
         checklist_topic=CHECKLIST_TOPIC,
         mock_data_topic="askrepo.mock-data.generate",
+        eval_topic="askrepo.eval.jobs",
     )
     await queue.start()
     await queue.produce_to(DLQ_TOPIC, message(attempt=3))
@@ -242,6 +252,7 @@ async def test_enqueue_before_start_is_a_programming_error() -> None:
         topic=INGEST_TOPIC,
         checklist_topic=CHECKLIST_TOPIC,
         mock_data_topic="askrepo.mock-data.generate",
+        eval_topic="askrepo.eval.jobs",
     )
     with pytest.raises(RuntimeError, match="not started"):
         await queue.enqueue(message())
@@ -258,6 +269,7 @@ async def test_enqueue_after_stop_is_a_programming_error(
         topic=INGEST_TOPIC,
         checklist_topic=CHECKLIST_TOPIC,
         mock_data_topic="askrepo.mock-data.generate",
+        eval_topic="askrepo.eval.jobs",
     )
     await queue.start()
     await queue.stop()
@@ -274,6 +286,7 @@ async def test_stopping_a_queue_that_never_started_is_a_no_op() -> None:
         topic=INGEST_TOPIC,
         checklist_topic=CHECKLIST_TOPIC,
         mock_data_topic="askrepo.mock-data.generate",
+        eval_topic="askrepo.eval.jobs",
     ).stop()
 
 
@@ -448,11 +461,12 @@ async def test_the_lifespan_owns_the_producer_outside_the_test_environment(
         assert queue.topic == INGEST_TOPIC
         assert StubLivePublisher.instances[0].started is True
 
-    # The ingest call, then the checklist family, the mock-data family, then live events.
+    # The ingest call, then the checklist, mock-data and eval families, then live events.
     assert ensured == [
         ("broker:9092", 2),
         ("broker:9092", settings.kafka_checklist_partitions),
         ("broker:9092", settings.kafka_mock_data_partitions),
+        ("broker:9092", settings.kafka_eval_partitions),
         ("broker:9092", 1),
     ]
     assert StubQueue.instances[0].stopped is True

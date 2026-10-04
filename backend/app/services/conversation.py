@@ -13,7 +13,7 @@ import logging
 import uuid
 from collections.abc import AsyncGenerator
 from contextlib import suppress
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from fastapi import status
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -31,11 +31,13 @@ from app.models.conversation import (
     Message,
     MessageRole,
 )
+from app.rag.answer_style import AnswerStyle
 from app.rag.answerer import Answerer
 from app.rag.prompts import Turn
 from app.repositories.conversation import ConversationRepository, MessageRepository
 from app.repositories.feedback import FeedbackRepository
 from app.repositories.project import ProjectRepository
+from app.repositories.user import UserRepository
 from app.schemas.conversation import (
     KEEP_ALIVE,
     CitationPayload,
@@ -76,6 +78,10 @@ class TurnContext:
     question: str
     history: list[Turn]
     message_id: uuid.UUID
+    # The caller's answer style, read once here so the stream never touches the
+    # request's session. Ask only: the refinement services never set it, and
+    # `Answerer` refuses one alongside a `propose_target`.
+    answer_style: AnswerStyle = field(default_factory=AnswerStyle)
 
 
 class ConversationService:
@@ -89,6 +95,7 @@ class ConversationService:
         self._conversations = ConversationRepository(session)
         self._messages = MessageRepository(session)
         self._projects = ProjectRepository(session)
+        self._users = UserRepository(session)
         self._recorder = recorder
 
     async def create(
@@ -236,6 +243,13 @@ class ConversationService:
             conversation.title = _derive_title(payload.question)
         await self.session.commit()
 
+        row = await self._users.get(actor.id)
+        answer_style = (
+            AnswerStyle.from_columns(row.answer_detail, row.answer_familiarity, row.answer_format)
+            if row is not None
+            else AnswerStyle()
+        )
+
         return TurnContext(
             conversation_id=conversation.id,
             project_id=project.id,
@@ -244,6 +258,7 @@ class ConversationService:
             question=payload.question,
             history=await self._history(conversation.id),
             message_id=uuid.uuid4(),
+            answer_style=answer_style,
         )
 
     # `builtins.list`, and it has to be: this class defines a method named `list`,
@@ -331,6 +346,7 @@ async def stream_turn(
         project_id=context.project_id,
         generation=context.generation,
         message_id=context.message_id,
+        answer_style=context.answer_style,
     )
     iterator = events.__aiter__()
     pending: asyncio.Task[StreamEvent] | None = None

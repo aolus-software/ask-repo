@@ -6,6 +6,7 @@ Each model inherits `ApiModel`, so every key ships camelCase.
 import uuid
 from datetime import datetime
 
+from app.rag.answer_style import AnswerDetail, AnswerFamiliarity, AnswerFormat
 from app.schemas.base import ApiModel
 
 
@@ -43,3 +44,20 @@ class ActivityEntry(ApiModel):
     target_label: str | None
     project_id: uuid.UUID | None
     ip_address: str | None
+
+
+class AnswerStyleRead(ApiModel):
+    """How the caller's Ask answers are shaped. `null` on a dial is no preference."""
+
+    detail: AnswerDetail | None
+    familiarity: AnswerFamiliarity | None
+    format: AnswerFormat | None
+
+
+class AnswerStyleUpdate(ApiModel):
+    """Replaces all three dials. Every key is required: an omitted key would mean
+    either "unchanged" or "clear it", and a `PUT` must not mean two things."""
+
+    detail: AnswerDetail | None
+    familiarity: AnswerFamiliarity | None
+    format: AnswerFormat | None

@@ -1,4 +1,4 @@
-"""The caller's own account surface: memberships, sessions and activity.
+"""The caller's own account surface: memberships, sessions, activity and answer style.
 
 Every method takes the caller and nothing that names another user. Membership comes
 from `app/core/access.py`, never a query of its own
@@ -6,18 +6,28 @@ from `app/core/access.py`, never a query of its own
 """
 
 import uuid
+from enum import StrEnum
 
 from fastapi import status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.access import memberships_for, resolve_project_scope
-from app.core.audit import AuditEntry, AuditEventType, AuditRecorder
+from app.core.audit import AuditEntry, AuditEventType, AuditRecorder, ChangedValue
 from app.core.errors import AppError, ErrorCode
 from app.core.middleware import AuthenticatedUser
+from app.models.user import User
+from app.rag.answer_style import AnswerStyle
 from app.repositories.audit_event import AuditEventRepository
 from app.repositories.project import ProjectRepository
 from app.repositories.refresh_token import RefreshTokenRepository
-from app.schemas.me import ActivityEntry, MembershipSummary, SessionResponse
+from app.repositories.user import UserRepository
+from app.schemas.me import (
+    ActivityEntry,
+    AnswerStyleRead,
+    AnswerStyleUpdate,
+    MembershipSummary,
+    SessionResponse,
+)
 from app.schemas.pagination import ListQuery, PaginatedResponse
 
 
@@ -35,6 +45,7 @@ class MeService:
         self.projects = ProjectRepository(session)
         self.tokens = RefreshTokenRepository(session)
         self.audit = AuditEventRepository(session)
+        self.users = UserRepository(session)
         self._recorder = recorder
         self._client_ip = client_ip
 
@@ -126,3 +137,70 @@ class MeService:
             for row in rows
         ]
         return PaginatedResponse.build(items, page=query.page, limit=query.limit, total_count=total)
+
+    async def answer_style(self, user: AuthenticatedUser) -> AnswerStyleRead:
+        """The caller's three dials, `None` where they have no preference."""
+        row = await self._own_row(user)
+        style = AnswerStyle.from_columns(
+            row.answer_detail, row.answer_familiarity, row.answer_format
+        )
+        return AnswerStyleRead(
+            detail=style.detail, familiarity=style.familiarity, format=style.format
+        )
+
+    async def update_answer_style(
+        self, user: AuthenticatedUser, payload: AnswerStyleUpdate
+    ) -> AnswerStyleRead:
+        """Replace the caller's dials, and audit what moved after the commit.
+
+        A `PUT` that changes nothing writes no audit row: `changed` holds only fields
+        that actually changed (`.claude/rules/audit-trail.md`), and an event with an
+        empty `changed` would record an intention, not a change.
+        """
+        row = await self._own_row(user)
+        before: dict[str, str | None] = {
+            "answerDetail": row.answer_detail,
+            "answerFamiliarity": row.answer_familiarity,
+            "answerFormat": row.answer_format,
+        }
+        after: dict[str, str | None] = {
+            "answerDetail": _stored(payload.detail),
+            "answerFamiliarity": _stored(payload.familiarity),
+            "answerFormat": _stored(payload.format),
+        }
+        row.answer_detail = after["answerDetail"]
+        row.answer_familiarity = after["answerFamiliarity"]
+        row.answer_format = after["answerFormat"]
+        await self.session.commit()
+
+        changed: dict[str, tuple[ChangedValue, ChangedValue]] = {
+            key: (before[key], after[key]) for key in before if before[key] != after[key]
+        }
+        if changed:
+            await self._recorder.record(
+                AuditEntry(
+                    event_type=AuditEventType.USER_ANSWER_STYLE_UPDATED,
+                    actor_user_id=user.id,
+                    actor_email=user.email,
+                    target_type="user",
+                    target_id=user.id,
+                    target_label=user.email,
+                    ip_address=self._client_ip,
+                    changed=changed,
+                )
+            )
+        return AnswerStyleRead(
+            detail=payload.detail, familiarity=payload.familiarity, format=payload.format
+        )
+
+    async def _own_row(self, user: AuthenticatedUser) -> User:
+        """The caller's row. Missing only if deactivated mid-request."""
+        row = await self.users.get(user.id)
+        if row is None:
+            raise AppError(status.HTTP_404_NOT_FOUND, ErrorCode.USER_NOT_FOUND, "User not found.")
+        return row
+
+
+def _stored(value: StrEnum | None) -> str | None:
+    """A dial's stored form: its string value, or `NULL` for no preference."""
+    return value.value if value is not None else None

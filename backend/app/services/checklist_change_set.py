@@ -19,6 +19,7 @@ from fastapi import status
 from pydantic import ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.checklist.operations import UPDATABLE_FIELDS, canonical_update_key
 from app.config import Settings
 from app.core import access
 from app.core.audit import AuditEntry, AuditEventType, AuditRecorder
@@ -53,21 +54,6 @@ from app.schemas.checklist import (
 from app.services.notification_fanout import NotificationFanout
 
 logger = logging.getLogger(__name__)
-
-# Which `ChecklistItem` attribute each camelCase key in an `update` operation writes.
-# An allowlist, not `setattr` on whatever the model returned: `changes` originates in a
-# model's output, and an unchecked key would let it write `status`, `current_result`,
-# or `created_by` -- the three columns this feature exists to keep it away from.
-UPDATABLE_FIELDS = {
-    "feature": "feature",
-    "testName": "test_name",
-    "expectedResult": "expected_result",
-    # Safe to let a proposal move: `kind` describes what the test is for, not what
-    # anyone observed. Unlike the free-text fields it is checked against the enum in
-    # the loop below, because the grid filters and the export group on it.
-    "kind": "kind",
-    "notes": "notes",
-}
 
 
 def _operation_id(raw: dict[str, object]) -> uuid.UUID:
@@ -342,7 +328,7 @@ class ChecklistChangeSetService:
             return item
 
         for key, value in (operation.changes or {}).items():
-            attribute = UPDATABLE_FIELDS.get(key)
+            attribute = UPDATABLE_FIELDS.get(canonical_update_key(key))
             if attribute is None:
                 logger.warning("ignoring unknown field %r in change set update", key)
                 continue

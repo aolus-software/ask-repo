@@ -57,7 +57,9 @@ stranded on the first tick.
 ## A generation may not start while a reindex is in flight
 
 `ChecklistModuleService` and `MockDataDatasetService` both call `_require_a_stable_index` on their
-generation path, refusing with `409 PROJECT_NOT_READY` while `reindex_in_progress` is set.
+generation path, and `EvalService` calls the same check (`require_stable_index` in
+`app/services/index_guards.py`) when it requests a set and when it starts a run, refusing with
+`409 PROJECT_NOT_READY` while `reindex_in_progress` is set.
 
 Checking `status` is not enough and never was: a reindex holds `ready` throughout. A generation
 that starts in that window scrolls the current generation, records it in `indexed_generation`, and
@@ -96,6 +98,18 @@ costs a **whole generation**, not a refused claim. Two writes buy back what the 
   scheduled — with a fresh `job_id` the claim cannot refuse, so both run. Expiring at the due
   moment serves both readers with the one `lease_expires_at < now` test, which is what
   `app/queue/consumer.py` has always done for ingestion via `renew_lease`.
+
+## The eval topic family is a third copy of the same shape
+
+`askrepo.eval.jobs`, its two retry rungs and `askrepo.eval.dlq` (`ALL_EVAL_TOPICS`) follow the
+checklist and mock-data families exactly, with one difference: **one topic carries two job kinds**,
+`generate` and `run`, because the cap is one eval job per instance. `EvalJobMessage.target_id` is
+the set for `generate` and the run for `run`, and the lease on that row is the dedupe boundary.
+Everything in the checklist-sweep section applies verbatim to both kinds: a set is `generating`
+and a run is `running` throughout their claim, so `claim_stranded` stamps `updated_at` and a failed
+run that is coming back calls `defer`. `eval_retries_exhausted` is the dead-letter test, derived
+from the same router as its siblings. A run's skip-existing-results step is what makes a
+re-published run cheap, where a re-published generation costs a whole pass.
 
 ## Long jobs pause their partitions and keep polling
 

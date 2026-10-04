@@ -23,8 +23,8 @@ project. `nomic-embed-text` is a 274 MB model that runs on anything; the multi-g
 is what makes a laptop unusable. Moving the chat model alone solves the resource problem at no
 re-indexing cost.
 
-**Ingestion uses no chat model at all.** It embeds. Checklist and mock-data generation each run
-a chat model in the worker process; answering runs one in the API process.
+**Ingestion uses no chat model at all.** It embeds. Checklist, mock-data and eval generation, and
+eval runs, each run a chat model in the worker process; answering runs one in the API process.
 
 ---
 
@@ -108,6 +108,11 @@ Two features, and that is nearly all of it.
 `CLASSIFY_PROMPT`, `GRADE_PROMPT`, `HISTORY_ANSWER_PROMPT`, plus the generation prompts
 (`MAP_FILE_SYSTEM`, `REDUCE_SYSTEM`, `PROPOSE_SYSTEM`, and the mock-data pair).
 
+The reduce and propose system messages both end with `TESTER_LANGUAGE`, which holds every
+generated row to plain language for a manual tester — no paths, code names, HTTP details or
+error codes — and sends the file reference to `citation_paths` instead. The map step stays
+technical on purpose: its observations are input to the reduce step, never shown to a tester.
+
 Keeping them in one module matters more than it looks: **no ordinary test can catch a prompt
 that routes or cites wrongly**, because every other test drives a `ScriptedChatModel`. That is
 what `uv run pytest -m model` exists for — it needs a real served model. Run it after touching
@@ -127,7 +132,7 @@ LangChain turns the Pydantic model into a tool definition (or a JSON-mode schema
 provider for it, and validates the response. There is no JSON parsing and no "please respond in
 this format" prompt-wrangling in our code.
 
-The structured paths are: `classify` and `grade` in the answer graph, and the map, reduce and
+The structured paths are: `classify` and `grade` in the answer graph, the eval pair generator and judge, and the map, reduce and
 propose steps in both generators.
 
 **This is why the boot probe exists.** `with_structured_output` needs tool-calling or a JSON
@@ -265,12 +270,20 @@ call with the moment it finished.
 
 **Features.** Each call passes `config=call_config(CallFeature.X)`: `classify`, `grade`, `answer`,
 `history_answer`, `propose_checklist`, `propose_mock_data`, `map`, `reduce`, `generate_mock_data`,
-`capability_probe`, and `untagged` for one that forgot. `tests/test_call_sites_tagged.py` fails on
+`eval_generate`, `eval_judge`, `capability_probe`, and `untagged` for one that forgot. `tests/test_call_sites_tagged.py` fails on
 a call site that omits it. The feature is the dimension feedback shares, so "is the expensive
 reduce step worth it" can be asked of both.
 
+**The eval harness adds two features, and no new model.** `eval_generate` writes a pair from one
+chunk and `eval_judge` grades an answer against its reference, both through `with_structured_output`.
+**The judge is the instance's chat model**, the same one that wrote the answer, so a run's verdicts
+share any bias that model has toward its own phrasing, and comparing two chat models compares two
+judges as well. Each run stores its `judge_model` so the comparison screen can say so. The answer
+calls inside a run keep the graph's own tags (`classify`, `grade`, `answer`, `history_answer`).
+
 **Trace grouping.** An Ask or refinement turn is one trace, seeded with the assistant message id
-(minted in `prepare_turn`, like a change-set id); a generation run is one trace seeded with the
+(minted in `prepare_turn`, like a change-set id); an eval pair is one trace, seeded with its result
+row's id, so the answer and the judge call group together; a generation run is one trace seeded with the
 change set id it ends up writing — 201 generations in one trace, not 201 traces. The trace id is
 `sha256(seed)[:16]` in hex, the same function the SDK's `create_trace_id(seed=...)` uses, so the
 admin feedback screen computes `traceUrl` from the target id and nothing stores a trace id. The

@@ -37,7 +37,7 @@ from app.models.mock_data import (
     MockDataMessage,
     MockDataRecord,
 )
-from app.models.project import Project, ProjectStatus
+from app.models.project import Project
 from app.queue.protocol import MockDataQueue
 from app.queue.topics import MockDataJobMessage
 from app.rag.answerer import Answerer
@@ -69,6 +69,7 @@ from app.schemas.mock_data import (
     MockDataRecordResponse,
 )
 from app.services.feedback import my_feedback_map
+from app.services.index_guards import require_indexed, require_stable_index
 from app.services.mock_data_export import build_mock_data_json, build_mock_data_workbook
 
 logger = logging.getLogger(__name__)
@@ -130,8 +131,8 @@ class MockDataDatasetService:
         module = await self._require_readable_module(module_id, actor)
         project = await access.require_readable_project(self.projects, module.project_id, actor)
         access.require_permission(actor, project.id, Permission.GENERATE_RUN)
-        self._require_indexed(project)
-        self._require_a_stable_index(project)
+        require_indexed(project)
+        require_stable_index(project)
 
         dataset = await self.datasets.get_or_create_for_module(module_id)
         if dataset.status == MockDataDatasetStatus.GENERATING.value:
@@ -429,27 +430,6 @@ class MockDataDatasetService:
                 "Checklist module not found.",
             )
         return module
-
-    @staticmethod
-    def _require_indexed(project: Project) -> None:
-        if project.status != ProjectStatus.READY.value or not project.embedding_collection:
-            raise AppError(
-                status.HTTP_409_CONFLICT,
-                ErrorCode.PROJECT_NOT_READY,
-                "This project is not indexed yet. Wait for indexing to finish.",
-            )
-
-    @staticmethod
-    def _require_a_stable_index(project: Project) -> None:
-        """Same guard `ChecklistModuleService._require_a_stable_index` applies, and for
-        the same reason -- a mock-data run stamps its own `indexed_generation`.
-        """
-        if project.reindex_in_progress:
-            raise AppError(
-                status.HTTP_409_CONFLICT,
-                ErrorCode.PROJECT_NOT_READY,
-                "This project is being re-indexed. Wait for that to finish, then generate.",
-            )
 
 
 @dataclass(frozen=True, slots=True)

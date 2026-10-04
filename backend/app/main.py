@@ -30,6 +30,9 @@ from app.api.routes import (
     roles,
     users,
 )
+from app.api.routes import (
+    eval as eval_routes,
+)
 from app.config import get_settings
 from app.core.errors import register_exception_handlers
 from app.core.logging import configure_logging
@@ -45,7 +48,7 @@ from app.live.kafka import (
 from app.live.staging import NullPublisher, set_live_publisher
 from app.observability.langfuse_sink import build_call_log
 from app.queue.producer import KafkaIngestionQueue, ensure_topics
-from app.queue.topics import ALL_CHECKLIST_TOPICS, ALL_MOCK_DATA_TOPICS
+from app.queue.topics import ALL_CHECKLIST_TOPICS, ALL_EVAL_TOPICS, ALL_MOCK_DATA_TOPICS
 from app.rag.capability import probe_structured_output
 from app.rag.chat import build_chat_model
 
@@ -108,6 +111,11 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     )
     await ensure_topics(
         bootstrap_servers=settings.kafka_bootstrap_servers,
+        partitions=settings.kafka_eval_partitions,
+        topics=ALL_EVAL_TOPICS,
+    )
+    await ensure_topics(
+        bootstrap_servers=settings.kafka_bootstrap_servers,
         partitions=1,
         topics=(settings.kafka_live_events_topic,),
         topic_configs=LIVE_TOPIC_CONFIGS,
@@ -121,6 +129,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         topic=settings.kafka_ingest_topic,
         checklist_topic=settings.kafka_checklist_topic,
         mock_data_topic=settings.kafka_mock_data_topic,
+        eval_topic=settings.kafka_eval_topic,
     )
     await queue.start()
     app.state.ingestion_queue = queue
@@ -220,6 +229,8 @@ def create_app() -> FastAPI:
     app.include_router(mock_data_datasets.router)
     app.include_router(mock_data_records.router)
     app.include_router(mock_data_change_sets.router)
+    app.include_router(eval_routes.project_router)
+    app.include_router(eval_routes.router)
     app.include_router(audit_events.router)
     app.include_router(notifications.router)
     app.include_router(notification_preferences.router)

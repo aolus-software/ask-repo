@@ -122,6 +122,18 @@ export function resolveBreadcrumbs(pathname: string, user: NavUser): Crumb[] {
     }
   }
 
+  // An eval set sits two segments below its project: Projects → project → Eval → set.
+  const evalSet = /^\/projects\/([^/]+)\/eval\/([^/]+)$/.exec(pathname);
+  if (evalSet) {
+    const projectHref = `/projects/${evalSet[1]}`;
+    return [
+      ...trail,
+      { href: projectHref, label: evalSet[1] },
+      { href: `${projectHref}#eval`, label: "Eval" },
+      { href: pathname, label: evalSet[2] },
+    ];
+  }
+
   const deepest = trail.at(-1);
   if (deepest && deepest.href !== pathname) {
     trail.push({ href: pathname, label: pathname.slice(deepest.href.length + 1) });

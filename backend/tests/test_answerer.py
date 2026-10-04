@@ -11,9 +11,10 @@ from pydantic import BaseModel
 from app.config import Settings
 from app.models.conversation import FinishReason
 from app.observability.recorder import CallRecorder
+from app.rag.answer_style import AnswerDetail, AnswerStyle
 from app.rag.answerer import Answerer, cited_indexes
 from app.rag.graph.state import Classification, EvidenceVerdict, Intent
-from app.rag.grounding import NO_CONTEXT, NO_CONTEXT_ANSWER, UNKNOWN_PATHS
+from app.rag.grounding import NO_CONTEXT, NO_CONTEXT_ANSWER, UNCITED_ANSWER, UNKNOWN_PATHS
 from app.rag.prompts import Turn
 from app.rag.retriever import RetrievedChunk, Retriever
 from app.schemas.conversation import (
@@ -495,3 +496,48 @@ async def test_the_graph_scope_reaches_the_answer_call() -> None:
     assert [call.feature for call in sink.calls] == ["answer"]
     assert sink.calls[0].trace_seed == str(message_id)
     assert sink.calls[0].project_id == project_id
+
+
+@pytest.mark.parametrize("target", ["checklist", "mock_data"])
+async def test_a_proposing_answerer_refuses_an_answer_style(
+    target: Literal["checklist", "mock_data"],
+) -> None:
+    """A refinement chat writes a document the whole project shares. A persona there
+    would make its content depend on who pressed the button."""
+    answerer = build(ScriptedChatModel(), propose_target=target)
+
+    with pytest.raises(ValueError, match="answer style"):
+        await anext(
+            answerer.answer(
+                question="q",
+                history=[],
+                project_id=uuid.uuid4(),
+                generation=0,
+                message_id=uuid.uuid4(),
+                answer_style=AnswerStyle(detail=AnswerDetail.BRIEF),
+            )
+        )
+
+
+async def test_a_style_cannot_talk_the_answer_out_of_its_citation_warning() -> None:
+    """`uncited_answer` is computed from the finished answer, whatever the prompt said."""
+    model = ScriptedChatModel(
+        tokens=["It is set up in the main module."],
+        structured_results=_codebase_question_script(),
+    )
+    answerer = build(model, RecordingRetriever(spans=[_span("app/main.py", 0, 1, 10)]))
+
+    events = [
+        event
+        async for event in answerer.answer(
+            question="how is it set up",
+            history=[],
+            project_id=uuid.uuid4(),
+            generation=0,
+            message_id=uuid.uuid4(),
+            answer_style=AnswerStyle(detail=AnswerDetail.BRIEF),
+        )
+    ]
+
+    assert isinstance(events[-1], DoneEvent)
+    assert UNCITED_ANSWER in events[-1].grounding_warnings

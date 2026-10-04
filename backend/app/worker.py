@@ -11,6 +11,7 @@ topic, and a sweep that recovers jobs Kafka never received.
 import asyncio
 import logging
 import uuid
+from collections.abc import Sequence
 from datetime import UTC, datetime, timedelta
 
 from langchain_core.language_models import BaseChatModel
@@ -20,6 +21,8 @@ from app.checklist.generator import ChecklistGenerator
 from app.config import Settings, get_settings
 from app.core.logging import configure_logging
 from app.db.session import get_sessionmaker
+from app.eval.generator import EvalSetGenerator
+from app.eval.runner import EvalRunner
 from app.ingestion.chunker import LanguageAwareChunker
 from app.ingestion.embedder import build_embedder, probe_dimensions
 from app.ingestion.pipeline import IngestionPipeline
@@ -32,17 +35,22 @@ from app.mockdata.generator import MockDataGenerator
 from app.observability.langfuse_sink import CallLog, build_call_log
 from app.queue.checklist import ChecklistConsumer
 from app.queue.consumer import IngestionConsumer
+from app.queue.eval import EvalConsumer, EvalRunners
 from app.queue.mock_data import MockDataConsumer
 from app.queue.producer import KafkaIngestionQueue, ensure_topics
 from app.queue.protocol import TopicProducer
 from app.queue.retry import RetryConsumer
 from app.queue.topics import (
     ALL_CHECKLIST_TOPICS,
+    ALL_EVAL_TOPICS,
     ALL_MOCK_DATA_TOPICS,
     CHECKLIST_RETRY_TOPICS,
+    EVAL_RETRY_TOPICS,
     MOCK_DATA_RETRY_TOPICS,
     RETRY_TOPICS,
     ChecklistJobMessage,
+    EvalJobKind,
+    EvalJobMessage,
     IngestionMessage,
     MockDataJobMessage,
 )
@@ -50,6 +58,8 @@ from app.rag.capability import probe_structured_output
 from app.rag.chat import build_chat_model
 from app.repositories.audit_event import AuditEventRepository
 from app.repositories.checklist_module import ChecklistModuleRepository
+from app.repositories.eval_run import EvalRunRepository
+from app.repositories.eval_set import EvalSetRepository
 from app.repositories.feedback import FeedbackRepository
 from app.repositories.mock_data_dataset import MockDataDatasetRepository
 from app.repositories.notification_event import NotificationEventRepository
@@ -161,12 +171,46 @@ async def reconcile_mock_data_once(
     return len(stranded)
 
 
+async def reconcile_eval_once(
+    *, sets: EvalSetRepository, runs: EvalRunRepository, producer: TopicProducer, topic: str
+) -> int:
+    """Re-enqueue every lost eval job. Returns how many.
+
+    `claim_stranded` takes the rows and stamps them, as for checklist modules, so a
+    fresh `job_id` is safe to publish unconditionally. A re-published run skips the
+    pairs it already answered (`EvalResultRepository.pair_ids_for_run`), so the
+    duplicate costs the remainder, not the whole run.
+    """
+    published = 0
+    kinds: tuple[tuple[EvalJobKind, Sequence[uuid.UUID]], ...] = (
+        ("generate", await sets.claim_stranded(older_than_seconds=STRANDED_AFTER_SECONDS)),
+        ("run", await runs.claim_stranded(older_than_seconds=STRANDED_AFTER_SECONDS)),
+    )
+    for kind, ids in kinds:
+        for target_id in ids:
+            logger.info("re-enqueueing stranded eval %s job for %s", kind, target_id)
+            await producer.produce_to(
+                topic,
+                EvalJobMessage(
+                    kind=kind,
+                    target_id=target_id,
+                    job_id=uuid.uuid4(),
+                    attempt=0,
+                    not_before_ms=0,
+                    original_topic=topic,
+                ),
+            )
+            published += 1
+    return published
+
+
 async def reconcile_loop(
     *,
     producer: TopicProducer,
     topic: str,
     checklist_topic: str,
     mock_data_topic: str,
+    eval_topic: str,
     settings: Settings,
 ) -> None:
     """The 60-second tick: recover lost jobs of all kinds and prune dead refresh
@@ -192,6 +236,12 @@ async def reconcile_loop(
                     repository=MockDataDatasetRepository(session),
                     producer=producer,
                     topic=mock_data_topic,
+                )
+                await reconcile_eval_once(
+                    sets=EvalSetRepository(session),
+                    runs=EvalRunRepository(session),
+                    producer=producer,
+                    topic=eval_topic,
                 )
                 pruned = await RefreshTokenRepository(session).delete_expired_and_revoked()
                 pruned_resets = await PasswordResetTokenRepository(session).delete_dead()
@@ -270,6 +320,11 @@ async def main() -> None:
     )
     await ensure_topics(
         bootstrap_servers=settings.kafka_bootstrap_servers,
+        partitions=settings.kafka_eval_partitions,
+        topics=ALL_EVAL_TOPICS,
+    )
+    await ensure_topics(
+        bootstrap_servers=settings.kafka_bootstrap_servers,
         partitions=1,
         topics=(settings.kafka_live_events_topic,),
         topic_configs=LIVE_TOPIC_CONFIGS,
@@ -280,6 +335,7 @@ async def main() -> None:
         topic=settings.kafka_ingest_topic,
         checklist_topic=settings.kafka_checklist_topic,
         mock_data_topic=settings.kafka_mock_data_topic,
+        eval_topic=settings.kafka_eval_topic,
     )
     await producer.start()
 
@@ -360,16 +416,42 @@ async def main() -> None:
         worker_id=worker_id,
     )
 
+    def build_eval_generator(session: AsyncSession) -> EvalSetGenerator:
+        """A set generator bound to one job's session."""
+        return EvalSetGenerator(
+            session, settings, store_factory=store_factory, chat_model=chat_model
+        )
+
+    def build_eval_runner(session: AsyncSession) -> EvalRunner:
+        """A run executor bound to one job's session."""
+        return EvalRunner(
+            session,
+            settings,
+            store_factory=store_factory,
+            embedder=embedder,
+            chat_model=chat_model,
+        )
+
+    eval_consumer = EvalConsumer(
+        settings=settings,
+        sessionmaker=get_sessionmaker(),
+        producer=producer,
+        runners=EvalRunners(build_generator=build_eval_generator, build_runner=build_eval_runner),
+        worker_id=worker_id,
+    )
+
     tasks = [
         asyncio.create_task(consumer.run()),
         asyncio.create_task(checklist_consumer.run()),
         asyncio.create_task(mock_data_consumer.run()),
+        asyncio.create_task(eval_consumer.run()),
         asyncio.create_task(
             reconcile_loop(
                 producer=producer,
                 topic=settings.kafka_ingest_topic,
                 checklist_topic=settings.kafka_checklist_topic,
                 mock_data_topic=settings.kafka_mock_data_topic,
+                eval_topic=settings.kafka_eval_topic,
                 settings=settings,
             )
         ),
@@ -408,6 +490,18 @@ async def main() -> None:
                 ).run()
             )
             for topic, _ in MOCK_DATA_RETRY_TOPICS
+        ],
+        *[
+            asyncio.create_task(
+                RetryConsumer(
+                    settings=settings,
+                    producer=producer,
+                    topic=topic,
+                    decode=EvalJobMessage.from_bytes,
+                    destination_topic=settings.kafka_eval_topic,
+                ).run()
+            )
+            for topic, _ in EVAL_RETRY_TOPICS
         ],
     ]
 

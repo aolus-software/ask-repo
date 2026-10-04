@@ -42,6 +42,22 @@ class ProjectRepository(BaseRepository[Project]):
     # query parameter, and an unchecked column name is an information leak.
     SORTABLE_FIELDS = frozenset({"name", "status", "created_at", "updated_at"})
 
+    async def lock(self, project_id: uuid.UUID) -> Project | None:
+        """The project's row, locked `FOR UPDATE` until the transaction ends.
+
+        Serialises "start an eval run" against "request a reindex": each reads state the
+        other writes (`reindex_in_progress` versus a `running` eval run), and neither
+        holds a constraint that could refuse the loser. `populate_existing` makes the
+        flag read after the lock the committed one, not a stale copy the session held.
+        """
+        result = await self.session.execute(
+            self.active_select()
+            .where(Project.id == project_id)
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
+        return result.scalars().first()
+
     async def list_page(
         self,
         *,

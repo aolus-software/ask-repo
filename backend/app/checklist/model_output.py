@@ -74,16 +74,21 @@ class ProposedOperation(BaseModel):
     expected_result: str = Field(
         default="",
         description=(
-            "what a CORRECT implementation should do, specifically -- the status "
-            "code, message or state, e.g. '401 with code INVALID_CREDENTIALS'"
+            "what the tester should SEE when the application behaves correctly, in "
+            "plain words with no code or file names, e.g. 'The sign-in is refused "
+            "and the page says the email or password is wrong'"
         ),
     )
     changes: dict[str, str] = Field(default_factory=dict)
     rationale: str = ""
     # File paths the expectation came from. Resolved to full citations by the
     # generator, which knows the line ranges; the model is not asked for those,
-    # because a model asked for line numbers invents plausible ones.
-    citation_paths: list[str] = Field(default_factory=list)
+    # because a model asked for line numbers invents plausible ones. These descriptions
+    # are outside `prompts.py`, so editing them does not move `PROMPT_VERSION`.
+    citation_paths: list[str] = Field(
+        default_factory=list,
+        description="the files this expectation came from -- the only place a file is ever named",
+    )
 
 
 class ProposedChangeSet(BaseModel):

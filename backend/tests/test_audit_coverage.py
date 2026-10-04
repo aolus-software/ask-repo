@@ -127,6 +127,10 @@ ROUTE_EVENTS: dict[tuple[str, str], AuditEventType | str] = {
         "POST",
         "/mock-data-change-sets/{change_set_id}/discard",
     ): AuditEventType.MOCK_DATA_CHANGE_SET_DISCARDED,
+    ("POST", "/projects/{project_id}/eval-sets"): AuditEventType.EVAL_SET_GENERATION_REQUESTED,
+    ("DELETE", "/eval-sets/{set_id}"): AuditEventType.EVAL_SET_DELETED,
+    ("PUT", "/eval-pairs/{pair_id}/excluded"): AuditEventType.EVAL_PAIR_UPDATED,
+    ("POST", "/eval-sets/{set_id}/runs"): AuditEventType.EVAL_RUN_REQUESTED,
     ("DELETE", "/mock-data-records/{record_id}"): AuditEventType.MOCK_DATA_RECORD_DELETED,
     (
         "GET",
@@ -145,6 +149,7 @@ ROUTE_EVENTS: dict[tuple[str, str], AuditEventType | str] = {
     ("POST", "/checklist-modules/{module_id}/mock-data-messages"): PROPOSAL,
     # --- profile ---
     ("DELETE", "/me/sessions/{session_id}"): AuditEventType.AUTH_SESSION_REVOKED,
+    ("PUT", "/me/answer-style"): AuditEventType.USER_ANSWER_STYLE_UPDATED,
     # --- Task 10: notifications, exemption 5 ---
     ("POST", "/notifications/mark-all-read"): NOTIFICATION_STATE,
     ("POST", "/notifications/{notification_id}/read"): NOTIFICATION_STATE,

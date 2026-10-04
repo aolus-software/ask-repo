@@ -356,6 +356,20 @@ make migrate-prod
 make up-prod
 ```
 
+**After a migration that adds permissions, run `restore-system-roles` once.** The eval harness
+added `eval.read` and `eval.run`, which the migration grants to the three system roles in SQL.
+A migration cannot reach Redis, so grant snapshots cached before the upgrade lack them until
+their TTL expires. The command re-applies the system roles and bumps the grant-cache epoch, so
+every session picks the new permissions up at once:
+
+```bash
+docker compose -f infra/docker-compose.prod.yml --profile ollama \
+  run --rm backend python -m app.cli restore-system-roles
+```
+
+Skipping it only delays the Eval tab for existing sessions by at most one cache TTL; it never
+grants anything wrongly. Custom roles gain nothing — an admin grants them deliberately.
+
 There is no automated rollback, and a migration that has run cannot be assumed reversible.
 
 Tag your images if you deploy by pulling rather than building on the box: `VERSION` sets the

@@ -35,6 +35,10 @@ from app.repositories.checklist_item import ChecklistItemRepository
 from app.repositories.checklist_message import ChecklistMessageRepository
 from app.repositories.checklist_module import ChecklistModuleRepository
 from app.repositories.conversation import ConversationRepository
+from app.repositories.eval_pair import EvalPairRepository
+from app.repositories.eval_result import EvalResultRepository
+from app.repositories.eval_run import EvalRunRepository
+from app.repositories.eval_set import EvalSetRepository
 from app.repositories.feedback import FeedbackRepository
 from app.repositories.membership import MembershipRepository
 from app.repositories.mock_data_change_set import MockDataChangeSetRepository
@@ -250,8 +254,28 @@ class ProjectService:
         project = await access.require_readable_project(self._repository, project_id, actor)
         access.require_permission(actor, project.id, Permission.PROJECT_REINDEX)
 
+        # Serialise against `EvalService.start_run`, which refuses while the flag is up:
+        # whichever takes the project row second sees the other's write.
+        locked = await self._repository.lock(project.id)
+        if locked is None:
+            raise AppError(
+                status.HTTP_404_NOT_FOUND, ErrorCode.PROJECT_NOT_FOUND, "Project not found."
+            )
+        project = locked
+
         if project.status in BUSY_STATUSES or project.reindex_in_progress:
             return ReindexResponse(enqueued=False, project=self._to_response(project, actor))
+
+        # A reindex deletes the generation a running eval run is reading, so its
+        # remaining pairs would score against nothing and the run would still finish
+        # `done`. Refused before the flag is raised and before the publish.
+        if await EvalRunRepository(self.session).active_for_project(project.id) is not None:
+            raise AppError(
+                status.HTTP_409_CONFLICT,
+                ErrorCode.EVAL_RUN_IN_PROGRESS,
+                "An eval run is in progress for this project. Wait for it to finish "
+                "before re-indexing.",
+            )
 
         # Captured before the flag flips: the new generation does not exist yet, the
         # worker increments it, so the one being superseded is the only number
@@ -350,6 +374,13 @@ class ProjectService:
                 mock_data_datasets,
                 project.id,
             )
+
+        # Eval sets, pairs, runs and results hold no vectors, so nothing here reaches
+        # Qdrant. Same transaction as the rest; children first, parents last.
+        await EvalResultRepository(self.session).soft_delete_for_project(project.id)
+        await EvalRunRepository(self.session).soft_delete_for_project(project.id)
+        await EvalPairRepository(self.session).soft_delete_for_project(project.id)
+        await EvalSetRepository(self.session).soft_delete_for_project(project.id)
 
         # A project's feedback goes with the project it judged, like every other
         # project-owned row. Soft, and in the same transaction as the rest.

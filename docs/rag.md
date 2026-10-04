@@ -137,6 +137,11 @@ Without the generation in the id, the new batch would upsert *over* the old poin
 "stays answerable throughout a reindex" and "a failed reindex leaves the working index intact"
 would be false.
 
+The swap deletes the old generation, so a reindex is refused with `409 EVAL_RUN_IN_PROGRESS` while
+one of the project's eval runs is `running` — the mirror of generations being refused during a
+reindex. Starting a run and requesting a reindex serialise on the project row, so neither passes
+the other's check.
+
 The same chunk in the same generation maps to the same id, so a retried batch overwrites rather
 than duplicating.
 
@@ -243,6 +248,32 @@ its citations, so a column would be derived state that can drift from the row it
 
 ---
 
+## Answer style
+
+A user may set three dials on `/profile` — detail (`brief`/`thorough`), familiarity
+(`new`/`expert`) and format (`prose`/`bullets`) — and `NULL` on a dial means no preference.
+`ConversationService.prepare_turn` reads them off the caller's own row and
+`app/rag/answer_style.py` carries them as an `AnswerStyle`.
+
+They render into one slot, `{reader_preferences}`, in `ANSWER_SYSTEM` and
+`HISTORY_ANSWER_SYSTEM`. In `ANSWER_SYSTEM` it sits before the grounding rules, so those
+rules are stated last; in `HISTORY_ANSWER_SYSTEM` it sits before the routing cases ("The
+message is about this conversation…").
+Seven constants in `app/rag/prompts.py` hold every word that can appear there: the preamble
+(`READER_PREFERENCES_PREAMBLE`) and one sentence per dial value (`ANSWER_DETAIL_BRIEF`,
+`ANSWER_DETAIL_THOROUGH`, `ANSWER_FAMILIARITY_NEW`, `ANSWER_FAMILIARITY_EXPERT`,
+`ANSWER_FORMAT_PROSE`, `ANSWER_FORMAT_BULLETS`). No user text is ever stored or rendered, and
+because they are constants they sit under `PROMPT_VERSION`. No sentence may mention citing,
+evidence or confidence.
+
+With no dial set, `render_reader_preferences` returns `""` and the prompt is byte-for-byte the
+one that shipped before the feature, which is what the eval harness relies on. A style never
+overrides grounding: `uncited_answer` and `unknown_paths` are still computed from the finished
+answer, so they remain the backstop whatever a preference said. The style reaches Ask answers
+only — never a refinement chat or a generation run, which write documents other people use.
+
+---
+
 ## Retrieved code is untrusted input
 
 Excerpts come from a cloned repository that anyone with commit access wrote. A comment or README
@@ -256,6 +287,38 @@ them is data being reported on, never instructions.
 bounds the damage is architectural: the model has **no tools, no write access and no network
 reach**, so it can be made to *say* something wrong, not to *do* something. Do not add
 tool-calling to this path without revisiting [`PRD.md`](PRD.md) §9.
+
+---
+
+## The eval harness
+
+Nothing in `pytest -m model` says whether an answer was *right*; the harness does. A user holding
+`eval.run` generates an **eval set**: up to 50 question and reference-answer pairs, each grounded
+in one real chunk of the project's index (`app/eval/generator.py`). Like checklist generation it
+**scrolls the index rather than searching it**, then samples chunks deterministically per set id
+(`app/eval/sampling.py`) so a set is reproducible. A pair whose question names its own file is
+dropped, because it would answer itself. The set is then frozen: nobody edits a reference,
+and a pair is only ever excluded.
+
+A **run** (`app/eval/runner.py`) answers every included pair through the real answer graph, then
+judges the answer against the reference. Two signals are recorded per pair and never blended:
+
+- **Retrieval hit.** Whether the pair's `source_file` is among the `citations` event's sources.
+  It reads the *first-pass* retrieval, which is what a change to chunking or the embedding model
+  moves, and it is deterministic, so it carries no judge noise.
+- **Verdict.** `correct`, `partial` or `wrong` from an LLM judge using the instance's chat model,
+  with a one-line reason; `error` when a pair's answer or judge call failed. Extra correct detail
+  beyond the reference is not penalised, because the reference comes from one chunk.
+
+**Personas are off.** The runner never passes an `answer_style` and reads no `users.answer_*`
+column, so `Answerer` renders the default prompt byte-for-byte; an eval score is comparable only
+against a fixed prompt. A run writes no `conversations` or `messages` row, sends no feedback, and
+stamps itself with the prompt version, the chat and embedding models and the project generation
+it read.
+
+Comparing two runs of a set happens client-side on the pairs both answered. The judge is the
+chat model, so comparing two chat models compares two judges too; the screen warns whenever the
+runs' `judge_model` differ. Retrieval hits are unaffected by that.
 
 ---
 

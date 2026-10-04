@@ -2,17 +2,24 @@
 
 import uuid
 
+import pytest
+
 from app.queue.protocol import InMemoryIngestionQueue, TopicProducer
 from app.queue.topics import (
     CHECKLIST_DLQ_TOPIC,
     CHECKLIST_TOPIC,
     DLQ_TOPIC,
+    EVAL_DLQ_TOPIC,
+    EVAL_RETRY_TOPICS,
     INGEST_TOPIC,
     RETRY_TOPICS,
     ChecklistJobMessage,
+    EvalJobMessage,
     IngestionMessage,
     JobMessage,
     checklist_next_destination,
+    eval_next_destination,
+    eval_retries_exhausted,
     next_destination,
 )
 
@@ -134,3 +141,55 @@ def test_both_message_types_satisfy_the_job_protocol() -> None:
         ),
     ):
         assert isinstance(message, JobMessage)
+
+
+def test_an_eval_message_round_trips_both_kinds() -> None:
+    for kind in ("generate", "run"):
+        eval_message = EvalJobMessage(
+            kind=kind,
+            target_id=uuid.uuid4(),
+            job_id=uuid.uuid4(),
+            attempt=1,
+            not_before_ms=5,
+            original_topic="askrepo.eval.jobs",
+        )
+        assert EvalJobMessage.from_bytes(eval_message.to_bytes()) == eval_message
+        assert eval_message.key() == str(eval_message.target_id).encode()
+
+
+def test_an_unknown_eval_kind_is_refused() -> None:
+    raw = (
+        EvalJobMessage(
+            kind="run",
+            target_id=uuid.uuid4(),
+            job_id=uuid.uuid4(),
+            attempt=0,
+            not_before_ms=0,
+            original_topic="t",
+        )
+        .to_bytes()
+        .replace(b'"run"', b'"impact"')
+    )
+    with pytest.raises(ValueError):
+        EvalJobMessage.from_bytes(raw)
+
+
+def test_the_eval_ladder_ends_in_its_own_dead_letter_topic() -> None:
+    assert eval_next_destination(attempt=0, max_attempts=5) == EVAL_RETRY_TOPICS[0]
+    assert eval_next_destination(attempt=99, max_attempts=5) == (EVAL_DLQ_TOPIC, 0)
+    assert eval_retries_exhausted(attempt=4, max_attempts=5)
+
+
+async def test_the_in_memory_queue_routes_an_eval_job_to_the_eval_topic() -> None:
+    queue = InMemoryIngestionQueue()
+    await queue.enqueue_eval(
+        EvalJobMessage(
+            kind="run",
+            target_id=uuid.uuid4(),
+            job_id=uuid.uuid4(),
+            attempt=0,
+            not_before_ms=0,
+            original_topic="askrepo.eval.jobs",
+        )
+    )
+    assert [topic for topic, _ in queue.produced] == ["askrepo.eval.jobs"]

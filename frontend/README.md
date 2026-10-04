@@ -13,12 +13,16 @@ permission matrix), the admin audit trail (`/settings/audit` and the
 `/checklist/[moduleId]` grid with chat and review panel, which also carries a Mock Data tab
 (generate, refine by chat, review the pending change set, export JSON/`.xlsx`) beside the
 checklist grid, no route of its own. The project detail page at `/projects/[id]` likewise
-carries a **Members** tab — grant, change role, revoke — as a tab, not a route of its own.
+carries a **Members** tab — grant, change role, revoke — as a tab, not a route of its own, and an
+**Eval** tab listing the project's synthetic Q&A sets with a generate dialog. A set opens at
+`/projects/[id]/eval/[setId]`: its pairs (exclude or include each), its runs, a run's per-pair
+verdicts and answers, and a comparison of two runs on the pairs both answered.
 Notifications add `/notifications` (a paginated list, filterable by project/type/unread) — the
 bell itself lives in the app shell's navbar, not a route. `/profile`, opened from the account
-menu, carries five sections — account, sessions (with a per-session sign-out), activity (the
-caller's own audit-trail rows), notifications (per-event in-app and email switches; the email
-switch is enabled only when `MAIL_ENABLED` is true on the instance), and password — and
+menu, carries six sections — account, answer style (three radio dials shaping your own Ask
+answers), sessions (with a per-session sign-out), activity (the caller's own audit-trail
+rows), notifications (per-event in-app and email switches; the email switch is enabled only
+when `MAIL_ENABLED` is true on the instance), and password — and
 `/settings/notifications` now only redirects to `/profile#notifications`.
 
 **Controls are hidden from what the server said, never from a client-side rule.** Each project
@@ -100,7 +104,8 @@ frontend/
 │   ├── manifest.ts        # web app manifest — served at /manifest.webmanifest
 │   ├── favicon.ico icon.png apple-icon.png   # copies of ../assets/favicon/
 │   ├── (auth)/            # shell-less: /login, /change-password
-│   ├── (app)/             # the shell: dashboard, projects (/projects, /projects/[id]),
+│   ├── (app)/             # the shell: dashboard, projects (/projects, /projects/[id],
+│   │                      #   /projects/[id]/eval/[setId]),
 │   │                      #   ask, checklist (/checklist, /checklist/[moduleId]),
 │   │                      #   notifications (/notifications), profile (/profile),
 │   │                      #   settings (/settings/users, /settings/roles, /settings/roles/[id],
@@ -112,17 +117,20 @@ frontend/
 ├── components/
 │   ├── ui/                # shadcn, CLI-managed
 │   ├── layout/ form/ feedback/
-│   └── projects/ ask/ checklist/ mock-data/ roles/ users/ notifications/ profile/
+│   └── projects/ ask/ checklist/ mock-data/ eval/ roles/ users/ notifications/ profile/
 │       #   projects/ also holds the Members tab: member-table, add-member-dialog
+│       #   eval/ holds the set table, generate dialog, set screen, pair and run tables,
+│       #     the run sheet and the two-run comparison
 │       #   roles/ holds the role table, create dialog, permission matrix, role badge
 │       #   notifications/ holds the bell, the popover list, and the deep-link mapper's UI
-│       #   profile/ holds the five sections: account, sessions, activity,
-│       #     notifications (reuses notifications/preferences-screen), password
+│       #   profile/ holds the six sections: account, answer style, sessions,
+│       #     activity, notifications (reuses notifications/preferences-screen), password
 ├── hooks/                 # one file per resource
 ├── lib/
 │   ├── api/               # types, endpoints, errors, both fetch clients
 │   ├── auth/              # cookie names + single-flight refresh
 │   ├── ask/               # SSE parser, pending-question carrier
+│   ├── eval-compare.ts    # two runs compared on the pairs both answered
 │   └── query/ nav.ts status.ts dates.ts can.ts
 ├── public/                # logo.png + the two android-chrome sizes the manifest names
 └── .env.example

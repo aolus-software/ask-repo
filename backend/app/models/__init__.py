@@ -15,6 +15,17 @@ from app.models.checklist import (
     ChecklistModuleStatus,
 )
 from app.models.conversation import Conversation, FinishReason, Message, MessageRole
+from app.models.eval import (
+    EvalMix,
+    EvalPair,
+    EvalQuestionType,
+    EvalResult,
+    EvalRun,
+    EvalRunStatus,
+    EvalSet,
+    EvalSetStatus,
+    EvalVerdict,
+)
 from app.models.feedback import Feedback
 from app.models.membership import ProjectMembership, Role, RolePermission
 from app.models.mock_data import (
@@ -43,6 +54,15 @@ __all__ = [
     "ChecklistModule",
     "ChecklistModuleStatus",
     "Conversation",
+    "EvalMix",
+    "EvalPair",
+    "EvalQuestionType",
+    "EvalResult",
+    "EvalRun",
+    "EvalRunStatus",
+    "EvalSet",
+    "EvalSetStatus",
+    "EvalVerdict",
     "Feedback",
     "FinishReason",
     "Message",

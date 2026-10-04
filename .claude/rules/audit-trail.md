@@ -2,7 +2,7 @@
 
 Everything under `app/core/audit.py`, plus every service that writes — `auth`, `user`, `project`,
 `membership`, `role`, `checklist_module`, `checklist_item`, `checklist_change_set`,
-`mock_data_dataset`, `mock_data_change_set`, `mock_data_record`, `conversation`, `password_reset` — and the two
+`mock_data_dataset`, `mock_data_change_set`, `mock_data_record`, `eval`, `conversation`, `password_reset` — and the two
 export paths. Read `persistence.md` and `router.md` alongside this — they own the table and the
 route; this file owns what must be recorded and what must never be.
 
@@ -65,7 +65,8 @@ Named here so a later reader finds a **decision** rather than what looks like an
 4. **Ingestion outcomes.** A finished or failed index has no actor — nobody did it, a job did.
    `projects.status` and `projects.error` already hold the result, and `NULL` actor is reserved for
    the two cases where a *human* acted without an authenticated identity: a failed login, and the
-   `seed-admins` CLI.
+   `seed-admins` CLI. The same holds for an eval set's or run's completion — a job did it, not a
+   person; the request is audited (`eval_set.generation.requested`, `eval_run.requested`).
 5. **A user's own notification state.** Marking a notification read, marking all read,
    and changing notification preferences. Three reasons, and all three are needed: the
    row is private to one user; it describes no shared resource and no change to one;
@@ -160,7 +161,7 @@ depend on when FastAPI closes the request's `AsyncExitStack`. On any `Exception`
 event at `WARNING` and returns.
 
 **It never raises.** That is what makes "an audit failure cannot fail a user's action" structural
-rather than a promise each of the 42 call sites keeps (41 in services, plus the `seed-admins`
+rather than a promise each of the 47 call sites keeps (46 in services, plus the `seed-admins`
 CLI). A login must not fail because a log write did.
 
 **The accepted consequence, and it is not to be quietly reframed as a guarantee:** an action that

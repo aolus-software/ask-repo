@@ -18,7 +18,7 @@ from app.core.audit import AuditEventType
 from app.core.security import sha256_hex
 from app.models import AuditEvent, User
 from tests.conftest import TEST_PASSWORD, AuditRows, GrantMembership
-from tests.factories import create_project
+from tests.factories import create_project, create_user
 
 UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_0) AppleWebKit/605.1.15 Safari/605.1.15"
 
@@ -92,7 +92,7 @@ async def test_an_admin_sees_only_real_memberships(
 
 
 async def test_me_routes_require_a_token(client: AsyncClient) -> None:
-    for path in ("/me/memberships", "/me/sessions", "/me/activity"):
+    for path in ("/me/memberships", "/me/sessions", "/me/activity", "/me/answer-style"):
         assert (await client.get(path)).status_code == 401, path
     assert (await client.delete(f"/me/sessions/{uuid.uuid4()}")).status_code == 401
 
@@ -106,7 +106,7 @@ async def test_me_routes_are_behind_the_password_change_gate(
     await db_session.commit()
     access, _ = await _login(client, authed_user.email)
 
-    for path in ("/me/memberships", "/me/sessions", "/me/activity"):
+    for path in ("/me/memberships", "/me/sessions", "/me/activity", "/me/answer-style"):
         response = await client.get(path, headers=_bearer(access))
         assert response.status_code == 403, path
         assert response.json()["detail"]["code"] == "PASSWORD_CHANGE_REQUIRED"
@@ -362,3 +362,107 @@ async def test_activity_is_paged(
     assert body["page"] == 2
     assert body["totalCount"] == 4
     assert len(body["items"]) == 2
+
+
+STYLE = {"detail": "brief", "familiarity": "expert", "format": "bullets"}
+UNSET = {"detail": None, "familiarity": None, "format": None}
+
+
+async def test_answer_style_defaults_to_no_preference(
+    client: AsyncClient, authed_user: User
+) -> None:
+    access, _ = await _login(client, authed_user.email)
+
+    response = await client.get("/me/answer-style", headers=_bearer(access))
+
+    assert response.status_code == 200
+    assert response.json() == UNSET
+
+
+async def test_answer_style_round_trips(client: AsyncClient, authed_user: User) -> None:
+    access, _ = await _login(client, authed_user.email)
+
+    put = await client.put("/me/answer-style", json=STYLE, headers=_bearer(access))
+    got = await client.get("/me/answer-style", headers=_bearer(access))
+
+    assert put.status_code == 200
+    assert put.json() == STYLE
+    assert got.json() == STYLE
+
+
+async def test_answer_style_can_be_cleared(client: AsyncClient, authed_user: User) -> None:
+    access, _ = await _login(client, authed_user.email)
+    await client.put("/me/answer-style", json=STYLE, headers=_bearer(access))
+
+    response = await client.put("/me/answer-style", json=UNSET, headers=_bearer(access))
+
+    assert response.json() == UNSET
+
+
+async def test_answer_style_put_requires_every_dial(client: AsyncClient, authed_user: User) -> None:
+    """A missing key is not "leave it unchanged": a PUT whose omission means two
+    different things is the bug PATCH semantics invite."""
+    access, _ = await _login(client, authed_user.email)
+
+    response = await client.put(
+        "/me/answer-style", json={"detail": "brief"}, headers=_bearer(access)
+    )
+
+    assert response.status_code == 422
+    assert "familiarity" in response.json()["detail"]["fields"]
+
+
+async def test_answer_style_rejects_an_unknown_value(
+    client: AsyncClient, authed_user: User
+) -> None:
+    access, _ = await _login(client, authed_user.email)
+
+    response = await client.put(
+        "/me/answer-style", json={**STYLE, "detail": "verbose"}, headers=_bearer(access)
+    )
+
+    assert response.status_code == 422
+    assert "detail" in response.json()["detail"]["fields"]
+
+
+async def test_answer_style_is_the_callers_own(
+    client: AsyncClient, authed_user: User, db_session: AsyncSession
+) -> None:
+    other = await create_user(db_session)
+    await db_session.commit()
+    access, _ = await _login(client, authed_user.email)
+
+    await client.put("/me/answer-style", json=STYLE, headers=_bearer(access))
+
+    await db_session.refresh(other)
+    assert (other.answer_detail, other.answer_familiarity, other.answer_format) == (
+        None,
+        None,
+        None,
+    )
+
+
+async def test_changing_the_answer_style_is_audited(
+    client: AsyncClient, authed_user: User, audit_rows: AuditRows
+) -> None:
+    access, _ = await _login(client, authed_user.email)
+
+    await client.put("/me/answer-style", json={**UNSET, "detail": "brief"}, headers=_bearer(access))
+
+    rows = await audit_rows(AuditEventType.USER_ANSWER_STYLE_UPDATED)
+    assert len(rows) == 1
+    assert rows[0].actor_user_id == authed_user.id
+    assert rows[0].target_id == authed_user.id
+    assert rows[0].project_id is None
+    assert rows[0].details == {"changed": {"answerDetail": {"before": None, "after": "brief"}}}
+
+
+async def test_an_unchanged_answer_style_writes_no_audit_row(
+    client: AsyncClient, authed_user: User, audit_rows: AuditRows
+) -> None:
+    access, _ = await _login(client, authed_user.email)
+    await client.put("/me/answer-style", json=STYLE, headers=_bearer(access))
+
+    await client.put("/me/answer-style", json=STYLE, headers=_bearer(access))
+
+    assert len(await audit_rows(AuditEventType.USER_ANSWER_STYLE_UPDATED)) == 1

@@ -79,3 +79,14 @@ def test_every_permission_appears_in_exactly_one_group() -> None:
 
     assert sorted(grouped) == sorted(Permission)
     assert len(grouped) == len(set(grouped))
+
+
+def test_eval_read_is_held_by_every_system_role() -> None:
+    for role in ("viewer", "editor", "owner"):
+        assert Permission.EVAL_READ in SYSTEM_ROLES[role], role
+
+
+def test_eval_run_is_held_by_editor_and_owner_only() -> None:
+    assert Permission.EVAL_RUN not in SYSTEM_ROLES["viewer"]
+    assert Permission.EVAL_RUN in SYSTEM_ROLES["editor"]
+    assert Permission.EVAL_RUN in SYSTEM_ROLES["owner"]

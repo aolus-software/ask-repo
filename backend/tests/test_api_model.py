@@ -11,6 +11,7 @@ ships unchecked.
 import uuid
 
 import pytest
+from pydantic import BaseModel
 
 from app.models.conversation import FinishReason, Intent
 from app.schemas import SSE_EVENT_MODELS
@@ -21,6 +22,7 @@ from app.schemas.conversation import (
     TokenEvent,
     encode_event,
 )
+from app.schemas.me import AnswerStyleRead, AnswerStyleUpdate
 
 
 class _Sample(ApiModel):
@@ -96,3 +98,23 @@ def test_every_terminator_carries_a_finish_reason() -> None:
     with no way to tell it apart from a complete short one."""
     assert "finish_reason" in DoneEvent.model_fields
     assert "finish_reason" in ErrorEvent.model_fields
+
+
+def test_answer_style_schemas_are_api_models() -> None:
+    assert issubclass(AnswerStyleRead, ApiModel)
+    assert issubclass(AnswerStyleUpdate, ApiModel)
+
+
+def test_eval_schemas_are_api_models() -> None:
+    from app.schemas import eval as eval_schemas
+
+    classes = [
+        value
+        for value in vars(eval_schemas).values()
+        if isinstance(value, type)
+        and issubclass(value, BaseModel)
+        and value.__module__ == eval_schemas.__name__
+    ]
+    assert classes
+    for cls in classes:
+        assert issubclass(cls, ApiModel), cls.__name__

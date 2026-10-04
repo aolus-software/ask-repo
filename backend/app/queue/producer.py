@@ -11,6 +11,7 @@ from app.queue.topics import (
     ALL_TOPICS,
     INGEST_TOPIC,
     ChecklistJobMessage,
+    EvalJobMessage,
     IngestionMessage,
     JobMessage,
     MockDataJobMessage,
@@ -33,10 +34,12 @@ class KafkaIngestionQueue:
         topic: str = INGEST_TOPIC,
         checklist_topic: str,
         mock_data_topic: str,
+        eval_topic: str,
     ) -> None:
         self.topic = topic
         self.checklist_topic = checklist_topic
         self.mock_data_topic = mock_data_topic
+        self.eval_topic = eval_topic
         self._bootstrap_servers = bootstrap_servers
         self._producer: AIOKafkaProducer | None = None
 
@@ -68,6 +71,10 @@ class KafkaIngestionQueue:
     async def enqueue_mock_data(self, message: MockDataJobMessage) -> None:
         """Publish a generation job to the mock-data topic."""
         await self.produce_to(self.mock_data_topic, message)
+
+    async def enqueue_eval(self, message: EvalJobMessage) -> None:
+        """Publish an eval job to the eval topic."""
+        await self.produce_to(self.eval_topic, message)
 
     async def produce_to(self, topic: str, message: JobMessage) -> None:
         """Publish to a specific topic — used by the retry and DLQ paths."""

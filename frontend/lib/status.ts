@@ -1,5 +1,8 @@
 import type {
   AuditOutcome,
+  EvalRunStatus,
+  EvalVerdict,
+  EvalSetStatus,
   ChecklistItemStatus,
   ChecklistModuleStatus,
   ProjectStatus,
@@ -120,4 +123,48 @@ export function auditOutcomeTone(outcome: AuditOutcome): StatusTone {
 
 export function auditOutcomeLabel(outcome: AuditOutcome): string {
   return outcome === "failure" ? "Failure" : "Success";
+}
+
+/**
+ * The eval harness's two status vocabularies. A set is `generating` → `ready` / `failed`
+ * and a run `running` → `done` / `failed`; both pair a moving state with `warning`, a
+ * settled good one with `success` and a failure with `danger`, like every domain above.
+ */
+const EVAL_STATUS_TONES: Record<EvalSetStatus | EvalRunStatus, StatusTone> = {
+  generating: "warning",
+  running: "warning",
+  ready: "success",
+  done: "success",
+  failed: "danger",
+};
+
+const EVAL_STATUS_LABELS: Record<EvalSetStatus | EvalRunStatus, string> = {
+  generating: "Generating",
+  running: "Running",
+  ready: "Ready",
+  done: "Done",
+  failed: "Failed",
+};
+
+export function evalStatusTone(status: EvalSetStatus | EvalRunStatus): StatusTone {
+  return EVAL_STATUS_TONES[status];
+}
+
+export function evalStatusLabel(status: EvalSetStatus | EvalRunStatus): string {
+  return EVAL_STATUS_LABELS[status];
+}
+
+const EVAL_VERDICT_TONES: Record<EvalVerdict, StatusTone> = {
+  correct: "success",
+  partial: "warning",
+  wrong: "danger",
+  error: "neutral",
+};
+
+export function evalVerdictTone(verdict: EvalVerdict): StatusTone {
+  return EVAL_VERDICT_TONES[verdict];
+}
+
+export function evalVerdictLabel(verdict: EvalVerdict): string {
+  return verdict.charAt(0).toUpperCase() + verdict.slice(1);
 }

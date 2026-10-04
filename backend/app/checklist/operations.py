@@ -26,6 +26,35 @@ from app.schemas.checklist import ChangeOperationPayload
 
 logger = logging.getLogger(__name__)
 
+# Which `ChecklistItem` attribute each camelCase key in an `update` operation writes.
+# An allowlist, not `setattr` on whatever the model returned: `changes` originates in a
+# model's output, and an unchecked key would let it write `status`, `current_result`,
+# or `created_by` -- the three columns this feature exists to keep it away from.
+# `canonical_update_key` below derives the snake_case spelling from this table, so a
+# model that echoes the `test_name` attribute name still lands on `testName`; it never
+# adds a writable attribute.
+UPDATABLE_FIELDS = {
+    "feature": "feature",
+    "testName": "test_name",
+    "expectedResult": "expected_result",
+    # Safe to let a proposal move: `kind` describes what the test is for, not what
+    # anyone observed. Unlike the free-text fields it is checked against the enum in
+    # the apply loop, because the grid filters and the export group on it.
+    "kind": "kind",
+    "notes": "notes",
+}
+_CANONICAL_UPDATE_KEYS = {attribute: key for key, attribute in UPDATABLE_FIELDS.items()}
+
+
+def canonical_update_key(key: str) -> str:
+    """The camelCase name for an `update` key written in either spelling.
+
+    A key matching neither form is returned unchanged, so the allowlist stays the
+    boundary that drops it.
+    """
+    return _CANONICAL_UPDATE_KEYS.get(key, key)
+
+
 # What a model actually writes when asked for a positive/negative kind. Anything
 # unrecognised falls back to `positive` rather than dropping the operation -- the
 # lesson `item_id` taught: a field the model fills in freely must never be able to
@@ -84,6 +113,16 @@ def stored_operation(
     review screen then had nothing to tick, with Generate and the chat both disabled
     behind the pending change set.
     """
+    changes = {canonical_update_key(key): value for key, value in operation.changes.items()}
+    if operation.op == "update" and not changes:
+        # The model put the new text beside `changes` rather than in it; apply reads
+        # only `changes`, so without this the update would succeed and change nothing.
+        top_level = {
+            "feature": operation.feature,
+            "testName": operation.test_name,
+            "expectedResult": operation.expected_result,
+        }
+        changes = {key: value for key, value in top_level.items() if value}
     payload: dict[str, object] = {
         "op": operation.op,
         # Minted here, not by the model: each operation needs its own id so apply
@@ -94,7 +133,7 @@ def stored_operation(
         "testName": operation.test_name or None,
         "expectedResult": operation.expected_result or None,
         "kind": _narrow_kind(operation.kind).value if operation.op == "add" else None,
-        "changes": operation.changes or None,
+        "changes": changes or None,
         "citations": citations or None,
         "rationale": operation.rationale or "No rationale given.",
     }

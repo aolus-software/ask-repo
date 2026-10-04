@@ -77,10 +77,16 @@ class TurnState(TypedDict):
     evidence_ok: bool
     answer: str
     failure: FinishReason | None
+    answer_style: AnswerStyle | None  # the asker's dials; None = default prompt
 ```
 
 `question` and `search_query` are separate on purpose: **the model answers what the user asked,
 while retrieval embeds the rewritten query.**
+
+`answer_style` is read by `generate` and `answer_from_history`, which render it into the
+`{reader_preferences}` slot of their system prompts (`docs/rag.md`, "Answer style"). `Answerer`
+raises on a style passed alongside a `propose_target`: only the Ask screen shapes an answer by
+one user's preferences.
 
 ---
 
