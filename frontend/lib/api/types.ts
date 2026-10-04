@@ -662,3 +662,88 @@ export interface ActivityEntry {
   projectId: string | null;
   ipAddress: string | null;
 }
+
+/* --- Eval harness. Mirrors `app/schemas/eval.py`. --- */
+
+export type EvalSetStatus = "generating" | "ready" | "failed";
+export type EvalRunStatus = "running" | "done" | "failed";
+export type EvalMix = "balanced" | "explain" | "locate";
+export type EvalQuestionType = "explain" | "locate";
+export type EvalVerdict = "correct" | "partial" | "wrong" | "error";
+export type EvalCount = 10 | 25 | 50;
+
+export interface EvalSetCreateInput {
+  name: string;
+  sourcePath: string | null;
+  count: EvalCount;
+  mix: EvalMix;
+}
+
+export interface EvalRunSummary {
+  id: string;
+  setId: string;
+  status: EvalRunStatus;
+  error: string | null;
+  promptVersion: string | null;
+  chatProvider: string | null;
+  chatModel: string | null;
+  judgeModel: string | null;
+  embeddingModel: string | null;
+  projectGeneration: number | null;
+  pairsAnswered: number;
+  hits: number;
+  correct: number;
+  partial: number;
+  wrong: number;
+  errors: number;
+  startedAt: string | null;
+  finishedAt: string | null;
+  createdAt: string;
+}
+
+export interface EvalSetSummary {
+  id: string;
+  projectId: string;
+  name: string;
+  sourcePath: string | null;
+  requestedCount: number;
+  mix: EvalMix;
+  status: EvalSetStatus;
+  error: string | null;
+  pairCount: number;
+  indexedGeneration: number | null;
+  createdAt: string;
+  latestRun: EvalRunSummary | null;
+}
+
+export interface EvalPair {
+  id: string;
+  position: number;
+  questionType: EvalQuestionType;
+  question: string;
+  referenceAnswer: string;
+  sourceFile: string;
+  startLine: number;
+  endLine: number;
+  excluded: boolean;
+}
+
+export interface EvalSetDetail extends EvalSetSummary {
+  pairs: EvalPair[];
+  projectGeneration: number;
+}
+
+export interface EvalResult {
+  id: string;
+  pairId: string;
+  retrievalHit: boolean;
+  verdict: EvalVerdict;
+  judgeReason: string | null;
+  answer: string;
+  groundingWarnings: string[];
+  retrievalAttempts: number;
+}
+
+export interface EvalRunDetail extends EvalRunSummary {
+  results: EvalResult[];
+}

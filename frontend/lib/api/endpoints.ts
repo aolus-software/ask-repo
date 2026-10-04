@@ -79,6 +79,13 @@ export const endpoints = {
     exportXlsx: (moduleId: string) =>
       `/checklist-modules/${moduleId}/mock-data/export.xlsx`,
   },
+  eval: {
+    projectSets: (projectId: string) => `/projects/${projectId}/eval-sets`,
+    set: (id: string) => `/eval-sets/${id}`,
+    pairExcluded: (id: string) => `/eval-pairs/${id}/excluded`,
+    setRuns: (id: string) => `/eval-sets/${id}/runs`,
+    run: (id: string) => `/eval-runs/${id}`,
+  },
   mockDataRecords: {
     detail: (id: string) => `/mock-data-records/${id}`,
   },

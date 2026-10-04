@@ -10,6 +10,8 @@ import { NotFound } from "@/components/feedback/not-found";
 import { ProjectStatusBadge } from "@/components/feedback/status-badge";
 import { PageHeader } from "@/components/layout/page-header";
 import { AddMemberDialog } from "@/components/projects/add-member-dialog";
+import { EvalSetTable } from "@/components/eval/eval-set-table";
+import { GenerateEvalSetDialog } from "@/components/eval/generate-eval-set-dialog";
 import { MemberTable } from "@/components/projects/member-table";
 import { ProjectRowActions } from "@/components/projects/project-row-actions";
 import { ProjectStats } from "@/components/projects/project-stats";
@@ -54,6 +56,7 @@ export function ProjectDetailScreen({ id }: { id: string }) {
   const isWorking = project.status === "cloning" || project.status === "indexing";
   const canReadMembers = can(project, PERMISSION.MEMBERSHIP_READ);
   const canGrantMembers = can(project, PERMISSION.MEMBERSHIP_GRANT);
+  const canReadEval = can(project, PERMISSION.EVAL_READ);
 
   return (
     <div className="mx-auto w-full max-w-7xl space-y-6">
@@ -85,6 +88,7 @@ export function ProjectDetailScreen({ id }: { id: string }) {
         <TabsList>
           <TabsTrigger value="overview">Overview</TabsTrigger>
           {canReadMembers ? <TabsTrigger value="members">Members</TabsTrigger> : null}
+          {canReadEval ? <TabsTrigger value="eval">Eval</TabsTrigger> : null}
         </TabsList>
 
         <TabsContent value="overview" className="space-y-6">
@@ -144,6 +148,26 @@ export function ProjectDetailScreen({ id }: { id: string }) {
               open={addingMember}
               onOpenChange={setAddingMember}
             />
+          </TabsContent>
+        ) : null}
+
+        {canReadEval ? (
+          <TabsContent value="eval" className="space-y-4">
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <h2 className="text-xl font-semibold tracking-tight">Eval</h2>
+                <p className="text-muted-foreground text-sm">
+                  Generated questions with reference answers, run against this project.
+                </p>
+              </div>
+              <GenerateEvalSetDialog
+                projectId={project.id}
+                permissions={project.permissions}
+              />
+            </div>
+            <Card className="p-0">
+              <EvalSetTable projectId={project.id} />
+            </Card>
           </TabsContent>
         ) : null}
       </Tabs>
