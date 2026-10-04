@@ -650,7 +650,7 @@ async def test_eval_set_soft_delete_stages_an_eval_set_event(
     row = await _eval_set(db_session, "ready")
     live_bus.published.clear()
 
-    await EvalSetRepository(db_session).soft_delete(row.id, row.project_id)
+    await EvalSetRepository(db_session).soft_delete_set(row.id, row.project_id)
     await db_session.commit()
 
     assert live_bus.published == [eval_set_event(row.id, row.project_id)]

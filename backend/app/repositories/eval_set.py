@@ -163,7 +163,7 @@ class EvalSetRepository(BaseRepository[EvalSet]):
         stage_live_event(self.session, eval_set_event(set_id, row[0]))
         return True
 
-    async def soft_delete(self, set_id: uuid.UUID, project_id: uuid.UUID) -> None:
+    async def soft_delete_set(self, set_id: uuid.UUID, project_id: uuid.UUID) -> None:
         """Soft-delete one set and stage its live event."""
         await self.session.execute(
             update(EvalSet)
