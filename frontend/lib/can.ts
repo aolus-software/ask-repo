@@ -27,6 +27,8 @@ export const PERMISSION = {
   RESULT_RECORD: "result.record",
   MOCKDATA_READ: "mockdata.read",
   MOCKDATA_EDIT: "mockdata.edit",
+  EVAL_READ: "eval.read",
+  EVAL_RUN: "eval.run",
   MEMBERSHIP_READ: "membership.read",
   MEMBERSHIP_GRANT: "membership.grant",
   MEMBERSHIP_REVOKE: "membership.revoke",

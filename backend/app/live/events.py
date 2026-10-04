@@ -59,3 +59,13 @@ def notification_event(
         project_id=project_id,
         recipients=tuple(sorted(recipients)),
     )
+
+
+def eval_set_event(set_id: uuid.UUID, project_id: uuid.UUID) -> LiveEvent:
+    """An eval set's status or pairs changed."""
+    return LiveEvent(kind="eval_set", id=set_id, project_id=project_id)
+
+
+def eval_run_event(run_id: uuid.UUID, project_id: uuid.UUID) -> LiveEvent:
+    """An eval run's status changed."""
+    return LiveEvent(kind="eval_run", id=run_id, project_id=project_id)
