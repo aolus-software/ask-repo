@@ -15,6 +15,7 @@ export const AUDIT_EVENT_TYPES = [
   "user.updated",
   "user.deactivated",
   "user.password.reset",
+  "user.answer_style.updated",
   "project.created",
   "project.reindex.requested",
   "project.deleted",

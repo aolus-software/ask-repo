@@ -14,6 +14,7 @@ import type {
   ListParams,
   MembershipSummary,
   PaginatedResponse,
+  AnswerStyle,
   SessionSummary,
 } from "@/lib/api/types";
 import { keys } from "@/lib/query/keys";
@@ -50,5 +51,25 @@ export function useActivity(params: ListParams) {
         `${endpoints.me.activity}${listQueryString(params)}`,
       ),
     placeholderData: keepPreviousData,
+  });
+}
+
+export function useAnswerStyle() {
+  return useQuery({
+    queryKey: keys.profile.answerStyle,
+    queryFn: () => apiFetch<AnswerStyle>(endpoints.me.answerStyle),
+  });
+}
+
+/** Replaces all three dials; the backend requires every key. */
+export function useUpdateAnswerStyle() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (style: AnswerStyle) =>
+      apiFetch<AnswerStyle>(endpoints.me.answerStyle, {
+        method: "PUT",
+        body: JSON.stringify(style),
+      }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: keys.profile.answerStyle }),
   });
 }

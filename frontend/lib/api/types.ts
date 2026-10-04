@@ -630,6 +630,13 @@ export interface MembershipSummary {
   role: string;
 }
 
+/** `GET`/`PUT /me/answer-style`. `null` on a dial is no preference. */
+export interface AnswerStyle {
+  detail: "brief" | "thorough" | null;
+  familiarity: "new" | "expert" | null;
+  format: "prose" | "bullets" | null;
+}
+
 /** `GET /me/sessions` — one live sign-in. `id` is the refresh-token family. */
 export interface SessionSummary {
   id: string;

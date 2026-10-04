@@ -149,6 +149,7 @@ add a row (and install it with `npx shadcn@latest add <name>`) when a new screen
 | Roles | `table`, `badge`, `checkbox`, `dialog`, `dropdown-menu`, `field`, `input`, `separator` |
 | Audit trail | `table`, `badge`, `combobox`, `dialog`, `card`, `separator`, `skeleton`, `alert` |
 | Notifications | `popover`, `scroll-area` (bell), `switch` (`/profile#notifications`) |
+| Answer style | `radio-group` (`/profile#answer-style`) |
 | Lists (all) | `pagination`, `input-group` |
 
 `form` is deliberately absent: shadcn's `form` component wraps **react-hook-form**, which

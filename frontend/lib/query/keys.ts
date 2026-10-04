@@ -18,6 +18,7 @@ export const keys = {
   profile: {
     all: ["profile"] as const,
     memberships: ["profile", "memberships"] as const,
+    answerStyle: ["profile", "answer-style"] as const,
     sessions: ["profile", "sessions"] as const,
     activity: (params: ListParams) => ["profile", "activity", params] as const,
   },
