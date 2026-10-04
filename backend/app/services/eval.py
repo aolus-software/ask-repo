@@ -241,6 +241,14 @@ class EvalService:
         worker's lease says whether anyone holds it.
         """
         eval_set, project = await self._load_set(set_id, actor, Permission.EVAL_RUN)
+        # Serialise against `ProjectService.reindex`, which refuses while a run is
+        # `running`: whichever takes the project row second sees the other's write.
+        # Lock order is project then set — the order project deletion takes them in
+        # (its soft delete updates the project row, then the set rows) — so no cycle.
+        locked_project = await self.projects.lock(project.id)
+        if locked_project is None:
+            raise self._set_not_found()
+        project = locked_project
         # Serialise concurrent starts on the set row; the guard below is check-then-insert.
         locked = await self.sets.lock(set_id)
         if locked is None:
@@ -259,13 +267,6 @@ class EvalService:
                 "A run of this set is already in progress.",
             )
         access.require_answerable(project, self.settings)
-        # Serialise against `ProjectService.reindex`, which refuses while a run is
-        # `running`: whichever takes the project row second sees the other's write.
-        # Lock order is set then project; reindex takes only the project, so no cycle.
-        locked_project = await self.projects.lock(project.id)
-        if locked_project is None:
-            raise self._set_not_found()
-        project = locked_project
         require_stable_index(project)
         included = await self.pairs.list_for_set(set_id, include_excluded=False)
         if not included:

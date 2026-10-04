@@ -703,3 +703,40 @@ async def test_deleting_a_set_takes_the_set_lock_first(
 
     assert (await authed_client.delete(f"/eval-sets/{eval_set.id}")).status_code == 204
     assert locked == [eval_set.id]
+
+
+@pytest.mark.asyncio
+async def test_starting_a_run_locks_the_project_before_the_set(
+    authed_client: AsyncClient,
+    authed_user: User,
+    grant_membership: GrantMembership,
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Project deletion updates the project row and then the set rows; taking the
+    # locks in the other order here would let the two deadlock each other.
+    from app.repositories.eval_set import EvalSetRepository
+    from app.repositories.project import ProjectRepository
+
+    project, eval_set = await _runnable_set(db_session)
+    await grant_membership(authed_user.id, project.id, OWNER_NAME)
+    await db_session.commit()
+    order: list[str] = []
+    set_lock = EvalSetRepository.lock
+    project_lock = ProjectRepository.lock
+
+    async def spy_set(self: EvalSetRepository, set_id: uuid.UUID) -> EvalSet | None:
+        order.append("set")
+        return await set_lock(self, set_id)
+
+    async def spy_project(self: ProjectRepository, project_id: uuid.UUID) -> Project | None:
+        order.append("project")
+        return await project_lock(self, project_id)
+
+    monkeypatch.setattr(EvalSetRepository, "lock", spy_set)
+    monkeypatch.setattr(ProjectRepository, "lock", spy_project)
+
+    response = await authed_client.post(f"/eval-sets/{eval_set.id}/runs")
+
+    assert response.status_code == 202, response.text
+    assert order == ["project", "set"]
