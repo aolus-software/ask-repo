@@ -42,12 +42,12 @@ export function useEvalSets(projectId: string) {
   });
 }
 
-export function useEvalSet(setId: string) {
+export function useEvalSet(setId: string, enabled = true) {
   const { connected } = useLiveEvents();
   return useQuery({
     queryKey: keys.eval.set(setId),
     queryFn: () => apiFetch<EvalSetDetail>(endpoints.eval.set(setId)),
-    enabled: Boolean(setId),
+    enabled: enabled && Boolean(setId),
     refetchInterval: (query) =>
       pollWhile(query.state.data?.status === "generating", connected),
     refetchIntervalInBackground: false,
@@ -55,7 +55,7 @@ export function useEvalSet(setId: string) {
 }
 
 /** A set's runs, newest first. Polls while any run is still running. */
-export function useEvalRuns(setId: string) {
+export function useEvalRuns(setId: string, enabled = true) {
   const { connected } = useLiveEvents();
   return useQuery({
     queryKey: keys.eval.runs(setId),
@@ -63,7 +63,7 @@ export function useEvalRuns(setId: string) {
       apiFetch<PaginatedResponse<EvalRunSummary>>(
         `${endpoints.eval.setRuns(setId)}?limit=100`,
       ),
-    enabled: Boolean(setId),
+    enabled: enabled && Boolean(setId),
     refetchInterval: (query) =>
       pollWhile(
         (query.state.data?.items ?? []).some((run) => run.status === "running"),

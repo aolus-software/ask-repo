@@ -2,7 +2,7 @@
 
 import { MessagesSquare, UserPlus } from "lucide-react";
 import Link from "next/link";
-import { useState } from "react";
+import { useState, useSyncExternalStore } from "react";
 
 import { DetailError } from "@/components/feedback/detail-error";
 import { JobFailureAlert } from "@/components/feedback/job-failure-alert";
@@ -25,9 +25,23 @@ import { useProject } from "@/hooks/use-projects";
 import { can, PERMISSION } from "@/lib/can";
 import { statusLabel } from "@/lib/status";
 
+function subscribeToHash(onChange: () => void) {
+  window.addEventListener("hashchange", onChange);
+  return () => window.removeEventListener("hashchange", onChange);
+}
+
 export function ProjectDetailScreen({ id }: { id: string }) {
   const query = useProject(id);
   const [addingMember, setAddingMember] = useState(false);
+  // A `#members` / `#eval` link (the eval breadcrumb) opens that tab. The server
+  // snapshot is empty so the first client render agrees with the server's.
+  const hash = useSyncExternalStore(
+    subscribeToHash,
+    () => window.location.hash.slice(1),
+    () => "",
+  );
+  const [picked, setPicked] = useState<string | null>(null);
+  const tab = picked ?? hash;
 
   if (query.isLoading) {
     return (
@@ -58,6 +72,12 @@ export function ProjectDetailScreen({ id }: { id: string }) {
   const canGrantMembers = can(project, PERMISSION.MEMBERSHIP_GRANT);
   const canReadEval = can(project, PERMISSION.EVAL_READ);
 
+  // A hash naming a tab this caller cannot see falls back to Overview.
+  const visibleTab =
+    (tab === "members" && canReadMembers) || (tab === "eval" && canReadEval)
+      ? tab
+      : "overview";
+
   return (
     <div className="mx-auto w-full max-w-7xl space-y-6">
       <PageHeader
@@ -84,7 +104,7 @@ export function ProjectDetailScreen({ id }: { id: string }) {
         }
       />
 
-      <Tabs defaultValue="overview">
+      <Tabs value={visibleTab} onValueChange={(next) => setPicked(String(next))}>
         <TabsList>
           <TabsTrigger value="overview">Overview</TabsTrigger>
           {canReadMembers ? <TabsTrigger value="members">Members</TabsTrigger> : null}

@@ -24,6 +24,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useEvalRun, useEvalRuns, useEvalSet, useStartEvalRun } from "@/hooks/use-eval";
 import { useProject } from "@/hooks/use-projects";
 import { can, PERMISSION } from "@/lib/can";
+import { formatAbsolute } from "@/lib/dates";
 import { toast } from "sonner";
 
 export function EvalSetScreen({
@@ -33,9 +34,13 @@ export function EvalSetScreen({
   projectId: string;
   setId: string;
 }) {
-  const setQuery = useEvalSet(setId);
   const projectQuery = useProject(projectId);
-  const runsQuery = useEvalRuns(setId);
+  // Nothing under eval-sets is fetched until the project says the caller may read it.
+  const mayRead = projectQuery.data
+    ? can(projectQuery.data, PERMISSION.EVAL_READ)
+    : false;
+  const setQuery = useEvalSet(setId, mayRead);
+  const runsQuery = useEvalRuns(setId, mayRead);
   const startRun = useStartEvalRun(setId, projectId);
   const [selectedRun, setSelectedRun] = useState<string | null>(null);
   const [baseId, setBaseId] = useState<string | null>(null);
@@ -43,7 +48,7 @@ export function EvalSetScreen({
   const baseRun = useEvalRun(baseId ?? "");
   const headRun = useEvalRun(headId ?? "");
 
-  if (setQuery.isLoading || projectQuery.isLoading) {
+  if (projectQuery.isLoading || (mayRead && setQuery.isLoading)) {
     return (
       <div className="mx-auto w-full max-w-7xl space-y-4">
         <Skeleton className="h-10 w-64" />
@@ -51,6 +56,7 @@ export function EvalSetScreen({
       </div>
     );
   }
+  if (projectQuery.data && !mayRead) return <NotFound />;
   if (setQuery.error) {
     return (
       <DetailError
@@ -78,9 +84,12 @@ export function EvalSetScreen({
     .filter(Boolean)
     .join(" · ");
 
+  // Runs arrive newest first, so the oldest is run 1. The number tells apart two
+  // runs started in the same second.
   const runLabel = (id: string) => {
-    const run = doneRuns.find((candidate) => candidate.id === id);
-    return run ? new Date(run.createdAt).toLocaleString() : "Select a run";
+    const index = runs.findIndex((candidate) => candidate.id === id);
+    if (index < 0) return "Select a run";
+    return `Run ${runs.length - index} · ${formatAbsolute(runs[index].createdAt)}`;
   };
 
   return (
@@ -136,26 +145,33 @@ export function EvalSetScreen({
                 ["Base run", baseId, setBaseId],
                 ["Head run", headId, setHeadId],
               ] as const
-            ).map(([label, value, setValue]) => (
-              <Select
-                key={label}
-                value={value ?? ""}
-                onValueChange={(next: string | null) => setValue(next || null)}
-              >
-                <SelectTrigger className="w-64" aria-label={label}>
-                  <SelectValue>
-                    {(id: string) => (id ? runLabel(id) : label)}
-                  </SelectValue>
-                </SelectTrigger>
-                <SelectContent>
-                  {doneRuns.map((run) => (
-                    <SelectItem key={run.id} value={run.id}>
-                      {runLabel(run.id)}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            ))}
+            ).map(([label, value, setValue], position, all) => {
+              const otherId = all[1 - position][1];
+              return (
+                <Select
+                  key={label}
+                  value={value ?? ""}
+                  onValueChange={(next: string | null) => setValue(next || null)}
+                >
+                  <SelectTrigger className="w-64" aria-label={label}>
+                    <SelectValue>
+                      {(id: string) => (id ? runLabel(id) : label)}
+                    </SelectValue>
+                  </SelectTrigger>
+                  <SelectContent>
+                    {doneRuns.map((run) => (
+                      <SelectItem
+                        key={run.id}
+                        value={run.id}
+                        disabled={run.id === otherId}
+                      >
+                        {runLabel(run.id)}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              );
+            })}
           </div>
           {baseRun.data && headRun.data && baseId && headId ? (
             <EvalCompare base={baseRun.data} head={headRun.data} pairs={set.pairs} />
