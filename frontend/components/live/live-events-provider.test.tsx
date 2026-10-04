@@ -110,4 +110,28 @@ describe("LiveEventsProvider", () => {
       }
     }
   });
+
+  it("invalidates eval queries on a resync", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        async () =>
+          new Response(
+            sseBody(["event: ready\ndata: {}\n\n", "event: resync\ndata: {}\n\n"]),
+            { status: 200, headers: { "content-type": "text/event-stream" } },
+          ),
+      ),
+    );
+    const client = new QueryClient();
+    const spy = vi.spyOn(client, "invalidateQueries");
+
+    renderProvider(client);
+
+    expect(await screen.findByText("connected")).toBeInTheDocument();
+    await waitFor(() =>
+      expect(spy).toHaveBeenCalledWith({
+        queryKey: keys.eval.all,
+      }),
+    );
+  });
 });

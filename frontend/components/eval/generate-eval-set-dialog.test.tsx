@@ -89,4 +89,38 @@ describe("GenerateEvalSetDialog", () => {
     expect(screen.getAllByText("Nothing under that path is indexed.")).toHaveLength(1);
     expect(screen.getByLabelText(/^path/i)).toHaveAttribute("aria-invalid", "true");
   });
+
+  it("routes 422 sourcePath field error to the path field", async () => {
+    vi.stubGlobal(
+      "fetch",
+      pathsOrPost(() =>
+        Response.json(
+          {
+            detail: {
+              code: "VALIDATION_ERROR",
+              message: "Validation error",
+              fields: {
+                sourcePath: "Path segment is invalid.",
+              },
+            },
+          },
+          { status: 422 },
+        ),
+      ),
+    );
+    renderDialog();
+
+    fireEvent.click(screen.getByRole("button", { name: /generate eval set/i }));
+    fireEvent.change(await screen.findByLabelText(/^name/i), {
+      target: { value: "Test" },
+    });
+    fireEvent.change(screen.getByLabelText(/^path/i), { target: { value: "bad" } });
+    fireEvent.click(screen.getByRole("button", { name: /^generate$/i }));
+
+    const message = await screen.findByText("Path segment is invalid.");
+    // Beside the path input, not in the form-level banner.
+    expect(message).toHaveAttribute("data-slot", "field-error");
+    expect(screen.getAllByText("Path segment is invalid.")).toHaveLength(1);
+    expect(screen.getByLabelText(/^path/i)).toHaveAttribute("aria-invalid", "true");
+  });
 });
