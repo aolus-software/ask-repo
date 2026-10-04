@@ -137,6 +137,11 @@ Without the generation in the id, the new batch would upsert *over* the old poin
 "stays answerable throughout a reindex" and "a failed reindex leaves the working index intact"
 would be false.
 
+The swap deletes the old generation, so a reindex is refused with `409 EVAL_RUN_IN_PROGRESS` while
+one of the project's eval runs is `running` — the mirror of generations being refused during a
+reindex. Starting a run and requesting a reindex serialise on the project row, so neither passes
+the other's check.
+
 The same chunk in the same generation maps to the same id, so a retried batch overwrites rather
 than duplicating.
 

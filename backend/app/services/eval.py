@@ -165,6 +165,9 @@ class EvalService:
     async def delete_set(self, set_id: uuid.UUID, *, actor: AuthenticatedUser) -> None:
         """Soft-delete a set and everything beneath it, in one transaction."""
         eval_set, project = await self._load_set(set_id, actor, Permission.EVAL_RUN)
+        # The same lock `start_run` takes: the guard below is check-then-delete.
+        if await self.sets.lock(set_id) is None:
+            raise self._set_not_found()
         if await self.runs.active_for_set(eval_set.id) is not None:
             raise AppError(
                 status.HTTP_409_CONFLICT,
@@ -256,6 +259,13 @@ class EvalService:
                 "A run of this set is already in progress.",
             )
         access.require_answerable(project, self.settings)
+        # Serialise against `ProjectService.reindex`, which refuses while a run is
+        # `running`: whichever takes the project row second sees the other's write.
+        # Lock order is set then project; reindex takes only the project, so no cycle.
+        locked_project = await self.projects.lock(project.id)
+        if locked_project is None:
+            raise self._set_not_found()
+        project = locked_project
         require_stable_index(project)
         included = await self.pairs.list_for_set(set_id, include_excluded=False)
         if not included:

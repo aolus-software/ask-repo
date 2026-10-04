@@ -166,7 +166,7 @@ async def create_project(
     response_model=ReindexResponse,
     status_code=status.HTTP_202_ACCEPTED,
     summary="Re-clone and re-index a project",
-    responses={code: ERROR_RESPONSES[code] for code in (401, 403, 404, 422)},
+    responses={code: ERROR_RESPONSES[code] for code in (401, 403, 404, 409, 422)},
 )
 async def reindex_project(
     project_id: uuid.UUID, current_user: CurrentUser, service: ProjectServiceDep

@@ -612,3 +612,94 @@ async def test_an_unknown_run_is_404_eval_run_not_found(authed_client: AsyncClie
 
     assert response.status_code == 404
     assert response.json()["detail"]["code"] == "EVAL_RUN_NOT_FOUND"
+
+
+async def _owned_ready_project(
+    authed_user: User, grant_membership: GrantMembership, db_session: AsyncSession
+) -> tuple[Project, EvalSet]:
+    project = await _ready_project(db_session)
+    eval_set = await create_eval_set(db_session, project_id=project.id, status=EvalSetStatus.READY)
+    await grant_membership(authed_user.id, project.id, OWNER_NAME)
+    return project, eval_set
+
+
+@pytest.mark.asyncio
+async def test_reindex_during_a_running_eval_run_is_409_and_changes_nothing(
+    authed_client: AsyncClient,
+    authed_user: User,
+    grant_membership: GrantMembership,
+    db_session: AsyncSession,
+    audit_rows: AuditRows,
+) -> None:
+    project, eval_set = await _owned_ready_project(authed_user, grant_membership, db_session)
+    await create_eval_run(
+        db_session,
+        set_id=eval_set.id,
+        project_id=project.id,
+        created_by=authed_user.id,
+        status="running",
+    )
+    await db_session.commit()
+
+    response = await authed_client.post(f"/projects/{project.id}/reindex")
+
+    assert response.status_code == 409
+    assert response.json()["detail"]["code"] == "EVAL_RUN_IN_PROGRESS"
+    await db_session.refresh(project)
+    assert project.reindex_in_progress is False
+    assert await audit_rows("project.reindex.requested") == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("state", ["done", "failed", "deleted"])
+async def test_reindex_ignores_runs_that_are_finished_or_deleted(
+    state: str,
+    authed_client: AsyncClient,
+    authed_user: User,
+    grant_membership: GrantMembership,
+    db_session: AsyncSession,
+) -> None:
+    from datetime import UTC, datetime
+
+    project, eval_set = await _owned_ready_project(authed_user, grant_membership, db_session)
+    run = await create_eval_run(
+        db_session,
+        set_id=eval_set.id,
+        project_id=project.id,
+        created_by=authed_user.id,
+        status="running" if state == "deleted" else state,
+    )
+    if state == "deleted":
+        run.deleted_at = datetime.now(UTC)
+    await db_session.commit()
+
+    response = await authed_client.post(f"/projects/{project.id}/reindex")
+
+    assert response.status_code == 202
+    assert response.json()["enqueued"] is True
+
+
+@pytest.mark.asyncio
+async def test_deleting_a_set_takes_the_set_lock_first(
+    authed_client: AsyncClient,
+    authed_user: User,
+    grant_membership: GrantMembership,
+    db_session: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from app.repositories.eval_set import EvalSetRepository
+
+    project, eval_set = await _runnable_set(db_session)
+    await grant_membership(authed_user.id, project.id, OWNER_NAME)
+    await db_session.commit()
+    locked: list[uuid.UUID] = []
+    original = EvalSetRepository.lock
+
+    async def spy(self: EvalSetRepository, set_id: uuid.UUID) -> EvalSet | None:
+        locked.append(set_id)
+        return await original(self, set_id)
+
+    monkeypatch.setattr(EvalSetRepository, "lock", spy)
+
+    assert (await authed_client.delete(f"/eval-sets/{eval_set.id}")).status_code == 204
+    assert locked == [eval_set.id]

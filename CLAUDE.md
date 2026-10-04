@@ -389,6 +389,8 @@ generation refuse with `409` while the flag is up** (`_require_a_stable_index`).
 records which project generation it read; one started mid-reindex records the generation that run
 is about to supersede and delete, so it reports itself `stale` the moment it finishes. Questions
 and refinement chats deliberately keep running — they read the live generation and record nothing.
+The mirror image: **a reindex refuses with `409 EVAL_RUN_IN_PROGRESS` while one of the project's
+eval runs is `running`**, because the swap deletes the generation that run is scoring against.
 
 ### Nothing derived from clone output is stored or logged unscrubbed
 

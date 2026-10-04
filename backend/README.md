@@ -165,7 +165,7 @@ repository exists to anyone who can guess an id. A **member** whose role is too 
 | `GET` | `/projects/{id}` | any member | One project, including your own `role` and effective `permissions` on it |
 | `GET` | `/projects/{id}/indexed-paths` | any member | Browse (`?path=`) or search (`?search=`) the project's indexed file tree, for the checklist path picker |
 | `POST` | `/projects` | any user | Register a repository and enqueue its first index. The creator is granted `owner` on it |
-| `POST` | `/projects/{id}/reindex` | `project.reindex` | Re-index; raises `reindexInProgress` before publishing, and a run already in flight is a no-op |
+| `POST` | `/projects/{id}/reindex` | `project.reindex` | Re-index; raises `reindexInProgress` before publishing, a run already in flight is a no-op, and `409 EVAL_RUN_IN_PROGRESS` while an eval run is `running` |
 | `DELETE` | `/projects/{id}` | `project.delete` | Soft-delete the row and hard-delete its vectors |
 
 `ProjectResponse` carries two fields the frontend uses to hide controls it would be refused:

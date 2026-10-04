@@ -37,6 +37,15 @@ class EvalRunRepository(BaseRepository[EvalRun]):
         )
         return result.scalars().first()
 
+    async def active_for_project(self, project_id: uuid.UUID) -> EvalRun | None:
+        """Any live run of the project that is still `running`, if there is one."""
+        result = await self.session.execute(
+            self.active_select()
+            .where(EvalRun.project_id == project_id, EvalRun.status == EvalRunStatus.RUNNING.value)
+            .limit(1)
+        )
+        return result.scalars().first()
+
     async def latest_for_sets(self, set_ids: Sequence[uuid.UUID]) -> dict[uuid.UUID, EvalRun]:
         """Each given set's newest run, in one query. A set with no run is absent."""
         if not set_ids:
@@ -70,6 +79,9 @@ class EvalRunRepository(BaseRepository[EvalRun]):
             .where(
                 EvalRun.id == run_id,
                 EvalRun.deleted_at.is_(None),
+                # A sweep-published copy carries a fresh job id, so `last_job_id` cannot
+                # refuse it; a finished row must refuse on status instead.
+                EvalRun.status == EvalRunStatus.RUNNING.value,
                 EvalRun.last_job_id.is_distinct_from(job_id),
                 or_(EvalRun.lease_expires_at.is_(None), EvalRun.lease_expires_at < now),
             )
@@ -95,7 +107,11 @@ class EvalRunRepository(BaseRepository[EvalRun]):
         now = datetime.now(UTC)
         result = await self.session.execute(
             update(EvalRun)
-            .where(EvalRun.id == run_id, EvalRun.lease_owner == worker_id)
+            .where(
+                EvalRun.id == run_id,
+                EvalRun.deleted_at.is_(None),
+                EvalRun.lease_owner == worker_id,
+            )
             .values(lease_expires_at=now + timedelta(seconds=lease_seconds), updated_at=now)
         )
         return cast(CursorResult[Any], result).rowcount == 1

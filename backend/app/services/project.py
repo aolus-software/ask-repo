@@ -254,8 +254,28 @@ class ProjectService:
         project = await access.require_readable_project(self._repository, project_id, actor)
         access.require_permission(actor, project.id, Permission.PROJECT_REINDEX)
 
+        # Serialise against `EvalService.start_run`, which refuses while the flag is up:
+        # whichever takes the project row second sees the other's write.
+        locked = await self._repository.lock(project.id)
+        if locked is None:
+            raise AppError(
+                status.HTTP_404_NOT_FOUND, ErrorCode.PROJECT_NOT_FOUND, "Project not found."
+            )
+        project = locked
+
         if project.status in BUSY_STATUSES or project.reindex_in_progress:
             return ReindexResponse(enqueued=False, project=self._to_response(project, actor))
+
+        # A reindex deletes the generation a running eval run is reading, so its
+        # remaining pairs would score against nothing and the run would still finish
+        # `done`. Refused before the flag is raised and before the publish.
+        if await EvalRunRepository(self.session).active_for_project(project.id) is not None:
+            raise AppError(
+                status.HTTP_409_CONFLICT,
+                ErrorCode.EVAL_RUN_IN_PROGRESS,
+                "An eval run is in progress for this project. Wait for it to finish "
+                "before re-indexing.",
+            )
 
         # Captured before the flag flips: the new generation does not exist yet, the
         # worker increments it, so the one being superseded is the only number

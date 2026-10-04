@@ -216,3 +216,69 @@ async def test_results_list_in_pair_position_order(db_session: AsyncSession) -> 
 
     by_pair = {pair.id: pair.position for pair in pairs}
     assert [by_pair[row.pair_id] for row in rows] == [0, 1, 2]
+
+
+async def test_a_stale_job_cannot_reclaim_a_finished_set(db_session: AsyncSession) -> None:
+    repo = EvalSetRepository(db_session)
+    for finished in (EvalSetStatus.READY, EvalSetStatus.FAILED):
+        row = await _generating_set(db_session)
+        row.status = finished.value
+        row.pair_count = 7
+        await db_session.commit()
+
+        claimed = await repo.claim(
+            set_id=row.id, job_id=uuid.uuid4(), worker_id="late", lease_seconds=300
+        )
+
+        assert claimed is False
+        await db_session.refresh(row)
+        assert (row.status, row.pair_count, row.lease_owner) == (finished.value, 7, None)
+
+
+async def test_a_stale_job_cannot_reclaim_a_finished_run(db_session: AsyncSession) -> None:
+    repo = EvalRunRepository(db_session)
+    for finished in (EvalRunStatus.DONE, EvalRunStatus.FAILED):
+        row = await _running_run(db_session)
+        row.status = finished.value
+        row.error = "kept"
+        await db_session.commit()
+
+        claimed = await repo.claim(
+            run_id=row.id, job_id=uuid.uuid4(), worker_id="late", lease_seconds=300
+        )
+
+        assert claimed is False
+        await db_session.refresh(row)
+        assert (row.status, row.error, row.lease_owner) == (finished.value, "kept", None)
+
+
+async def test_a_heartbeat_on_a_deleted_row_returns_false(db_session: AsyncSession) -> None:
+    run = await _running_run(db_session)
+    runs, sets = EvalRunRepository(db_session), EvalSetRepository(db_session)
+    set_row = await _generating_set(db_session)
+    await runs.claim(run_id=run.id, job_id=uuid.uuid4(), worker_id="a", lease_seconds=300)
+    await sets.claim(set_id=set_row.id, job_id=uuid.uuid4(), worker_id="a", lease_seconds=300)
+    assert await runs.renew_lease(run_id=run.id, worker_id="a", lease_seconds=300)
+    assert await sets.renew_lease(set_id=set_row.id, worker_id="a", lease_seconds=300)
+
+    run.deleted_at = datetime.now(UTC)
+    set_row.deleted_at = datetime.now(UTC)
+    await db_session.commit()
+
+    assert not await runs.renew_lease(run_id=run.id, worker_id="a", lease_seconds=300)
+    assert not await sets.renew_lease(set_id=set_row.id, worker_id="a", lease_seconds=300)
+
+
+async def test_active_for_project_finds_only_live_running_runs(db_session: AsyncSession) -> None:
+    row = await _running_run(db_session)
+    repo = EvalRunRepository(db_session)
+    assert await repo.active_for_project(row.project_id) is not None
+
+    row.status = EvalRunStatus.FAILED.value
+    await db_session.commit()
+    assert await repo.active_for_project(row.project_id) is None
+
+    row.status = EvalRunStatus.RUNNING.value
+    row.deleted_at = datetime.now(UTC)
+    await db_session.commit()
+    assert await repo.active_for_project(row.project_id) is None

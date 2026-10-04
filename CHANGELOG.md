@@ -13,6 +13,24 @@ client can have received it, so it is recorded under Changed and allowed in a `M
 
 ## [Unreleased]
 
+### Changed
+
+- **`POST /projects/{id}/reindex` now answers `409 EVAL_RUN_IN_PROGRESS` while one of the
+  project's eval runs is `running`.** A reindex deletes the generation a run is reading, so its
+  remaining pairs would score against nothing and the run would still finish `done`. The refusal
+  comes before the reindex flag is raised and before the publish, writes no audit event, and
+  reuses the existing error code (no new member). Starting a run and requesting a reindex now
+  serialise on the project row, so neither can slip past the other.
+
+### Fixed
+
+- **A stale duplicate job could re-claim a finished eval set or run.** A reconcile-sweep copy
+  carries a fresh job id, so the claim's job-id check could not refuse it; the claim now also
+  requires the row to still be `generating` / `running`. A re-claimed `ready` set appended a second
+  batch of pairs at duplicate positions, and a re-claimed `done` run restarted and cleared its
+  error. A lease heartbeat on a soft-deleted eval set or run now fails, so the job abandons, and
+  deleting an eval set takes the same row lock a run start does.
+
 ### Added
 
 - **User feedback on model output** (`docs/PRD.md` §2.1, phase 2.5, stage 1, issue #55): a

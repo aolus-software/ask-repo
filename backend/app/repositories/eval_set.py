@@ -65,6 +65,9 @@ class EvalSetRepository(BaseRepository[EvalSet]):
             .where(
                 EvalSet.id == set_id,
                 EvalSet.deleted_at.is_(None),
+                # A sweep-published copy carries a fresh job id, so `last_job_id` cannot
+                # refuse it; a finished row must refuse on status instead.
+                EvalSet.status == EvalSetStatus.GENERATING.value,
                 EvalSet.last_job_id.is_distinct_from(job_id),
                 or_(EvalSet.lease_expires_at.is_(None), EvalSet.lease_expires_at < now),
             )
@@ -89,7 +92,11 @@ class EvalSetRepository(BaseRepository[EvalSet]):
         now = datetime.now(UTC)
         result = await self.session.execute(
             update(EvalSet)
-            .where(EvalSet.id == set_id, EvalSet.lease_owner == worker_id)
+            .where(
+                EvalSet.id == set_id,
+                EvalSet.deleted_at.is_(None),
+                EvalSet.lease_owner == worker_id,
+            )
             .values(lease_expires_at=now + timedelta(seconds=lease_seconds), updated_at=now)
         )
         return cast(CursorResult[Any], result).rowcount == 1
