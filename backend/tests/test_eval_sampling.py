@@ -70,3 +70,23 @@ def test_a_question_naming_its_file_is_detected() -> None:
     assert names_its_file("Where is login handled in app/auth/login.py?", "app/auth/login.py")
     assert names_its_file("What does login.py do?", "app/auth/login.py")
     assert not names_its_file("Where is a wrong password refused?", "app/auth/login.py")
+
+
+def _tied() -> list[dict[str, object]]:
+    """Every chunk the same length with no symbol: only identity can order them."""
+    return [_payload(f"f{f}.py", i) for f in range(3) for i in range(3)]
+
+
+def test_ties_do_not_depend_on_the_order_the_store_returned_them_in() -> None:
+    seed = uuid.UUID(int=7)
+    forward = _tied()
+    shuffled = forward[::-1]
+    shuffled[2], shuffled[5] = shuffled[5], shuffled[2]
+    assert sample_chunks(forward, count=9, seed=seed) == sample_chunks(shuffled, count=9, seed=seed)
+
+
+def test_two_fixed_seeds_order_the_files_differently() -> None:
+    payloads = [_payload(f"f{n}.py", 0) for n in range(10)]
+    first = [c.file_path for c in sample_chunks(payloads, count=10, seed=uuid.UUID(int=1))]
+    second = [c.file_path for c in sample_chunks(payloads, count=10, seed=uuid.UUID(int=2))]
+    assert first != second

@@ -25,9 +25,19 @@ class SampledChunk:
     content: str
 
 
-def _rank(payload: dict[str, Any]) -> tuple[int, int]:
-    """Prefer a chunk with a symbol, then the longest."""
-    return (0 if payload.get("symbol") else 1, -len(str(payload.get("content", ""))))
+def _rank(payload: dict[str, Any]) -> tuple[int, int, int, int, int]:
+    """Prefer a chunk with a symbol, then the longest, then by stable identity.
+
+    The identity tail makes the order total: a vector store's scroll order is not a
+    contract, so ties must never fall back to the order the payloads arrived in.
+    """
+    return (
+        0 if payload.get("symbol") else 1,
+        -len(str(payload.get("content", ""))),
+        int(payload["start_line"]),
+        int(payload["end_line"]),
+        int(payload.get("chunk_index", 0)),
+    )
 
 
 def sample_chunks(
