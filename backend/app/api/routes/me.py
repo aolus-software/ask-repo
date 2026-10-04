@@ -97,7 +97,7 @@ async def list_activity(
     response_model=AnswerStyleRead,
     status_code=status.HTTP_200_OK,
     summary="How your Ask answers are shaped",
-    responses={code: ERROR_RESPONSES[code] for code in (401, 403)},
+    responses={code: ERROR_RESPONSES[code] for code in (401, 403, 404)},
 )
 async def get_answer_style(current_user: CurrentUser, service: MeServiceDep) -> AnswerStyleRead:
     return await service.answer_style(current_user)
@@ -112,7 +112,7 @@ async def get_answer_style(current_user: CurrentUser, service: MeServiceDep) -> 
         "Replaces all three dials; `null` is no preference. Applies to your own Ask "
         "answers only — never to the QA Checklist or Mock Data, which a project shares."
     ),
-    responses={code: ERROR_RESPONSES[code] for code in (401, 403, 422)},
+    responses={code: ERROR_RESPONSES[code] for code in (401, 403, 404, 422)},
 )
 async def update_answer_style(
     payload: AnswerStyleUpdate, current_user: CurrentUser, service: MeServiceDep

@@ -251,7 +251,9 @@ A user may set three dials on `/profile` — detail (`brief`/`thorough`), famili
 `app/rag/answer_style.py` carries them as an `AnswerStyle`.
 
 They render into one slot, `{reader_preferences}`, in `ANSWER_SYSTEM` and
-`HISTORY_ANSWER_SYSTEM`, placed *before* the grounding rules so those rules are stated last.
+`HISTORY_ANSWER_SYSTEM`. In `ANSWER_SYSTEM` it sits before the grounding rules, so those
+rules are stated last; in `HISTORY_ANSWER_SYSTEM` it sits before the routing cases ("The
+message is about this conversation…").
 Seven constants in `app/rag/prompts.py` hold every word that can appear there: the preamble
 (`READER_PREFERENCES_PREAMBLE`) and one sentence per dial value (`ANSWER_DETAIL_BRIEF`,
 `ANSWER_DETAIL_THOROUGH`, `ANSWER_FAMILIARITY_NEW`, `ANSWER_FAMILIARITY_EXPERT`,

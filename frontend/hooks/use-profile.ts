@@ -70,6 +70,7 @@ export function useUpdateAnswerStyle() {
         method: "PUT",
         body: JSON.stringify(style),
       }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: keys.profile.answerStyle }),
+    onSuccess: () =>
+      queryClient.invalidateQueries({ queryKey: keys.profile.answerStyle }),
   });
 }

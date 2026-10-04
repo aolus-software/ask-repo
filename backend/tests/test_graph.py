@@ -1235,6 +1235,7 @@ async def test_generate_puts_the_answer_style_in_the_system_message() -> None:
     await run_node(build_generate(model, timeout_seconds=5), state)
 
     system = model.captured_stream_messages[0][0].content
+    assert isinstance(system, str)
     assert ANSWER_DETAIL_BRIEF in system
     assert system.index(READER_PREFERENCES_PREAMBLE) < system.index("Grounding rules.")
 

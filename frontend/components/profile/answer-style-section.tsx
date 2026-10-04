@@ -55,6 +55,9 @@ export function AnswerStyleSection() {
   const query = useAnswerStyle();
   const save = useUpdateAnswerStyle();
   const style = draft ?? query.data ?? UNSET;
+  // Until the stored style arrives the radios would show Default; one click would then
+  // save null for the other two dials and overwrite what is stored.
+  const loaded = query.data !== undefined;
 
   if (query.isError) {
     return <ListError error={query.error} onRetry={() => query.refetch()} />;
@@ -74,6 +77,7 @@ export function AnswerStyleSection() {
             <RadioGroup
               aria-labelledby={`answer-style-${dial.key}`}
               value={style[dial.key] ?? DEFAULT}
+              disabled={!loaded}
               onValueChange={(value) =>
                 setDraft({ ...style, [dial.key]: value === DEFAULT ? null : value })
               }
@@ -99,7 +103,7 @@ export function AnswerStyleSection() {
 
       <div className="mt-4 flex justify-end">
         <Button
-          disabled={draft === null || save.isPending}
+          disabled={draft === null || save.isPending || !loaded}
           onClick={() =>
             save.mutate(style, {
               onSuccess: () => {

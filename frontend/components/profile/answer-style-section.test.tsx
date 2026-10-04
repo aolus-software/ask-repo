@@ -50,7 +50,9 @@ describe("AnswerStyleSection", () => {
     vi.stubGlobal("fetch", fetchMock);
     renderSection();
 
-    fireEvent.click(await screen.findByRole("radio", { name: "Bullets" }));
+    const brief = await screen.findByRole("radio", { name: "Brief" });
+    await waitFor(() => expect(brief).toHaveAttribute("aria-checked", "true"));
+    fireEvent.click(screen.getByRole("radio", { name: "Bullets" }));
     fireEvent.click(screen.getAllByRole("radio", { name: "Default" })[0]);
     fireEvent.click(screen.getByRole("button", { name: /save answer style/i }));
 
@@ -63,6 +65,30 @@ describe("AnswerStyleSection", () => {
       familiarity: null,
       format: "bullets",
     });
+  });
+
+  it("keeps the radios and Save disabled until the stored style arrives", async () => {
+    let release: (value: Response) => void = () => {};
+    const gate = new Promise<Response>((resolve) => {
+      release = resolve;
+    });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() => gate),
+    );
+    renderSection();
+
+    for (const radio of screen.getAllByRole("radio")) {
+      expect(radio).toHaveAttribute("aria-disabled", "true");
+    }
+    expect(screen.getByRole("button", { name: /save answer style/i })).toBeDisabled();
+
+    release(Response.json(SAVED));
+
+    const brief = await screen.findByRole("radio", { name: "Brief" });
+    await waitFor(() => expect(brief).not.toHaveAttribute("aria-disabled", "true"));
+    fireEvent.click(screen.getByRole("radio", { name: "Bullets" }));
+    expect(screen.getByRole("button", { name: /save answer style/i })).toBeEnabled();
   });
 
   it("says it never changes the shared checklist", async () => {

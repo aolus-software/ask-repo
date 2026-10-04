@@ -16,9 +16,10 @@ checklist grid, no route of its own. The project detail page at `/projects/[id]`
 carries a **Members** tab — grant, change role, revoke — as a tab, not a route of its own.
 Notifications add `/notifications` (a paginated list, filterable by project/type/unread) — the
 bell itself lives in the app shell's navbar, not a route. `/profile`, opened from the account
-menu, carries six sections — account, sessions (with a per-session sign-out), activity (the
-caller's own audit-trail rows), notifications (per-event in-app and email switches; the email
-switch is enabled only when `MAIL_ENABLED` is true on the instance), answer style (three radio dials shaping your own Ask answers), and password — and
+menu, carries six sections — account, answer style (three radio dials shaping your own Ask
+answers), sessions (with a per-session sign-out), activity (the caller's own audit-trail
+rows), notifications (per-event in-app and email switches; the email switch is enabled only
+when `MAIL_ENABLED` is true on the instance), and password — and
 `/settings/notifications` now only redirects to `/profile#notifications`.
 
 **Controls are hidden from what the server said, never from a client-side rule.** Each project
@@ -116,8 +117,8 @@ frontend/
 │       #   projects/ also holds the Members tab: member-table, add-member-dialog
 │       #   roles/ holds the role table, create dialog, permission matrix, role badge
 │       #   notifications/ holds the bell, the popover list, and the deep-link mapper's UI
-│       #   profile/ holds the six sections: account, sessions, activity,
-│       #     notifications (reuses notifications/preferences-screen), answer style, password
+│       #   profile/ holds the six sections: account, answer style, sessions,
+│       #     activity, notifications (reuses notifications/preferences-screen), password
 ├── hooks/                 # one file per resource
 ├── lib/
 │   ├── api/               # types, endpoints, errors, both fetch clients
