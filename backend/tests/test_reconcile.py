@@ -12,28 +12,34 @@ from datetime import UTC, datetime, timedelta
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.checklist import ChecklistModuleStatus
+from app.models.eval import EvalRun, EvalRunStatus, EvalSet, EvalSetStatus
 from app.models.mock_data import MockDataDatasetStatus
 from app.models.project import ProjectStatus
 from app.queue.protocol import InMemoryIngestionQueue
 from app.queue.topics import (
     CHECKLIST_TOPIC,
+    EVAL_TOPIC,
     INGEST_TOPIC,
     MOCK_DATA_TOPIC,
     ChecklistJobMessage,
+    EvalJobMessage,
     IngestionMessage,
     JobMessage,
     MockDataJobMessage,
 )
 from app.repositories.checklist_module import ChecklistModuleRepository
+from app.repositories.eval_run import EvalRunRepository
+from app.repositories.eval_set import EvalSetRepository
 from app.repositories.mock_data_dataset import MockDataDatasetRepository
 from app.repositories.project import LEASE_SECONDS, ProjectRepository
 from app.worker import (
     RECONCILE_INTERVAL_SECONDS,
+    reconcile_eval_once,
     reconcile_mock_data_once,
     reconcile_modules_once,
     reconcile_once,
 )
-from tests.factories import create_checklist_module, create_project
+from tests.factories import create_checklist_module, create_project, create_user
 
 
 class RecordingProducer:
@@ -326,3 +332,49 @@ async def test_a_swept_dataset_is_not_swept_again_on_the_next_tick(
 
     assert (first, second) == (1, 0)
     assert len(producer.produced) == 1
+
+
+async def test_stranded_eval_sets_and_runs_are_republished(db_session: AsyncSession) -> None:
+    """One stale `generating` set and one stale `running` run: the sweep publishes a
+    `generate` and a `run` message with fresh job ids at attempt 0, and a second call
+    publishes nothing."""
+    user = await create_user(db_session)
+    project = await create_project(db_session, created_by=user.id)
+    stale = datetime.now(UTC) - timedelta(seconds=600)
+    eval_set = EvalSet(
+        id=uuid.uuid4(),
+        project_id=project.id,
+        name="s",
+        requested_count=10,
+        mix="balanced",
+        status=EvalSetStatus.GENERATING.value,
+        pair_count=0,
+        created_by=user.id,
+        updated_at=stale,
+    )
+    db_session.add(eval_set)
+    await db_session.flush()
+    run = EvalRun(
+        id=uuid.uuid4(),
+        set_id=eval_set.id,
+        project_id=project.id,
+        status=EvalRunStatus.RUNNING.value,
+        created_by=user.id,
+        updated_at=stale,
+    )
+    db_session.add(run)
+    await db_session.flush()
+    producer = InMemoryIngestionQueue()
+    sets, runs = EvalSetRepository(db_session), EvalRunRepository(db_session)
+
+    first = await reconcile_eval_once(sets=sets, runs=runs, producer=producer, topic=EVAL_TOPIC)
+    second = await reconcile_eval_once(sets=sets, runs=runs, producer=producer, topic=EVAL_TOPIC)
+
+    assert (first, second) == (2, 0)
+    messages = [m for t, m in producer.produced if t == EVAL_TOPIC]
+    assert all(isinstance(m, EvalJobMessage) for m in messages)
+    by_kind = {m.kind: m for m in messages if isinstance(m, EvalJobMessage)}
+    assert by_kind["generate"].target_id == eval_set.id
+    assert by_kind["run"].target_id == run.id
+    assert {m.attempt for m in by_kind.values()} == {0}
+    assert len({m.job_id for m in by_kind.values()}) == 2
