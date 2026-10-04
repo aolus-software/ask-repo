@@ -10,6 +10,7 @@ CALL_SITE_FILES = [
     "rag/answerer.py",
     "checklist/generator.py",
     "mockdata/generator.py",
+    "eval/generator.py",
 ]
 MODEL_METHODS = {"ainvoke", "astream"}
 

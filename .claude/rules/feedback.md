@@ -17,8 +17,8 @@ Feedback is user-authored text about a private repository. Concatenated into a p
 an instruction, which breaks the property `.claude/rules/rag.md` rests on: the model's
 instructions come from the system message and nowhere else. The loop is manual on purpose — an
 administrator reads, spots a pattern, and edits `app/rag/prompts.py`.
-`tests/test_feedback_never_reaches_a_model.py` fails if `app/rag/`, `app/checklist/` or
-`app/mockdata/` imports any feedback module. `app/rag/prompt_version.py` may be imported *by*
+`tests/test_feedback_never_reaches_a_model.py` fails if `app/rag/`, `app/checklist/`,
+`app/eval/` or `app/mockdata/` imports any feedback module. `app/rag/prompt_version.py` may be imported *by*
 feedback; the reverse is the defect.
 
 ## 2. Administrators see the aggregate and the notes — never the turn, never the voter
