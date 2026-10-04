@@ -8,7 +8,7 @@ is due before re-producing it. `RETRY_TOPICS` is ordered by attempt.
 import json
 import uuid
 from dataclasses import asdict, dataclass
-from typing import Protocol, runtime_checkable
+from typing import Literal, Protocol, cast, runtime_checkable
 
 INGEST_TOPIC = "askrepo.ingest.requested"
 DLQ_TOPIC = "askrepo.ingest.dlq"
@@ -274,3 +274,76 @@ def mock_data_retries_exhausted(*, attempt: int, max_attempts: int) -> bool:
     """
     topic, _ = mock_data_next_destination(attempt=attempt, max_attempts=max_attempts)
     return topic == MOCK_DATA_DLQ_TOPIC
+
+
+EVAL_TOPIC = "askrepo.eval.jobs"
+EVAL_DLQ_TOPIC = "askrepo.eval.dlq"
+
+# Its own ladder, for the checklist's reason: a stuck eval run must not sit in the queue
+# a reindex or a generation is waiting in.
+EVAL_RETRY_TOPICS: tuple[tuple[str, int], ...] = (
+    ("askrepo.eval.retry.1m", 60),
+    ("askrepo.eval.retry.10m", 600),
+)
+
+ALL_EVAL_TOPICS = (EVAL_TOPIC, *[topic for topic, _ in EVAL_RETRY_TOPICS], EVAL_DLQ_TOPIC)
+
+EvalJobKind = Literal["generate", "run"]
+_EVAL_KINDS: frozenset[str] = frozenset({"generate", "run"})
+
+
+@dataclass(frozen=True, slots=True)
+class EvalJobMessage:
+    """One eval job: generate a set's pairs, or run a set.
+
+    One topic, two kinds, because the cap is one eval job per instance whichever kind
+    it is. `target_id` is the set for `generate` and the run for `run`; the lease on
+    that row is what stops two workers racing, not the partition key.
+    """
+
+    kind: EvalJobKind
+    target_id: uuid.UUID
+    job_id: uuid.UUID
+    attempt: int
+    not_before_ms: int
+    original_topic: str
+
+    def to_bytes(self) -> bytes:
+        """Serialise for the wire."""
+        payload = asdict(self)
+        payload["target_id"] = str(self.target_id)
+        payload["job_id"] = str(self.job_id)
+        return json.dumps(payload).encode()
+
+    @classmethod
+    def from_bytes(cls, raw: bytes) -> "EvalJobMessage":
+        """Parse a message off the wire. An unknown kind raises `ValueError`."""
+        payload = json.loads(raw)
+        kind = str(payload["kind"])
+        if kind not in _EVAL_KINDS:
+            raise ValueError(f"unknown eval job kind {kind!r}")
+        return cls(
+            kind=cast(EvalJobKind, kind),
+            target_id=uuid.UUID(payload["target_id"]),
+            job_id=uuid.UUID(payload["job_id"]),
+            attempt=int(payload["attempt"]),
+            not_before_ms=int(payload["not_before_ms"]),
+            original_topic=str(payload["original_topic"]),
+        )
+
+    def key(self) -> bytes:
+        """Partition key: orders one target's messages within a topic."""
+        return str(self.target_id).encode()
+
+
+def eval_next_destination(*, attempt: int, max_attempts: int) -> tuple[str, int]:
+    """Where an eval job goes after failing, and how long it waits."""
+    if attempt >= max_attempts - 1 or attempt >= len(EVAL_RETRY_TOPICS):
+        return EVAL_DLQ_TOPIC, 0
+    return EVAL_RETRY_TOPICS[attempt]
+
+
+def eval_retries_exhausted(*, attempt: int, max_attempts: int) -> bool:
+    """Whether failing at `attempt` dead-letters rather than buying another rung."""
+    topic, _ = eval_next_destination(attempt=attempt, max_attempts=max_attempts)
+    return topic == EVAL_DLQ_TOPIC

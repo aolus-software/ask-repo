@@ -97,6 +97,7 @@ async def producer() -> AsyncIterator[KafkaIngestionQueue]:
         topic=INGEST_TOPIC,
         checklist_topic=CHECKLIST_TOPIC,
         mock_data_topic=settings.kafka_mock_data_topic,
+        eval_topic=settings.kafka_eval_topic,
     )
     await queue.start()
     yield queue

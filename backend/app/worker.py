@@ -38,6 +38,7 @@ from app.queue.protocol import TopicProducer
 from app.queue.retry import RetryConsumer
 from app.queue.topics import (
     ALL_CHECKLIST_TOPICS,
+    ALL_EVAL_TOPICS,
     ALL_MOCK_DATA_TOPICS,
     CHECKLIST_RETRY_TOPICS,
     MOCK_DATA_RETRY_TOPICS,
@@ -270,6 +271,11 @@ async def main() -> None:
     )
     await ensure_topics(
         bootstrap_servers=settings.kafka_bootstrap_servers,
+        partitions=settings.kafka_eval_partitions,
+        topics=ALL_EVAL_TOPICS,
+    )
+    await ensure_topics(
+        bootstrap_servers=settings.kafka_bootstrap_servers,
         partitions=1,
         topics=(settings.kafka_live_events_topic,),
         topic_configs=LIVE_TOPIC_CONFIGS,
@@ -280,6 +286,7 @@ async def main() -> None:
         topic=settings.kafka_ingest_topic,
         checklist_topic=settings.kafka_checklist_topic,
         mock_data_topic=settings.kafka_mock_data_topic,
+        eval_topic=settings.kafka_eval_topic,
     )
     await producer.start()
 
