@@ -130,6 +130,7 @@ ROUTE_EVENTS: dict[tuple[str, str], AuditEventType | str] = {
     ("POST", "/projects/{project_id}/eval-sets"): AuditEventType.EVAL_SET_GENERATION_REQUESTED,
     ("DELETE", "/eval-sets/{set_id}"): AuditEventType.EVAL_SET_DELETED,
     ("PUT", "/eval-pairs/{pair_id}/excluded"): AuditEventType.EVAL_PAIR_UPDATED,
+    ("POST", "/eval-sets/{set_id}/runs"): AuditEventType.EVAL_RUN_REQUESTED,
     ("DELETE", "/mock-data-records/{record_id}"): AuditEventType.MOCK_DATA_RECORD_DELETED,
     (
         "GET",

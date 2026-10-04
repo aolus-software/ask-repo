@@ -6,7 +6,7 @@ from typing import Literal
 
 from pydantic import Field
 
-from app.models.eval import EvalMix, EvalQuestionType, EvalRunStatus, EvalSetStatus
+from app.models.eval import EvalMix, EvalQuestionType, EvalRunStatus, EvalSetStatus, EvalVerdict
 from app.schemas.base import ApiModel
 
 NAME_MAX_LENGTH = 120
@@ -92,3 +92,23 @@ class EvalPairExclude(ApiModel):
     """Take a pair out of (or put it back into) future runs."""
 
     excluded: bool
+
+
+class EvalResultRead(ApiModel):
+    """One pair's outcome in a run. The answer and judge reason are model output about a
+    private repository: members read them here and nowhere else."""
+
+    id: uuid.UUID
+    pair_id: uuid.UUID
+    retrieval_hit: bool
+    verdict: EvalVerdict
+    judge_reason: str | None
+    answer: str
+    grounding_warnings: list[str]
+    retrieval_attempts: int
+
+
+class EvalRunDetail(EvalRunSummary):
+    """A run with every result it has recorded so far."""
+
+    results: list[EvalResultRead]

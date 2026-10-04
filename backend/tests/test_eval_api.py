@@ -1,6 +1,7 @@
 """The eval set HTTP surface: generate, list, read, delete, exclude a pair."""
 
 import uuid
+from datetime import timedelta
 
 import pytest
 from httpx import AsyncClient
@@ -320,3 +321,251 @@ async def test_deleting_a_set_with_a_running_run_is_409(
 
     assert response.status_code == 409
     assert response.json()["detail"]["code"] == "EVAL_RUN_IN_PROGRESS"
+
+
+async def _runnable_set(
+    db_session: AsyncSession, *, pairs: int = 2, excluded: int = 0
+) -> tuple[Project, EvalSet]:
+    """A ready project holding a ready set with `pairs` pairs, `excluded` of them excluded."""
+    project = await _ready_project(db_session)
+    eval_set = await create_eval_set(
+        db_session, project_id=project.id, status=EvalSetStatus.READY, pair_count=pairs
+    )
+    for position in range(pairs):
+        await create_eval_pair(
+            db_session, set_id=eval_set.id, position=position, excluded=position < excluded
+        )
+    return project, eval_set
+
+
+@pytest.mark.asyncio
+async def test_starting_a_run_returns_202_and_publishes_a_run_job(
+    authed_client: AsyncClient,
+    authed_user: User,
+    grant_membership: GrantMembership,
+    db_session: AsyncSession,
+    ingestion_queue: InMemoryIngestionQueue,
+    audit_rows: AuditRows,
+) -> None:
+    project, eval_set = await _runnable_set(db_session, pairs=3, excluded=1)
+    await db_session.commit()
+    await grant_membership(authed_user.id, project.id, EDITOR_NAME)
+
+    response = await authed_client.post(f"/eval-sets/{eval_set.id}/runs")
+
+    assert response.status_code == 202
+    body = response.json()
+    assert body["status"] == "running"
+    assert body["setId"] == str(eval_set.id)
+    topic, message = ingestion_queue.produced[-1]
+    assert topic == "askrepo.eval.jobs"
+    assert isinstance(message, EvalJobMessage)
+    assert message.kind == "run"
+    assert str(message.target_id) == body["id"]
+    (row,) = await audit_rows("eval_run.requested")
+    assert row.target_label == eval_set.name
+    assert row.target_id == uuid.UUID(body["id"])
+    assert row.details["pairCount"] == 2
+
+
+@pytest.mark.asyncio
+async def test_a_run_on_a_generating_set_is_409_not_ready(
+    authed_client: AsyncClient,
+    authed_user: User,
+    grant_membership: GrantMembership,
+    db_session: AsyncSession,
+) -> None:
+    project = await _ready_project(db_session)
+    eval_set = await create_eval_set(
+        db_session, project_id=project.id, status=EvalSetStatus.GENERATING
+    )
+    await db_session.commit()
+    await grant_membership(authed_user.id, project.id, EDITOR_NAME)
+
+    response = await authed_client.post(f"/eval-sets/{eval_set.id}/runs")
+
+    assert response.status_code == 409
+    assert response.json()["detail"]["code"] == "EVAL_SET_NOT_READY"
+
+
+@pytest.mark.asyncio
+async def test_a_run_with_every_pair_excluded_is_409_not_ready(
+    authed_client: AsyncClient,
+    authed_user: User,
+    grant_membership: GrantMembership,
+    db_session: AsyncSession,
+) -> None:
+    project, eval_set = await _runnable_set(db_session, pairs=2, excluded=2)
+    await db_session.commit()
+    await grant_membership(authed_user.id, project.id, EDITOR_NAME)
+
+    response = await authed_client.post(f"/eval-sets/{eval_set.id}/runs")
+
+    assert response.status_code == 409
+    assert response.json()["detail"]["code"] == "EVAL_SET_NOT_READY"
+
+
+@pytest.mark.asyncio
+async def test_a_second_run_while_one_runs_is_409_in_progress(
+    authed_client: AsyncClient,
+    authed_user: User,
+    grant_membership: GrantMembership,
+    db_session: AsyncSession,
+) -> None:
+    project, eval_set = await _runnable_set(db_session)
+    await db_session.commit()
+    await grant_membership(authed_user.id, project.id, EDITOR_NAME)
+
+    first = await authed_client.post(f"/eval-sets/{eval_set.id}/runs")
+    second = await authed_client.post(f"/eval-sets/{eval_set.id}/runs")
+
+    assert first.status_code == 202
+    assert second.status_code == 409
+    assert second.json()["detail"]["code"] == "EVAL_RUN_IN_PROGRESS"
+
+
+@pytest.mark.asyncio
+async def test_a_run_during_a_reindex_is_409(
+    authed_client: AsyncClient,
+    authed_user: User,
+    grant_membership: GrantMembership,
+    db_session: AsyncSession,
+) -> None:
+    project, eval_set = await _runnable_set(db_session)
+    project.reindex_in_progress = True
+    await db_session.commit()
+    await grant_membership(authed_user.id, project.id, EDITOR_NAME)
+
+    response = await authed_client.post(f"/eval-sets/{eval_set.id}/runs")
+
+    assert response.status_code == 409
+    assert response.json()["detail"]["code"] == "PROJECT_NOT_READY"
+
+
+@pytest.mark.asyncio
+async def test_a_run_after_an_embedding_model_change_is_409(
+    authed_client: AsyncClient,
+    authed_user: User,
+    grant_membership: GrantMembership,
+    db_session: AsyncSession,
+) -> None:
+    project, eval_set = await _runnable_set(db_session)
+    project.embedding_model = "other"
+    await db_session.commit()
+    await grant_membership(authed_user.id, project.id, EDITOR_NAME)
+
+    response = await authed_client.post(f"/eval-sets/{eval_set.id}/runs")
+
+    assert response.status_code == 409
+    assert response.json()["detail"]["code"] == "EMBEDDING_MODEL_CHANGED"
+
+
+@pytest.mark.asyncio
+async def test_runs_list_newest_first_and_a_run_reads_with_its_results(
+    authed_client: AsyncClient,
+    authed_user: User,
+    grant_membership: GrantMembership,
+    db_session: AsyncSession,
+) -> None:
+    project, eval_set = await _runnable_set(db_session, pairs=1)
+    pair = (await db_session.scalars(select(EvalPair).where(EvalPair.set_id == eval_set.id))).one()
+    older = await create_eval_run(
+        db_session, set_id=eval_set.id, project_id=project.id, created_by=authed_user.id
+    )
+    newer = await create_eval_run(
+        db_session, set_id=eval_set.id, project_id=project.id, created_by=authed_user.id
+    )
+    # One transaction means one `now()`; pin the order the assertion depends on.
+    older.created_at = newer.created_at - timedelta(minutes=5)
+    db_session.add(
+        EvalResult(
+            id=uuid.uuid4(),
+            run_id=newer.id,
+            pair_id=pair.id,
+            retrieval_hit=True,
+            verdict="correct",
+            judge_reason="Matches.",
+            answer="It does thing 0.",
+            grounding_warnings=["uncited_answer"],
+            retrieval_attempts=2,
+        )
+    )
+    await db_session.commit()
+    await grant_membership(authed_user.id, project.id, VIEWER_NAME)
+
+    listed = await authed_client.get(f"/eval-sets/{eval_set.id}/runs")
+    detail = await authed_client.get(f"/eval-runs/{newer.id}")
+
+    assert listed.status_code == 200
+    assert [item["id"] for item in listed.json()["items"]] == [str(newer.id), str(older.id)]
+    assert detail.status_code == 200
+    (result,) = detail.json()["results"]
+    assert set(result) == {
+        "id",
+        "pairId",
+        "retrievalHit",
+        "verdict",
+        "judgeReason",
+        "answer",
+        "groundingWarnings",
+        "retrievalAttempts",
+    }
+    assert result["pairId"] == str(pair.id)
+    assert result["groundingWarnings"] == ["uncited_answer"]
+
+
+@pytest.mark.asyncio
+async def test_a_viewer_may_read_runs_but_not_start_one(
+    authed_client: AsyncClient,
+    authed_user: User,
+    grant_membership: GrantMembership,
+    db_session: AsyncSession,
+) -> None:
+    project, eval_set = await _runnable_set(db_session)
+    run = await create_eval_run(
+        db_session,
+        set_id=eval_set.id,
+        project_id=project.id,
+        created_by=authed_user.id,
+        status="done",
+    )
+    await db_session.commit()
+    await grant_membership(authed_user.id, project.id, VIEWER_NAME)
+
+    listed = await authed_client.get(f"/eval-sets/{eval_set.id}/runs")
+    read = await authed_client.get(f"/eval-runs/{run.id}")
+    started = await authed_client.post(f"/eval-sets/{eval_set.id}/runs")
+
+    assert listed.status_code == 200
+    assert read.status_code == 200
+    assert started.status_code == 403
+    assert started.json()["detail"]["code"] == "INSUFFICIENT_ROLE"
+
+
+@pytest.mark.asyncio
+async def test_a_non_member_gets_404_on_every_run_route(
+    authed_client: AsyncClient, authed_user: User, db_session: AsyncSession
+) -> None:
+    project, eval_set = await _runnable_set(db_session)
+    run = await create_eval_run(
+        db_session, set_id=eval_set.id, project_id=project.id, created_by=authed_user.id
+    )
+    await db_session.commit()
+
+    responses = [
+        await authed_client.post(f"/eval-sets/{eval_set.id}/runs"),
+        await authed_client.get(f"/eval-sets/{eval_set.id}/runs"),
+        await authed_client.get(f"/eval-runs/{run.id}"),
+    ]
+
+    for response in responses:
+        assert response.status_code == 404
+        assert response.json()["detail"]["code"] == "PROJECT_NOT_FOUND"
+
+
+@pytest.mark.asyncio
+async def test_an_unknown_run_is_404_eval_run_not_found(authed_client: AsyncClient) -> None:
+    response = await authed_client.get(f"/eval-runs/{uuid.uuid4()}")
+
+    assert response.status_code == 404
+    assert response.json()["detail"]["code"] == "EVAL_RUN_NOT_FOUND"

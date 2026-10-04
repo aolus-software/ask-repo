@@ -20,9 +20,9 @@ from app.core.audit import AuditEntry, AuditEventType, AuditRecorder
 from app.core.errors import AppError, ErrorCode
 from app.core.middleware import AuthenticatedUser
 from app.core.permissions import Permission
-from app.live.events import eval_set_event
+from app.live.events import eval_run_event, eval_set_event
 from app.live.staging import stage_live_event
-from app.models.eval import EvalPair, EvalRun, EvalSet, EvalSetStatus
+from app.models.eval import EvalPair, EvalResult, EvalRun, EvalRunStatus, EvalSet, EvalSetStatus
 from app.models.project import Project
 from app.queue.protocol import EvalQueue
 from app.queue.topics import EvalJobMessage
@@ -34,6 +34,8 @@ from app.repositories.project import ProjectRepository
 from app.schemas.eval import (
     EvalPairExclude,
     EvalPairRead,
+    EvalResultRead,
+    EvalRunDetail,
     EvalRunSummary,
     EvalSetCreate,
     EvalSetDetail,
@@ -227,6 +229,106 @@ class EvalService:
         )
         return read
 
+    async def start_run(
+        self, set_id: uuid.UUID, *, actor: AuthenticatedUser, queue: EvalQueue
+    ) -> EvalRunSummary:
+        """Write a `running` run, publish its job, audit after the commit.
+
+        There is no `pending` state: the row is `running` from the request, and the
+        worker's lease says whether anyone holds it.
+        """
+        eval_set, project = await self._load_set(set_id, actor, Permission.EVAL_RUN)
+        if eval_set.status != EvalSetStatus.READY.value:
+            raise AppError(
+                status.HTTP_409_CONFLICT,
+                ErrorCode.EVAL_SET_NOT_READY,
+                "This eval set has not finished generating.",
+            )
+        if await self.runs.active_for_set(set_id) is not None:
+            raise AppError(
+                status.HTTP_409_CONFLICT,
+                ErrorCode.EVAL_RUN_IN_PROGRESS,
+                "A run of this set is already in progress.",
+            )
+        access.require_answerable(project, self.settings)
+        require_stable_index(project)
+        included = await self.pairs.list_for_set(set_id, include_excluded=False)
+        if not included:
+            raise AppError(
+                status.HTTP_409_CONFLICT,
+                ErrorCode.EVAL_SET_NOT_READY,
+                "Every pair in this set is excluded.",
+            )
+
+        run = await self.runs.add(
+            EvalRun(
+                id=uuid.uuid4(),
+                set_id=set_id,
+                project_id=project.id,
+                status=EvalRunStatus.RUNNING.value,
+                created_by=actor.id,
+            )
+        )
+        stage_live_event(self.session, eval_run_event(run.id, project.id))
+        run_id, project_id = run.id, project.id
+        set_name, pair_count = eval_set.name, len(included)
+        await self.session.commit()
+        await self.session.refresh(run)
+        summary = EvalRunSummary.model_validate(run)
+
+        await queue.enqueue_eval(
+            EvalJobMessage(
+                kind="run",
+                target_id=run_id,
+                job_id=uuid.uuid4(),
+                attempt=0,
+                not_before_ms=int(time.time() * 1000),
+                original_topic=self.settings.kafka_eval_topic,
+            )
+        )
+        await self._recorder.record(
+            AuditEntry(
+                event_type=AuditEventType.EVAL_RUN_REQUESTED,
+                actor_user_id=actor.id,
+                actor_email=actor.email,
+                target_type="eval_run",
+                target_id=run_id,
+                target_label=set_name,
+                project_id=project_id,
+                context={"pairCount": pair_count},
+            )
+        )
+        return summary
+
+    async def list_runs(
+        self, set_id: uuid.UUID, query: ListQuery, *, actor: AuthenticatedUser
+    ) -> PaginatedResponse[EvalRunSummary]:
+        """A page of a set's runs, newest first."""
+        eval_set, _ = await self._load_set(set_id, actor, Permission.EVAL_READ)
+        rows, total = await self.runs.list_for_set(
+            eval_set.id, limit=query.limit, offset=(query.page - 1) * query.limit
+        )
+        return PaginatedResponse.build(
+            [EvalRunSummary.model_validate(row) for row in rows],
+            page=query.page,
+            limit=query.limit,
+            total_count=total,
+        )
+
+    async def get_run(self, run_id: uuid.UUID, *, actor: AuthenticatedUser) -> EvalRunDetail:
+        """One run with its results. Resolves through the set's project like every read."""
+        run = await self.runs.get(run_id)
+        if run is None:
+            raise AppError(
+                status.HTTP_404_NOT_FOUND, ErrorCode.EVAL_RUN_NOT_FOUND, "Eval run not found."
+            )
+        await self._load_set(run.set_id, actor, Permission.EVAL_READ)
+        results = await self.results.list_for_run(run.id)
+        return EvalRunDetail(
+            **EvalRunSummary.model_validate(run).model_dump(),
+            results=[self._result(row) for row in results],
+        )
+
     async def _load_set(
         self, set_id: uuid.UUID, actor: AuthenticatedUser, permission: Permission
     ) -> tuple[EvalSet, Project]:
@@ -280,4 +382,17 @@ class EvalService:
             start_line=pair.start_line,
             end_line=pair.end_line,
             excluded=pair.excluded_at is not None,
+        )
+
+    @staticmethod
+    def _result(result: EvalResult) -> EvalResultRead:
+        return EvalResultRead(
+            id=result.id,
+            pair_id=result.pair_id,
+            retrieval_hit=result.retrieval_hit,
+            verdict=result.verdict,  # type: ignore[arg-type]  # str column; coerced to EvalVerdict
+            judge_reason=result.judge_reason,
+            answer=result.answer,
+            grounding_warnings=result.grounding_warnings,
+            retrieval_attempts=result.retrieval_attempts,
         )

@@ -1,4 +1,4 @@
-"""Eval sets: generate, list, read, delete, and exclude a pair.
+"""Eval sets and runs: generate, list, read, delete, exclude a pair, start a run.
 
 Access is a project membership with `eval.read` / `eval.run` (`app/core/access.py`); a
 set and a pair have no scope of their own and resolve through their project.
@@ -17,6 +17,8 @@ from app.schemas.errors import ERROR_RESPONSES
 from app.schemas.eval import (
     EvalPairExclude,
     EvalPairRead,
+    EvalRunDetail,
+    EvalRunSummary,
     EvalSetCreate,
     EvalSetDetail,
     EvalSetSummary,
@@ -129,3 +131,51 @@ async def set_pair_excluded(
 ) -> EvalPairRead:
     """Idempotent: setting the state a pair already has writes and audits nothing."""
     return await service.set_excluded(pair_id, payload, actor=current_user)
+
+
+@router.post(
+    "/eval-sets/{set_id}/runs",
+    response_model=EvalRunSummary,
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="Run an eval set",
+    responses={code: ERROR_RESPONSES[code] for code in (401, 403, 404, 409)},
+)
+async def start_eval_run(
+    set_id: uuid.UUID,
+    current_user: CurrentUser,
+    service: EvalServiceDep,
+    queue: EvalQueueDep,
+) -> EvalRunSummary:
+    """Publish a run job and return the `running` run."""
+    return await service.start_run(set_id, actor=current_user, queue=queue)
+
+
+@router.get(
+    "/eval-sets/{set_id}/runs",
+    response_model=PaginatedResponse[EvalRunSummary],
+    status_code=status.HTTP_200_OK,
+    summary="List a set's runs",
+    responses={code: ERROR_RESPONSES[code] for code in (401, 403, 404, 422)},
+)
+async def list_eval_runs(
+    set_id: uuid.UUID,
+    current_user: CurrentUser,
+    service: EvalServiceDep,
+    query: Annotated[ListQuery, Query()],
+) -> PaginatedResponse[EvalRunSummary]:
+    """A page of runs, newest first."""
+    return await service.list_runs(set_id, query, actor=current_user)
+
+
+@router.get(
+    "/eval-runs/{run_id}",
+    response_model=EvalRunDetail,
+    status_code=status.HTTP_200_OK,
+    summary="Get one eval run and its results",
+    responses={code: ERROR_RESPONSES[code] for code in (401, 403, 404)},
+)
+async def get_eval_run(
+    run_id: uuid.UUID, current_user: CurrentUser, service: EvalServiceDep
+) -> EvalRunDetail:
+    """One run with a result per pair answered so far."""
+    return await service.get_run(run_id, actor=current_user)

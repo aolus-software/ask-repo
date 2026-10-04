@@ -91,6 +91,7 @@ class AuditEventType(StrEnum):
     EVAL_SET_GENERATION_REQUESTED = "eval_set.generation.requested"
     EVAL_SET_DELETED = "eval_set.deleted"
     EVAL_PAIR_UPDATED = "eval_pair.updated"
+    EVAL_RUN_REQUESTED = "eval_run.requested"
     # --- conversations ------------------------------------------------------
     # Metadata only: no title, no message, no per-question row. See spec §1.4 and
     # `.claude/rules/audit-trail.md` — this is a deliberate narrowing of what
@@ -203,6 +204,9 @@ CONTEXT_KEYS: dict[AuditEventType, frozenset[str]] = {
     AuditEventType.MOCK_DATA_EXPORTED: frozenset({"format", "rowCount"}),
     AuditEventType.CONVERSATION_DELETED: frozenset({"messageCount"}),
     AuditEventType.EVAL_SET_DELETED: frozenset({"pairCount", "runCount"}),
+    # A run's answers and judge reasons are model output about a private repository and
+    # never reach this table; the count of pairs it will answer is all it records.
+    AuditEventType.EVAL_RUN_REQUESTED: frozenset({"pairCount"}),
 }
 
 type ChangedValue = str | bool | int | float | list[str] | None
