@@ -6,7 +6,7 @@ from typing import Any, cast
 from sqlalchemy import func, select, update
 from sqlalchemy.engine import CursorResult
 
-from app.models.eval import EvalResult, EvalRun
+from app.models.eval import EvalPair, EvalResult, EvalRun
 from app.repositories.base import BaseRepository
 
 
@@ -25,8 +25,16 @@ class EvalResultRepository(BaseRepository[EvalResult]):
         return set(result.scalars().all())
 
     async def list_for_run(self, run_id: uuid.UUID) -> list[EvalResult]:
-        """Every result of a run."""
-        result = await self.session.execute(self.active_select().where(EvalResult.run_id == run_id))
+        """Every result of a run, in the order its pairs sit in the set.
+
+        A total order, so a screen polling a running run does not see rows reshuffle.
+        """
+        result = await self.session.execute(
+            self.active_select()
+            .join(EvalPair, EvalPair.id == EvalResult.pair_id)
+            .where(EvalResult.run_id == run_id)
+            .order_by(EvalPair.position, EvalResult.id)
+        )
         return list(result.scalars().all())
 
     async def soft_delete_for_runs_of_set(self, set_id: uuid.UUID) -> int:

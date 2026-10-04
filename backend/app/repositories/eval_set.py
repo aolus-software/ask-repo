@@ -28,6 +28,22 @@ class EvalSetRepository(BaseRepository[EvalSet]):
 
     model = EvalSet
 
+    async def lock(self, set_id: uuid.UUID) -> EvalSet | None:
+        """The set's row, locked `FOR UPDATE` until the transaction ends.
+
+        Serialises concurrent run requests: `eval_runs` has no unique index that could
+        refuse a second `running` row, so the second request waits here and then sees
+        the first's run in `active_for_set`. `populate_existing` refreshes a row the
+        session already holds, so the status read after the lock is the committed one.
+        """
+        result = await self.session.execute(
+            self.active_select()
+            .where(EvalSet.id == set_id)
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
+        return result.scalars().first()
+
     async def list_for_project(
         self, project_id: uuid.UUID, *, limit: int, offset: int
     ) -> tuple[list[EvalSet], int]:

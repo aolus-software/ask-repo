@@ -157,3 +157,62 @@ async def test_soft_deleting_a_project_reaches_every_eval_table(db_session: Asyn
     assert await EvalSetRepository(db_session).list_for_project(
         row.project_id, limit=10, offset=0
     ) == ([], 0)
+
+
+async def test_set_lock_selects_for_update(db_session: AsyncSession) -> None:
+    from sqlalchemy import event
+
+    eval_set = await _generating_set(db_session)
+    seen: list[str] = []
+    engine = db_session.get_bind().engine
+
+    def capture(conn: object, cursor: object, statement: str, *args: object) -> None:
+        seen.append(statement)
+
+    event.listen(engine, "before_cursor_execute", capture)
+    try:
+        found = await EvalSetRepository(db_session).lock(eval_set.id)
+    finally:
+        event.remove(engine, "before_cursor_execute", capture)
+
+    assert found is not None
+    assert any("FOR UPDATE" in statement for statement in seen)
+
+
+async def test_results_list_in_pair_position_order(db_session: AsyncSession) -> None:
+    from app.models.eval import EvalPair, EvalResult
+
+    run = await _running_run(db_session)
+    pairs = []
+    for position in (2, 0, 1):
+        pair = EvalPair(
+            id=uuid.uuid4(),
+            set_id=run.set_id,
+            position=position,
+            question_type="explain",
+            question="q",
+            reference_answer="a",
+            source_file="f.py",
+            start_line=1,
+            end_line=2,
+        )
+        db_session.add(pair)
+        pairs.append(pair)
+    await db_session.flush()
+    for pair in pairs:  # inserted in 2, 0, 1 order
+        db_session.add(
+            EvalResult(
+                id=uuid.uuid4(),
+                run_id=run.id,
+                pair_id=pair.id,
+                retrieval_hit=True,
+                verdict="correct",
+                answer="x",
+            )
+        )
+    await db_session.commit()
+
+    rows = await EvalResultRepository(db_session).list_for_run(run.id)
+
+    by_pair = {pair.id: pair.position for pair in pairs}
+    assert [by_pair[row.pair_id] for row in rows] == [0, 1, 2]

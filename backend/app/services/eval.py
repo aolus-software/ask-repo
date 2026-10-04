@@ -238,6 +238,11 @@ class EvalService:
         worker's lease says whether anyone holds it.
         """
         eval_set, project = await self._load_set(set_id, actor, Permission.EVAL_RUN)
+        # Serialise concurrent starts on the set row; the guard below is check-then-insert.
+        locked = await self.sets.lock(set_id)
+        if locked is None:
+            raise self._set_not_found()
+        eval_set = locked
         if eval_set.status != EvalSetStatus.READY.value:
             raise AppError(
                 status.HTTP_409_CONFLICT,
