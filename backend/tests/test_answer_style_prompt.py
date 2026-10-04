@@ -24,7 +24,12 @@ FULL = AnswerStyle(
     familiarity=AnswerFamiliarity.EXPERT,
     format=AnswerFormat.BULLETS,
 )
-FRAGMENT_PREFIXES = ("READER_PREFERENCES_", "ANSWER_DETAIL_", "ANSWER_FAMILIARITY_", "ANSWER_FORMAT_")
+FRAGMENT_PREFIXES = (
+    "READER_PREFERENCES_",
+    "ANSWER_DETAIL_",
+    "ANSWER_FAMILIARITY_",
+    "ANSWER_FORMAT_",
+)
 BANNED = ("cite", "citation", "evidence", "guess", "confiden", "[")
 
 

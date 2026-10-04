@@ -188,7 +188,11 @@ async def test_the_answer_carries_citation_labels(settings: Settings) -> None:
     for question in ANSWERABLE:
         message = await model.ainvoke(
             ANSWER_PROMPT.format_messages(
-                context=context, history=[], question=question, evidence_note="", reader_preferences=""
+                context=context,
+                history=[],
+                question=question,
+                evidence_note="",
+                reader_preferences="",
             )
         )
         answer = str(message.content)

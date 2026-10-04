@@ -133,8 +133,8 @@ routed to you as being about the conversation itself rather than about the code,
 you have no code excerpts for it. That routing is a guess, and checking it is your \
 first job.
 
-{reader_preferences}The message is about this conversation — what was said, a repetition, a summary, an \
-acknowledgement. Answer it from the conversation above.
+{reader_preferences}The message is about this conversation — what was said, a repetition, \
+a summary, an acknowledgement. Answer it from the conversation above.
 
 Or the message turns out to need the code after all. Say so plainly and invite the \
 question directly: name what you would need to look up. Do not describe code from \
@@ -202,8 +202,7 @@ ANSWER_FAMILIARITY_NEW = (
     "how they work, and explain project-specific terms."
 )
 ANSWER_FAMILIARITY_EXPERT = (
-    "The reader knows this repository well: skip orientation and go straight to the "
-    "specifics."
+    "The reader knows this repository well: skip orientation and go straight to the specifics."
 )
 ANSWER_FORMAT_PROSE = "Write in short paragraphs rather than lists."
 ANSWER_FORMAT_BULLETS = "Lay the answer out as a bulleted list where the content allows."
