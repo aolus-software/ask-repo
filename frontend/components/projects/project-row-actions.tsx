@@ -3,10 +3,12 @@
 import {
   ExternalLink,
   Eye,
+  FlaskConical,
   MessagesSquare,
   MoreHorizontal,
   RefreshCw,
   Trash2,
+  Users,
 } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
@@ -46,6 +48,8 @@ export function ProjectRowActions({
   const remove = useDeleteProject(project.id);
   const canReindex = can(project, PERMISSION.PROJECT_REINDEX);
   const canDelete = can(project, PERMISSION.PROJECT_DELETE);
+  const canReadMembers = can(project, PERMISSION.MEMBERSHIP_READ);
+  const canReadEval = can(project, PERMISSION.EVAL_READ);
 
   return (
     <>
@@ -83,6 +87,22 @@ export function ProjectRowActions({
             <DropdownMenuItem render={<Link href={`/ask?projectId=${project.id}`} />}>
               <MessagesSquare className="size-4" />
               Ask about this
+            </DropdownMenuItem>
+          ) : null}
+          {/* Shortcuts into the detail page's tabs, which open from the hash. Not on the
+              detail page itself, where the tabs are already on screen. */}
+          {context === "list" && canReadMembers ? (
+            <DropdownMenuItem
+              render={<Link href={`/projects/${project.id}#members`} />}
+            >
+              <Users className="size-4" />
+              Members
+            </DropdownMenuItem>
+          ) : null}
+          {context === "list" && canReadEval ? (
+            <DropdownMenuItem render={<Link href={`/projects/${project.id}#eval`} />}>
+              <FlaskConical className="size-4" />
+              Eval
             </DropdownMenuItem>
           ) : null}
 
