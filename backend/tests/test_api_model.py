@@ -11,6 +11,7 @@ ships unchecked.
 import uuid
 
 import pytest
+from pydantic import BaseModel
 
 from app.models.conversation import FinishReason, Intent
 from app.schemas import SSE_EVENT_MODELS
@@ -102,3 +103,18 @@ def test_every_terminator_carries_a_finish_reason() -> None:
 def test_answer_style_schemas_are_api_models() -> None:
     assert issubclass(AnswerStyleRead, ApiModel)
     assert issubclass(AnswerStyleUpdate, ApiModel)
+
+
+def test_eval_schemas_are_api_models() -> None:
+    from app.schemas import eval as eval_schemas
+
+    classes = [
+        value
+        for value in vars(eval_schemas).values()
+        if isinstance(value, type)
+        and issubclass(value, BaseModel)
+        and value.__module__ == eval_schemas.__name__
+    ]
+    assert classes
+    for cls in classes:
+        assert issubclass(cls, ApiModel), cls.__name__

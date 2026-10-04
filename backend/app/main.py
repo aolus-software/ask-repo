@@ -30,6 +30,9 @@ from app.api.routes import (
     roles,
     users,
 )
+from app.api.routes import (
+    eval as eval_routes,
+)
 from app.config import get_settings
 from app.core.errors import register_exception_handlers
 from app.core.logging import configure_logging
@@ -226,6 +229,8 @@ def create_app() -> FastAPI:
     app.include_router(mock_data_datasets.router)
     app.include_router(mock_data_records.router)
     app.include_router(mock_data_change_sets.router)
+    app.include_router(eval_routes.project_router)
+    app.include_router(eval_routes.router)
     app.include_router(audit_events.router)
     app.include_router(notifications.router)
     app.include_router(notification_preferences.router)

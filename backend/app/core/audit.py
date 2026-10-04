@@ -87,6 +87,10 @@ class AuditEventType(StrEnum):
     MOCK_DATA_CHANGE_SET_DISCARDED = "mock_data_change_set.discarded"
     MOCK_DATA_RECORD_DELETED = "mock_data_record.deleted"
     MOCK_DATA_EXPORTED = "mock_data.exported"
+    # --- eval ---------------------------------------------------------------
+    EVAL_SET_GENERATION_REQUESTED = "eval_set.generation.requested"
+    EVAL_SET_DELETED = "eval_set.deleted"
+    EVAL_PAIR_UPDATED = "eval_pair.updated"
     # --- conversations ------------------------------------------------------
     # Metadata only: no title, no message, no per-question row. See spec §1.4 and
     # `.claude/rules/audit-trail.md` — this is a deliberate narrowing of what
@@ -137,6 +141,13 @@ CHANGED_FIELDS: dict[AuditEventType, frozenset[str]] = {
     # `currentResultChanged` is the boolean substitute.
     AuditEventType.CHECKLIST_ITEM_RESULT_RECORDED: frozenset({"status", "currentResultChanged"}),
     AuditEventType.CHECKLIST_ITEM_DELETED: frozenset({"feature", "testName"}),
+    AuditEventType.EVAL_SET_GENERATION_REQUESTED: frozenset(
+        {"name", "sourcePath", "requestedCount", "mix"}
+    ),
+    AuditEventType.EVAL_SET_DELETED: frozenset({"name", "sourcePath"}),
+    # Exclusion only -- a pair's question and reference are model-authored and derived
+    # from a private repository, which the content ban forbids storing here.
+    AuditEventType.EVAL_PAIR_UPDATED: frozenset({"excluded"}),
 }
 
 # Immutable context that is not a change: flat keys beside `changed`.
@@ -191,6 +202,7 @@ CONTEXT_KEYS: dict[AuditEventType, frozenset[str]] = {
     AuditEventType.MOCK_DATA_RECORD_DELETED: frozenset({"position"}),
     AuditEventType.MOCK_DATA_EXPORTED: frozenset({"format", "rowCount"}),
     AuditEventType.CONVERSATION_DELETED: frozenset({"messageCount"}),
+    AuditEventType.EVAL_SET_DELETED: frozenset({"pairCount", "runCount"}),
 }
 
 type ChangedValue = str | bool | int | float | list[str] | None

@@ -37,6 +37,18 @@ class EvalRunRepository(BaseRepository[EvalRun]):
         )
         return result.scalars().first()
 
+    async def latest_for_sets(self, set_ids: Sequence[uuid.UUID]) -> dict[uuid.UUID, EvalRun]:
+        """Each given set's newest run, in one query. A set with no run is absent."""
+        if not set_ids:
+            return {}
+        result = await self.session.execute(
+            self.active_select()
+            .where(EvalRun.set_id.in_(set_ids))
+            .order_by(EvalRun.set_id, EvalRun.created_at.desc(), EvalRun.id)
+            .distinct(EvalRun.set_id)
+        )
+        return {run.set_id: run for run in result.scalars().all()}
+
     async def list_for_set(
         self, set_id: uuid.UUID, *, limit: int, offset: int
     ) -> tuple[list[EvalRun], int]:
