@@ -3,6 +3,7 @@
 import { ChevronDown, ChevronRight } from "lucide-react";
 import { Fragment, useState } from "react";
 
+import { Answer } from "@/components/ask/answer";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import {
@@ -15,6 +16,7 @@ import {
 } from "@/components/ui/table";
 import { useSetPairExcluded } from "@/hooks/use-eval";
 import type { EvalPair } from "@/lib/api/types";
+import { cn } from "@/lib/utils";
 
 /** A set's questions. The reference answer expands in place; excluding is `eval.run` only. */
 export function EvalPairTable({
@@ -46,7 +48,10 @@ export function EvalPairTable({
             return (
               <Fragment key={pair.id}>
                 <TableRow
-                  className={pair.excluded ? "text-muted-foreground" : undefined}
+                  className={cn(
+                    pair.excluded && "text-muted-foreground",
+                    expanded && "bg-muted/50 border-b-0",
+                  )}
                 >
                   <TableCell className="max-w-xl whitespace-normal">
                     <button
@@ -82,15 +87,19 @@ export function EvalPairTable({
                   ) : null}
                 </TableRow>
                 {expanded ? (
-                  <TableRow>
+                  <TableRow className="bg-muted/50 hover:bg-muted/50">
                     <TableCell
                       colSpan={canRun ? 4 : 3}
-                      className="bg-muted/40 text-sm whitespace-pre-wrap"
+                      className="pt-0 pb-4 whitespace-normal"
                     >
-                      <p className="text-muted-foreground mb-1 text-xs font-medium">
-                        Reference answer
-                      </p>
-                      {pair.referenceAnswer}
+                      {/* Inset under the question text (chevron + gap) and capped at a
+                          readable line length; a full-width paragraph is hard to follow. */}
+                      <div className="border-primary bg-card ml-6 max-w-prose rounded-md border-l-2 px-4 py-3">
+                        <p className="text-muted-foreground mb-1.5 text-xs font-medium tracking-wide uppercase">
+                          Reference answer
+                        </p>
+                        <Answer content={pair.referenceAnswer} />
+                      </div>
                     </TableCell>
                   </TableRow>
                 ) : null}

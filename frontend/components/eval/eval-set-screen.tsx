@@ -13,6 +13,7 @@ import { JobFailureAlert } from "@/components/feedback/job-failure-alert";
 import { NotFound } from "@/components/feedback/not-found";
 import { PageHeader } from "@/components/layout/page-header";
 import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 import {
   Select,
   SelectContent,
@@ -128,12 +129,16 @@ export function EvalSetScreen({
 
       <section className="space-y-3">
         <h2 className="text-xl font-semibold tracking-tight">Pairs</h2>
-        <EvalPairTable setId={setId} pairs={set.pairs} canRun={canRun} />
+        <Card className="p-0">
+          <EvalPairTable setId={setId} pairs={set.pairs} canRun={canRun} />
+        </Card>
       </section>
 
       <section className="space-y-3">
         <h2 className="text-xl font-semibold tracking-tight">Runs</h2>
-        <EvalRunTable runs={runs} onSelect={setSelectedRun} />
+        <Card className="p-0">
+          <EvalRunTable runs={runs} onSelect={setSelectedRun} />
+        </Card>
       </section>
 
       {doneRuns.length >= 2 ? (
@@ -174,7 +179,9 @@ export function EvalSetScreen({
             })}
           </div>
           {baseRun.data && headRun.data && baseId && headId ? (
-            <EvalCompare base={baseRun.data} head={headRun.data} pairs={set.pairs} />
+            <Card className="px-4">
+              <EvalCompare base={baseRun.data} head={headRun.data} pairs={set.pairs} />
+            </Card>
           ) : null}
         </section>
       ) : null}

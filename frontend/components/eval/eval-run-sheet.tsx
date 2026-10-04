@@ -1,5 +1,6 @@
 "use client";
 
+import { Answer } from "@/components/ask/answer";
 import { EvalStatusBadge } from "@/components/eval/eval-status-badge";
 import { EvalVerdictBadge } from "@/components/eval/eval-verdict-badge";
 import { JobFailureAlert } from "@/components/feedback/job-failure-alert";
@@ -31,7 +32,7 @@ export function EvalRunSheet({
 
   return (
     <Sheet open={runId !== null} onOpenChange={(open) => (open ? null : onClose())}>
-      <SheetContent className="w-full overflow-y-auto sm:max-w-2xl">
+      <SheetContent className="w-full overflow-y-auto data-[side=right]:sm:max-w-3xl data-[side=right]:lg:max-w-5xl">
         <SheetHeader>
           <SheetTitle className="flex items-center gap-2">
             Run results
@@ -57,7 +58,7 @@ export function EvalRunSheet({
               <p className="text-sm font-medium">
                 {questions.get(result.pairId) ?? result.pairId}
               </p>
-              <p className="text-sm whitespace-pre-wrap">{result.answer}</p>
+              <Answer content={result.answer} />
               {result.judgeReason ? (
                 <p className="text-muted-foreground text-sm">
                   Judge: {result.judgeReason}
