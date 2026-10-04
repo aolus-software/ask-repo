@@ -54,6 +54,7 @@ class AuditEventType(StrEnum):
     USER_UPDATED = "user.updated"
     USER_DEACTIVATED = "user.deactivated"
     USER_PASSWORD_RESET = "user.password.reset"
+    USER_ANSWER_STYLE_UPDATED = "user.answer_style.updated"
     # --- projects -----------------------------------------------------------
     PROJECT_CREATED = "project.created"
     PROJECT_REINDEX_REQUESTED = "project.reindex.requested"
@@ -105,6 +106,11 @@ CHANGED_FIELDS: dict[AuditEventType, frozenset[str]] = {
     # allowlist entry with no producer reads as documentation and is wrong in the
     # misleading direction (`.claude/rules/audit-trail.md`).
     AuditEventType.USER_UPDATED: frozenset({"name", "isAdmin"}),
+    # The caller's own answer style (`PUT /me/answer-style`). Enum values only -- no
+    # content can reach these keys, because no free text exists to reach them.
+    AuditEventType.USER_ANSWER_STYLE_UPDATED: frozenset(
+        {"answerDetail", "answerFamiliarity", "answerFormat"}
+    ),
     AuditEventType.PROJECT_CREATED: frozenset({"name", "repoUrlHost", "branch"}),
     AuditEventType.PROJECT_DELETED: frozenset({"name", "repoUrlHost"}),
     AuditEventType.MEMBERSHIP_GRANTED: frozenset({"roleName"}),

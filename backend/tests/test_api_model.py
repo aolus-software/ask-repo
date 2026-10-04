@@ -21,6 +21,7 @@ from app.schemas.conversation import (
     TokenEvent,
     encode_event,
 )
+from app.schemas.me import AnswerStyleRead, AnswerStyleUpdate
 
 
 class _Sample(ApiModel):
@@ -96,3 +97,8 @@ def test_every_terminator_carries_a_finish_reason() -> None:
     with no way to tell it apart from a complete short one."""
     assert "finish_reason" in DoneEvent.model_fields
     assert "finish_reason" in ErrorEvent.model_fields
+
+
+def test_answer_style_schemas_are_api_models() -> None:
+    assert issubclass(AnswerStyleRead, ApiModel)
+    assert issubclass(AnswerStyleUpdate, ApiModel)

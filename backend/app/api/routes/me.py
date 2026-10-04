@@ -13,7 +13,13 @@ from fastapi import APIRouter, Depends, Query, status
 
 from app.api.deps import AuditRecorderDep, ClientIpDep, CurrentUser, SessionDep
 from app.schemas.errors import ERROR_RESPONSES
-from app.schemas.me import ActivityEntry, MembershipSummary, SessionResponse
+from app.schemas.me import (
+    ActivityEntry,
+    AnswerStyleRead,
+    AnswerStyleUpdate,
+    MembershipSummary,
+    SessionResponse,
+)
 from app.schemas.pagination import ListQuery, PaginatedResponse
 from app.services.me import MeService
 
@@ -84,3 +90,31 @@ async def list_activity(
     query: Annotated[ListQuery, Query()],
 ) -> PaginatedResponse[ActivityEntry]:
     return await service.activity(current_user, query)
+
+
+@router.get(
+    "/answer-style",
+    response_model=AnswerStyleRead,
+    status_code=status.HTTP_200_OK,
+    summary="How your Ask answers are shaped",
+    responses={code: ERROR_RESPONSES[code] for code in (401, 403)},
+)
+async def get_answer_style(current_user: CurrentUser, service: MeServiceDep) -> AnswerStyleRead:
+    return await service.answer_style(current_user)
+
+
+@router.put(
+    "/answer-style",
+    response_model=AnswerStyleRead,
+    status_code=status.HTTP_200_OK,
+    summary="Set how your Ask answers are shaped",
+    description=(
+        "Replaces all three dials; `null` is no preference. Applies to your own Ask "
+        "answers only — never to the QA Checklist or Mock Data, which a project shares."
+    ),
+    responses={code: ERROR_RESPONSES[code] for code in (401, 403, 422)},
+)
+async def update_answer_style(
+    payload: AnswerStyleUpdate, current_user: CurrentUser, service: MeServiceDep
+) -> AnswerStyleRead:
+    return await service.update_answer_style(current_user, payload)

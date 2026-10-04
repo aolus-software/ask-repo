@@ -145,6 +145,7 @@ ROUTE_EVENTS: dict[tuple[str, str], AuditEventType | str] = {
     ("POST", "/checklist-modules/{module_id}/mock-data-messages"): PROPOSAL,
     # --- profile ---
     ("DELETE", "/me/sessions/{session_id}"): AuditEventType.AUTH_SESSION_REVOKED,
+    ("PUT", "/me/answer-style"): AuditEventType.USER_ANSWER_STYLE_UPDATED,
     # --- Task 10: notifications, exemption 5 ---
     ("POST", "/notifications/mark-all-read"): NOTIFICATION_STATE,
     ("POST", "/notifications/{notification_id}/read"): NOTIFICATION_STATE,
