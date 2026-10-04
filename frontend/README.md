@@ -116,8 +116,8 @@ frontend/
 │       #   projects/ also holds the Members tab: member-table, add-member-dialog
 │       #   roles/ holds the role table, create dialog, permission matrix, role badge
 │       #   notifications/ holds the bell, the popover list, and the deep-link mapper's UI
-│       #   profile/ holds the five sections: account, sessions, activity,
-│       #     notifications (reuses notifications/preferences-screen), password
+│       #   profile/ holds the six sections: account, sessions, activity,
+│       #     notifications (reuses notifications/preferences-screen), answer style, password
 ├── hooks/                 # one file per resource
 ├── lib/
 │   ├── api/               # types, endpoints, errors, both fetch clients
