@@ -15,11 +15,15 @@ from app.eval.model_output import GeneratedPair
 from app.ingestion.chunker import Chunk
 from app.ingestion.vector_store import InMemoryVectorStore
 from app.models.eval import EvalSet, EvalSetStatus
-from app.rag.errors import TerminalChatError
+from app.rag.errors import RetryableChatError, TerminalChatError
 from app.repositories.eval_pair import EvalPairRepository
 from app.repositories.eval_set import EvalSetRepository
 from tests.factories import create_project, create_user
 from tests.fakes import StructuredScriptedChatModel
+
+
+class RateLimitError(Exception):
+    """Named so `classify_chat_error` maps it to retryable."""
 
 
 class AuthenticationError(Exception):
@@ -224,3 +228,19 @@ async def test_the_lease_heartbeat_renews_during_the_run_and_stops_after(
     settled = len(calls)
     await asyncio.sleep(0.05)
     assert len(calls) == settled
+
+
+async def test_a_retryable_chat_error_propagates_and_writes_nothing(
+    db_session: AsyncSession,
+) -> None:
+    """A later pair's retryable failure must not release the set or keep earlier pairs."""
+    eval_set, store, job = await _setup(db_session, ["a/x.py", "b/y.py"], count=2)
+    chat = _SequencedModel([_pair(1), RateLimitError("slow down")])
+
+    with pytest.raises(RetryableChatError):
+        await _run(_generator(db_session, store, chat), eval_set, job)
+
+    row = await _reload(db_session, eval_set.id)
+    assert row.status == EvalSetStatus.GENERATING.value
+    pairs = await EvalPairRepository(db_session).list_for_set(eval_set.id, include_excluded=True)
+    assert pairs == []

@@ -27,7 +27,7 @@ from app.ingestion.errors import RetryableIngestionError, TerminalIngestionError
 from app.ingestion.vector_store import VectorStoreFactory
 from app.models.eval import EvalMix, EvalPair, EvalQuestionType, EvalSetStatus
 from app.observability.features import CallFeature, call_config
-from app.rag.errors import TerminalChatError, classify_chat_error
+from app.rag.errors import classify_chat_error
 from app.rag.prompts import build_eval_pair_prompt
 from app.repositories.eval_pair import EvalPairRepository
 from app.repositories.eval_set import LEASE_RENEWAL_SECONDS, LEASE_SECONDS, EvalSetRepository
@@ -201,7 +201,9 @@ class EvalSetGenerator:
             )
         except Exception as error:
             classified = classify_chat_error(error)
-            if isinstance(classified, TerminalChatError):
+            if classified is not None:
+                # Terminal fails the job; retryable defers the lease up the ladder. Only
+                # an unclassified failure (a malformed response) drops this one pair.
                 raise classified from error
             logger.warning("an eval pair could not be generated: %s", type(error).__name__)
             return None
