@@ -299,6 +299,49 @@ async def test_deleting_a_set_soft_deletes_pairs_runs_and_results(
 
 
 @pytest.mark.asyncio
+async def test_deleting_a_project_soft_deletes_all_four_eval_tables(
+    authed_client: AsyncClient,
+    authed_user: User,
+    grant_membership: GrantMembership,
+    db_session: AsyncSession,
+) -> None:
+    project = await _ready_project(db_session)
+    eval_set = await create_eval_set(db_session, project_id=project.id, pair_count=1)
+    pair = await create_eval_pair(db_session, set_id=eval_set.id)
+    run = await create_eval_run(
+        db_session, set_id=eval_set.id, project_id=project.id, created_by=authed_user.id
+    )
+    result = EvalResult(
+        id=uuid.uuid4(),
+        run_id=run.id,
+        pair_id=pair.id,
+        retrieval_hit=True,
+        verdict="correct",
+        answer="a",
+        grounding_warnings=[],
+        retrieval_attempts=1,
+    )
+    db_session.add(result)
+    await db_session.commit()
+    await grant_membership(authed_user.id, project.id, OWNER_NAME)
+    ids: list[tuple[type[EvalSet | EvalPair | EvalRun | EvalResult], uuid.UUID]] = [
+        (EvalSet, eval_set.id),
+        (EvalPair, pair.id),
+        (EvalRun, run.id),
+        (EvalResult, result.id),
+    ]
+
+    response = await authed_client.delete(f"/projects/{project.id}")
+
+    assert response.status_code == 204
+    db_session.expire_all()
+    for model, row_id in ids:
+        stamped = await db_session.scalar(
+            select(model.id).where(model.id == row_id, model.deleted_at.is_not(None))
+        )
+        assert stamped == row_id, model.__name__
+
+
 async def test_deleting_a_set_with_a_running_run_is_409(
     authed_client: AsyncClient,
     authed_user: User,

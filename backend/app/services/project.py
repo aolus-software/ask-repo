@@ -35,6 +35,10 @@ from app.repositories.checklist_item import ChecklistItemRepository
 from app.repositories.checklist_message import ChecklistMessageRepository
 from app.repositories.checklist_module import ChecklistModuleRepository
 from app.repositories.conversation import ConversationRepository
+from app.repositories.eval_pair import EvalPairRepository
+from app.repositories.eval_result import EvalResultRepository
+from app.repositories.eval_run import EvalRunRepository
+from app.repositories.eval_set import EvalSetRepository
 from app.repositories.feedback import FeedbackRepository
 from app.repositories.membership import MembershipRepository
 from app.repositories.mock_data_change_set import MockDataChangeSetRepository
@@ -350,6 +354,13 @@ class ProjectService:
                 mock_data_datasets,
                 project.id,
             )
+
+        # Eval sets, pairs, runs and results hold no vectors, so nothing here reaches
+        # Qdrant. Same transaction as the rest; children first, parents last.
+        await EvalResultRepository(self.session).soft_delete_for_project(project.id)
+        await EvalRunRepository(self.session).soft_delete_for_project(project.id)
+        await EvalPairRepository(self.session).soft_delete_for_project(project.id)
+        await EvalSetRepository(self.session).soft_delete_for_project(project.id)
 
         # A project's feedback goes with the project it judged, like every other
         # project-owned row. Soft, and in the same transaction as the rest.
