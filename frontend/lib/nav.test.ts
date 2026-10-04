@@ -104,6 +104,15 @@ describe("resolveBreadcrumbs", () => {
     expect(trail).toHaveLength(2);
   });
 
+  it("resolves a trail into an eval set", () => {
+    expect(resolveBreadcrumbs("/projects/p1/eval/s1", member)).toEqual([
+      { href: "/projects", label: "Projects" },
+      { href: "/projects/p1", label: "p1" },
+      { href: "/projects/p1#eval", label: "Eval" },
+      { href: "/projects/p1/eval/s1", label: "s1" },
+    ]);
+  });
+
   it("is empty on the dashboard", () => {
     expect(resolveBreadcrumbs("/", member)).toEqual([]);
   });

@@ -1,6 +1,7 @@
 import type {
   AuditOutcome,
   EvalRunStatus,
+  EvalVerdict,
   EvalSetStatus,
   ChecklistItemStatus,
   ChecklistModuleStatus,
@@ -151,4 +152,19 @@ export function evalStatusTone(status: EvalSetStatus | EvalRunStatus): StatusTon
 
 export function evalStatusLabel(status: EvalSetStatus | EvalRunStatus): string {
   return EVAL_STATUS_LABELS[status];
+}
+
+const EVAL_VERDICT_TONES: Record<EvalVerdict, StatusTone> = {
+  correct: "success",
+  partial: "warning",
+  wrong: "danger",
+  error: "neutral",
+};
+
+export function evalVerdictTone(verdict: EvalVerdict): StatusTone {
+  return EVAL_VERDICT_TONES[verdict];
+}
+
+export function evalVerdictLabel(verdict: EvalVerdict): string {
+  return verdict.charAt(0).toUpperCase() + verdict.slice(1);
 }
