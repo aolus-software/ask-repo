@@ -50,6 +50,11 @@ client can have received it, so it is recorded under Changed and allowed in a `M
   `LANGFUSE_SECRET_KEY`, `LANGFUSE_PROJECT_ID` and `LANGFUSE_UI_URL`. Enabling it without both
   keys stops the instance at boot.
 - `.claude/rules/call-log.md`.
+- **Per-user answer style** (`docs/PRD.md` §2.1, phase 2.6, #22): `GET`/`PUT /me/answer-style`,
+  three dials (detail, familiarity, format) on the profile's new Answer style tab, applied to
+  your own Ask answers only — never to the QA Checklist or Mock Data. Each dial maps to a fixed
+  sentence in `app/rag/prompts.py`; no user text reaches a prompt.
+- Audit event `user.answer_style.updated`.
 
 ### Changed
 

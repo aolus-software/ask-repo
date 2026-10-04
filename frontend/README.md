@@ -16,9 +16,9 @@ checklist grid, no route of its own. The project detail page at `/projects/[id]`
 carries a **Members** tab — grant, change role, revoke — as a tab, not a route of its own.
 Notifications add `/notifications` (a paginated list, filterable by project/type/unread) — the
 bell itself lives in the app shell's navbar, not a route. `/profile`, opened from the account
-menu, carries five sections — account, sessions (with a per-session sign-out), activity (the
+menu, carries six sections — account, sessions (with a per-session sign-out), activity (the
 caller's own audit-trail rows), notifications (per-event in-app and email switches; the email
-switch is enabled only when `MAIL_ENABLED` is true on the instance), and password — and
+switch is enabled only when `MAIL_ENABLED` is true on the instance), answer style (three radio dials shaping your own Ask answers), and password — and
 `/settings/notifications` now only redirects to `/profile#notifications`.
 
 **Controls are hidden from what the server said, never from a client-side rule.** Each project

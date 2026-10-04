@@ -243,6 +243,30 @@ its citations, so a column would be derived state that can drift from the row it
 
 ---
 
+## Answer style
+
+A user may set three dials on `/profile` — detail (`brief`/`thorough`), familiarity
+(`new`/`expert`) and format (`prose`/`bullets`) — and `NULL` on a dial means no preference.
+`ConversationService.prepare_turn` reads them off the caller's own row and
+`app/rag/answer_style.py` carries them as an `AnswerStyle`.
+
+They render into one slot, `{reader_preferences}`, in `ANSWER_SYSTEM` and
+`HISTORY_ANSWER_SYSTEM`, placed *before* the grounding rules so those rules are stated last.
+Seven constants in `app/rag/prompts.py` hold every word that can appear there: the preamble
+(`READER_PREFERENCES_PREAMBLE`) and one sentence per dial value (`ANSWER_DETAIL_BRIEF`,
+`ANSWER_DETAIL_THOROUGH`, `ANSWER_FAMILIARITY_NEW`, `ANSWER_FAMILIARITY_EXPERT`,
+`ANSWER_FORMAT_PROSE`, `ANSWER_FORMAT_BULLETS`). No user text is ever stored or rendered, and
+because they are constants they sit under `PROMPT_VERSION`. No sentence may mention citing,
+evidence or confidence.
+
+With no dial set, `render_reader_preferences` returns `""` and the prompt is byte-for-byte the
+one that shipped before the feature, which is what the eval harness relies on. A style never
+overrides grounding: `uncited_answer` and `unknown_paths` are still computed from the finished
+answer, so they remain the backstop whatever a preference said. The style reaches Ask answers
+only — never a refinement chat or a generation run, which write documents other people use.
+
+---
+
 ## Retrieved code is untrusted input
 
 Excerpts come from a cloned repository that anyone with commit access wrote. A comment or README

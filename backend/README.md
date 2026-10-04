@@ -127,6 +127,8 @@ wired in yet**, even though all four datastores are now read elsewhere in the ap
 | `GET` | `/me/memberships` | access token | The projects you are a member of, and your role on each |
 | `GET` | `/me/sessions` | access token | Your live sign-ins, the one making the request marked `current` |
 | `DELETE` | `/me/sessions/{sessionId}` | access token | Sign one of your sessions out; `404 SESSION_NOT_FOUND` for another user's |
+| `GET` | `/me/answer-style` | access token | Your answer style: `detail`, `familiarity`, `format`, each `null` for no preference |
+| `PUT` | `/me/answer-style` | access token | Replace all three dials (every key required, `null` clears one); shapes your own Ask answers only. Audited as `user.answer_style.updated` |
 | `GET` | `/me/activity` | access token | Your own audit events, newest first, paginated |
 
 ### Users
