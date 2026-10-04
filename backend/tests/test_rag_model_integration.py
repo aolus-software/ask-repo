@@ -30,6 +30,7 @@ from app.checklist.model_output import ProposedChangeSet
 from app.checklist.operations import _narrow_kind
 from app.config import Settings
 from app.models.checklist import ChecklistItemKind
+from app.rag.answer_style import AnswerDetail, AnswerStyle
 from app.rag.chat import build_chat_model
 from app.rag.graph.state import Classification
 from app.rag.prompts import (
@@ -39,6 +40,7 @@ from app.rag.prompts import (
     build_propose_prompt,
     build_reduce_prompt,
     format_spans,
+    render_reader_preferences,
 )
 from app.rag.retriever import RetrievedChunk
 
@@ -425,3 +427,34 @@ async def test_a_chat_proposal_from_a_technical_answer_is_plain(settings: Settin
     assert isinstance(result, ProposedChangeSet)
     assert result.operations, "the answer asked for a test and none was proposed"
     _assert_plain(result)
+
+
+async def test_brief_answers_are_shorter_than_thorough_ones_and_both_cite(
+    settings: Settings,
+) -> None:
+    """The dials have to change something, and must not change citing.
+
+    A dial whose sentence the model ignores is a setting that lies to the user; one
+    that costs the citation is a preference that beat a guardrail.
+    """
+    model = build_chat_model(settings)
+    question = "How does the retry consumer wait until a job is due?"
+
+    async def answer(detail: AnswerDetail) -> str:
+        message = await model.ainvoke(
+            ANSWER_PROMPT.format_messages(
+                context=format_spans(SPANS),
+                history=[],
+                question=question,
+                evidence_note="",
+                reader_preferences=render_reader_preferences(AnswerStyle(detail=detail)),
+            )
+        )
+        return str(message.content)
+
+    brief = await answer(AnswerDetail.BRIEF)
+    thorough = await answer(AnswerDetail.THOROUGH)
+
+    assert len(brief) < len(thorough), f"brief={len(brief)} thorough={len(thorough)}"
+    assert CITATION_LABEL.search(brief), brief
+    assert CITATION_LABEL.search(thorough), thorough
