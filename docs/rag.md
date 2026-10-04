@@ -285,6 +285,38 @@ tool-calling to this path without revisiting [`PRD.md`](PRD.md) §9.
 
 ---
 
+## The eval harness
+
+Nothing in `pytest -m model` says whether an answer was *right*; the harness does. A user holding
+`eval.run` generates an **eval set**: up to 50 question and reference-answer pairs, each grounded
+in one real chunk of the project's index (`app/eval/generator.py`). Like checklist generation it
+**scrolls the index rather than searching it**, then samples chunks deterministically per set id
+(`app/eval/sampling.py`) so a set is reproducible. A pair whose question names its own file is
+dropped, because it would answer itself. The set is then frozen: nobody edits a reference,
+and a pair is only ever excluded.
+
+A **run** (`app/eval/runner.py`) answers every included pair through the real answer graph, then
+judges the answer against the reference. Two signals are recorded per pair and never blended:
+
+- **Retrieval hit.** Whether the pair's `source_file` is among the `citations` event's sources.
+  It reads the *first-pass* retrieval, which is what a change to chunking or the embedding model
+  moves, and it is deterministic, so it carries no judge noise.
+- **Verdict.** `correct`, `partial` or `wrong` from an LLM judge using the instance's chat model,
+  with a one-line reason; `error` when a pair's answer or judge call failed. Extra correct detail
+  beyond the reference is not penalised, because the reference comes from one chunk.
+
+**Personas are off.** The runner never passes an `answer_style` and reads no `users.answer_*`
+column, so `Answerer` renders the default prompt byte-for-byte; an eval score is comparable only
+against a fixed prompt. A run writes no `conversations` or `messages` row, sends no feedback, and
+stamps itself with the prompt version, the chat and embedding models and the project generation
+it read.
+
+Comparing two runs of a set happens client-side on the pairs both answered. The judge is the
+chat model, so comparing two chat models compares two judges too; the screen warns whenever the
+runs' `judge_model` differ. Retrieval hits are unaffected by that.
+
+---
+
 ## The knobs
 
 | Setting | Default | Effect |

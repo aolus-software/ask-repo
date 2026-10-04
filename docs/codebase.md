@@ -138,32 +138,33 @@ membership's role, never from that column, and it never scopes reads.
 ```
 backend/app/
 ├── main.py            FastAPI app + lifespan (topics, probes, queue, the live hub)
-├── worker.py          the separate process: 3 consumers + retry ladders + reconcile sweep
+├── worker.py          the separate process: 4 consumers + retry ladders + reconcile sweep
 ├── config.py          Settings — the only place os.environ is read
 ├── cli.py             seed-admins and restore-system-roles; seed-admins runs from
 │                      the container entrypoint
 │
 ├── api/
 │   ├── deps.py        shared dependencies (CurrentUser, AdminUser, service factories)
-│   └── routes/        20 routers, 85 routes
+│   └── routes/        21 routers, 95 routes
 │
 ├── core/              cross-cutting: access, audit, crypto, errors, feedback, grant_cache,
 │                      logging, middleware, notifications, passwords, permissions, rate_limit,
 │                      repo_url, role_seed, security
 ├── db/session.py      engine + sessionmaker
-├── models/            12 modules, 22 tables
-├── repositories/      21 repositories — the only place SQL is written
+├── models/            12 modules, 26 tables
+├── repositories/      24 repositories — the only place SQL is written
 ├── schemas/           request/response shapes, all on ApiModel
-├── services/          20 services — business rules and authorization,
+├── services/          22 services — business rules and authorization,
 │                      plus path_tree.py: pure tree shaping, no I/O
 │
 ├── ingestion/         cloner, walker, chunker, embedder/, vector_store, pipeline
 ├── observability/     the AI call log: features, record, recorder, trace_ids, langfuse_sink
-├── queue/             topics, producer, consumer, retry, protocol, checklist, mock_data
+├── queue/             topics, producer, consumer, retry, protocol, checklist, mock_data, eval
 ├── rag/               retriever, chat, prompts, answerer, grounding, capability, errors
 │   └── graph/         build.py, nodes.py, state.py
 ├── checklist/         generator, model_output, operations, source
 ├── mockdata/          generator, model_output, operations
+├── eval/              generator, runner, sampling, model_output — the synthetic Q&A harness
 └── live/              kinds, events, staging, fanout, bus, kafka — the live-update
                        stream behind `GET /events` (issue #48)
 ```

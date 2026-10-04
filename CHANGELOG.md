@@ -55,6 +55,28 @@ client can have received it, so it is recorded under Changed and allowed in a `M
   your own Ask answers only — never to the QA Checklist or Mock Data. Each dial maps to a fixed
   sentence in `app/rag/prompts.py`; no user text reaches a prompt.
 - Audit event `user.answer_style.updated`.
+- **The synthetic Q&A eval harness** (`docs/PRD.md` §2.1, phase 2.6): generate a fixed set of 10,
+  25 or 50 question and reference-answer pairs from a project's indexed code (optionally under one
+  path, `explain` and `locate` questions only), then run the set through the real answer graph as
+  often as you like. Each run records two signals side by side: whether first-pass retrieval
+  found the pair's source file, and an LLM judge's `correct` / `partial` / `wrong` verdict. A run
+  answers with no persona, writes no conversation, and is stamped with the prompt version, the
+  chat and embedding models and the project generation it read. Excluding a pair is the only
+  curation; two runs compare on the pairs both answered. The project page gains an Eval tab and
+  a set opens at `/projects/[id]/eval/[setId]`.
+- Eight routes: `POST`/`GET /projects/{id}/eval-sets`, `GET`/`DELETE /eval-sets/{id}`,
+  `PUT /eval-pairs/{id}/excluded`, `POST`/`GET /eval-sets/{id}/runs` and `GET /eval-runs/{id}`.
+- Permissions `eval.read` (viewer, editor, owner) and `eval.run` (editor, owner). Run
+  `python -m app.cli restore-system-roles` after migrating so cached grants pick them up; custom
+  roles gain neither.
+- `ErrorCode.EVAL_SET_NOT_FOUND` and `ErrorCode.EVAL_RUN_NOT_FOUND` (404),
+  `ErrorCode.EVAL_SET_NOT_READY` and `ErrorCode.EVAL_RUN_IN_PROGRESS` (409).
+- Audit events `eval_set.generation.requested`, `eval_set.deleted`, `eval_pair.updated` and
+  `eval_run.requested`. None carries a question, reference, answer or judge reason.
+- Call features `eval_generate` and `eval_judge`; live event kinds `eval_set` and `eval_run`.
+- `KAFKA_EVAL_TOPIC` (`askrepo.eval.jobs`, with its own retry and dead-letter topics),
+  `KAFKA_EVAL_PARTITIONS` (`1`), `EVAL_SCROLL_PAGE_SIZE` (`256`) and `EVAL_ANSWER_CONCURRENCY`
+  (`2`).
 
 ### Changed
 
@@ -71,6 +93,9 @@ client can have received it, so it is recorded under Changed and allowed in a `M
 - Generated QA Checklist test cases — from generation and from the module chat — are written in
   plain language for any tester: no file paths, code names, HTTP details or error codes. Sources
   stay in the sources panel. Existing rows are not rewritten.
+- The `409 PROJECT_NOT_READY` message for a re-index in progress now ends "…then try again." (it
+  said "…then generate."), because eval runs take the same guard. The code and status are
+  unchanged.
 
 ### Fixed
 

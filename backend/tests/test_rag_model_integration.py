@@ -29,7 +29,10 @@ import pytest
 from app.checklist.model_output import ProposedChangeSet
 from app.checklist.operations import _narrow_kind
 from app.config import Settings
+from app.eval.model_output import GeneratedPair, JudgeVerdict
+from app.eval.sampling import SampledChunk, names_its_file
 from app.models.checklist import ChecklistItemKind
+from app.models.eval import EvalQuestionType
 from app.rag.answer_style import AnswerDetail, AnswerStyle
 from app.rag.chat import build_chat_model
 from app.rag.graph.state import Classification
@@ -37,6 +40,8 @@ from app.rag.prompts import (
     ANSWER_PROMPT,
     CLASSIFY_PROMPT,
     ExistingItem,
+    build_eval_judge_prompt,
+    build_eval_pair_prompt,
     build_propose_prompt,
     build_reduce_prompt,
     format_spans,
@@ -458,3 +463,50 @@ async def test_brief_answers_are_shorter_than_thorough_ones_and_both_cite(
     assert len(brief) < len(thorough), f"brief={len(brief)} thorough={len(thorough)}"
     assert CITATION_LABEL.search(brief), brief
     assert CITATION_LABEL.search(thorough), thorough
+
+
+LOGIN_CHUNK = SampledChunk(
+    file_path="app/auth/login.py",
+    start_line=30,
+    end_line=44,
+    symbol="authenticate",
+    content=(
+        "def authenticate(email: str, password: str) -> User:\n"
+        "    user = users.get_by_email(email)\n"
+        "    if user is None or not bcrypt.checkpw(password, user.password_hash):\n"
+        "        raise AppError(401, 'INVALID_CREDENTIALS')\n"
+        "    return user"
+    ),
+)
+
+
+async def test_a_locate_question_does_not_name_its_file(settings: Settings) -> None:
+    model = build_chat_model(settings).with_structured_output(GeneratedPair)
+    pair = await model.ainvoke(
+        build_eval_pair_prompt(chunk=LOGIN_CHUNK, question_type=EvalQuestionType.LOCATE)
+    )
+    assert isinstance(pair, GeneratedPair)
+    assert pair.question.strip() and pair.reference_answer.strip()
+    assert not names_its_file(pair.question, LOGIN_CHUNK.file_path), pair.question
+
+
+async def test_the_judge_accepts_the_reference_and_rejects_a_wrong_location(
+    settings: Settings,
+) -> None:
+    judge = build_chat_model(settings).with_structured_output(JudgeVerdict)
+    question = "Where is a wrong password refused at sign-in?"
+    reference = "In `authenticate` in app/auth/login.py, which raises INVALID_CREDENTIALS."
+
+    same = await judge.ainvoke(
+        build_eval_judge_prompt(question=question, reference=reference, answer=reference)
+    )
+    other = await judge.ainvoke(
+        build_eval_judge_prompt(
+            question=question,
+            reference=reference,
+            answer="It is handled in `check_session` in app/auth/session.py.",
+        )
+    )
+
+    assert isinstance(same, JudgeVerdict) and same.verdict == "correct", same
+    assert isinstance(other, JudgeVerdict) and other.verdict == "wrong", other

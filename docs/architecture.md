@@ -51,7 +51,7 @@ Generating a checklist takes minutes too — it is one model call per file plus 
 can run inside a request.
 
 So `POST /projects` writes the row, publishes a job, and returns immediately. The worker
-(`app/worker.py`) is a separate process running three Kafka consumers, a reconcile sweep, and
+(`app/worker.py`) is a separate process running four Kafka consumers (ingestion, checklist, mock data and eval), a reconcile sweep, and
 a mail loop (Phase 2.4). It is the only process that writes vectors, and it is the only process
 that runs a model for generation. The mail loop is a sibling of the reconcile sweep, both on
 60-second ticks, so a broken mail service does not starve stranded-job recovery.
@@ -67,7 +67,7 @@ an embedding model. The worker holds both.
 | **Postgres** | Every row: users, projects, conversations, checklist, mock data | API and worker, through `app/repositories/` |
 | **Qdrant** | Code chunks as vectors, with the chunk text in the payload | API (query) and worker (write) |
 | **Redis** | Login rate-limit counters, and each user's project-grant snapshot | API only |
-| **Kafka** | The job queue, on 12 topics | API publishes, worker consumes |
+| **Kafka** | The job queue, on 16 topics | API publishes, worker consumes |
 
 Two of these are commonly assumed wrong:
 
@@ -177,18 +177,24 @@ matter:
 
 ## The job queue
 
-Twelve Kafka topics, in three independent ladders — ingestion, checklist, mock data:
+Sixteen Kafka topics, in four independent ladders — ingestion, checklist, mock data, eval:
 
 | Ladder | Main topic | Retries | Dead letter |
 | --- | --- | --- | --- |
 | Ingestion | `askrepo.ingest.requested` | `.retry.1m`, `.retry.10m` | `askrepo.ingest.dlq` |
 | Checklist | `askrepo.checklist.generate` | `.retry.1m`, `.retry.10m` | `askrepo.checklist.dlq` |
 | Mock data | `askrepo.mock-data.generate` | `.retry.1m`, `.retry.10m` | `askrepo.mock-data.dlq` |
+| Eval | `askrepo.eval.jobs` | `.retry.1m`, `.retry.10m` | `askrepo.eval.dlq` |
 
 They are separate on purpose: a checklist generation retrying for eleven minutes must not sit in
 the queue a project reindex is waiting in.
 
-**A thirteenth topic, `askrepo.live.events`, is not a fourth ladder.** One partition,
+The eval ladder carries **two job kinds on one topic**, `generate` (write a set's pairs) and `run`
+(answer and judge a set), because the cap is one eval job per instance whichever kind it is:
+`KAFKA_EVAL_PARTITIONS` defaults to `1`, concurrency expressed as topology. `target_id` names the
+set for `generate` and the run for `run`, and the lease on that row is what stops a duplicate.
+
+**A seventeenth topic, `askrepo.live.events`, is not a fifth ladder.** One partition,
 `retention.ms` of one hour, no retry topic and no dead letter — a live event that never arrives
 is not retried, because the safety poll every screen keeps running recovers it, and retrying a
 hint nobody is still waiting for would just be noise. It is also the only topic the API process
@@ -209,7 +215,7 @@ substitute, and there is deliberately no setting for it.
 
 **A reconcile sweep runs every 60 seconds.** Publishing to Kafka can fail after the row is
 already committed, and a worker can die holding a lease. The sweep re-publishes jobs that were
-never picked up and jobs whose lease expired. It runs for all three ladders. The same tick also
+never picked up and jobs whose lease expired. It runs for all four ladders; the eval sweep re-publishes a stranded set or run on the checklist pattern, and a re-published run skips the pairs it already answered. The same tick also
 prunes dead refresh tokens and, when `AUDIT_RETENTION_DAYS` is set, audit rows past the window.
 
 ---
@@ -321,7 +327,7 @@ The flow: a repository or service method **stages** a `LiveEvent` on the session
 staged during that transaction to the process's publisher, and `after_transaction_end` discards
 whatever is left once the outermost transaction ends (a rollback, or a close) with no publish at
 all — so an event can only leave a process describing a change that actually
-committed. The publisher writes to a new topic, `askrepo.live.events`, alongside the three job
+committed. The publisher writes to a new topic, `askrepo.live.events`, alongside the four job
 ladders below. Every API process (not the worker) also runs one `KafkaLiveEventHub` consumer
 against that topic — no consumer group, every partition assigned to itself, seeking to the end on
 start — and fans each message out in memory to that process's open `/events` streams. Each stream

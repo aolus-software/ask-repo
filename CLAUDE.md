@@ -36,7 +36,7 @@ file outranks the one that went stale.
 | Turning on and running the AI call log (Langfuse) | [`docs/langfuse.md`](docs/langfuse.md) |
 
 **All four datastores are read** — Postgres, Redis, Qdrant and Kafka. The worker reads a chat
-model as well as an embedder: checklist and mock-data generation each run a model in that
+model as well as an embedder: checklist, mock-data and eval generation, and eval runs, each run a model in that
 process, ingestion does not.
 
 Two facts about generation outrank everything else written about it. **The generator scrolls the
@@ -250,8 +250,8 @@ nothing else, so it cannot be aimed at anyone's entries. Never add an `update` m
 a route that writes.
 
 **`AuditRecorder.record` opens its own session and never raises.** That is what makes "an audit
-failure cannot fail a user's action" structural rather than a promise each of the 43 call sites
-keeps (42 in services, plus the `seed-admins` CLI). The accepted consequence is not to be quietly reframed as a guarantee: an action that
+failure cannot fail a user's action" structural rather than a promise each of the 47 call sites
+keeps (46 in services, plus the `seed-admins` CLI). The accepted consequence is not to be quietly reframed as a guarantee: an action that
 commits and then crashes before its audit write leaves no row, silently — the trail is a strong
 record, not a complete one. Services record **after** the commit that made the change true, from
 plain locals, never from an ORM object.
@@ -488,12 +488,12 @@ enforced there — if you add a convention, wire it into the config in the same 
 
 App Router, React 19, Tailwind CSS 4 (CSS-first `@theme`, no `tailwind.config.js` for tokens).
 The routes that exist are `/login`, `/forgot-password`, `/reset-password`, `/change-password`, `/` (dashboard),
-`/projects`, `/projects/[id]`, `/ask`, `/ask/[conversationId]`, `/settings/users`,
+`/projects`, `/projects/[id]`, `/projects/[id]/eval/[setId]`, `/ask`, `/ask/[conversationId]`, `/settings/users`,
 `/settings/roles`, `/settings/roles/[id]`, `/settings/audit`, `/settings/audit/[eventId]`,
 `/notifications`, `/settings/notifications`, `/profile`, `/settings/feedback`,
 `/checklist`, and `/checklist/[moduleId]` — the last
 of which now carries a Mock Data tab beside the checklist grid, no new route of its own.
-`/projects/[id]` likewise carries a Members tab rather than a route. `/settings/notifications`
+`/projects/[id]` likewise carries a Members tab and an Eval tab rather than routes of their own; only a single eval set opens at its own route. `/settings/notifications`
 now only redirects to `/profile#notifications` — notification preferences moved to the profile,
 so Settings is admin-only again and `/settings` itself is not a screen: a group's index route
 only redirects to its first reachable child.

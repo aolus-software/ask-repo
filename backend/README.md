@@ -23,9 +23,9 @@ all of them and sweeps up jobs the broker never received. `POST /projects` enque
 indexes.
 
 On top of that sit Dev Knowledge (streaming RAG Q&A over an indexed project), the LangGraph
-intent routing and corrective retrieval loop behind it, the QA Checklist, and the Mock Data
-Generator — see the `### Conversations`, `### QA Checklist`, and `### Mock Data Generator` route
-sections below.
+intent routing and corrective retrieval loop behind it, the QA Checklist, the Mock Data
+Generator, and the Eval harness — see the `### Conversations`, `### QA Checklist`,
+`### Mock Data Generator` and `### Eval harness` route sections below.
 
 ## Requirements
 
@@ -369,6 +369,29 @@ it fails rather than inventing fields when no schema-shaped code exists under th
 returns `409 EXPORT_TOO_LARGE` over that limit, the same reasoning
 `checklist_export_max_rows` already documents above.
 
+### Eval harness
+
+Synthetic Q&A sets generated from a project's indexed code, and repeatable runs of a set against
+the answer path. Every route resolves its project through `access.py`: a non-member gets
+`404 PROJECT_NOT_FOUND` on all of them, including by set, pair or run id.
+
+| Method | Path | Auth | Description |
+| --- | --- | --- | --- |
+| `POST` | `/projects/{id}/eval-sets` | `eval.run` | Request a set of 10, 25 or 50 pairs with a `balanced`, `explain` or `locate` mix, optionally under a `sourcePath`; returns the set in `generating` status (`202`). `409 PROJECT_NOT_READY` while the project is not indexed or is being re-indexed, `400 MODULE_PATH_NOT_INDEXED` if the path matches nothing |
+| `GET` | `/projects/{id}/eval-sets` | `eval.read` | List the project's sets, newest first, each with its latest run's tally |
+| `GET` | `/eval-sets/{id}` | `eval.read` | One set with its pairs. `404 EVAL_SET_NOT_FOUND` |
+| `DELETE` | `/eval-sets/{id}` | `eval.run` | Soft-delete the set, its pairs, runs and results. `409 EVAL_RUN_IN_PROGRESS` while a run is live |
+| `PUT` | `/eval-pairs/{id}/excluded` | `eval.run` | Exclude a pair from future runs, or include it again; a pair is excluded, never edited |
+| `POST` | `/eval-sets/{id}/runs` | `eval.run` | Answer and judge every included pair; returns the run in `running` status (`202`). `409 EVAL_SET_NOT_READY` (still generating, or every pair excluded), `409 EVAL_RUN_IN_PROGRESS`, `409 PROJECT_NOT_READY`, `409 EMBEDDING_MODEL_CHANGED` |
+| `GET` | `/eval-sets/{id}/runs` | `eval.read` | List the set's runs, newest first |
+| `GET` | `/eval-runs/{id}` | `eval.read` | One run with its per-pair results: the answer, the verdict and the judge's reason. `404 EVAL_RUN_NOT_FOUND` |
+
+A set is `generating` → `ready` / `failed` and a run is `running` → `done` / `failed`; there is no
+`pending` state, because the request writes the first one directly. A run is scored on two
+signals: whether the first retrieval pass found the pair's source file (`hit`), and an LLM judge's
+`correct` / `partial` / `wrong` verdict (`error` when a pair could not be answered or judged).
+A run answers with no persona and writes no conversation or message.
+
 ### Audit trail
 
 Append-only. Both routes are **reads**, and that is the point: there is no route that writes an
@@ -381,7 +404,7 @@ scope would not describe this read.
 | `GET` | `/audit-events` | admin | A page of events, newest first. Filters: `eventType`, `actorUserId`, `projectId`, `outcome` (`success`/`failure`), `occurredFrom`, `occurredTo`, `search`, plus `page`/`limit`. A bare `occurredTo` date (no time component) is inclusive of that whole day. `search` matches `actorEmail`/`targetLabel` by substring and `ipAddress` by prefix. `sort` accepts the literal `created_at` only — the one ordering the `created_at` index supports — with `sortDirection` defaulting to `desc` |
 | `GET` | `/audit-events/{id}` | admin | One event with its full `details` payload, `ipAddress`, and a `current` block saying whether the actor is still active and the target still exists. `404 AUDIT_EVENT_NOT_FOUND` |
 
-Every write and every export in the app records one of **39 event types** catalogued in
+Every write and every export in the app records one of **45 event types** catalogued in
 `app/core/audit.py`; which operations must is a rule (`.claude/rules/audit-trail.md`), enforced in
 both directions by `tests/test_audit_coverage.py`. The payload is an allowlist per event type,
 never a diff of dirty attributes, and it never carries a secret or any content — no message text,
@@ -407,7 +430,7 @@ event: exemption 5 in `.claude/rules/audit-trail.md`.
 ### Live events
 
 A per-user Server-Sent Events stream that tells a connected client *what changed*, never
-what it changed to — a `project`, `checklist_module`, `mock_data` or `notification` row's
+what it changed to — a `project`, `checklist_module`, `mock_data`, `notification`, `eval_set` or `eval_run` row's
 id, so the client refetches through the ordinary REST routes and their own `403`/`404`
 rules decide what it sees. Access is re-checked on the stream itself, not trusted from the
 token that opened it: every non-notification event and every heartbeat reloads the
@@ -464,6 +487,7 @@ backend/
 │   │       ├── mock_data_datasets.py    # module-scoped mock data reads, generate, chat, export
 │   │       ├── mock_data_records.py     # DELETE /mock-data-records/{id}
 │   │       ├── mock_data_change_sets.py # apply + discard mock-data change sets
+│   │       ├── eval.py     # /projects/{id}/eval-sets, /eval-sets, /eval-pairs, /eval-runs
 │   │       ├── audit_events.py # GET /audit-events, GET /audit-events/{id} (admin, reads only)
 │   │       ├── notifications.py # /notifications list + unread-count + mark-read(-all)
 │   │       ├── notification_preferences.py # GET/PUT /notification-preferences
@@ -471,7 +495,7 @@ backend/
 │   │       └── feedback.py # /feedback — vote on model output + the admin aggregate
 │   ├── core/
 │   │   ├── access.py     # resolve_project_scope + require_permission — the only two
-│   │   ├── audit.py      # the 37-event catalogue, the per-event field allowlist, AuditRecorder
+│   │   ├── audit.py      # the 45-event catalogue, the per-event field allowlist, AuditRecorder
 │   │   ├── crypto.py     # SecretBox (PAT encryption at rest) + scrub
 │   │   ├── errors.py     # AppError, ErrorCode, exception handlers
 │   │   ├── feedback.py   # the feedback catalogue — target types, reason codes, feature mapping
@@ -511,6 +535,7 @@ backend/
 │   │       └── build.py  # wires the nodes into the compiled graph, incl. routing edges
 │   ├── checklist/        # QA Checklist: modules, generation, chat, change sets
 │   ├── mockdata/          # Mock Data Generator: generation, model output contracts, change-set ops
+│   ├── eval/              # Eval harness: set generator, run + judge, chunk sampling, model output
 │   ├── worker.py          # the worker entrypoint: consumers + the reconcile sweep
 │   ├── models/            # SQLAlchemy models: User, RefreshToken, Project, Conversation,
 │   │                      #   Message, Role, RolePermission, ProjectMembership, ...
