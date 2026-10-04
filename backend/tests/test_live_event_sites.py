@@ -19,11 +19,14 @@ from app.db.session import get_sessionmaker
 from app.live.bus import InMemoryLiveEventBus
 from app.live.events import (
     checklist_module_event,
+    eval_run_event,
+    eval_set_event,
     mock_data_event,
     notification_event,
     project_event,
 )
 from app.models.checklist import ChangeSetOrigin, ChangeSetStatus, ChecklistModuleStatus
+from app.models.eval import EvalRun, EvalRunStatus, EvalSet, EvalSetStatus
 from app.models.mock_data import MockDataChangeSet, MockDataDataset, MockDataDatasetStatus
 from app.models.notification import NotificationEvent
 from app.models.project import ProjectStatus
@@ -31,6 +34,8 @@ from app.models.user import User
 from app.queue.protocol import InMemoryIngestionQueue
 from app.repositories.checklist_module import LEASE_SECONDS as CHECKLIST_LEASE_SECONDS
 from app.repositories.checklist_module import ChecklistModuleRepository
+from app.repositories.eval_run import EvalRunRepository
+from app.repositories.eval_set import EvalSetRepository
 from app.repositories.mock_data_change_set import MockDataChangeSetRepository
 from app.repositories.mock_data_dataset import MockDataDatasetRepository
 from app.repositories.project import ProjectRepository
@@ -568,3 +573,118 @@ async def test_raise_event_with_no_recipients_stages_nothing(
     await db_session.commit()
 
     assert live_bus.published == []
+
+
+# --- app/repositories/eval_set.py and eval_run.py -----------------------------------
+
+
+async def _eval_set(db_session: AsyncSession, status: str = "generating") -> EvalSet:
+    user = await create_user(db_session)
+    project = await create_project(db_session, created_by=user.id)
+    row = EvalSet(
+        id=uuid.uuid4(),
+        project_id=project.id,
+        name="s",
+        requested_count=10,
+        mix="balanced",
+        status=status,
+        pair_count=0,
+        created_by=user.id,
+    )
+    db_session.add(row)
+    await db_session.commit()
+    return row
+
+
+async def _eval_run(db_session: AsyncSession) -> EvalRun:
+    eval_set = await _eval_set(db_session, "ready")
+    row = EvalRun(
+        id=uuid.uuid4(),
+        set_id=eval_set.id,
+        project_id=eval_set.project_id,
+        status="running",
+        created_by=eval_set.created_by,
+    )
+    db_session.add(row)
+    await db_session.commit()
+    return row
+
+
+async def test_eval_set_claim_release_defer_stage_an_eval_set_event(
+    db_session: AsyncSession, live_bus: InMemoryLiveEventBus
+) -> None:
+    row = await _eval_set(db_session)
+    repository = EvalSetRepository(db_session)
+    job_id = uuid.uuid4()
+    expected = eval_set_event(row.id, row.project_id)
+
+    for call in (
+        repository.claim(set_id=row.id, job_id=job_id, worker_id="w", lease_seconds=300),
+        repository.defer(set_id=row.id, worker_id="w", hold_seconds=60),
+        repository.release(set_id=row.id, job_id=job_id, worker_id="w", status=EvalSetStatus.READY),
+    ):
+        live_bus.published.clear()
+        assert await call is True
+        await db_session.commit()
+        assert live_bus.published == [expected]
+
+
+async def test_eval_set_claim_stranded_stages_an_eval_set_event(
+    db_session: AsyncSession, live_bus: InMemoryLiveEventBus
+) -> None:
+    row = await _eval_set(db_session)
+    row.updated_at = datetime.now(UTC) - timedelta(seconds=999)
+    await db_session.commit()
+    live_bus.published.clear()
+
+    stranded = await EvalSetRepository(db_session).claim_stranded(older_than_seconds=120)
+    await db_session.commit()
+
+    assert stranded == [row.id]
+    assert live_bus.published == [eval_set_event(row.id, row.project_id)]
+
+
+async def test_eval_set_soft_delete_stages_an_eval_set_event(
+    db_session: AsyncSession, live_bus: InMemoryLiveEventBus
+) -> None:
+    row = await _eval_set(db_session, "ready")
+    live_bus.published.clear()
+
+    await EvalSetRepository(db_session).soft_delete(row.id, row.project_id)
+    await db_session.commit()
+
+    assert live_bus.published == [eval_set_event(row.id, row.project_id)]
+
+
+async def test_eval_run_claim_release_defer_stage_an_eval_run_event(
+    db_session: AsyncSession, live_bus: InMemoryLiveEventBus
+) -> None:
+    row = await _eval_run(db_session)
+    repository = EvalRunRepository(db_session)
+    job_id = uuid.uuid4()
+    expected = eval_run_event(row.id, row.project_id)
+
+    for call in (
+        repository.claim(run_id=row.id, job_id=job_id, worker_id="w", lease_seconds=300),
+        repository.defer(run_id=row.id, worker_id="w", hold_seconds=60),
+        repository.release(run_id=row.id, job_id=job_id, worker_id="w", status=EvalRunStatus.DONE),
+    ):
+        live_bus.published.clear()
+        assert await call is True
+        await db_session.commit()
+        assert live_bus.published == [expected]
+
+
+async def test_eval_run_claim_stranded_stages_an_eval_run_event(
+    db_session: AsyncSession, live_bus: InMemoryLiveEventBus
+) -> None:
+    row = await _eval_run(db_session)
+    row.updated_at = datetime.now(UTC) - timedelta(seconds=999)
+    await db_session.commit()
+    live_bus.published.clear()
+
+    stranded = await EvalRunRepository(db_session).claim_stranded(older_than_seconds=120)
+    await db_session.commit()
+
+    assert stranded == [row.id]
+    assert live_bus.published == [eval_run_event(row.id, row.project_id)]
