@@ -10,10 +10,18 @@ from langchain_core.runnables import RunnableLambda
 from langgraph.graph import END, START, StateGraph
 from langgraph.graph.state import CompiledStateGraph
 
-from app.rag.graph.nodes import Node
+from app.rag.answer_style import AnswerDetail, AnswerFamiliarity, AnswerStyle
+from app.rag.graph.nodes import Node, build_answer_from_history, build_generate
 from app.rag.graph.state import Classification, EvidenceVerdict, Intent, TurnState
+from app.rag.prompts import (
+    ANSWER_DETAIL_BRIEF,
+    ANSWER_FAMILIARITY_NEW,
+    READER_PREFERENCES_PREAMBLE,
+)
 from app.rag.retriever import Retriever
 from app.schemas.conversation import StreamEvent
+from tests.fakes import ScriptedChatModel
+from tests.test_retriever import _span
 
 
 def test_intent_serialises_as_its_value() -> None:
@@ -213,6 +221,7 @@ def base_state(**overrides: object) -> TurnState:
         "existing_records": [],
         "record_operations": [],
         "record_change_summary": "",
+        "answer_style": None,
     }
     state.update(overrides)  # type: ignore[typeddict-item]  # test helper takes arbitrary overrides
     return state
@@ -1213,3 +1222,40 @@ async def test_propose_node_drops_invalid_operations_one_at_a_time() -> None:
     assert emitted[0].operations[0].test_name == "Valid operation"
     assert len(state["operations"]) == 1
     assert state["operations"][0]["testName"] == "Valid operation"
+
+
+async def test_generate_puts_the_answer_style_in_the_system_message() -> None:
+    model = ScriptedChatModel(tokens=["See [1]."])
+    state = base_state(
+        spans=[_span("app/a.py", 0, 1, 10)],
+        evidence_ok=True,
+        answer_style=AnswerStyle(detail=AnswerDetail.BRIEF),
+    )
+
+    await run_node(build_generate(model, timeout_seconds=5), state)
+
+    system = model.captured_stream_messages[0][0].content
+    assert ANSWER_DETAIL_BRIEF in system
+    assert system.index(READER_PREFERENCES_PREAMBLE) < system.index("Grounding rules.")
+
+
+async def test_generate_without_a_style_sends_no_preference_block() -> None:
+    model = ScriptedChatModel(tokens=["See [1]."])
+
+    await run_node(
+        build_generate(model, timeout_seconds=5),
+        base_state(spans=[_span("app/a.py", 0, 1, 10)], evidence_ok=True),
+    )
+
+    assert READER_PREFERENCES_PREAMBLE not in model.captured_stream_messages[0][0].content
+
+
+async def test_answer_from_history_puts_the_answer_style_in_the_system_message() -> None:
+    model = ScriptedChatModel(tokens=["You asked about the lease."])
+
+    await run_node(
+        build_answer_from_history(model, timeout_seconds=5),
+        base_state(answer_style=AnswerStyle(familiarity=AnswerFamiliarity.NEW)),
+    )
+
+    assert ANSWER_FAMILIARITY_NEW in model.captured_stream_messages[0][0].content

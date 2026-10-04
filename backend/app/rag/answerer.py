@@ -24,6 +24,7 @@ from app.config import Settings
 from app.core.errors import ErrorCode
 from app.models.conversation import FinishReason
 from app.observability.features import scope_config
+from app.rag.answer_style import AnswerStyle
 from app.rag.graph import build_answer_graph
 from app.rag.graph.state import Intent, TurnState
 from app.rag.grounding import NO_CONTEXT_ANSWER, WEAK_EVIDENCE, grounding_warnings
@@ -69,6 +70,7 @@ class Answerer:
         self.model_id = model_id
         self.semaphore = semaphore
         self.settings = settings
+        self.propose_target = propose_target
         self.graph = build_answer_graph(
             retriever=retriever,
             chat_model=chat_model,
@@ -88,6 +90,7 @@ class Answerer:
         existing_records: list[ExistingRecord] | None = None,
         change_set_id: uuid.UUID | None = None,
         module_name: str = "",
+        answer_style: AnswerStyle | None = None,
     ) -> AsyncGenerator[StreamEvent]:
         """Run the graph, forwarding its events and terminating exactly once.
 
@@ -102,7 +105,18 @@ class Answerer:
         chat's, `existing_records` the mock-data chat's; `change_set_id` and
         `module_name` are shared, because only one proposer is ever wired into a
         given graph.
+
+        `answer_style` is the Ask screen's alone. A proposing answerer serves a
+        refinement chat, whose proposal becomes a document the whole project shares,
+        so a style there is refused outright rather than ignored: a call-site mistake
+        fails the first request instead of quietly shaping shared content.
         """
+        if answer_style is not None and self.propose_target is not None:
+            raise ValueError(
+                "an answer style applies to private answers only, never to a "
+                f"{self.propose_target} refinement chat"
+            )
+
         if self.semaphore.locked():
             # Silence for the length of someone else's answer is indistinguishable
             # from a hung request.
@@ -130,6 +144,7 @@ class Answerer:
                 "existing_records": existing_records or [],
                 "record_operations": [],
                 "record_change_summary": "",
+                "answer_style": answer_style,
             }
 
             final: TurnState | None = None

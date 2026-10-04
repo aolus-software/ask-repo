@@ -35,6 +35,7 @@ from app.rag.prompts import (
     build_mock_data_propose_prompt,
     build_propose_prompt,
     format_spans,
+    render_reader_preferences,
     to_langchain_history,
 )
 from app.rag.retriever import RetrievedChunk, Retriever
@@ -256,6 +257,7 @@ def build_generate(chat_model: BaseChatModel, *, timeout_seconds: float) -> Node
             history=to_langchain_history(state["history"]),
             question=state["question"],
             evidence_note=note,
+            reader_preferences=render_reader_preferences(state["answer_style"]),
         )
 
         parts: list[str] = []
@@ -300,7 +302,9 @@ def build_answer_from_history(chat_model: BaseChatModel, *, timeout_seconds: flo
         emit(CitationsEvent(citations=[]))
         emit(StatusEvent(phase="generating"))
         messages = HISTORY_ANSWER_PROMPT.format_messages(
-            history=to_langchain_history(state["history"]), question=state["question"]
+            history=to_langchain_history(state["history"]),
+            question=state["question"],
+            reader_preferences=render_reader_preferences(state["answer_style"]),
         )
 
         parts: list[str] = []
