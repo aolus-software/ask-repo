@@ -6,9 +6,18 @@ A finding that has been fixed moves, verbatim, to
 [`audit-finding-solved-logs.md`](audit-finding-solved-logs.md). A number cited below that is not
 in this file (§1.1, §9.1 and so on) is there.
 
-**Sweeps:** 2026-09-19 (at `f902f4c`, phase 2.2 branch) and 2026-09-27 (at `5b43564`, `main`).
-Both were read-only. The first was followed by a separate, explicitly requested fix pass; the
-second has had none.
+**Sweeps:** 2026-09-19 (at `f902f4c`, phase 2.2 branch), 2026-09-27 (at `5b43564`, `main`) and
+2026-10-04 (at `df7594e`, `main`). All three were read-only. The first two were each followed by a
+separate, explicitly requested fix pass; the third has had none.
+
+**Re-verified 2026-10-17**, still at `df7594e` (no application code had changed). Every open
+finding was re-checked against the code. None was refuted. §8.5 and §8.6 were promoted from
+SUSPECT to CONFIRMED, and §9.31 stays SUSPECT. §2.2 was corrected and retitled: its original count
+and one citation were wrong. Line citations were updated wherever code had been misquoted.
+Overstatements were narrowed in §1.3 (which tests are loose), §3.2 (messages have no soft delete
+of their own), §5.1 (the leak is bounded to about a minute), §7.1 (what the rule actually
+requires), §8.1 (the timeout has to be added, not moved) and §8.2 (the repeat stops once a worker
+claims the row).
 
 **Ground truth:** [`PRD.md`](PRD.md), which outranks everything else, then `CLAUDE.md`, then
 `.claude/rules/*.md`, then [`SECURITY.md`](../SECURITY.md). The rules outrank the code.
@@ -22,13 +31,60 @@ settle it, is stated).
 
 ## Open findings
 
-**None.** Every finding raised so far has been fixed. The most recent ones were fixed on
-`fix/audit-sweep-2026-09-27`, the same day they were found, and each is in
-[`audit-finding-solved-logs.md`](audit-finding-solved-logs.md) under the sweep that raised it.
-The next sweep adds its findings here.
+Every finding from the 2026-09-19 and 2026-09-27 sweeps has been fixed and is in
+[`audit-finding-solved-logs.md`](audit-finding-solved-logs.md). Everything below was raised on
+2026-10-04 and is open.
 
-Nothing either sweep found was security-relevant. Both found access, scoping, conversation
-privacy, SSRF, soft delete, secrets, the response contract and job handling clean.
+| # | Finding | Severity | Raised |
+| --- | --- | --- | --- |
+| §3.1 | An administrator can recover a vote's exact time through the feedback date filters, and with it the voter | 🔴 | 2026-10-04 |
+| §8.1 | The worker container never receives the chat model settings | 🔴 | 2026-10-04 |
+| §1.3 | The eval routes' 404 code tells a non-member whether an id exists | 🟠 | 2026-10-04 |
+| §3.2 | Deactivating a user leaves their private conversations live, contrary to the PRD | 🟠 | 2026-10-04 |
+| §8.2 | One failed step in the 60-second sweep makes it re-publish stranded jobs every minute | 🟠 | 2026-10-04 |
+| §2.2 | Two services flatten the project scope into a raw id list, and the single-point grep cannot see it | 🟡 | 2026-10-04 |
+| §3.3 | Deleting a project keeps the free-text notes on its Ask feedback | 🟡 | 2026-10-04 |
+| §5.1 | Deleting a project mid-run can leave live eval results under a deleted run | 🟡 | 2026-10-04 |
+| §7.1 | Four eval routes do not declare `422` | 🟡 | 2026-10-04 |
+| §7.2 | Eval, feedback and activity lists accept `sort`/`search` and ignore them | 🟡 | 2026-10-04 |
+| §7.3 | An eval set can be created with a whitespace-only name | 🟡 | 2026-10-04 |
+| §8.3 | A failed eval run reports zero tallies and no finish time | 🟡 | 2026-10-04 |
+| §8.4 | The eval set generator never checks that it still holds its lease | 🟡 | 2026-10-04 |
+| §8.5 | A resumed eval run overwrites its own provenance stamp | 🟡 | 2026-10-04 |
+| §8.6 | Eval requests audit after the publish, unlike reindex | 🟡 | 2026-10-04 |
+| §9.17 | `HOST` and `PORT` are settings nothing reads | 🟡 | 2026-10-04 |
+| §9.19 | The "project is indexed" guard exists in three copies | 🟡 | 2026-10-04 |
+| §9.20 | The lease and heartbeat mechanism is copied across five repositories | 🟡 | 2026-10-04 |
+| §9.21 | Four dead `STRANDED_AFTER_SECONDS` constants | 🟡 | 2026-10-04 |
+| §9.22 | Eval does not normalise `sourcePath` the way checklist modules do | 🟡 | 2026-10-04 |
+| §9.18 | `APP_VERSION` defaults to `0.1.0` on a 2.2.0 release | 📄 | 2026-10-04 |
+| §9.23 | `docs/README.md` and `docs/architecture.md` carry stale counts | 📄 | 2026-10-04 |
+| §9.24 | `docs/codebase.md`'s tree misses modules | 📄 | 2026-10-04 |
+| §9.25 | `backend/README.md`'s layout and worker description are stale | 📄 | 2026-10-04 |
+| §9.26 | `docs/PRD.md` §6 does not record Phase 2.6 as shipped | 📄 | 2026-10-04 |
+| §9.27 | `docs/notifications.md` carries an "in progress" banner | 📄 | 2026-10-04 |
+| §9.28 | The eval harness is missing from `docs/langfuse.md` and the timeout docs | 📄 | 2026-10-04 |
+| §9.29 | `CHANGELOG.md` `[Unreleased]` has duplicate headings and misfiled entries | 📄 | 2026-10-04 |
+| §9.30 | Stale comments in the feedback schema and the audit coverage test | 📄 | 2026-10-04 |
+| §9.31 | `PROMPT_VERSION` changes when a non-answer prompt changes (SUSPECT) | 📄 | 2026-10-04 |
+
+## Top priorities (2026-10-04)
+
+1. **An administrator can work out who cast a feedback vote** (§3.1). The admin list shows only
+   the day of a vote so it cannot be matched against the audit trail — but the date filters accept
+   a time to the second, so narrowing the window recovers it. Make the filters day-only.
+2. **In Docker, the worker never receives the chat model settings** (§8.1). In production it falls
+   back to an Ollama address inside its own container and should refuse to start; anywhere, a
+   provider set in `infra/.env` reaches the API and not generation. Move the `CHAT_*` variables
+   into the block both services share.
+3. **The 60-second recovery sweep can start the same generation every minute** (§8.2) if any later
+   step in that tick fails, because every step shares one transaction. Commit each step on its own.
+4. **Deactivating a user does not delete their private conversations** (§3.2), which the PRD says
+   it does.
+5. **The eval routes' error code reveals whether an id exists** to someone with no membership
+   (§1.3).
+6. Then the eval job edge cases (§5.1, §8.3–§8.6), the response-contract gaps (§7.1–§7.3), the
+   duplication (§9.19–§9.22), and the documentation (§9.18, §9.23–§9.31).
 
 ---
 
@@ -378,6 +434,617 @@ in the same pass.
   `docs/README.md` and `backend/README.md`'s table); 40 audit event types (`docs/data.md`); nine
   fan-out sites (`notifications.md`). `SECURITY.md` covers `SMTP_PASSWORD`. `README.md`'s Roadmap
   defers to PRD §6 with no checkboxes.
+
+---
+
+# Sweep 2026-10-04
+
+**Swept:** 2026-10-04 at `df7594e` (`main`). **Scope:** the whole backend and infrastructure,
+weighted toward what merged since v2.2.0: user feedback on model output and the AI call log
+(Phase 2.5, PR #57), the synthetic question-and-answer eval harness and per-user answer style
+(Phase 2.6, PR #58). **Ground truth:** unchanged. **Read-only** — nothing below has been fixed.
+
+**Numbering** continues each category (`§1.3`, `§3.1`, `§9.17`…) and never reuses a number.
+
+**Four decisions were put to the owner during this sweep.** The PRD is right about deactivation
+and the code should follow it (§3.2). An eval id's existence must not be told apart from a random
+id's (§1.3). The two frontend decisions are in [`ui-audit-findings.md`](ui-audit-findings.md).
+
+## §1 Access control
+
+### §1.3 The eval routes' 404 code tells a non-member whether an id exists — 🟠 inconsistency
+
+**Evidence:** CONFIRMED by reading; not executed.
+
+**Where:** `backend/app/services/eval.py:348-365` (`_load_set`), `:201-208` (`set_excluded`),
+`:334-341` (`get_run`), and the module docstring `:1-7`; `backend/tests/test_eval_api.py:175-181`,
+`:606`, `:614`
+
+**What this is.** An eval set is a saved list of questions generated from a project's code. It
+belongs to one project, and only that project's members may see it. `CLAUDE.md` ("`403` vs `404`
+is a security decision") requires that someone with no membership cannot tell "this does not
+exist" from "you may not see this" — repository names are private inventory, and so is the
+existence of work done against them.
+
+**Why this can happen.** `_load_set` looks the set up by id first. A missing id answers
+`404 EVAL_SET_NOT_FOUND`. A real id then goes through `require_readable_project`, which answers a
+non-member with `404 PROJECT_NOT_FOUND`. Both are `404`, but the **code** differs, and the code is
+in the response body. So a former member who kept a set's id (or anyone who saw it in a URL) can
+tell whether it still exists. Runs and pairs follow the same path. One test
+(`test_eval_api.py:181`) accepts either code, so it does not catch this. The other two pin the
+current, split behaviour: `:606` asserts `PROJECT_NOT_FOUND` for a non-member and `:614` asserts
+`EVAL_RUN_NOT_FOUND` for an unknown run. The service docstring and the module docstring argue it
+is safe because the project is never named. That is true, but it is not the rule.
+
+**What it costs.** Small today — ids are random UUIDs, so this confirms a known id rather than
+enumerating. It is, however, the one place in the app where the answer differs; feedback
+(`FEEDBACK_TARGET_NOT_FOUND`) and checklist reads already give a single code.
+
+**What we should do.** Resolve the caller's access first and turn every miss into the resource's
+own code: `EVAL_SET_NOT_FOUND` for sets and pairs, `EVAL_RUN_NOT_FOUND` for runs. Tighten the loose
+test at `:181` to assert that one code, change `:606` to expect the resource's code, and correct both
+docstrings. About an hour. Owner decision (2026-10-04): treat as a finding.
+
+## §2 Read scoping
+
+### §2.2 Two services flatten the project scope into a raw id list, and the single-point grep cannot see it — 🟡 hygiene
+
+> **Corrected 2026-10-17.** This finding was first filed as "three reads of `scope.ids`", citing
+> `repositories/feedback.py:41`. That line reads a `project_ids` filter, not `scope.ids`. A recount
+> finds five reads outside `access.py`. Three of them are repositories applying a `ProjectScope`
+> they were handed, which is the intended pattern. The two that matter are in services. The
+> heading and blocks below are the corrected version.
+
+**Evidence:** CONFIRMED (`grep -rn "scope\.ids" backend/app`, re-run 2026-10-17).
+
+**Where:** `backend/app/services/feedback.py:260`, `backend/app/services/me.py:125` (the two service
+sites); `backend/app/repositories/project.py:84`, `checklist_module.py:58`, `checklist_item.py:42`
+(the three repository sites, which are correct); `backend/tests/test_scoping_is_single_point.py`
+
+**What this is.** `docs/PRD.md` §7 requires that which projects a user may read is decided in one
+function, `resolve_project_scope`, and a grep test enforces it. The resolver returns a
+`ProjectScope`: either unrestricted (an administrator) or a set of project ids. Repositories
+receive that object and apply it in their `WHERE` clause.
+
+**Why this can happen.** `FeedbackService` and `MeService` do not pass the `ProjectScope` down.
+Each unpacks it into a plain list (`None if scope.unrestricted else scope.ids`), and the repository
+filters on that list. The result is correct today, because both lists come straight from the
+resolver. But the repository can no longer tell a resolver-issued list from any other list of ids.
+The grep test has no pattern for `scope.ids`, so a later service that builds the list some other
+way would also pass.
+
+**What it costs.** Nothing today. It is the shape that lets read scoping leak out of `access.py`
+without any test noticing.
+
+**What we should do.** Pass the `ProjectScope` itself into `FeedbackRepository` and the activity
+query, the way the project and checklist repositories already do. Then add a grep pattern for
+`scope.ids` outside `app/core/access.py` and `app/repositories/`. About an hour.
+
+## §3 Conversation and voter privacy
+
+### §3.1 An administrator can recover a vote's exact time through the feedback date filters — 🔴 bug
+
+**Evidence:** CONFIRMED by reading `backend/app/repositories/feedback.py:36-63`; not executed.
+Re-verified 2026-10-17.
+
+**Where:** `backend/app/schemas/feedback.py:59-60` (`created_from`, `created_to` are `datetime`),
+`backend/app/repositories/feedback.py:36-63` (`_apply`; the date filters are `:50-62`),
+`backend/app/services/feedback.py:252-268` (`_filters`)
+
+**What this is.** Users can give a thumbs-up or thumbs-down on an answer, with an optional note.
+Administrators read these in aggregate on `/settings/feedback`. The voter is never shown — and,
+deliberately, neither is the vote's time of day: `.claude/rules/feedback.md` rule 2 explains that
+the audit trail already records, to the second, when each user opened a conversation
+(`conversation.created`). A vote time to the second could be matched against that row and would
+name the voter. So the admin list shows only the **day** (`createdOn`) and orders within a day by
+a random id.
+
+**Why this can happen.** The filters `createdFrom` and `createdTo` are typed as full timestamps.
+Only a value at exactly midnight is widened to a whole day; any other value is compared to the
+second, and the same filter drives the list, its count and every aggregate. An administrator:
+
+1. filters to one project, one feature, and a 30-second window → sees whether a vote is inside it;
+2. halves the window repeatedly → recovers the vote's second;
+3. opens `/audit-events` for that project → finds whose `conversation.created` falls just before.
+
+**What it costs.** It defeats the specific protection the PRD and rule 2 promise, for every Ask
+vote on the instance, using only screens an administrator already has. A voter's note becomes
+attributable to them. (Rule 2 already calls day-only a mitigation rather than a guarantee: on a
+project with a single member, that member is the voter anyway. This finding is about every other
+project, where the day-only design does hide the voter and the filters undo it.)
+
+**What we should do.** Make the filters day-precision: type them as `date`, and compare
+`>= day` and `< day + 1` in UTC (the same day `createdOn` reports). Add a test that a sub-day
+window cannot narrow the result. One to two hours. See `.claude/rules/feedback.md` rule 2.
+
+### §3.2 Deactivating a user leaves their private conversations live — 🟠 inconsistency
+
+**Evidence:** CONFIRMED.
+
+**Where:** `docs/PRD.md:448`; `backend/app/services/user.py:215-258` (`soft_delete`, through its
+audit record);
+`backend/app/repositories/conversation.py:87` (only `soft_delete_for_project` exists)
+
+**What this is.** Soft delete marks a row deleted (`deleted_at`) rather than removing it, so every
+query skips it. The PRD says that when an administrator deactivates an account, "their private
+conversations are soft-deleted with them".
+
+**Why this can happen.** `UserService.soft_delete` deactivates the user and revokes their refresh
+tokens, and does nothing else. Their conversations, and the notes on their Ask feedback, stay
+live. (Messages have no `deleted_at` of their own; they are reachable only through their
+conversation.) They are unreachable only because their owner can no longer sign in.
+
+**What it costs.** Rows the PRD promises are deleted are not. Anything that later reads
+conversations without going through the owner — a reactivation, an export, a future admin tool —
+would find them.
+
+**What we should do.** In the same transaction as the deactivation, soft-delete the user's
+conversations (a per-owner sibling of `soft_delete_for_project`) and null the notes on their Ask feedback (`UPDATE feedback SET note =
+NULL` for their `message` targets). Add a test. About two hours. Owner decision (2026-10-04): the
+PRD is right and the code should change.
+
+### §3.3 Deleting a project keeps the free-text notes on its Ask feedback — 🟡 hygiene
+
+**Evidence:** CONFIRMED.
+
+**Where:** `backend/app/services/project.py:347`, `:387`; `backend/app/repositories/feedback.py:150-166`
+(`clear_notes_for_conversation`, called only from `backend/app/services/conversation.py:199`)
+
+**What this is.** Deleting one conversation nulls the notes on its feedback, because a note is
+the user's own text about a private turn. Deleting a project soft-deletes all its conversations
+and its feedback.
+
+**Why this can happen.** The project delete soft-deletes the feedback rows but never nulls their
+notes, unlike the per-conversation path. Feedback retention defaults to keep-forever.
+
+**What it costs.** User-written text about private turns survives in deleted rows indefinitely.
+No route reads it, so nothing is exposed today; it is a second copy outside the lifecycle the
+conversation path enforces.
+
+**What we should do.** Null the project's Ask feedback notes in the delete transaction. The same
+statement serves §3.2. Half an hour.
+
+## §5 Soft delete
+
+### §5.1 Deleting a project mid-run can leave live eval results under a deleted run — 🟡 hygiene
+
+**Evidence:** CONFIRMED by reading; the race was not executed.
+
+**Where:** `backend/app/services/project.py:309-387` (the soft-delete block of `delete`);
+`backend/app/eval/runner.py:57` (`RESULT_BATCH = 10`), `:148-172` (the result loop), `:231-238`
+(`_require_lease`), `:332-346` (`_renew`), `:182-194` (the final release);
+`backend/app/repositories/eval_run.py:21-22`, `:112`, `:135`
+
+**What this is.** An eval run answers each question with the real answer graph and stores the
+answer and a judge's verdict as result rows, committing every ten. A worker holds a lease on the
+run and renews it every 60 seconds.
+
+**Why this can happen.** A project delete soft-deletes the project's eval rows, but takes no lock
+on a running run and does not refuse while one is active (unlike reindex and eval set delete,
+which refuse with `409 EVAL_RUN_IN_PROGRESS`). Sequence: an owner deletes the project → the run row is
+soft-deleted → the worker keeps committing batches of ten results → those rows are live, under a
+deleted run, and nothing sweeps them.
+
+The window is bounded. `renew_lease` filters on `deleted_at IS NULL`, so the renewal task's next
+tick (at most 60 seconds later) fails, and `_require_lease` stops the loop before the next commit.
+The final `release` also refuses a deleted run and rolls back. What leaks is only the batches
+committed between the delete and that tick: up to about a minute of results.
+
+**What it costs.** Orphan rows holding model answers about a deleted repository's code. No route
+returns them (the run is deleted), so it is invisible rather than exposed.
+
+**What we should do.** Either refuse a project delete with `409 EVAL_RUN_IN_PROGRESS` while a run
+is active, or have the runner's batch commit re-check the run (`... WHERE deleted_at IS NULL`).
+One to two hours.
+
+## §7 The response contract
+
+### §7.1 Four eval routes do not declare `422` — 🟡 hygiene
+
+**Evidence:** CONFIRMED.
+
+**Where:** `backend/app/api/routes/eval.py:91-102`, `:105-116`, `:136-150`, `:170-181`;
+`backend/app/api/routes/projects.py:118`, `:184` (the siblings that declare it)
+
+**What this is.** `.claude/rules/response-api.md` (`:117-120`, `:150`) requires `422` on a route
+that takes a body or typed query parameters. The project routes go further and declare it for a
+typed UUID path parameter too, so `/docs` and generated clients describe the malformed-id case.
+
+**Why this can happen.** `get_eval_set`, `delete_eval_set`, `start_eval_run` and `get_eval_run`
+take a UUID path parameter and omit `422`, while the project routes with the same shape declare
+it. Strictly, the rule's wording does not require it for a path-only route, so this is a sibling
+inconsistency rather than a rule breach. `start_eval_run` also takes a body, and for that route
+the rule does apply.
+
+**What we should do.** Add `422` to the four `responses` blocks. Minutes.
+
+### §7.2 Eval, feedback and activity lists accept `sort`/`search` and ignore them — 🟡 hygiene
+
+**Evidence:** CONFIRMED.
+
+**Where:** `backend/app/api/routes/eval.py:74-89`, `:153-167`; `backend/app/services/eval.py:136-151`,
+`:319-332`; `backend/app/api/routes/feedback.py:37-50` (takes `FeedbackListQuery`, a `ListQuery`
+subclass); `backend/app/api/routes/me.py:80-93`
+
+**What this is.** `ListQuery` carries `page`, `limit`, `sort`, `sortDirection` and `search`.
+`.claude/rules/router.md` says an unknown `sort` answers `400`, and the project, checklist and
+conversation lists do.
+
+**Why this can happen.** These routes take `ListQuery` but have a fixed order, so the service
+reads only `page` and `limit`. `?sort=bogus` answers `200`, and `?search=x` returns the whole list.
+
+**What it costs.** A client that sends a search gets an unfiltered list and no error, and the
+generated docs advertise parameters that do nothing.
+
+**What we should do.** Add a `PageQuery` (page and limit only) for fixed-order lists, or honour
+or reject the fields. One to two hours, across the four routes.
+
+### §7.3 An eval set can be created with a whitespace-only name — 🟡 hygiene
+
+**Evidence:** CONFIRMED.
+
+**Where:** `backend/app/schemas/eval.py:22`; `backend/app/services/eval.py:90`
+
+**Why this can happen.** `name` has `min_length=1` but no stripping, and the service strips it
+after validation. `{"name": "   "}` passes, stores `""`, and writes an empty audit `target_label`.
+
+**What we should do.** Strip in a validator before the length check. Minutes. The checklist
+module name has the same gap; fix both together.
+
+## §8 Job and status handling
+
+### §8.1 The worker container never receives the chat model settings — 🔴 bug
+
+**Evidence:** the configuration is CONFIRMED (`docker compose config` resolves no `CHAT_*`
+variable on `worker` in either file, and `worker` loads no env file). The production crash is
+inferred; `make up-prod` and the worker's log would confirm it.
+
+**Where:** `infra/docker-compose.yml:242-249`, `infra/docker-compose.prod.yml:263-269` (the
+`CHAT_*` block, under `backend:` only, commented "API-only: the worker indexes, it never answers a
+question"); `backend/app/config.py:175-177`; `backend/app/worker.py:284-298`
+
+**What this is.** The worker is the background process that runs long jobs. Since milestone 4 it
+also needs a chat model: checklist and mock-data generation, eval set generation and eval runs all
+run there, and at startup it checks the model can return structured output, refusing to boot if
+not (`docs/llm.md`). The two compose files pass the chat settings — provider, model, base URL,
+key — to the API container only. The comment explaining why is from milestone 2, when the worker
+only indexed.
+
+**Why this can happen.** With no `CHAT_*` in its environment, the worker uses the defaults in
+`Settings`: provider `ollama` at `http://localhost:11434`. Inside a container, `localhost` is the
+container itself, not the host. Then:
+
+- **Production** (`make up-prod`): nothing answers there, the startup check fails, and the worker
+  crash-loops. No indexing, generation or eval runs.
+- **Development** (`make up`): probably hidden, because the worker bind-mounts the working copy over
+  `/app` and so can read `backend/.env`.
+- **Either stack:** an operator who sets `CHAT_PROVIDER=anthropic` and a key in `infra/.env` changes
+  the API only. Answers use Anthropic; checklists and eval runs still try Ollama.
+
+**What it costs.** A production instance whose background work never starts, or, when it does
+start, generation running on a different model than the operator chose.
+
+**What we should do.** Move the `CHAT_*` block into the `x-app-env` block both services share, in
+both compose files. Also add `GENERATION_TIMEOUT_SECONDS`, which is in neither file today, only in
+`backend/.env.example:110`. Replace the stale comment, and the one at
+`infra/docker-compose.prod.yml:~319-322` that still names "probing embedding dimensions" as the
+worker's only failure mode. Then
+run `make up-prod` and confirm the worker passes its probe. About an hour.
+`.claude/rules/documentation.md` requires the production file to receive the same change.
+
+### §8.2 One failed step in the 60-second sweep makes it re-publish stranded jobs every minute — 🟠 latent risk
+
+**Evidence:** CONFIRMED mechanism (`backend/app/worker.py:226-264` — one session, one commit at the
+end). The trigger needs a later step to fail; no test forces one.
+
+**Where:** `backend/app/worker.py:226-264`, `:280`
+
+**What this is.** Every 60 seconds the worker's reconcile sweep finds jobs that were never picked
+up — an ingestion, a checklist or mock-data generation, an eval set or run — and publishes them
+again. For generation jobs it gives each re-publish a fresh job id, so a duplicate cannot be
+refused by its id; what stops the sweep publishing the same row forever is that it stamps the row's
+`updated_at` (`CLAUDE.md`, "The checklist sweep is the exception").
+
+**Why this can happen.** All of the sweep's steps share one transaction, committed once at the end
+after token, audit, notification and feedback pruning. Sequence: the sweep stamps three stranded
+rows → publishes their jobs to Kafka (this cannot be undone) → a later prune step raises → the
+transaction rolls back and the stamps are lost → next tick, the same rows look stranded again and
+are published again.
+
+**What it costs.** For as long as the later failure persists **and** the row stays unclaimed, one
+extra job is published per stranded row per minute. Once a worker claims the row, its live lease
+takes it out of `claim_stranded`'s reach, and the repeat stops. A duplicate generation that does
+run costs a full set of model calls. A duplicate eval run costs only the pairs not yet answered,
+because a resumed run skips them. This is real model spend on a hosted provider, in a failure that
+nobody sees. Eval is the third job kind on this path; checklist and mock data were already
+exposed.
+
+**What we should do.** Commit after each `reconcile_*_once`, and give the pruning steps their own
+session and `try`/`except`. Add a test that a failing prune does not undo a stamp. Two hours.
+
+### §8.3 A failed eval run reports zero tallies and no finish time — 🟡 hygiene
+
+**Evidence:** CONFIRMED.
+
+**Where:** `backend/app/queue/eval.py:133-143` (`_RunLease.fail`); `backend/app/eval/runner.py:182-194`
+
+**Why this can happen.** Tallies (`hits`, `correct`, `partial`, `wrong`, `errors`,
+`pairs_answered`) and `finished_at` are written only when a run finishes `done`. A run that
+answers 30 of 50 questions and then fails keeps its 30 committed results but is released `failed`
+with tallies of zero and no finish time.
+
+**What it costs.** The runs table shows "hits 0/0 · correct 0" for a run whose detail sheet lists 30
+answers, and its duration cannot be computed.
+
+**What we should do.** On failure, write `finished_at` and tallies computed from the committed
+results. One hour.
+
+### §8.4 The eval set generator never checks that it still holds its lease — 🟡 hygiene
+
+**Evidence:** CONFIRMED.
+
+**Where:** `backend/app/eval/generator.py:88-119`, `:139-143`; compare `backend/app/eval/runner.py:231-238`
+
+**Why this can happen.** The runner checks its renewal task before each batch; the generator
+starts one and never reads it. If the set is deleted while generating (`delete_set` refuses only
+while a *run* is active), or its lease lapses and the sweep re-publishes it, the generator carries
+on through up to 50 model calls and only learns at the end, when its release matches no row and it
+discards everything.
+
+**What it costs.** Wasted model calls; no stuck or corrupt rows.
+
+**What we should do.** Check the renewal task in the per-question loop, as the runner does, and
+consider refusing to delete a set that is still generating. One hour.
+
+### §8.5 A resumed eval run overwrites its own provenance stamp — 🟡 hygiene
+
+**Evidence:** CONFIRMED 2026-10-17 (was SUSPECT). The overwrite is in
+`backend/app/eval/runner.py:132-138` and `backend/app/repositories/eval_run.py:88-96` (`started_at`
+reset at `:93`). The trigger is reachable: a resume happens only after a lease lapses, which means
+a worker restart or a redeploy, and that is exactly when `PROMPT_VERSION` or the `CHAT_*` settings
+can change (§8.1 makes the settings drift more likely). The embedding model and index generation
+cannot change mid-run, because reindex refuses with `409` (`backend/app/services/project.py:271-279`).
+How often it happens in practice cannot be measured from the code.
+
+**What this is.** Each run records which prompt version, chat model, judge model, embedding model
+and index generation it used, so two runs can be compared honestly. `docs/PRD.md` (`:343`, `:354`)
+says a score is comparable only against a fixed prompt; the list of stamped fields comes from
+`app/models/eval.py`.
+
+**Why this can happen.** Every attempt overwrites the stamp and resets `started_at`. A run that
+answers 20 questions, is retried after a restart, and resumes on a different model is stamped only
+with the second.
+
+**What we should do.** Stamp only when empty; on resume, compare and fail the run if the stamp
+would change. Set `started_at` only once. One hour.
+
+### §8.6 Eval requests audit after the publish, unlike reindex — 🟡 hygiene
+
+**Evidence:** CONFIRMED 2026-10-17 (was SUSPECT). The ordering is certain: commit `:105`, publish
+`:107`, audit `:117-133` in `create_set`; commit `:291`, publish `:295`, audit `:305` in
+`start_run`. `producer.produce_to` raises on a Kafka failure. How often a produce fails after the
+commit cannot be measured from the code.
+
+**Where:** `backend/app/services/eval.py:105-134`, `:291-316`; compare
+`backend/app/services/project.py:293-306`
+
+**Why this can happen.** `create_set` and `start_run` commit, then publish to Kafka, then record
+the audit event. If the publish raises, the user sees a `500`, the row survives (the sweep later
+publishes it), and `eval_set.generation.requested` / `eval_run.requested` is never written.
+Reindex and checklist generation record before the publish. Mock data has the same order as eval.
+
+**What we should do.** Record the audit event before the publish (still after the commit, as
+`.claude/rules/audit-trail.md` requires), in eval and mock data. Half an hour.
+
+## §9 Code health — dead code, duplication, and documentation
+
+### §9.17 `HOST` and `PORT` are settings nothing reads — 🟡 hygiene
+
+**Where:** `backend/app/config.py:28-29`; `backend/.env.example:12-13`; `docs/configuration.md:82-83`
+
+The bind address comes from the uvicorn command (`Makefile:207`,
+`infra/backend.prod.Dockerfile:68`). `grep -rnw "settings\.\(host\|port\)" backend/app` returns
+nothing, so an operator who sets `PORT=9000` changes nothing. **Fix:** delete the two fields and
+their example and doc rows, or pass them to uvicorn. Every other of the 108 settings is read.
+
+### §9.18 `APP_VERSION` defaults to `0.1.0` on a 2.2.0 release — 📄 doc
+
+**Where:** `backend/app/config.py:23`, `backend/.env.example:7`, `docs/configuration.md:74`;
+`backend/pyproject.toml:3`, `frontend/package.json:3`
+
+`/` and `/health` report `0.1.0`; both package files say `2.2.0`. **Fix:** decide whether
+`APP_VERSION` tracks the release; if it does, read it from the package metadata rather than a
+default someone must remember to bump.
+
+### §9.19 The "project is indexed" guard exists in three copies — 🟡 hygiene
+
+**Where:** `backend/app/services/index_guards.py:16-26`, `backend/app/core/access.py:155-181`
+(`require_answerable`), `backend/app/services/indexed_path.py:200-212`; a fourth variant at
+`backend/app/eval/runner.py:116-119` (it raises `TerminalIngestionError` with its own message)
+
+Same condition, same message, three bodies (`require_answerable` adds the `EMBEDDING_MODEL_CHANGED`
+check on top of the shared condition) — although `index_guards.py`'s own docstring says it
+exists "so a fourth caller cannot drift" (commit `8f42a28`, a partial fix of §9.4). **Fix:** move
+`require_indexed` to a leaf module (importing it from `index_guards` would cycle through
+`IndexedPathReader`) and call it from all three. One hour.
+
+### §9.20 The lease and heartbeat mechanism is copied across five repositories — 🟡 hygiene
+
+**Where:** `claim`/`renew_lease`/`release`/`claim_stranded`/`defer` in
+`backend/app/repositories/checklist_module.py`, `mock_data_dataset.py`, `eval_set.py`, `eval_run.py`
+(and the project's `claim`/`renew_lease`/`release`/`find_stranded`); `LEASE_SECONDS`/`LEASE_RENEWAL_SECONDS`
+repeated in all five; a renewal heartbeat in five runners — `_renew`/`_stop_renewal` in
+`checklist/generator.py:212,235`, `mockdata/generator.py:227,246`, `eval/generator.py:146,159` and
+`eval/runner.py:332,349`, and a differently named `_renew_lease` in `ingestion/pipeline.py:334`; `_defer`/`_fail`/`_route_failure` in three queue handlers
+
+A lease is how one worker claims a job so another cannot run it at the same time. `eval_set.py:3-4`
+calls itself "a near-copy" of the mock-data repository. Parameter names already diverge
+(`generating_older_than_seconds` / `older_than_seconds` / `pending_older_than_seconds`). A fix to the
+lease protocol — §8.2 is one — has to land in five places. **Fix:** a lease helper parameterised
+by table, and one heartbeat context manager. A day; do it before a sixth job kind.
+
+### §9.21 Four dead `STRANDED_AFTER_SECONDS` constants — 🟡 hygiene
+
+**Where:** `backend/app/repositories/checklist_module.py:33`, `mock_data_dataset.py:28`,
+`eval_set.py:23`, `eval_run.py:23`
+
+Nothing imports them; the live value is `backend/app/worker.py:73`. **Fix:** delete them.
+
+### §9.22 Eval does not normalise `sourcePath` the way checklist modules do — 🟡 hygiene
+
+**Where:** `backend/app/services/eval.py:83-91`, `backend/app/eval/generator.py:95`; compare
+`backend/app/services/checklist_module.py:163`; `backend/app/services/path_tree.py:34-47`;
+`backend/app/schemas/eval.py:12`, `:23`; `backend/app/models/checklist.py:25-26`
+
+A checklist module strips whitespace and slashes from its path, so `src/` and `/src` work. Eval
+passes it raw, so the same input answers `400 MODULE_PATH_NOT_INDEXED`. Eval also caps the path at
+1024 characters where checklist uses 512, and repeats the 120-character name limit as its own
+constant. **Fix:** one shared normaliser and the shared length constants. One hour.
+
+### §9.23 `docs/README.md` and `docs/architecture.md` carry stale counts — 📄 doc
+
+| Claim | Where | Actual | How counted |
+| --- | --- | --- | --- |
+| "81 routes" | `docs/README.md:83` | 95 | `grep -rhE "^@[a-z_]+\.(get\|post\|put\|patch\|delete)\(" backend/app/api/routes \| wc -l` (`docs/codebase.md:148` says 95) |
+| "20 tables" | `docs/README.md:27` | 26 | `grep -rh __tablename__ backend/app/models \| wc -l` (`docs/data.md:14` says 26) |
+| "All 104 backend settings" | `docs/README.md:40` | 108 | `len(Settings.model_fields)` |
+| "All 80 settings" | `docs/architecture.md:393` | 108 | same |
+
+The same class as §9.7 and §9.15. **Fix:** correct the numbers, or drop the two settings counts and
+link to `docs/configuration.md`.
+
+### §9.24 `docs/codebase.md`'s tree misses modules — 📄 doc
+
+**Where:** `docs/codebase.md:160` (`ingestion/`), `:163` (`rag/`), `:157` (`services/`), `:168`
+(`live/`)
+
+`ingestion/` lacks `errors.py`; `rag/` lacks `answer_style.py` and `prompt_version.py`; the
+service count says 22 where there are 21 services plus `path_tree.py` and `index_guards.py`, and
+`index_guards.py` is not mentioned; `mail/` is absent; the `live/` line omits `stream.py`. The
+route, model and repository counts are right. **Fix:** update the tree.
+
+### §9.25 `backend/README.md`'s layout and worker description are stale — 📄 doc
+
+**Where:** `backend/README.md:59-75`, `:460-560`; `backend/app/worker.py:383`, `:397`, `:411`,
+`:435` (the four consumers), `:508-512` (the mail loop)
+
+The worker section still says "the API only enqueues indexing and checklist-generation jobs" and
+lists two consumers; there are four, plus their retry consumers, the mail loop and the sweeps. The
+layout block has no `observability/`, `live/` or `mail/`, lists six of 18 schema files, and describes `services/` as
+three services. **Fix:** update both, linking to `docs/codebase.md` for the tree.
+
+### §9.26 `docs/PRD.md` §6 does not record Phase 2.6 as shipped — 📄 doc
+
+**Where:** `docs/PRD.md:1047`; compare `:1046` (Phase 2.5, "Shipped in two stages…")
+
+PR #58 merged the eval harness and answer style, and #61 polished the eval screen. §6 is the only
+place progress is recorded (`.claude/rules/documentation.md`). **Fix:** add a "Shipped" sentence
+naming #58 and #61, in Phase 2.5's style.
+
+### §9.27 `docs/notifications.md` carries an "in progress" banner — 📄 doc
+
+**Where:** `docs/notifications.md:96` ("Amendment (2026-09-27, in progress)"); `docs/PRD.md:1027`
+
+Progress belongs in the PRD only, which records live updates as shipped. **Fix:** drop "in
+progress".
+
+### §9.28 The eval harness is missing from `docs/langfuse.md` and the timeout docs — 📄 doc
+
+**Where:** `docs/langfuse.md:41`, `:152-160` (the traces table), `:167-178`, `:426`; `docs/configuration.md:270`,
+`docs/llm.md:235`
+
+`docs/langfuse.md` never mentions eval: its feature table lacks `eval_generate` and `eval_judge`,
+and it does not say an eval answer is one trace seeded from its result id (which `docs/llm.md`
+does). `GENERATION_TIMEOUT_SECONDS` is documented as covering checklist and mock-data generation
+only; it also bounds eval generation, answers and the judge. **Fix:** add eval to each.
+
+### §9.29 `CHANGELOG.md` `[Unreleased]` has duplicate headings and misfiled entries — 📄 doc
+
+**Where:** `CHANGELOG.md:16`, `:25`, `:34`, `:99`, `:118`; `:101-110`; `:22`
+
+The section reads Changed, Fixed, Added, Changed, Fixed. The `traceUrl` and `createdOn` entries
+are filed as Changed, but feedback has never been released, so they describe the feature as it
+ships and belong in its Added entry. Line 22 says the reindex refusal "reuses the existing error
+code", which is itself new in this release. **Fix:** merge the headings and move the two entries
+before the release is cut.
+
+### §9.30 Stale comments in the feedback schema and the audit coverage test — 📄 doc
+
+**Where:** `backend/app/schemas/feedback.py:95` ("Stage 2 (Langfuse) fills this; until then…
+null" — Stage 2 shipped, `backend/app/services/feedback.py:165-166`);
+`backend/tests/test_audit_coverage.py:11`, `:14`, `:50`, `:221`, `:238-241` ("six", "five"
+exemptions — there are seven: the comment at `:38` says so, and `VALID_EXEMPTIONS` at `:60-62`
+has seven);
+`backend/tests/test_auth_middleware.py:219` ("`/auth/me` does not exist yet" — it does,
+`backend/app/api/routes/auth.py:327`)
+
+**Fix:** reword to "the named exemptions" and rename `test_every_exemption_is_one_of_the_five`.
+
+### §9.31 `PROMPT_VERSION` changes when a non-answer prompt changes — 📄 doc
+
+**Evidence:** SUSPECT — whether this is intended is a design question. Re-checked 2026-10-17 and
+still unsettled. The module docstring (`prompt_version.py:3-6`) and `prompts.py:189` say "any edit
+changes the version" deliberately, and nothing records a decision either way about scoping it to
+the answer path. The owner settles it.
+
+**Where:** `backend/app/rag/prompt_version.py:18-25`; stamped at `backend/app/services/feedback.py:116`,
+`backend/app/observability/recorder.py:110`, `:172`, `backend/app/eval/runner.py:132`
+
+`PROMPT_VERSION` hashes every upper-case constant in `app/rag/prompts.py`, including the
+checklist, mock-data and eval judge prompts. Editing the judge prompt therefore changes the version
+stamped on Ask answers and feedback, though the answer prompt did not change — which weakens the
+PRD's "an eval score is comparable only against a fixed prompt". **Fix:** document it, or hash
+only the answer-path prompts.
+
+## Verified correct in this sweep (2026-10-04), with what was checked
+
+- **Access on every new route.** `backend/app/api/routes/eval.py` (8 routes), `feedback.py` and
+  `me.py`. Eval gates on `eval.read` / `eval.run` through `require_permission`. A member without
+  the permission gets `403 INSUFFICIENT_ROLE`, a non-member `404`, and an admin passes. The feedback
+  reads take `AdminUser`, the writes `CurrentUser`. `/me/answer-style` has no id parameter.
+  No `created_by` or inline `is_admin` gate exists. The new prefixes (`/eval-sets`, `/eval-runs`,
+  `/eval-pairs`, `/feedback`, `/me`) are covered by the forced-password-change gate, which is an
+  allowlist.
+- **Conversation privacy and the feedback write side.** There is no `is_admin` under
+  `/conversations`. Every feedback write miss is the single `404 FEEDBACK_TARGET_NOT_FOUND`, through
+  `get_for_owner` or `ChecklistModuleRepository.get_in_scope`. `FeedbackAdminRead` has no user
+  field and no `updatedAt`. `traceUrl` is never seeded for an Ask vote.
+- **Server-side request forgery** (making the server fetch an address an attacker chose).
+  `git diff v2.2.0..HEAD -- backend/app/ingestion` is empty. `repo_url.py`, the connect-time
+  re-validation in `pipeline.py:233`, and the cloner's pinned resolve, disabled redirects, timeout
+  and size cap are unchanged.
+- **Soft delete reaches eval and feedback.** A project delete soft-deletes results, runs, pairs,
+  sets and feedback in one transaction, children first, and hard-deletes the Qdrant points before
+  committing. Every eval repository read filters `deleted_at`. Eval tables hold no vectors.
+- **Secrets and content.** No response schema carries `encrypted_pat`. The Langfuse keys are read
+  only in `config.py`, `main.py` and `langfuse_sink.py`, and the frontend never sees them.
+  `CallRecord` and `CallStart` have no content or user field. The recorder sets
+  `raise_error = False`, reads only usage from `on_llm_end`, and stores `type(error).__name__`.
+  `langfuse` is imported only after the enabled check. The eval audit allowlists carry no
+  question, reference, answer or judge reason, and eval log lines carry ids and exception class
+  names only. Answer style is three enums mapped to fixed sentences.
+  Observation, not filed: `LANGFUSE_SECRET_KEY`, `CHAT_API_KEY` and `EMBEDDING_API_KEY` are plain
+  `str` where `SMTP_PASSWORD` is `SecretStr`. No leak path was found.
+- **Response contract.** Every raise in `backend/app/services/eval.py` was traced to its route's
+  `responses`; apart from §7.1, nothing is under- or over-declared. Every eval, feedback and me
+  schema inherits `ApiModel`. `AppError(extra=…)` is used only for `LAST_OWNER`.
+  `SSE_EVENT_MODELS` covers the live event payloads, whose `kind` includes `eval_set` and
+  `eval_run`.
+- **Eval jobs cannot stick.** `claim`, `release`, `defer`, `renew_lease` and `claim_stranded` gate
+  on `deleted_at` and the lease owner. `claim_stranded` stamps `updated_at`, as the checklist sweep
+  does (but see §8.2). Every failure path writes a terminal status with a class-name-only error.
+  `EvalConsumer` inherits the pausing consumer. Reindex and run start serialise on the project row.
+  The eval status writes stage live events (`tests/test_live_event_sites.py`).
+- **Counts that hold.**
+  - 47 `AuditRecorder` call sites (46 in services plus the CLI) and 45 audit event types, matching
+    `CLAUDE.md`, `.claude/rules/audit-trail.md` and `docs/data.md`.
+  - 19 rule files, 7 commands, 6 live kinds, 9 notification fan-out sites, 16 job topics plus 1 live
+    topic, 4 worker consumers, and 20 permissions.
+  - All 108 settings are in `backend/.env.example` and `docs/configuration.md`.
+  - Every `.ainvoke`/`.astream` call site is listed in `tests/test_call_sites_tagged.py`, including
+    `eval_generate` and `eval_judge`.
+- **No regressions** of §1.1, §1.2, §2.1, §9.2, §9.3, §9.6, §9.8, §9.13, §9.14 or §9.16. §9.4 is
+  partly fixed; the remainder is §9.19.
 
 ---
 
