@@ -1,4 +1,5 @@
 import { ShieldX } from "lucide-react";
+import { useTranslations } from "next-intl";
 
 import { CenteredMessage } from "@/components/feedback/centered-message";
 
@@ -7,13 +8,14 @@ import { CenteredMessage } from "@/components/feedback/centered-message";
  * caller may see the resource but not act on it — the 403 case (response-api.md).
  */
 export function Forbidden({ message }: { message?: string }) {
+  const t = useTranslations("feedback.forbidden");
   return (
     <CenteredMessage
       icon={ShieldX}
       tone="danger"
       level={2}
-      title="You do not have access to this"
-      description={message ?? "Ask an administrator if you think you should."}
+      title={t("title")}
+      description={message ?? t("description")}
     />
   );
 }

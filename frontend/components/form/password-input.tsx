@@ -1,6 +1,7 @@
 "use client";
 
 import { Eye, EyeOff } from "lucide-react";
+import { useTranslations } from "next-intl";
 import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -22,6 +23,7 @@ export function PasswordInput({
   className,
   ...props
 }: Omit<React.ComponentProps<typeof Input>, "type">) {
+  const t = useTranslations("forms.passwordInput");
   const [visible, setVisible] = useState(false);
 
   return (
@@ -38,7 +40,7 @@ export function PasswordInput({
         size="icon-sm"
         // The label states what pressing it DOES, which is what a screen reader
         // announces; aria-pressed carries the current state separately.
-        aria-label={visible ? "Hide password" : "Show password"}
+        aria-label={visible ? t("hide") : t("show")}
         aria-pressed={visible}
         className="absolute inset-y-0 end-1 my-auto"
         onClick={() => setVisible((current) => !current)}

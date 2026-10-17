@@ -1,5 +1,13 @@
 {
   "listTitle": "Could not load this list",
   "detailTitle": "Could not load this page",
-  "retry": "Try again"
+  "retry": "Try again",
+  "forbidden": {
+    "title": "You do not have access to this",
+    "description": "Ask an administrator if you think you should."
+  },
+  "notFound": {
+    "title": "Not found",
+    "description": "It may have been deleted, or it may never have existed."
+  }
 }

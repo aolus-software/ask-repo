@@ -11,5 +11,14 @@
     "greater_than_equal": "This number is too small.",
     "less_than_equal": "This number is too large.",
     "uuid_parsing": "This is not a valid id."
+  },
+  "passwordInput": {
+    "show": "Show password",
+    "hide": "Hide password"
+  },
+  "passwordField": {
+    "notAccepted": "That password is not accepted.",
+    "looksGood": "Looks good so far.",
+    "hint": "Choose a strong password you do not use anywhere else."
   }
 }
