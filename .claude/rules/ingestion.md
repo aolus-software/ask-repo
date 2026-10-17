@@ -88,6 +88,11 @@ costs a **whole generation**, not a refused claim. Two writes buy back what the 
   the window and the next tick passes over it. Selecting without stamping publishes the same
   module on every tick, forever, for as long as it sits in `generating` with nobody on it — one
   full generation per minute. It also makes concurrent sweeps safe: the UPDATE matches once.
+  **The stamp has to commit on its own**, which is why `reconcile_tick` runs every recovery and
+  prune step through `_run_step`, one transaction each. Put them back in one session and any
+  later step that raises rolls the stamp back while the Kafka publish beside it stands — the
+  same per-minute duplicate, triggered by an unrelated prune
+  (`tests/test_reconcile.py::test_a_failing_prune_step_does_not_undo_a_sweep_stamp`).
 - **A run that fails but is coming back calls `defer`**, which shortens the lease to the moment
   its retry is due and leaves the status alone. Both neighbouring answers are wrong, and each has
   been shipped. Keeping the full five minutes: `claim` commits *before* generation starts, so

@@ -11,11 +11,11 @@ topic, and a sweep that recovers jobs Kafka never received.
 import asyncio
 import logging
 import uuid
-from collections.abc import Sequence
+from collections.abc import Awaitable, Callable, Sequence
 from datetime import UTC, datetime, timedelta
 
 from langchain_core.language_models import BaseChatModel
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.checklist.generator import ChecklistGenerator
 from app.config import Settings, get_settings
@@ -204,6 +204,109 @@ async def reconcile_eval_once(
     return published
 
 
+SweepStep = Callable[[AsyncSession], Awaitable[None]]
+
+
+async def _run_step(
+    sessionmaker: async_sessionmaker[AsyncSession], name: str, step: SweepStep
+) -> None:
+    """One sweep step in a transaction of its own, committed or abandoned alone.
+
+    The steps used to share one session committed at the end, and that is a
+    duplicate-job bug rather than a tidiness one: `claim_stranded` stamps
+    `updated_at` and the Kafka publish beside it cannot be undone, so a prune step
+    raising afterwards rolled the stamp back and the next tick published the same
+    stranded row again, every minute, for as long as the failure lasted. Isolated, a
+    failing step costs only its own work.
+    """
+    try:
+        async with sessionmaker() as session:
+            await step(session)
+            await session.commit()
+    except Exception:
+        logger.exception("reconcile step %s failed", name)
+
+
+async def reconcile_tick(
+    sessionmaker: async_sessionmaker[AsyncSession],
+    *,
+    producer: TopicProducer,
+    topic: str,
+    checklist_topic: str,
+    mock_data_topic: str,
+    eval_topic: str,
+    settings: Settings,
+) -> None:
+    """One pass of the sweep: recover lost jobs of every kind, then prune. Each step
+    runs through `_run_step`, so none can undo another."""
+
+    async def projects(session: AsyncSession) -> None:
+        await reconcile_once(repository=ProjectRepository(session), producer=producer, topic=topic)
+
+    async def modules(session: AsyncSession) -> None:
+        await reconcile_modules_once(
+            repository=ChecklistModuleRepository(session), producer=producer, topic=checklist_topic
+        )
+
+    async def mock_data(session: AsyncSession) -> None:
+        await reconcile_mock_data_once(
+            repository=MockDataDatasetRepository(session),
+            producer=producer,
+            topic=mock_data_topic,
+        )
+
+    async def evals(session: AsyncSession) -> None:
+        await reconcile_eval_once(
+            sets=EvalSetRepository(session),
+            runs=EvalRunRepository(session),
+            producer=producer,
+            topic=eval_topic,
+        )
+
+    async def refresh_tokens(session: AsyncSession) -> None:
+        if pruned := await RefreshTokenRepository(session).delete_expired_and_revoked():
+            logger.info("pruned %d dead refresh tokens", pruned)
+
+    async def reset_tokens(session: AsyncSession) -> None:
+        if pruned := await PasswordResetTokenRepository(session).delete_dead():
+            logger.info("pruned %d dead password reset tokens", pruned)
+
+    async def audit_events(session: AsyncSession) -> None:
+        if settings.audit_retention_days <= 0:
+            return
+        cutoff = datetime.now(UTC) - timedelta(days=settings.audit_retention_days)
+        if pruned := await AuditEventRepository(session).delete_older_than(cutoff):
+            logger.info("pruned %d audit events past the retention window", pruned)
+
+    async def notifications(session: AsyncSession) -> None:
+        if settings.notification_retention_days <= 0:
+            return
+        cutoff = datetime.now(UTC) - timedelta(days=settings.notification_retention_days)
+        if pruned := await NotificationEventRepository(session).delete_older_than(cutoff):
+            logger.info("pruned %d notification events past the retention window", pruned)
+
+    async def feedback(session: AsyncSession) -> None:
+        if settings.feedback_retention_days <= 0:
+            return
+        cutoff = datetime.now(UTC) - timedelta(days=settings.feedback_retention_days)
+        if pruned := await FeedbackRepository(session).delete_older_than(cutoff):
+            logger.info("pruned %d feedback rows past the retention window", pruned)
+
+    steps: tuple[tuple[str, SweepStep], ...] = (
+        ("projects", projects),
+        ("checklist modules", modules),
+        ("mock data", mock_data),
+        ("eval", evals),
+        ("refresh tokens", refresh_tokens),
+        ("password reset tokens", reset_tokens),
+        ("audit events", audit_events),
+        ("notifications", notifications),
+        ("feedback", feedback),
+    )
+    for name, step in steps:
+        await _run_step(sessionmaker, name, step)
+
+
 async def reconcile_loop(
     *,
     producer: TopicProducer,
@@ -222,63 +325,15 @@ async def reconcile_loop(
     sessionmaker = get_sessionmaker()
     while True:
         await asyncio.sleep(RECONCILE_INTERVAL_SECONDS)
-        try:
-            async with sessionmaker() as session:
-                await reconcile_once(
-                    repository=ProjectRepository(session), producer=producer, topic=topic
-                )
-                await reconcile_modules_once(
-                    repository=ChecklistModuleRepository(session),
-                    producer=producer,
-                    topic=checklist_topic,
-                )
-                await reconcile_mock_data_once(
-                    repository=MockDataDatasetRepository(session),
-                    producer=producer,
-                    topic=mock_data_topic,
-                )
-                await reconcile_eval_once(
-                    sets=EvalSetRepository(session),
-                    runs=EvalRunRepository(session),
-                    producer=producer,
-                    topic=eval_topic,
-                )
-                pruned = await RefreshTokenRepository(session).delete_expired_and_revoked()
-                pruned_resets = await PasswordResetTokenRepository(session).delete_dead()
-                pruned_events = 0
-                if settings.audit_retention_days > 0:
-                    cutoff = datetime.now(UTC) - timedelta(days=settings.audit_retention_days)
-                    pruned_events = await AuditEventRepository(session).delete_older_than(cutoff)
-                pruned_notifications = 0
-                if settings.notification_retention_days > 0:
-                    cutoff = datetime.now(UTC) - timedelta(
-                        days=settings.notification_retention_days
-                    )
-                    pruned_notifications = await NotificationEventRepository(
-                        session
-                    ).delete_older_than(cutoff)
-                pruned_feedback = 0
-                if settings.feedback_retention_days > 0:
-                    cutoff = datetime.now(UTC) - timedelta(days=settings.feedback_retention_days)
-                    pruned_feedback = await FeedbackRepository(session).delete_older_than(cutoff)
-                await session.commit()
-                if pruned:
-                    logger.info("pruned %d dead refresh tokens", pruned)
-                if pruned_resets:
-                    logger.info("pruned %d dead password reset tokens", pruned_resets)
-                if pruned_events:
-                    logger.info("pruned %d audit events past the retention window", pruned_events)
-                if pruned_notifications:
-                    logger.info(
-                        "pruned %d notification events past the retention window",
-                        pruned_notifications,
-                    )
-                if pruned_feedback:
-                    logger.info(
-                        "pruned %d feedback rows past the retention window", pruned_feedback
-                    )
-        except Exception:
-            logger.exception("reconcile tick failed")
+        await reconcile_tick(
+            sessionmaker,
+            producer=producer,
+            topic=topic,
+            checklist_topic=checklist_topic,
+            mock_data_topic=mock_data_topic,
+            eval_topic=eval_topic,
+            settings=settings,
+        )
 
 
 async def _build_chat_model(settings: Settings, call_log: CallLog | None = None) -> BaseChatModel:
