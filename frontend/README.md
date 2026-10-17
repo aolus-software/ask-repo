@@ -12,7 +12,8 @@ permission matrix), the admin audit trail (`/settings/audit` and the
 `/settings/audit/[eventId]` detail), and the QA Checklist — the `/checklist` module list and the
 `/checklist/[moduleId]` grid with chat and review panel, which also carries a Mock Data tab
 (generate, refine by chat, review the pending change set, export JSON/`.xlsx`) beside the
-checklist grid, no route of its own. The project detail page at `/projects/[id]` likewise
+checklist grid, no route of its own. `/checklist/export` exports a project's checklist and mock
+data, for every module or a chosen set, as one file or a `.zip`. The project detail page at `/projects/[id]` likewise
 carries a **Members** tab — grant, change role, revoke — as a tab, not a route of its own, and an
 **Eval** tab listing the project's synthetic Q&A sets with a generate dialog. A set opens at
 `/projects/[id]/eval/[setId]`: its pairs (exclude or include each), its runs, a run's per-pair
@@ -106,7 +107,8 @@ frontend/
 │   ├── (auth)/            # shell-less: /login, /change-password
 │   ├── (app)/             # the shell: dashboard, projects (/projects, /projects/[id],
 │   │                      #   /projects/[id]/eval/[setId]),
-│   │                      #   ask, checklist (/checklist, /checklist/[moduleId]),
+│   │                      #   ask, checklist (/checklist, /checklist/export,
+│   │                      #     /checklist/[moduleId]),
 │   │                      #   notifications (/notifications), profile (/profile),
 │   │                      #   settings (/settings/users, /settings/roles, /settings/roles/[id],
 │   │                      #     /settings/audit, /settings/audit/[eventId],

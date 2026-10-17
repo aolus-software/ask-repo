@@ -117,6 +117,21 @@ describe("resolveBreadcrumbs", () => {
     expect(resolveBreadcrumbs("/", member)).toEqual([]);
   });
 
+  it("labels the export page rather than reading it as a module id", () => {
+    expect(
+      resolveBreadcrumbs(
+        "/checklist/export",
+        { isAdmin: false },
+        {
+          "/checklist/export": "renamed",
+        },
+      ),
+    ).toEqual([
+      { href: "/checklist", label: "Checklist" },
+      { href: "/checklist/export", label: "Export" },
+    ]);
+  });
+
   it("resolves a breadcrumb trail into a module", () => {
     expect(resolveBreadcrumbs("/checklist/abc-123", { isAdmin: false })).toEqual([
       { href: "/checklist", label: "Checklist" },

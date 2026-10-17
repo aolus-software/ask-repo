@@ -774,6 +774,7 @@ This replaces the QA List that shipped at M4 earlier — a browsable store of sa
 - As a QA engineer, I can refine the checklist by chat ("add a test for an empty password"), and the reply proposes another change set rather than editing rows behind my back.
 - As a tester, I can record what I observed and mark a row pass, fail, or blocked, even on a checklist somebody else authored.
 - As a QA lead, I can export the filtered grid to `.xlsx` and hand it to someone who does not use AskRepo.
+- As a QA lead, I can export the checklist — and the mock data, if I want it — for a whole project or a chosen set of its modules in one download, instead of one module at a time.
 - As a QA engineer, I can see that a checklist is stale because the repository was reindexed after it was built, and choose whether to regenerate.
 
 **Acceptance criteria**
@@ -788,6 +789,7 @@ This replaces the QA List that shipped at M4 earlier — a browsable store of sa
 - The module chat streams over the same SSE contract as §4.2's answer stream, with one added event carrying the proposed change set. The client sends only an instruction to apply or discard — never proposal content.
 - Deleting a project soft-deletes all four tables; deleting a module soft-deletes its items, change sets, and chat. Nothing reaches Qdrant: the checklist owns no vector points.
 - `GET /checklist-items/export` takes the same filters as the list route and applies **no pagination**, capped at `CHECKLIST_EXPORT_MAX_ROWS` rows with `409 EXPORT_TOO_LARGE` past the cap.
+- **Added 2026-10-17 (issue #60).** `GET /projects/{id}/export` exports one project's checklist, its mock data (§4.4), or both, for every module or a chosen set, from a page at `/checklist/export`. One part is one `.xlsx`; both are one `.zip` of the two. The checklist part is the same one-sheet workbook with its Module column, grouped by module name, and takes the grid's feature, status, source and kind filters. Each part needs its own read permission (`checklist.read`, `mockdata.read`); a module id that is not a live module of the project is `404`. Each part keeps its existing row cap, counted across modules. Both parts are built before either is audited, and each records its existing export event with a `moduleCount`. The per-module exports are unchanged.
 - No screen shows a coverage percentage or a "complete" badge. The UI states which path was enumerated instead, because that is a claim the system can actually support.
 
 **Schema**
@@ -892,6 +894,7 @@ Unlike `messages` (§4.2), `checklist_messages` **does** carry `deleted_at`. Tha
 - Configurable count per generation (5/10/25/50).
 - Generation runs as a background job with an instance-wide concurrency cap, not inline in the request — the same cost profile as checklist generation.
 - Accepted records export as `.json` (an array of field maps) and as `.xlsx` (one row per record, one column per field), from the same module page as the checklist's own export.
+- Several modules' records export together through §4.3's project export: one `.xlsx` that opens on a cover sheet listing every chosen module with its record count and whether its data is stale, then one sheet per module that has records, each with that module's own columns. A module with no records gets a cover row and no sheet, so the file says what it covered rather than silently leaving a module out. No JSON form for several modules.
 
 **Out of scope for v1:** binary or file content generation (a file field's generated value is a filename, never bytes), auto-filling a running target application's UI directly (the output is data to paste or feed into a seed script, not browser automation against another app), per-module RBAC, and the synthetic Q&A eval harness this milestone originally specified — deferred to phase 2, see §2.1's "Synthetic Q&A eval harness".
 

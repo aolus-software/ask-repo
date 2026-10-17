@@ -6,6 +6,7 @@ import type {
   FeedbackTargetType,
   ListParams,
   NotificationListParams,
+  ProjectExportParams,
 } from "@/lib/api/types";
 
 /**
@@ -43,6 +44,7 @@ export const endpoints = {
     detail: (id: string) => `/projects/${id}`,
     reindex: (id: string) => `/projects/${id}/reindex`,
     indexedPaths: (id: string) => `/projects/${id}/indexed-paths`,
+    export: (id: string) => `/projects/${id}/export`,
   },
   conversations: {
     list: "/conversations",
@@ -210,6 +212,21 @@ export function checklistItemListQueryString(params: ChecklistItemListParams): s
   if (params.kind) search.set("kind", params.kind);
   const qs = search.toString();
   return qs ? `?${qs}` : "";
+}
+
+/**
+ * `GET /projects/{id}/export`'s query. `include` and `moduleIds` repeat, the way FastAPI
+ * reads a list; no `moduleIds` means every module of the project.
+ */
+export function projectExportQueryString(params: ProjectExportParams): string {
+  const search = new URLSearchParams();
+  for (const part of params.include) search.append("include", part);
+  for (const id of params.moduleIds) search.append("moduleIds", id);
+  if (params.feature) search.set("feature", params.feature);
+  if (params.status) search.set("status", params.status);
+  if (params.source) search.set("source", params.source);
+  if (params.kind) search.set("kind", params.kind);
+  return `?${search.toString()}`;
 }
 
 /** `listQueryString` plus the audit trail's own filters. */

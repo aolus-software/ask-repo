@@ -166,6 +166,7 @@ repository exists to anyone who can guess an id. A **member** whose role is too 
 | `GET` | `/projects` | any user | List the projects you are a member of, paginated. Admins see all. `?ownerless=true` (**admin only**, else `403 ADMIN_REQUIRED`) narrows to projects with no live owner |
 | `GET` | `/projects/{id}` | any member | One project, including your own `role` and effective `permissions` on it |
 | `GET` | `/projects/{id}/indexed-paths` | any member | Browse (`?path=`) or search (`?search=`) the project's indexed file tree, for the checklist path picker |
+| `GET` | `/projects/{id}/export` | `checklist.read` / `mockdata.read` | Export the test checklist (`include=checklist`), the mock data (`include=mockData`), or both as a `.zip`, for every module or the repeated `moduleIds`; `feature`, `status`, `source` and `kind` narrow the checklist |
 | `POST` | `/projects` | any user | Register a repository and enqueue its first index. The creator is granted `owner` on it |
 | `POST` | `/projects/{id}/reindex` | `project.reindex` | Re-index; raises `reindexInProgress` before publishing, a run already in flight is a no-op, and `409 EVAL_RUN_IN_PROGRESS` while an eval run is `running` |
 | `DELETE` | `/projects/{id}` | `project.delete` | Soft-delete the row and hard-delete its vectors |
@@ -187,6 +188,18 @@ in place of it, so it can only ever narrow what the caller may already read.
 to satisfy `docs/PRD.md` §5.1's same-operation hard delete; if Qdrant is down nothing is
 committed, so the project stays visible and the call can be retried. It also soft-deletes every
 conversation against the project, for every owner (`docs/PRD.md` §4.2).
+
+`export` checks each requested part's read permission separately, so a member whose role reads the
+checklist but not mock data gets `403 INSUFFICIENT_ROLE` for a request carrying both. A
+`moduleIds` value that is not a live module of this project is `404 CHECKLIST_MODULE_NOT_FOUND`,
+whichever project it does belong to. The checklist part is today's one-sheet workbook with its
+Module column, grouped by module name; the mock-data part opens on a `Modules` cover sheet listing
+every chosen module with its record count and whether its data is stale, then one sheet per
+module that has records. Each part is capped by its own setting (`checklist_export_max_rows`,
+`mock_data_export_max_rows`, counted across every module) and answers `409 EXPORT_TOO_LARGE`
+past it. Both parts are built before either is audited, so a refused export records nothing; a
+successful one records `checklist.exported` and/or `mock_data.exported` against the project,
+with a `moduleCount`. The per-module exports below are unchanged.
 
 `indexed-paths` enumerates the project's indexed `file_path` values — a scroll asking for that
 one payload field, no vector search and no model call — cached per `(project, activeGeneration)`

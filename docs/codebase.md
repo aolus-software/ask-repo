@@ -145,7 +145,7 @@ backend/app/
 │
 ├── api/
 │   ├── deps.py        shared dependencies (CurrentUser, AdminUser, service factories)
-│   └── routes/        21 routers, 95 routes
+│   └── routes/        21 routers, 96 routes
 │
 ├── core/              cross-cutting: access, audit, crypto, errors, feedback, grant_cache,
 │                      logging, middleware, notifications, passwords, permissions, rate_limit,
@@ -154,7 +154,7 @@ backend/app/
 ├── models/            12 modules, 26 tables
 ├── repositories/      24 repositories — the only place SQL is written
 ├── schemas/           request/response shapes, all on ApiModel
-├── services/          21 services — business rules and authorization,
+├── services/          22 services — business rules and authorization,
 │                      plus path_tree.py (pure tree shaping, no I/O) and
 │                      index_guards.py (the shared "is the index stable" refusals)
 │

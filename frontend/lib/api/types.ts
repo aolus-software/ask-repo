@@ -518,6 +518,19 @@ export interface ChecklistModuleListParams extends ListParams {
   status?: ChecklistModuleStatus;
 }
 
+/** What `GET /projects/{id}/export` may carry. */
+export type ProjectExportPart = "checklist" | "mockData";
+
+/** The export's query: parts, chosen modules (empty = all), and the grid filters. */
+export interface ProjectExportParams {
+  include: ProjectExportPart[];
+  moduleIds: string[];
+  feature?: string;
+  status?: ChecklistItemStatus;
+  source?: ChecklistItemSource;
+  kind?: ChecklistItemKind;
+}
+
 export interface ChecklistItemListParams extends ListParams {
   projectId?: string;
   moduleId?: string;

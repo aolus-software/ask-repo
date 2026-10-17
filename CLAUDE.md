@@ -493,7 +493,7 @@ The routes that exist are `/login`, `/forgot-password`, `/reset-password`, `/cha
 `/projects`, `/projects/[id]`, `/projects/[id]/eval/[setId]`, `/ask`, `/ask/[conversationId]`, `/settings/users`,
 `/settings/roles`, `/settings/roles/[id]`, `/settings/audit`, `/settings/audit/[eventId]`,
 `/notifications`, `/settings/notifications`, `/profile`, `/settings/feedback`,
-`/checklist`, and `/checklist/[moduleId]` — the last
+`/checklist`, `/checklist/export`, and `/checklist/[moduleId]` — the last
 of which now carries a Mock Data tab beside the checklist grid, no new route of its own.
 `/projects/[id]` likewise carries a Members tab and an Eval tab rather than routes of their own; only a single eval set opens at its own route. `/settings/notifications`
 now only redirects to `/profile#notifications` — notification preferences moved to the profile,

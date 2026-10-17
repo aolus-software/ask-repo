@@ -2,8 +2,8 @@
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 
-import { apiFetch } from "@/lib/api/client";
-import { endpoints } from "@/lib/api/endpoints";
+import { apiFetch, apiFetchRaw } from "@/lib/api/client";
+import { endpoints, projectExportQueryString } from "@/lib/api/endpoints";
 import type {
   ChecklistItemKind,
   ChecklistItemListParams,
@@ -11,7 +11,9 @@ import type {
   ChecklistItemStatus,
   ChecklistModuleDetailResponse,
   ChecklistModuleResponse,
+  ProjectExportParams,
 } from "@/lib/api/types";
+import { filenameFromDisposition, saveDownload } from "@/lib/download";
 import { keys } from "@/lib/query/keys";
 
 function useChecklistModuleInvalidation() {
@@ -223,6 +225,34 @@ export function useDeleteChecklistItem(moduleId: string) {
         queryKey: keys.checklistModules.detail(moduleId),
       });
       queryClient.invalidateQueries({ queryKey: keys.checklistItems.all });
+    },
+  });
+}
+
+/**
+ * Download a project's checklist and/or mock data as one file.
+ *
+ * Fetched rather than linked, unlike the per-module exports: a project-wide export is
+ * the one likely to cross a row cap, and a `409 EXPORT_TOO_LARGE` must land in the
+ * form's error banner, not replace the page with a JSON body. Nothing is cached, so
+ * nothing is invalidated.
+ */
+export function useProjectExport() {
+  return useMutation({
+    mutationFn: async ({
+      projectId,
+      params,
+    }: {
+      projectId: string;
+      params: ProjectExportParams;
+    }) => {
+      const response = await apiFetchRaw(
+        `${endpoints.projects.export(projectId)}${projectExportQueryString(params)}`,
+      );
+      saveDownload(
+        await response.blob(),
+        filenameFromDisposition(response.headers.get("content-disposition")),
+      );
     },
   });
 }

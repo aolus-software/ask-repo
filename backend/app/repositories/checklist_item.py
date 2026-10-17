@@ -6,6 +6,7 @@ this layer can filter across modules without a join (spec 3.2).
 """
 
 import uuid
+from collections.abc import Collection
 from typing import Any, cast
 
 from sqlalchemy import CursorResult, Select, func, select, update
@@ -30,6 +31,7 @@ class ChecklistItemRepository(BaseRepository[ChecklistItem]):
         *,
         project_id: uuid.UUID | None = None,
         module_id: uuid.UUID | None = None,
+        module_ids: Collection[uuid.UUID] | None = None,
         feature: str | None = None,
         status: str | None = None,
         source: str | None = None,
@@ -44,6 +46,8 @@ class ChecklistItemRepository(BaseRepository[ChecklistItem]):
             statement = statement.where(ChecklistItem.project_id == project_id)
         if module_id is not None:
             statement = statement.where(ChecklistItem.module_id == module_id)
+        if module_ids is not None:
+            statement = statement.where(ChecklistItem.module_id.in_(module_ids))
         if feature:
             statement = statement.where(ChecklistItem.feature.ilike(f"%{feature.strip()}%"))
         if status:
@@ -107,6 +111,7 @@ class ChecklistItemRepository(BaseRepository[ChecklistItem]):
         cap: int,
         project_id: uuid.UUID | None = None,
         module_id: uuid.UUID | None = None,
+        module_ids: Collection[uuid.UUID] | None = None,
         feature: str | None = None,
         status: str | None = None,
         source: str | None = None,
@@ -124,6 +129,7 @@ class ChecklistItemRepository(BaseRepository[ChecklistItem]):
             scope,
             project_id=project_id,
             module_id=module_id,
+            module_ids=module_ids,
             feature=feature,
             status=status,
             source=source,

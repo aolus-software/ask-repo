@@ -113,6 +113,15 @@ export function resolveBreadcrumbs(
 
 type RawCrumb = Crumb & { fromId?: boolean };
 
+/**
+ * Pages that sit below a nav item at a fixed path. Without an entry the trailing
+ * segment would be read as a resource id and shown raw, and a page could then rename
+ * it through `useBreadcrumbLabel`, which only id-derived crumbs may allow.
+ */
+const FIXED_CRUMBS: Record<string, string> = {
+  "/checklist/export": "Export",
+};
+
 function resolveRawBreadcrumbs(pathname: string, user: NavUser): RawCrumb[] {
   if (pathname === "/") return [];
 
@@ -137,6 +146,10 @@ function resolveRawBreadcrumbs(pathname: string, user: NavUser): RawCrumb[] {
         trail.push({ href: item.href, label: item.title });
     }
   }
+
+  // A fixed page below a list, not a resource id: its crumb is a label, never `fromId`.
+  const fixed = FIXED_CRUMBS[pathname];
+  if (fixed) return [...trail, { href: pathname, label: fixed }];
 
   // An eval set sits two segments below its project: Projects → project → Eval → set.
   const evalSet = /^\/projects\/([^/]+)\/eval\/([^/]+)$/.exec(pathname);

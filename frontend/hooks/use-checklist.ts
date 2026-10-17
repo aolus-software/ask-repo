@@ -14,9 +14,16 @@ import type {
 import { useLiveEvents } from "@/hooks/use-live-events";
 import { keys } from "@/lib/query/keys";
 
-/** The module list, alongside `useProjects`/`useUsers` (`docs/audit-finding-solved-logs.md` §U3.2). */
-export function useChecklistModules(params: ChecklistModuleListParams) {
+/**
+ * The module list, alongside `useProjects`/`useUsers` (`docs/audit-finding-solved-logs.md` §U3.2).
+ * `enabled: false` holds the request back until a caller has the filter it needs.
+ */
+export function useChecklistModules(
+  params: ChecklistModuleListParams,
+  { enabled = true }: { enabled?: boolean } = {},
+) {
   return useQuery({
+    enabled,
     queryKey: keys.checklistModules.list(params),
     queryFn: () =>
       apiFetch<PaginatedResponse<ChecklistModuleResponse>>(

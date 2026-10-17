@@ -15,6 +15,22 @@ client can have received it, so it is recorded under Changed and allowed in a `M
 
 ### Added
 
+- **Project-wide checklist and mock-data export** (`docs/PRD.md` §4.3/§4.4, issue #60):
+  `GET /projects/{projectId}/export` and a new `/checklist/export` page, opened from an Export
+  button on `/checklist`. Choose a project, every module or a chosen set, and the test
+  checklist, the mock data, or both. One part downloads as `qa-checklist.xlsx` or
+  `mock-data.xlsx`; both download as `qa-export.zip`. The checklist part takes the grid's
+  feature, status, source and kind filters. The mock-data workbook opens on a `Modules` cover
+  sheet listing every chosen module, its record count and whether its data is stale, then one
+  sheet per module with records. Query: repeated `include` (`checklist`, `mockData`), repeated
+  `moduleIds`, and the four filters. Each part needs its own read permission (`403
+  INSUFFICIENT_ROLE` otherwise), a module id outside the project is `404
+  CHECKLIST_MODULE_NOT_FOUND`, and each part keeps its row cap (`409 EXPORT_TOO_LARGE`).
+  `checklist.exported` and `mock_data.exported` audit events gain a `moduleCount` context key.
+  The per-module exports are unchanged.
+
+### Added
+
 - **Eval notifications** (`docs/PRD.md` §2.1, phase 2.6, issue #59): four new notification
   types, `eval_set.ready`, `eval_set.failed`, `eval_run.finished` and `eval_run.failed`, sent
   to every project member holding `eval.read` — including whoever started the job — when an
