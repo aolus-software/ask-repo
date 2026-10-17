@@ -93,7 +93,7 @@ Full definition, including the cascade and the prune mechanism: [`configuration.
 **Not configurable, deliberately.** The bell's poll interval is a frontend constant rather than a
 setting.
 
-**Amendment (2026-09-27, in progress) — the bell is now pushed too.** A per-user SSE stream,
+**Amendment (2026-09-27) — the bell is now pushed too.** A per-user SSE stream,
 `GET /events`, was built for a different reason — job status for project and generation screens
 (`.claude/rules/live-events.md`) — and the bell rides it rather than gaining a stream of its own:
 a `notification` live event fans out to the recipients the fan-out already resolved, and an open

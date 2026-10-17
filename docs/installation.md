@@ -52,7 +52,7 @@ BOOTSTRAP_ADMIN_PASSWORD='<a real passphrase>' make up
 ```
 
 That is the whole install. `make up` builds both images and starts eight containers: Postgres,
-Qdrant, Redis, Kafka, the API, two ingestion workers, and the frontend. It runs in the
+Qdrant, Redis, Kafka, the API, two workers, and the frontend. It runs in the
 **foreground** — `Ctrl-C` stops it, and `make down` cleans up if you detach.
 
 **Ollama is the ninth piece and it is not a container.** The API and workers reach it at
@@ -265,7 +265,7 @@ widen it deliberately.
 | Kafka | `localhost:9092` |
 | Ollama | `localhost:11434` — a host process, not a container |
 
-The **ingestion worker publishes no port** — it is reached through Kafka, not HTTP. `make up`
+The **worker publishes no port** — it is reached through Kafka, not HTTP. `make up`
 runs two replicas, one per ingest partition.
 
 ---

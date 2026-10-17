@@ -5,7 +5,9 @@ default here is invisible until deployment. The production validators exist beca
 `SECURITY.md:54` promises operators that a real `SECRET_KEY` is required.
 """
 
+import tomllib
 from collections.abc import Callable
+from pathlib import Path
 
 import pytest
 from pydantic import ValidationError
@@ -217,3 +219,13 @@ def test_chat_reasoning_defaults_to_unconfigured() -> None:
 def test_chat_reasoning_rejects_an_unknown_value() -> None:
     with pytest.raises(ValidationError, match="chat_reasoning"):
         Settings(chat_reasoning="thinking-hard")  # type: ignore[arg-type]  # test builder
+
+
+def test_app_version_defaults_to_the_release_version(monkeypatch: pytest.MonkeyPatch) -> None:
+    """`/` and `/health` report the version a release bumps, not a hand-kept default
+    that sat at 0.1.0 through v2.2.0 (audit §9.18)."""
+    monkeypatch.delenv("APP_VERSION", raising=False)
+    with (Path(__file__).parent.parent / "pyproject.toml").open("rb") as handle:
+        expected = tomllib.load(handle)["project"]["version"]
+
+    assert Settings(_env_file=None).app_version == expected  # type: ignore[call-arg]  # pydantic-settings init kwarg

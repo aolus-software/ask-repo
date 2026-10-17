@@ -38,7 +38,7 @@ When `LANGFUSE_ENABLED=true`, the API process and the worker each do this once, 
 3. Attach the call recorder to the chat model they build (`build_chat_model(..., callbacks=...)`).
 
 From then on every model call is sent with no further setup — the Ask answer path, grading,
-checklist and mock-data generation, both refinement chats. The client sends in the background, in
+checklist and mock-data generation, eval generation and runs, both refinement chats. The client sends in the background, in
 batches. If Langfuse is down or the keys are wrong, the model call still succeeds and the failure
 appears only as a `WARNING` in that process's log. The call log never fails a user's request.
 
@@ -158,6 +158,8 @@ If nothing appears, see [Troubleshooting](#troubleshooting).
 | One Ask or refinement-chat turn | `classify`, `grade`, `answer` (or `history_answer`), and a proposal on the refinement chats | The assistant message id |
 | One checklist generation | One `map` per file, then `reduce` — a 200-file run is one trace with about 201 generations | The change set id |
 | One mock-data generation | `generate_mock_data` | The change set id |
+| One eval set generation | One `eval_generate` per sampled chunk | The eval set id |
+| One eval pair in a run | The answer's own calls (`classify`, `grade`, `answer`, `history_answer`) and one `eval_judge`, so the answer and its verdict group together | The pair's result row id |
 
 The re-run route and the capability probe have no message or change set to seed from, so their
 calls are recorded without a trace grouping.
@@ -175,6 +177,8 @@ calls are recorded without a trace grouping.
 | `map` | Checklist generation, one call per file |
 | `reduce` | Checklist generation, combining the per-file notes |
 | `generate_mock_data` | Mock-data generation |
+| `eval_generate` | Eval set generation, writing a question and reference answer from one chunk |
+| `eval_judge` | An eval run grading an answer against its reference (the instance's own chat model) |
 | `capability_probe` | The worker's startup check that the model can return structured output |
 | `untagged` | A call that did not say which feature it was — a bug; a test should have caught it |
 
@@ -423,7 +427,7 @@ come from `LANGFUSE_INIT_PROJECT_PUBLIC_KEY` / `_SECRET_KEY` in `infra/.env`.
 
 - Wait 30 seconds and refresh — export is batched.
 - Check `LANGFUSE_ENABLED=true` reached the process that made the call, and that you restarted it.
-  The API answers questions; the **worker** runs checklist and mock-data generation.
+  The API answers questions; the **worker** runs checklist, mock-data and eval generation, and eval runs.
 - Check the keys match the project. On the host they must be the ones the stack created
   (`pk-lf-dev-askrepo` / `sk-lf-dev-askrepo` unless you changed them in `infra/.env`).
 - Check the address. On the host `LANGFUSE_BASE_URL` is `http://localhost:3001`; inside Docker it is

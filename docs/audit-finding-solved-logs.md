@@ -895,6 +895,121 @@ stamped on Ask answers and feedback, though the answer prompt did not change —
 PRD's "an eval score is comparable only against a fixed prompt". **Fix:** document it, or hash
 only the answer-path prompts.
 
+### §9.18 `APP_VERSION` defaults to `0.1.0` on a 2.2.0 release — 📄 doc — ✅ RESOLVED 2026-10-17
+
+> Fixed, owner decision 2026-10-17: it tracks the release. `APP_VERSION` now defaults to `version` in `backend/pyproject.toml` (read with `tomllib`, since the project is never installed); `backend/.env.example` carries it commented out and `docs/configuration.md` names the source. Test: `tests/test_config.py::test_app_version_defaults_to_the_release_version`. On `docs/release-prep-v2.3.0`.
+>
+> Original finding follows.
+
+**Where:** `backend/app/config.py:23`, `backend/.env.example:7`, `docs/configuration.md:74`;
+`backend/pyproject.toml:3`, `frontend/package.json:3`
+
+`/` and `/health` report `0.1.0`; both package files say `2.2.0`. **Fix:** decide whether
+`APP_VERSION` tracks the release; if it does, read it from the package metadata rather than a
+default someone must remember to bump.
+
+
+### §9.23 `docs/README.md` and `docs/architecture.md` carry stale counts — 📄 doc — ✅ RESOLVED 2026-10-17
+
+> Fixed. `docs/README.md` now says 95 routes and 26 tables; both settings counts were replaced with "every setting" and the link to `docs/configuration.md`, since a settings count is what goes stale. On `docs/release-prep-v2.3.0`.
+>
+> Original finding follows.
+
+| Claim | Where | Actual | How counted |
+| --- | --- | --- | --- |
+| "81 routes" | `docs/README.md:83` | 95 | `grep -rhE "^@[a-z_]+\.(get\|post\|put\|patch\|delete)\(" backend/app/api/routes \| wc -l` (`docs/codebase.md:148` says 95) |
+| "20 tables" | `docs/README.md:27` | 26 | `grep -rh __tablename__ backend/app/models \| wc -l` (`docs/data.md:14` says 26) |
+| "All 104 backend settings" | `docs/README.md:40` | 108 | `len(Settings.model_fields)` |
+| "All 80 settings" | `docs/architecture.md:393` | 108 | same |
+
+The same class as §9.7 and §9.15. **Fix:** correct the numbers, or drop the two settings counts and
+link to `docs/configuration.md`.
+
+
+### §9.24 `docs/codebase.md`'s tree misses modules — 📄 doc — ✅ RESOLVED 2026-10-17
+
+> Fixed. The `docs/codebase.md` tree gained `ingestion/errors.py`, `rag/answer_style.py`, `rag/prompt_version.py`, `live/stream.py` and `mail/`, and the services line reads 21 plus `path_tree.py` and `index_guards.py`; router, model and repository counts were already right. On `docs/release-prep-v2.3.0`.
+>
+> Original finding follows.
+
+**Where:** `docs/codebase.md:160` (`ingestion/`), `:163` (`rag/`), `:157` (`services/`), `:168`
+(`live/`)
+
+`ingestion/` lacks `errors.py`; `rag/` lacks `answer_style.py` and `prompt_version.py`; the
+service count says 22 where there are 21 services plus `path_tree.py` and `index_guards.py`, and
+`index_guards.py` is not mentioned; `mail/` is absent; the `live/` line omits `stream.py`. The
+route, model and repository counts are right. **Fix:** update the tree.
+
+
+### §9.25 `backend/README.md`'s layout and worker description are stale — 📄 doc — ✅ RESOLVED 2026-10-17
+
+> Fixed. `backend/README.md`'s worker section names the four consumers, their retry consumers, the mail loop and the sweep; the layout gained `observability/`, `live/`, `mail/` and `core/notifications.py`, collapses schemas to a count, and links `docs/codebase.md` for the full tree. On `docs/release-prep-v2.3.0`.
+>
+> Original finding follows.
+
+**Where:** `backend/README.md:59-75`, `:460-560`; `backend/app/worker.py:383`, `:397`, `:411`,
+`:435` (the four consumers), `:508-512` (the mail loop)
+
+The worker section still says "the API only enqueues indexing and checklist-generation jobs" and
+lists two consumers; there are four, plus their retry consumers, the mail loop and the sweeps. The
+layout block has no `observability/`, `live/` or `mail/`, lists six of 18 schema files, and describes `services/` as
+three services. **Fix:** update both, linking to `docs/codebase.md` for the tree.
+
+
+### §9.26 `docs/PRD.md` §6 does not record Phase 2.6 as shipped — 📄 doc — ✅ RESOLVED 2026-10-17
+
+> Fixed. `docs/PRD.md` §6 marks Phase 2.5 and Phase 2.6 shipped, naming #58 and #61, and #62's per-feature prompt versions. On `docs/release-prep-v2.3.0`.
+>
+> Original finding follows.
+
+**Where:** `docs/PRD.md:1047`; compare `:1046` (Phase 2.5, "Shipped in two stages…")
+
+PR #58 merged the eval harness and answer style, and #61 polished the eval screen. §6 is the only
+place progress is recorded (`.claude/rules/documentation.md`). **Fix:** add a "Shipped" sentence
+naming #58 and #61, in Phase 2.5's style.
+
+
+### §9.27 `docs/notifications.md` carries an "in progress" banner — 📄 doc — ✅ RESOLVED 2026-10-17
+
+> Fixed. "in progress" dropped from `docs/notifications.md`'s amendment heading. On `docs/release-prep-v2.3.0`.
+>
+> Original finding follows.
+
+**Where:** `docs/notifications.md:96` ("Amendment (2026-09-27, in progress)"); `docs/PRD.md:1027`
+
+Progress belongs in the PRD only, which records live updates as shipped. **Fix:** drop "in
+progress".
+
+
+### §9.28 The eval harness is missing from `docs/langfuse.md` and the timeout docs — 📄 doc — ✅ RESOLVED 2026-10-17
+
+> Fixed. `docs/langfuse.md` lists `eval_generate` and `eval_judge` and how an eval set's and an eval answer's traces are seeded; `GENERATION_TIMEOUT_SECONDS` in `docs/configuration.md` and `docs/llm.md` names the eval harness. The same pass replaced "ingestion worker" in `docs/configuration.md` and `docs/installation.md`. On `docs/release-prep-v2.3.0`.
+>
+> Original finding follows.
+
+**Where:** `docs/langfuse.md:41`, `:152-160` (the traces table), `:167-178`, `:426`; `docs/configuration.md:270`,
+`docs/llm.md:235`
+
+`docs/langfuse.md` never mentions eval: its feature table lacks `eval_generate` and `eval_judge`,
+and it does not say an eval answer is one trace seeded from its result id (which `docs/llm.md`
+does). `GENERATION_TIMEOUT_SECONDS` is documented as covering checklist and mock-data generation
+only; it also bounds eval generation, answers and the judge. **Fix:** add eval to each.
+
+
+### §9.29 `CHANGELOG.md` `[Unreleased]` has duplicate headings and misfiled entries — 📄 doc — ✅ RESOLVED 2026-10-17
+
+> Fixed. `[Unreleased]` is one Added, one Changed and one Fixed section. Entries about never-released features (feedback, the call log, eval, answer style), including their 2026-10-17 audit fixes, are folded into their Added entries; the reindex entry no longer claims an existing code; #61's project-menu shortcuts gained an entry. On `docs/release-prep-v2.3.0`.
+>
+> Original finding follows.
+
+**Where:** `CHANGELOG.md:16`, `:25`, `:34`, `:99`, `:118`; `:101-110`; `:22`
+
+The section reads Changed, Fixed, Added, Changed, Fixed. The `traceUrl` and `createdOn` entries
+are filed as Changed, but feedback has never been released, so they describe the feature as it
+ships and belong in its Added entry. Line 22 says the reindex refusal "reuses the existing error
+code", which is itself new in this release. **Fix:** merge the headings and move the two entries
+before the release is cut.
+
 
 # Frontend (`/audit-ui`)
 
