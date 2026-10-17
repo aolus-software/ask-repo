@@ -19,6 +19,11 @@ describe("useErrorText", () => {
     );
   });
 
+  it("keeps the backend reason for a code whose message names what to fix", () => {
+    const { result } = renderHook(() => useErrorText());
+    expect(result.current(new ApiError(400, "WEAK_PASSWORD", "Too common"))).toBe("Too common");
+  });
+
   it("uses the generic text for something that is not an ApiError", () => {
     const { result } = renderHook(() => useErrorText());
     expect(result.current("boom")).toBe("Something went wrong. Please try again.");
