@@ -55,6 +55,7 @@ class AuditEventType(StrEnum):
     USER_DEACTIVATED = "user.deactivated"
     USER_PASSWORD_RESET = "user.password.reset"
     USER_ANSWER_STYLE_UPDATED = "user.answer_style.updated"
+    USER_LANGUAGE_UPDATED = "user.language.updated"
     # --- projects -----------------------------------------------------------
     PROJECT_CREATED = "project.created"
     PROJECT_REINDEX_REQUESTED = "project.reindex.requested"
@@ -116,6 +117,9 @@ CHANGED_FIELDS: dict[AuditEventType, frozenset[str]] = {
     AuditEventType.USER_ANSWER_STYLE_UPDATED: frozenset(
         {"answerDetail", "answerFamiliarity", "answerFormat"}
     ),
+    # The caller's own interface language (`PUT /me/language`). A code from a fixed
+    # catalogue, never content.
+    AuditEventType.USER_LANGUAGE_UPDATED: frozenset({"language"}),
     AuditEventType.PROJECT_CREATED: frozenset({"name", "repoUrlHost", "branch"}),
     AuditEventType.PROJECT_DELETED: frozenset({"name", "repoUrlHost"}),
     AuditEventType.MEMBERSHIP_GRANTED: frozenset({"roleName"}),

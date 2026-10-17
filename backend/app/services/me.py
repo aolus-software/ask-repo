@@ -1,4 +1,4 @@
-"""The caller's own account surface: memberships, sessions, activity and answer style.
+"""The caller's own account surface: memberships, sessions, activity, answer style and language.
 
 Every method takes the caller and nothing that names another user. Membership comes
 from `app/core/access.py`, never a query of its own
@@ -25,6 +25,7 @@ from app.schemas.me import (
     ActivityEntry,
     AnswerStyleRead,
     AnswerStyleUpdate,
+    LanguageSetting,
     MembershipSummary,
     SessionResponse,
 )
@@ -192,6 +193,36 @@ class MeService:
         return AnswerStyleRead(
             detail=payload.detail, familiarity=payload.familiarity, format=payload.format
         )
+
+    async def language(self, user: AuthenticatedUser) -> LanguageSetting:
+        """The caller's stored interface language, `None` if they never chose one."""
+        row = await self._own_row(user)
+        return LanguageSetting(language=row.language)
+
+    async def update_language(
+        self, user: AuthenticatedUser, payload: LanguageSetting
+    ) -> LanguageSetting:
+        """Replace the caller's language, and audit it after the commit if it moved."""
+        row = await self._own_row(user)
+        before = row.language
+        after = _stored(payload.language)
+        row.language = after
+        await self.session.commit()
+
+        if before != after:
+            await self._recorder.record(
+                AuditEntry(
+                    event_type=AuditEventType.USER_LANGUAGE_UPDATED,
+                    actor_user_id=user.id,
+                    actor_email=user.email,
+                    target_type="user",
+                    target_id=user.id,
+                    target_label=user.email,
+                    ip_address=self._client_ip,
+                    changed={"language": (before, after)},
+                )
+            )
+        return LanguageSetting(language=payload.language)
 
     async def _own_row(self, user: AuthenticatedUser) -> User:
         """The caller's row. Missing only if deactivated mid-request."""

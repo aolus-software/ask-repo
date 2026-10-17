@@ -6,6 +6,7 @@ Each model inherits `ApiModel`, so every key ships camelCase.
 import uuid
 from datetime import datetime
 
+from app.core.language import Language
 from app.rag.answer_style import AnswerDetail, AnswerFamiliarity, AnswerFormat
 from app.schemas.base import ApiModel
 
@@ -61,3 +62,13 @@ class AnswerStyleUpdate(ApiModel):
     detail: AnswerDetail | None
     familiarity: AnswerFamiliarity | None
     format: AnswerFormat | None
+
+
+class LanguageSetting(ApiModel):
+    """The caller's interface language. `null` is "never chose": the browser decides.
+
+    One model serves the read and the `PUT` body. The key is required on the `PUT`,
+    because an omitted key would mean either "unchanged" or "clear it".
+    """
+
+    language: Language | None
