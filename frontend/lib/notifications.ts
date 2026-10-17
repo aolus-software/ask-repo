@@ -26,6 +26,10 @@ export const NOTIFICATION_TYPES = [
   "mock_data_change_set.applied",
   "mock_data_change_set.discarded",
   "membership.granted",
+  "eval_set.ready",
+  "eval_set.failed",
+  "eval_run.finished",
+  "eval_run.failed",
 ] as const;
 
 /**
@@ -34,11 +38,15 @@ export const NOTIFICATION_TYPES = [
  * Both change-set families target the checklist module, not the change set: the Mock
  * Data tab is part of `/checklist/[moduleId]` rather than a route of its own, and a
  * change set's own id names nothing anyone can navigate to. The backend already stores
- * the module id as `targetId` for exactly this reason.
+ * the module id as `targetId` for exactly this reason. Both eval families target the
+ * set for the same reason: a run's results live on its set's screen.
  */
 export function notificationHref(n: NotificationSummary): string {
   if (n.targetType === "checklist_module" && n.targetId) {
     return `/checklist/${n.targetId}`;
+  }
+  if (n.targetType === "eval_set" && n.targetId) {
+    return `/projects/${n.projectId}/eval/${n.targetId}`;
   }
   return `/projects/${n.projectId}`;
 }
@@ -62,6 +70,14 @@ const TITLES: Record<string, (d: Record<string, unknown>) => string> = {
     `A mock data change set for ${name(d, "moduleName")} was discarded`,
   "membership.granted": (d) =>
     `You were added to ${name(d, "projectName")} as ${name(d, "roleName")}`,
+  "eval_set.ready": (d) =>
+    `Eval set ${name(d, "setName")} in ${name(d, "projectName")} is ready`,
+  "eval_set.failed": (d) =>
+    `Eval set ${name(d, "setName")} in ${name(d, "projectName")} failed to generate`,
+  "eval_run.finished": (d) =>
+    `An eval run of ${name(d, "setName")} in ${name(d, "projectName")} finished`,
+  "eval_run.failed": (d) =>
+    `An eval run of ${name(d, "setName")} in ${name(d, "projectName")} failed`,
 };
 
 /** A human sentence for one notification, falling back to the raw type. */
@@ -90,6 +106,10 @@ const CATEGORY_TITLES: Record<string, string> = {
   "mock_data_change_set.applied": "A mock data change set was applied",
   "mock_data_change_set.discarded": "A mock data change set was discarded",
   "membership.granted": "You were added to a project",
+  "eval_set.ready": "An eval set finished generating",
+  "eval_set.failed": "An eval set failed to generate",
+  "eval_run.finished": "An eval run finished",
+  "eval_run.failed": "An eval run failed",
 };
 
 /** A human label for an event *type*, for the preferences screen's row headings. */

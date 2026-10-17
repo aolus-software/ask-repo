@@ -13,6 +13,16 @@ client can have received it, so it is recorded under Changed and allowed in a `M
 
 ## [Unreleased]
 
+### Added
+
+- **Eval notifications** (`docs/PRD.md` §2.1, phase 2.6, issue #59): four new notification
+  types, `eval_set.ready`, `eval_set.failed`, `eval_run.finished` and `eval_run.failed`, sent
+  to every project member holding `eval.read` — including whoever started the job — when an
+  eval set or run finishes or fails for good. A failure that will be retried sends nothing.
+  Each links to the set's screen (`/projects/{projectId}/eval/{setId}`, `targetType:
+  "eval_set"`), has its own in-app and email switches under `/profile#notifications`, and has a
+  fixed email subject and sentence.
+
 ## [2.3.0] — 2026-10-17
 
 ### Added

@@ -8,7 +8,7 @@ from typing import Any
 import pytest
 
 from app.config import Settings
-from app.core.notifications import NotificationType
+from app.core.notifications import TARGET_TYPES, NotificationType
 from app.mail.compose import (
     _ENVIRONMENT,
     MESSAGES,
@@ -37,6 +37,14 @@ BASE: dict[str, Any] = {
 }
 PROJECT = uuid.UUID("7f3c0000-0000-0000-0000-000000000001")
 MODULE = uuid.UUID("9a1b0000-0000-0000-0000-000000000002")
+EVAL_SET = uuid.UUID("5e7a0000-0000-0000-0000-000000000003")
+
+# Where each target type's email links, and the id the test hands in as `target_id`.
+TARGETS: dict[str, tuple[uuid.UUID, str]] = {
+    "project": (PROJECT, f"{BASE_URL}/projects/{PROJECT}"),
+    "checklist_module": (MODULE, f"{BASE_URL}/checklist/{MODULE}"),
+    "eval_set": (EVAL_SET, f"{BASE_URL}/projects/{PROJECT}/eval/{EVAL_SET}"),
+}
 
 
 def _settings(app_env: str) -> Settings:
@@ -67,13 +75,12 @@ def test_every_event_type_has_a_message() -> None:
 
 @pytest.mark.parametrize("event_type", list(NotificationType))
 def test_every_event_type_composes_with_a_link(event_type: NotificationType) -> None:
-    target_type = (
-        "project" if event_type.value.startswith(("project", "membership")) else "checklist_module"
-    )
+    target_type = TARGET_TYPES[event_type]
+    target_id, expected = TARGETS[target_type]
     email = compose_notification(
         event_type=event_type,
         target_type=target_type,
-        target_id=PROJECT if target_type == "project" else MODULE,
+        target_id=target_id,
         project_id=PROJECT,
         to="dev@example.com",
         settings=_settings("production"),
@@ -81,11 +88,6 @@ def test_every_event_type_composes_with_a_link(event_type: NotificationType) -> 
     assert email.to == "dev@example.com"
     assert email.subject == f"{MESSAGES[event_type][0]} | AskRepo"
     assert "https://askrepo.internal/settings/notifications" in email.body
-    expected = (
-        f"https://askrepo.internal/projects/{PROJECT}"
-        if target_type == "project"
-        else f"https://askrepo.internal/checklist/{MODULE}"
-    )
     assert f"Open: {expected}" in email.body
 
     assert email.html is not None

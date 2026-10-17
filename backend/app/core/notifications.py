@@ -41,6 +41,11 @@ class NotificationType(StrEnum):
     MOCK_DATA_CHANGE_SET_DISCARDED = "mock_data_change_set.discarded"
     # --- membership ---------------------------------------------------------
     MEMBERSHIP_GRANTED = "membership.granted"
+    # --- eval harness -------------------------------------------------------
+    EVAL_SET_READY = "eval_set.ready"
+    EVAL_SET_FAILED = "eval_set.failed"
+    EVAL_RUN_FINISHED = "eval_run.finished"
+    EVAL_RUN_FAILED = "eval_run.failed"
 
 
 # Which permission a member must hold on the project to hear about this event.
@@ -59,6 +64,12 @@ RECIPIENT_PERMISSIONS: dict[NotificationType, Permission] = {
     NotificationType.MOCK_DATA_CHANGE_SET_PENDING: Permission.CHANGESET_APPLY,
     NotificationType.MOCK_DATA_CHANGE_SET_APPLIED: Permission.MOCKDATA_READ,
     NotificationType.MOCK_DATA_CHANGE_SET_DISCARDED: Permission.MOCKDATA_READ,
+    # Failures go to every reader too, not only the requester or `eval.run` holders:
+    # a reader is who watches a score, and a failed run is a score that did not move.
+    NotificationType.EVAL_SET_READY: Permission.EVAL_READ,
+    NotificationType.EVAL_SET_FAILED: Permission.EVAL_READ,
+    NotificationType.EVAL_RUN_FINISHED: Permission.EVAL_READ,
+    NotificationType.EVAL_RUN_FAILED: Permission.EVAL_READ,
 }
 
 # Events whose recipient is named by the caller rather than resolved from membership.
@@ -87,7 +98,8 @@ ACTOR_EXCLUDED: frozenset[NotificationType] = frozenset(
 # that changed. Both change-set families therefore target the checklist module:
 # `mock_data_change_sets` keys directly to `checklist_modules.id`, and the Mock Data
 # tab is part of `/checklist/[moduleId]` rather than a route of its own, so a change
-# set's own id names nothing anyone can navigate to.
+# set's own id names nothing anyone can navigate to. Both eval families target the set
+# for the same reason: a run's results live on `/projects/[id]/eval/[setId]`.
 TARGET_TYPES: dict[NotificationType, str] = {
     NotificationType.PROJECT_READY: "project",
     NotificationType.PROJECT_FAILED: "project",
@@ -100,6 +112,10 @@ TARGET_TYPES: dict[NotificationType, str] = {
     NotificationType.MOCK_DATA_CHANGE_SET_APPLIED: "checklist_module",
     NotificationType.MOCK_DATA_CHANGE_SET_DISCARDED: "checklist_module",
     NotificationType.MEMBERSHIP_GRANTED: "project",
+    NotificationType.EVAL_SET_READY: "eval_set",
+    NotificationType.EVAL_SET_FAILED: "eval_set",
+    NotificationType.EVAL_RUN_FINISHED: "eval_set",
+    NotificationType.EVAL_RUN_FAILED: "eval_set",
 }
 
 # The only keys each event may carry. Keys are `camelCase` as stored, so `ApiModel`
@@ -136,6 +152,14 @@ DETAIL_FIELDS: dict[NotificationType, frozenset[str]] = {
     ),
     NotificationType.MOCK_DATA_CHANGE_SET_DISCARDED: frozenset({"projectName", "moduleName"}),
     NotificationType.MEMBERSHIP_GRANTED: frozenset({"projectName", "roleName"}),
+    # No error text on either failure, for `project.failed`'s reason: the set's screen
+    # renders `error`, and a second copy buys nothing over a link.
+    NotificationType.EVAL_SET_READY: frozenset({"projectName", "setName", "pairCount"}),
+    NotificationType.EVAL_SET_FAILED: frozenset({"projectName", "setName"}),
+    NotificationType.EVAL_RUN_FINISHED: frozenset(
+        {"projectName", "setName", "pairsAnswered", "correct"}
+    ),
+    NotificationType.EVAL_RUN_FAILED: frozenset({"projectName", "setName"}),
 }
 
 
