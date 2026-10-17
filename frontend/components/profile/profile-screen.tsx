@@ -5,6 +5,7 @@ import { useState, useSyncExternalStore } from "react";
 import { AccountSection } from "@/components/profile/account-section";
 import { AnswerStyleSection } from "@/components/profile/answer-style-section";
 import { ActivitySection } from "@/components/profile/activity-section";
+import { LanguageSection } from "@/components/profile/language-section";
 import { PasswordSection } from "@/components/profile/password-section";
 import { SessionsSection } from "@/components/profile/sessions-section";
 import { PageHeader } from "@/components/layout/page-header";
@@ -14,6 +15,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 const SECTIONS = [
   { id: "account", title: "Account" },
   { id: "answer-style", title: "Answer style" },
+  { id: "language", title: "Language" },
   { id: "sessions", title: "Sessions" },
   { id: "activity", title: "Activity" },
   { id: "notifications", title: "Notifications" },
@@ -58,6 +60,7 @@ export function ProfileScreen({ resetEnabled }: { resetEnabled: boolean }) {
   const body: Record<SectionId, React.ReactNode> = {
     account: <AccountSection />,
     "answer-style": <AnswerStyleSection />,
+    language: <LanguageSection />,
     sessions: <SessionsSection />,
     activity: <ActivitySection />,
     notifications: <PreferencesScreen />,

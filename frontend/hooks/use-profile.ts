@@ -15,6 +15,7 @@ import type {
   MembershipSummary,
   PaginatedResponse,
   AnswerStyle,
+  LanguageSetting,
   SessionSummary,
 } from "@/lib/api/types";
 import { keys } from "@/lib/query/keys";
@@ -72,5 +73,29 @@ export function useUpdateAnswerStyle() {
       }),
     onSuccess: () =>
       queryClient.invalidateQueries({ queryKey: keys.profile.answerStyle }),
+  });
+}
+
+export function useLanguage() {
+  return useQuery({
+    queryKey: keys.profile.language,
+    queryFn: () => apiFetch<LanguageSetting>(endpoints.me.language),
+  });
+}
+
+/**
+ * Store the caller's language. The API proxy mirrors it onto the locale cookie from
+ * the response; the caller then refreshes the route so Server Components re-render
+ * in the new language.
+ */
+export function useUpdateLanguage() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (setting: LanguageSetting) =>
+      apiFetch<LanguageSetting>(endpoints.me.language, {
+        method: "PUT",
+        body: JSON.stringify(setting),
+      }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: keys.profile.language }),
   });
 }

@@ -30,6 +30,7 @@ export const endpoints = {
   me: {
     memberships: "/me/memberships",
     answerStyle: "/me/answer-style",
+    language: "/me/language",
     sessions: "/me/sessions",
     session: (id: string) => `/me/sessions/${id}`,
     activity: "/me/activity",
