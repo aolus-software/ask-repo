@@ -20,7 +20,9 @@ describe("POST /api/auth/locale", () => {
   it("refuses an unshipped language in the one error shape", async () => {
     const response = await POST(post({ language: "fr" }));
     expect(response.status).toBe(422);
-    expect((await response.json()).detail.code).toBe("VALIDATION_ERROR");
+    const { detail } = await response.json();
+    expect(detail.code).toBe("VALIDATION_ERROR");
+    expect(detail.fieldTypes).toEqual({ language: "enum" });
   });
 
   it("never calls the backend", async () => {

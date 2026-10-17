@@ -24,6 +24,7 @@ export async function POST(request: Request): Promise<Response> {
           code: "VALIDATION_ERROR",
           message: "Unsupported language.",
           fields: { language: "Unsupported language." },
+          fieldTypes: { language: "enum" },
         },
       },
       { status: 422 },
