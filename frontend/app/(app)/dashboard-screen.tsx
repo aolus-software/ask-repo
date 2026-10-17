@@ -6,6 +6,7 @@ import Link from "next/link";
 import { EmptyState } from "@/components/feedback/empty-state";
 import { ListError } from "@/components/feedback/list-error";
 import { ProjectStatusBadge } from "@/components/feedback/status-badge";
+import { StatTile } from "@/components/feedback/stat-tile";
 import { PageHeader } from "@/components/layout/page-header";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -46,34 +47,16 @@ export function DashboardScreen() {
         would be quietly wrong past 25 projects (design spec §2.6).
       */}
       <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-        <Card>
-          <CardContent className="p-6">
-            <p className="text-muted-foreground text-sm font-medium">
-              Projects on this instance
-            </p>
-            {projects.isLoading ? (
-              <Skeleton className="mt-1 h-9 w-16" />
-            ) : (
-              <p className="mt-1 text-3xl font-semibold">
-                {projects.data?.totalCount ?? 0}
-              </p>
-            )}
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="p-6">
-            <p className="text-muted-foreground text-sm font-medium">
-              Your conversations
-            </p>
-            {conversations.isLoading ? (
-              <Skeleton className="mt-1 h-9 w-16" />
-            ) : (
-              <p className="mt-1 text-3xl font-semibold">
-                {conversations.data?.totalCount ?? 0}
-              </p>
-            )}
-          </CardContent>
-        </Card>
+        <StatTile
+          label="Projects on this instance"
+          value={projects.data?.totalCount ?? 0}
+          loading={projects.isLoading}
+        />
+        <StatTile
+          label="Your conversations"
+          value={conversations.data?.totalCount ?? 0}
+          loading={conversations.isLoading}
+        />
       </div>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">

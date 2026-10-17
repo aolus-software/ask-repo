@@ -26,7 +26,12 @@ function renderPanel() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={client}>
-      <ChatPanel moduleId="m1" hasPendingChangeSet={false} canSend />
+      <ChatPanel
+        moduleId="m1"
+        hasPendingChangeSet={false}
+        isGenerating={false}
+        canSend
+      />
     </QueryClientProvider>,
   );
 }

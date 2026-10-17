@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Skeleton } from "@/components/ui/skeleton";
 import { useAnswerStyle, useUpdateAnswerStyle } from "@/hooks/use-profile";
 import type { AnswerStyle } from "@/lib/api/types";
 
@@ -71,30 +72,44 @@ export function AnswerStyleSection() {
       </p>
 
       <Card className="gap-6 p-6">
-        {DIALS.map((dial) => (
-          <div key={dial.key} className="grid gap-2">
-            <Label id={`answer-style-${dial.key}`}>{dial.label}</Label>
-            <RadioGroup
-              aria-labelledby={`answer-style-${dial.key}`}
-              value={style[dial.key] ?? DEFAULT}
-              disabled={!loaded}
-              onValueChange={(value) =>
-                setDraft({ ...style, [dial.key]: value === DEFAULT ? null : value })
-              }
-              className="flex flex-wrap gap-4"
-            >
-              {[{ value: DEFAULT, label: "Default" }, ...dial.options].map((option) => (
-                <Label
-                  key={option.value}
-                  className="text-foreground flex items-center gap-2 text-sm font-normal"
-                >
-                  <RadioGroupItem value={option.value} />
-                  {option.label}
-                </Label>
-              ))}
-            </RadioGroup>
-          </div>
-        ))}
+        {DIALS.map((dial) =>
+          !loaded ? (
+            // Same shape as a settled dial (label, then one row of options) so nothing
+            // jumps, and no radio claims a value that has not arrived.
+            <div key={dial.key} className="grid gap-2">
+              <Skeleton className="h-4 w-20" />
+              <div className="flex flex-wrap gap-4">
+                {Array.from({ length: dial.options.length + 1 }, (_, index) => (
+                  <Skeleton key={index} className="h-5 w-24" />
+                ))}
+              </div>
+            </div>
+          ) : (
+            <div key={dial.key} className="grid gap-2">
+              <Label id={`answer-style-${dial.key}`}>{dial.label}</Label>
+              <RadioGroup
+                aria-labelledby={`answer-style-${dial.key}`}
+                value={style[dial.key] ?? DEFAULT}
+                onValueChange={(value) =>
+                  setDraft({ ...style, [dial.key]: value === DEFAULT ? null : value })
+                }
+                className="flex flex-wrap gap-4"
+              >
+                {[{ value: DEFAULT, label: "Default" }, ...dial.options].map(
+                  (option) => (
+                    <Label
+                      key={option.value}
+                      className="text-foreground flex items-center gap-2 text-sm font-normal"
+                    >
+                      <RadioGroupItem value={option.value} />
+                      {option.label}
+                    </Label>
+                  ),
+                )}
+              </RadioGroup>
+            </div>
+          ),
+        )}
       </Card>
 
       {/* No field the backend can name is user-typed, so a failure is form-level

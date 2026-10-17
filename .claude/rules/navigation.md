@@ -126,3 +126,21 @@ breadcrumb-only page above, not a route of its own — and `/settings/notificati
 redirects there. With no reachable child left for a non-admin, `visibleNavTree` hides the whole
 Settings group for one, the same as it always has for every other child, which was admin-only
 already.
+
+## 9. A detail page names its own crumb; `lib/nav.ts` still owns every label and href
+
+For a detail route the trailing crumb is the raw path segment, a UUID. A detail page replaces it
+with the resource's name by calling `useBreadcrumbLabel(href, name)`
+(`components/layout/breadcrumb-labels.tsx`), where `href` is the crumb's href exactly as
+`resolveBreadcrumbs` builds it:
+
+```tsx
+useBreadcrumbLabel(`/projects/${id}`, project.data?.name); // undefined while loading
+```
+
+`AppShell` mounts the provider and `AppBreadcrumbs` passes the registered names to
+`resolveBreadcrumbs(pathname, user, labels)`. That keeps this rule's first one intact: the trail,
+its hrefs and every nav item's title still come from `lib/nav.ts`, and a name is applied **only**
+to a crumb derived from an id (`fromId`), so a page cannot rename a nav item. An eval set's page
+can name both its project (`/projects/${projectId}`) and itself. A name that is not known yet
+leaves the raw segment showing, and the name is dropped when the page unmounts.

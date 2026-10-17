@@ -3,6 +3,7 @@
 import { Answer } from "@/components/ask/answer";
 import { EvalStatusBadge } from "@/components/eval/eval-status-badge";
 import { EvalVerdictBadge } from "@/components/eval/eval-verdict-badge";
+import { DetailError } from "@/components/feedback/detail-error";
 import { JobFailureAlert } from "@/components/feedback/job-failure-alert";
 import {
   Sheet,
@@ -39,11 +40,22 @@ export function EvalRunSheet({
             {run ? <EvalStatusBadge status={run.status} /> : null}
           </SheetTitle>
           <SheetDescription>
-            {run ? formatAbsolute(run.createdAt) : "Loading the run…"}
+            {run
+              ? formatAbsolute(run.createdAt)
+              : query.error
+                ? "The run could not be loaded"
+                : "Loading the run…"}
           </SheetDescription>
         </SheetHeader>
         <div className="space-y-4 px-4 pb-4">
           {query.isLoading ? <Skeleton className="h-32 w-full" /> : null}
+          {query.error ? (
+            <DetailError
+              error={query.error}
+              notFoundMessage="That run does not exist, or it has been deleted."
+              onRetry={() => query.refetch()}
+            />
+          ) : null}
           {run?.status === "failed" && run.error ? (
             <JobFailureAlert title="Run failed" message={run.error} />
           ) : null}

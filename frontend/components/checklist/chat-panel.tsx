@@ -74,10 +74,13 @@ function initialTurnState(): TurnState {
 export function ChatPanel({
   moduleId,
   hasPendingChangeSet,
+  isGenerating,
   canSend,
 }: {
   moduleId: string;
   hasPendingChangeSet: boolean;
+  /** A generation holds the module's lease, so a refinement started now is refused. */
+  isGenerating: boolean;
   /**
    * Mirrors the backend's `generate.run` gate; it does not replace it. The chat
    * itself stays visible and readable to everyone -- only sending is gated, since
@@ -240,14 +243,17 @@ export function ChatPanel({
   );
 
   const isStreaming = turn?.isStreaming ?? false;
-  const composerDisabled = isStreaming || hasPendingChangeSet || !canSend;
+  const composerDisabled =
+    isStreaming || hasPendingChangeSet || isGenerating || !canSend;
   const composerPlaceholder = !canSend
     ? "You do not have permission to refine this checklist."
-    : hasPendingChangeSet
-      ? "Apply or discard the pending changes first."
-      : isStreaming
-        ? "Answering…"
-        : "Ask a follow-up, or say what you'd like changed";
+    : isGenerating
+      ? "A generation is running for this module. Wait for it to finish."
+      : hasPendingChangeSet
+        ? "Apply or discard the pending changes first."
+        : isStreaming
+          ? "Answering…"
+          : "Ask a follow-up, or say what you'd like changed";
 
   return (
     <div className="space-y-6">

@@ -78,9 +78,12 @@ export function RecordsTable({
   moduleId,
   records,
   canEdit,
+  isGenerating,
 }: {
   moduleId: string;
   records: MockDataRecordResponse[];
+  /** While a generation runs the empty state must not invite starting another. */
+  isGenerating: boolean;
   /** Mirrors the backend's `mockdata.edit` gate; it does not replace it. */
   canEdit: boolean;
 }) {
@@ -93,8 +96,12 @@ export function RecordsTable({
       <Card className="p-0">
         <EmptyState
           icon={Database}
-          title="No mock data yet"
-          description="Generate a batch, or ask for one by chat."
+          title={isGenerating ? "Generating mock data…" : "No mock data yet"}
+          description={
+            isGenerating
+              ? "A generation is running. The records appear here when it finishes."
+              : "Generate a batch, or ask for one by chat."
+          }
         />
       </Card>
     );

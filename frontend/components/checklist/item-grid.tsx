@@ -88,9 +88,12 @@ interface Draft {
 export function ItemGrid({
   items,
   moduleId,
+  isGenerating,
 }: {
   items: ChecklistItemResponse[];
   moduleId: string;
+  /** While a generation runs the empty state must not invite starting another. */
+  isGenerating: boolean;
 }) {
   const [recording, setRecording] = useState<ChecklistItemResponse | null>(null);
   const [editing, setEditing] = useState<ChecklistItemResponse | null>(null);
@@ -148,8 +151,12 @@ export function ItemGrid({
       <Card className="p-0">
         <EmptyState
           icon={ClipboardCheck}
-          title="No test cases yet"
-          description="Generate the checklist, or add one by hand."
+          title={isGenerating ? "Generating test cases…" : "No test cases yet"}
+          description={
+            isGenerating
+              ? "A generation is running. The test cases appear here when it finishes."
+              : "Generate the checklist, or add one by hand."
+          }
         />
       </Card>
     );

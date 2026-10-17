@@ -6,6 +6,9 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { EvalSetScreen } from "@/components/eval/eval-set-screen";
 import { PERMISSION } from "@/lib/can";
 
+const push = vi.fn();
+vi.mock("next/navigation", () => ({ useRouter: () => ({ push }) }));
+
 const RUN_BASE = {
   id: "r1",
   setId: "s1",
@@ -15,8 +18,9 @@ const RUN_BASE = {
 const RUN_HEAD = { ...RUN_BASE, id: "r2", createdAt: "2026-10-01T10:00:00Z" };
 
 function stubApi(permissions: string[]) {
-  const fetchMock = vi.fn(async (url: string) => {
+  const fetchMock = vi.fn(async (url: string, _init?: RequestInit) => {
     const path = String(url);
+    if (_init?.method === "DELETE") return new Response(null, { status: 204 });
     if (path.endsWith("/eval-sets/s1"))
       return Response.json({
         id: "s1",
@@ -88,5 +92,44 @@ describe("EvalSetScreen", () => {
     await userEvent.click(second[1]);
 
     await screen.findByText(/No pair changed between these runs/);
+  });
+
+  it("shows an error, not not-found, when the project fails to load", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        Response.json(
+          { detail: { code: "INTERNAL", message: "boom" } },
+          { status: 500 },
+        ),
+      ),
+    );
+    renderScreen();
+
+    expect(await screen.findByText("Could not load this page")).toBeInTheDocument();
+  });
+
+  it("offers delete only with eval.run, and goes back to the Eval tab after", async () => {
+    const fetchMock = stubApi([PERMISSION.EVAL_READ, PERMISSION.EVAL_RUN]);
+    renderScreen();
+
+    await userEvent.click(await screen.findByRole("button", { name: "Delete Smoke" }));
+    expect(
+      await screen.findByText(/every run and all of their results/),
+    ).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Delete eval set" }));
+
+    await waitFor(() => expect(push).toHaveBeenCalledWith("/projects/p1#eval"));
+    expect(fetchMock.mock.calls.some(([, init]) => init?.method === "DELETE")).toBe(
+      true,
+    );
+  });
+
+  it("hides delete without eval.run", async () => {
+    stubApi([PERMISSION.EVAL_READ]);
+    renderScreen();
+
+    await screen.findByText("Smoke");
+    expect(screen.queryByRole("button", { name: "Delete Smoke" })).toBeNull();
   });
 });

@@ -67,7 +67,7 @@ describe("AnswerStyleSection", () => {
     });
   });
 
-  it("keeps the radios and Save disabled until the stored style arrives", async () => {
+  it("shows no radios and keeps Save disabled until the stored style arrives", async () => {
     let release: (value: Response) => void = () => {};
     const gate = new Promise<Response>((resolve) => {
       release = resolve;
@@ -78,15 +78,13 @@ describe("AnswerStyleSection", () => {
     );
     renderSection();
 
-    for (const radio of screen.getAllByRole("radio")) {
-      expect(radio).toHaveAttribute("aria-disabled", "true");
-    }
+    // No radio exists to claim a value that has not arrived (a skeleton stands in).
+    expect(screen.queryAllByRole("radio")).toHaveLength(0);
     expect(screen.getByRole("button", { name: /save answer style/i })).toBeDisabled();
 
     release(Response.json(SAVED));
 
-    const brief = await screen.findByRole("radio", { name: "Brief" });
-    await waitFor(() => expect(brief).not.toHaveAttribute("aria-disabled", "true"));
+    await screen.findByRole("radio", { name: "Brief" });
     fireEvent.click(screen.getByRole("radio", { name: "Bullets" }));
     expect(screen.getByRole("button", { name: /save answer style/i })).toBeEnabled();
   });

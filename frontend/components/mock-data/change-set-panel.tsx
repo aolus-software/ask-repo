@@ -44,6 +44,14 @@ function fieldMapText(fields: Record<string, string>): string {
   return entries.map(([key, value]) => `${key}: ${value}`).join(", ");
 }
 
+/** The first few fields of a record, enough to recognise it by. */
+function identifyingFields(record: MockDataRecordResponse): string {
+  return Object.entries(record.fields)
+    .slice(0, 2)
+    .map(([key, value]) => `${key}: ${value}`)
+    .join(", ");
+}
+
 function isOrphaned(
   operation: MockDataChangeOperation,
   records: MockDataRecordResponse[],
@@ -135,6 +143,13 @@ export function MockDataChangeSetPanel({
 
   function renderRow(operation: MockDataChangeOperation) {
     const orphaned = isOrphaned(operation, records);
+    // Which record an update or remove lands on -- the decision this panel exists
+    // for. The id is always shown; a record still in the dataset adds its first
+    // fields so a reviewer can recognise it without cross-checking the table.
+    const target =
+      operation.op === "add"
+        ? undefined
+        : records.find((record) => record.id === operation.recordId);
     return (
       <OperationRow
         key={operation.id}
@@ -143,6 +158,12 @@ export function MockDataChangeSetPanel({
         orphaned={orphaned}
       >
         <p className="font-medium capitalize">{operation.op}</p>
+        {operation.op !== "add" && operation.recordId ? (
+          <p className="text-muted-foreground text-xs">
+            Record <span className="font-mono">{operation.recordId}</span>
+            {target ? ` · ${identifyingFields(target)}` : null}
+          </p>
+        ) : null}
         {orphaned ? (
           <p className="text-sm">
             This record no longer exists — this change will be skipped

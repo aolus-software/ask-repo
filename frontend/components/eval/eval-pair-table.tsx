@@ -1,9 +1,11 @@
 "use client";
 
-import { ChevronDown, ChevronRight } from "lucide-react";
+import { ChevronDown, ChevronRight, FlaskConical } from "lucide-react";
 import { Fragment, useState } from "react";
+import { toast } from "sonner";
 
 import { Answer } from "@/components/ask/answer";
+import { EmptyState } from "@/components/feedback/empty-state";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import {
@@ -15,6 +17,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { useSetPairExcluded } from "@/hooks/use-eval";
+import { isApiError } from "@/lib/api/errors";
 import type { EvalPair } from "@/lib/api/types";
 import { cn } from "@/lib/utils";
 
@@ -23,13 +26,30 @@ export function EvalPairTable({
   setId,
   pairs,
   canRun,
+  generating = false,
 }: {
   setId: string;
   pairs: EvalPair[];
   canRun: boolean;
+  /** The set is still being generated, so no pairs yet is expected rather than empty. */
+  generating?: boolean;
 }) {
   const [open, setOpen] = useState<string | null>(null);
   const setExcluded = useSetPairExcluded(setId);
+
+  if (pairs.length === 0) {
+    return (
+      <EmptyState
+        icon={FlaskConical}
+        title={generating ? "Generating questions…" : "No questions"}
+        description={
+          generating
+            ? "The questions appear here as soon as generation finishes."
+            : "This set has no questions."
+        }
+      />
+    );
+  }
 
   return (
     <div className="overflow-x-auto">
@@ -80,7 +100,17 @@ export function EvalPairTable({
                         aria-label={`Exclude: ${pair.question}`}
                         checked={pair.excluded}
                         onCheckedChange={(checked) =>
-                          setExcluded.mutate({ pairId: pair.id, excluded: checked })
+                          setExcluded.mutate(
+                            { pairId: pair.id, excluded: checked },
+                            {
+                              onError: (error) =>
+                                toast.error(
+                                  isApiError(error)
+                                    ? error.message
+                                    : "That did not save. Try again",
+                                ),
+                            },
+                          )
                         }
                       />
                     </TableCell>

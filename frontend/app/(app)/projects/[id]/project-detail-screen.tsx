@@ -21,6 +21,7 @@ import { Card } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useBreadcrumbLabel } from "@/components/layout/breadcrumb-labels";
 import { useProject } from "@/hooks/use-projects";
 import { can, PERMISSION } from "@/lib/can";
 import { statusLabel } from "@/lib/status";
@@ -32,6 +33,7 @@ function subscribeToHash(onChange: () => void) {
 
 export function ProjectDetailScreen({ id }: { id: string }) {
   const query = useProject(id);
+  useBreadcrumbLabel(`/projects/${id}`, query.data?.name);
   const [addingMember, setAddingMember] = useState(false);
   // A `#members` / `#eval` link (the eval breadcrumb) opens that tab. The server
   // snapshot is empty so the first client render agrees with the server's.
@@ -186,7 +188,10 @@ export function ProjectDetailScreen({ id }: { id: string }) {
               />
             </div>
             <Card className="p-0">
-              <EvalSetTable projectId={project.id} />
+              <EvalSetTable
+                projectId={project.id}
+                canDelete={can(project, PERMISSION.EVAL_RUN)}
+              />
             </Card>
           </TabsContent>
         ) : null}
