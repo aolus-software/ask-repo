@@ -1,1 +1,15 @@
-{}
+{
+  "validation": {
+    "missing": "This field is required.",
+    "string_too_short": "This is too short.",
+    "string_too_long": "This is too long.",
+    "enum": "Choose one of the listed options.",
+    "literal_error": "Choose one of the listed options.",
+    "url_parsing": "Enter a valid URL.",
+    "url_scheme": "The URL must start with https://.",
+    "int_parsing": "Enter a whole number.",
+    "greater_than_equal": "This number is too small.",
+    "less_than_equal": "This number is too large.",
+    "uuid_parsing": "This is not a valid id."
+  }
+}

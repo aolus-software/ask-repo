@@ -1,8 +1,11 @@
+import { useTranslations } from "next-intl";
+
 import { Forbidden } from "@/components/feedback/forbidden";
 import { NotFound } from "@/components/feedback/not-found";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { isApiError } from "@/lib/api/errors";
+import { useErrorText } from "@/lib/i18n/error-text";
 
 /**
  * The one ladder every detail screen uses to read a fetch failure
@@ -22,22 +25,23 @@ export function DetailError({
   notFoundMessage: string;
   onRetry?: () => void;
 }) {
+  const t = useTranslations("feedback");
+  const errorText = useErrorText();
+
   if (isApiError(error)) {
     if (error.status === 404) return <NotFound message={notFoundMessage} />;
-    if (error.status === 403) return <Forbidden message={error.message} />;
+    if (error.status === 403) return <Forbidden message={errorText(error)} />;
   }
-
-  const message = isApiError(error) ? error.message : "Something went wrong.";
 
   return (
     <div className="space-y-4">
       <Alert variant="destructive">
-        <AlertTitle>Could not load this page</AlertTitle>
-        <AlertDescription>{message}</AlertDescription>
+        <AlertTitle>{t("detailTitle")}</AlertTitle>
+        <AlertDescription>{errorText(error)}</AlertDescription>
       </Alert>
       {onRetry ? (
         <Button variant="outline" size="sm" onClick={onRetry}>
-          Try again
+          {t("retry")}
         </Button>
       ) : null}
     </div>

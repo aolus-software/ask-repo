@@ -1,8 +1,9 @@
 import { RefreshCw } from "lucide-react";
+import { useTranslations } from "next-intl";
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import { isApiError } from "@/lib/api/errors";
+import { useErrorText } from "@/lib/i18n/error-text";
 
 /**
  * A list request failed. Rendered instead of, never behind, an empty state — a failed
@@ -12,17 +13,18 @@ import { isApiError } from "@/lib/api/errors";
  * never guesses at how to recover.
  */
 export function ListError({ error, onRetry }: { error: unknown; onRetry: () => void }) {
-  const message = isApiError(error) ? error.message : "Something went wrong.";
+  const t = useTranslations("feedback");
+  const errorText = useErrorText();
 
   return (
     <div className="space-y-4">
       <Alert variant="destructive">
-        <AlertTitle>Could not load this list</AlertTitle>
-        <AlertDescription>{message}</AlertDescription>
+        <AlertTitle>{t("listTitle")}</AlertTitle>
+        <AlertDescription>{errorText(error)}</AlertDescription>
       </Alert>
       <Button variant="outline" size="sm" onClick={onRetry}>
         <RefreshCw className="size-4" />
-        Try again
+        {t("retry")}
       </Button>
     </div>
   );

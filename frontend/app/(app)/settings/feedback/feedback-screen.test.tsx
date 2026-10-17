@@ -64,7 +64,7 @@ describe("FeedbackScreen", () => {
 
     renderScreen();
 
-    expect(screen.getByText("Could not load the summary.")).toBeInTheDocument();
+    expect(screen.getByText("Internal server error.")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: /try again/i }));
     expect(refetchSummary).toHaveBeenCalledTimes(1);
