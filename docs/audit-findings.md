@@ -33,17 +33,11 @@ settle it, is stated).
 
 Every finding from the 2026-09-19 and 2026-09-27 sweeps has been fixed and is in
 [`audit-finding-solved-logs.md`](audit-finding-solved-logs.md). Everything below was raised on
-2026-10-04 and is open.
+2026-10-04 and is still open; what was fixed on 2026-10-17 is in the log.
 
 | # | Finding | Severity | Raised |
 | --- | --- | --- | --- |
-| §3.1 | An administrator can recover a vote's exact time through the feedback date filters, and with it the voter | 🔴 | 2026-10-04 |
-| §8.1 | The worker container never receives the chat model settings | 🔴 | 2026-10-04 |
-| §1.3 | The eval routes' 404 code tells a non-member whether an id exists | 🟠 | 2026-10-04 |
-| §3.2 | Deactivating a user leaves their private conversations live, contrary to the PRD | 🟠 | 2026-10-04 |
-| §8.2 | One failed step in the 60-second sweep makes it re-publish stranded jobs every minute | 🟠 | 2026-10-04 |
 | §2.2 | Two services flatten the project scope into a raw id list, and the single-point grep cannot see it | 🟡 | 2026-10-04 |
-| §3.3 | Deleting a project keeps the free-text notes on its Ask feedback | 🟡 | 2026-10-04 |
 | §5.1 | Deleting a project mid-run can leave live eval results under a deleted run | 🟡 | 2026-10-04 |
 | §7.1 | Four eval routes do not declare `422` | 🟡 | 2026-10-04 |
 | §7.2 | Eval, feedback and activity lists accept `sort`/`search` and ignore them | 🟡 | 2026-10-04 |
@@ -68,23 +62,22 @@ Every finding from the 2026-09-19 and 2026-09-27 sweeps has been fixed and is in
 | §9.30 | Stale comments in the feedback schema and the audit coverage test | 📄 | 2026-10-04 |
 | §9.31 | `PROMPT_VERSION` changes when a non-answer prompt changes (SUSPECT) | 📄 | 2026-10-04 |
 
-## Top priorities (2026-10-04)
+## Top priorities (2026-10-17)
 
-1. **An administrator can work out who cast a feedback vote** (§3.1). The admin list shows only
-   the day of a vote so it cannot be matched against the audit trail — but the date filters accept
-   a time to the second, so narrowing the window recovers it. Make the filters day-only.
-2. **In Docker, the worker never receives the chat model settings** (§8.1). In production it falls
-   back to an Ollama address inside its own container and should refuse to start; anywhere, a
-   provider set in `infra/.env` reaches the API and not generation. Move the `CHAT_*` variables
-   into the block both services share.
-3. **The 60-second recovery sweep can start the same generation every minute** (§8.2) if any later
-   step in that tick fails, because every step shares one transaction. Commit each step on its own.
-4. **Deactivating a user does not delete their private conversations** (§3.2), which the PRD says
-   it does.
-5. **The eval routes' error code reveals whether an id exists** to someone with no membership
-   (§1.3).
-6. Then the eval job edge cases (§5.1, §8.3–§8.6), the response-contract gaps (§7.1–§7.3), the
-   duplication (§9.19–§9.22), and the documentation (§9.18, §9.23–§9.31).
+Both 🔴 bugs and all three 🟠 findings from 2026-10-04 were fixed on 2026-10-17, along with §3.3,
+and are in the log. Everything still open is hygiene or documentation.
+
+1. **One owner decision is waiting: §9.31.** One prompt version is stamped on every vote, every
+   model call and every eval run. Hashing only the answer prompts (the option first chosen) would
+   stop checklist, mock-data and judge prompt edits from moving the version on the records that
+   depend on them. Recommended instead: a version per feature.
+2. **The eval job edge cases** (§5.1, §8.3–§8.6): about a minute of orphan results after a
+   mid-run project delete, a failed run's empty tallies, a generator that never checks its lease,
+   a resumed run's overwritten stamp, and audit-after-publish ordering.
+3. **The response-contract gaps** (§7.1–§7.3), the duplication (§9.19–§9.22), and the scope
+   plumbing in two services (§2.2).
+4. **The documentation** (§9.18, §9.23–§9.30), in particular §9.26: the PRD still does not record
+   Phase 2.6 as shipped, and must before a release is cut.
 
 ---
 
@@ -452,38 +445,8 @@ id's (§1.3). The two frontend decisions are in [`ui-audit-findings.md`](ui-audi
 
 ## §1 Access control
 
-### §1.3 The eval routes' 404 code tells a non-member whether an id exists — 🟠 inconsistency
-
-**Evidence:** CONFIRMED by reading; not executed.
-
-**Where:** `backend/app/services/eval.py:348-365` (`_load_set`), `:201-208` (`set_excluded`),
-`:334-341` (`get_run`), and the module docstring `:1-7`; `backend/tests/test_eval_api.py:175-181`,
-`:606`, `:614`
-
-**What this is.** An eval set is a saved list of questions generated from a project's code. It
-belongs to one project, and only that project's members may see it. `CLAUDE.md` ("`403` vs `404`
-is a security decision") requires that someone with no membership cannot tell "this does not
-exist" from "you may not see this" — repository names are private inventory, and so is the
-existence of work done against them.
-
-**Why this can happen.** `_load_set` looks the set up by id first. A missing id answers
-`404 EVAL_SET_NOT_FOUND`. A real id then goes through `require_readable_project`, which answers a
-non-member with `404 PROJECT_NOT_FOUND`. Both are `404`, but the **code** differs, and the code is
-in the response body. So a former member who kept a set's id (or anyone who saw it in a URL) can
-tell whether it still exists. Runs and pairs follow the same path. One test
-(`test_eval_api.py:181`) accepts either code, so it does not catch this. The other two pin the
-current, split behaviour: `:606` asserts `PROJECT_NOT_FOUND` for a non-member and `:614` asserts
-`EVAL_RUN_NOT_FOUND` for an unknown run. The service docstring and the module docstring argue it
-is safe because the project is never named. That is true, but it is not the rule.
-
-**What it costs.** Small today — ids are random UUIDs, so this confirms a known id rather than
-enumerating. It is, however, the one place in the app where the answer differs; feedback
-(`FEEDBACK_TARGET_NOT_FOUND`) and checklist reads already give a single code.
-
-**What we should do.** Resolve the caller's access first and turn every miss into the resource's
-own code: `EVAL_SET_NOT_FOUND` for sets and pairs, `EVAL_RUN_NOT_FOUND` for runs. Tighten the loose
-test at `:181` to assert that one code, change `:606` to expect the resource's code, and correct both
-docstrings. About an hour. Owner decision (2026-10-04): treat as a finding.
+Every finding this sweep raised here (§1.3) was resolved on 2026-10-17 and is in
+[`audit-finding-solved-logs.md`](audit-finding-solved-logs.md).
 
 ## §2 Read scoping
 
@@ -522,87 +485,8 @@ query, the way the project and checklist repositories already do. Then add a gre
 
 ## §3 Conversation and voter privacy
 
-### §3.1 An administrator can recover a vote's exact time through the feedback date filters — 🔴 bug
-
-**Evidence:** CONFIRMED by reading `backend/app/repositories/feedback.py:36-63`; not executed.
-Re-verified 2026-10-17.
-
-**Where:** `backend/app/schemas/feedback.py:59-60` (`created_from`, `created_to` are `datetime`),
-`backend/app/repositories/feedback.py:36-63` (`_apply`; the date filters are `:50-62`),
-`backend/app/services/feedback.py:252-268` (`_filters`)
-
-**What this is.** Users can give a thumbs-up or thumbs-down on an answer, with an optional note.
-Administrators read these in aggregate on `/settings/feedback`. The voter is never shown — and,
-deliberately, neither is the vote's time of day: `.claude/rules/feedback.md` rule 2 explains that
-the audit trail already records, to the second, when each user opened a conversation
-(`conversation.created`). A vote time to the second could be matched against that row and would
-name the voter. So the admin list shows only the **day** (`createdOn`) and orders within a day by
-a random id.
-
-**Why this can happen.** The filters `createdFrom` and `createdTo` are typed as full timestamps.
-Only a value at exactly midnight is widened to a whole day; any other value is compared to the
-second, and the same filter drives the list, its count and every aggregate. An administrator:
-
-1. filters to one project, one feature, and a 30-second window → sees whether a vote is inside it;
-2. halves the window repeatedly → recovers the vote's second;
-3. opens `/audit-events` for that project → finds whose `conversation.created` falls just before.
-
-**What it costs.** It defeats the specific protection the PRD and rule 2 promise, for every Ask
-vote on the instance, using only screens an administrator already has. A voter's note becomes
-attributable to them. (Rule 2 already calls day-only a mitigation rather than a guarantee: on a
-project with a single member, that member is the voter anyway. This finding is about every other
-project, where the day-only design does hide the voter and the filters undo it.)
-
-**What we should do.** Make the filters day-precision: type them as `date`, and compare
-`>= day` and `< day + 1` in UTC (the same day `createdOn` reports). Add a test that a sub-day
-window cannot narrow the result. One to two hours. See `.claude/rules/feedback.md` rule 2.
-
-### §3.2 Deactivating a user leaves their private conversations live — 🟠 inconsistency
-
-**Evidence:** CONFIRMED.
-
-**Where:** `docs/PRD.md:448`; `backend/app/services/user.py:215-258` (`soft_delete`, through its
-audit record);
-`backend/app/repositories/conversation.py:87` (only `soft_delete_for_project` exists)
-
-**What this is.** Soft delete marks a row deleted (`deleted_at`) rather than removing it, so every
-query skips it. The PRD says that when an administrator deactivates an account, "their private
-conversations are soft-deleted with them".
-
-**Why this can happen.** `UserService.soft_delete` deactivates the user and revokes their refresh
-tokens, and does nothing else. Their conversations, and the notes on their Ask feedback, stay
-live. (Messages have no `deleted_at` of their own; they are reachable only through their
-conversation.) They are unreachable only because their owner can no longer sign in.
-
-**What it costs.** Rows the PRD promises are deleted are not. Anything that later reads
-conversations without going through the owner — a reactivation, an export, a future admin tool —
-would find them.
-
-**What we should do.** In the same transaction as the deactivation, soft-delete the user's
-conversations (a per-owner sibling of `soft_delete_for_project`) and null the notes on their Ask feedback (`UPDATE feedback SET note =
-NULL` for their `message` targets). Add a test. About two hours. Owner decision (2026-10-04): the
-PRD is right and the code should change.
-
-### §3.3 Deleting a project keeps the free-text notes on its Ask feedback — 🟡 hygiene
-
-**Evidence:** CONFIRMED.
-
-**Where:** `backend/app/services/project.py:347`, `:387`; `backend/app/repositories/feedback.py:150-166`
-(`clear_notes_for_conversation`, called only from `backend/app/services/conversation.py:199`)
-
-**What this is.** Deleting one conversation nulls the notes on its feedback, because a note is
-the user's own text about a private turn. Deleting a project soft-deletes all its conversations
-and its feedback.
-
-**Why this can happen.** The project delete soft-deletes the feedback rows but never nulls their
-notes, unlike the per-conversation path. Feedback retention defaults to keep-forever.
-
-**What it costs.** User-written text about private turns survives in deleted rows indefinitely.
-No route reads it, so nothing is exposed today; it is a second copy outside the lifecycle the
-conversation path enforces.
-
-**What we should do.** Null the project's Ask feedback notes in the delete transaction. The same
-statement serves §3.2. Half an hour.
+Every finding this sweep raised here (§3.1–§3.3) was resolved on 2026-10-17 and is in
+[`audit-finding-solved-logs.md`](audit-finding-solved-logs.md).
 
 ## §5 Soft delete
 
@@ -692,75 +576,6 @@ after validation. `{"name": "   "}` passes, stores `""`, and writes an empty aud
 module name has the same gap; fix both together.
 
 ## §8 Job and status handling
-
-### §8.1 The worker container never receives the chat model settings — 🔴 bug
-
-**Evidence:** the configuration is CONFIRMED (`docker compose config` resolves no `CHAT_*`
-variable on `worker` in either file, and `worker` loads no env file). The production crash is
-inferred; `make up-prod` and the worker's log would confirm it.
-
-**Where:** `infra/docker-compose.yml:242-249`, `infra/docker-compose.prod.yml:263-269` (the
-`CHAT_*` block, under `backend:` only, commented "API-only: the worker indexes, it never answers a
-question"); `backend/app/config.py:175-177`; `backend/app/worker.py:284-298`
-
-**What this is.** The worker is the background process that runs long jobs. Since milestone 4 it
-also needs a chat model: checklist and mock-data generation, eval set generation and eval runs all
-run there, and at startup it checks the model can return structured output, refusing to boot if
-not (`docs/llm.md`). The two compose files pass the chat settings — provider, model, base URL,
-key — to the API container only. The comment explaining why is from milestone 2, when the worker
-only indexed.
-
-**Why this can happen.** With no `CHAT_*` in its environment, the worker uses the defaults in
-`Settings`: provider `ollama` at `http://localhost:11434`. Inside a container, `localhost` is the
-container itself, not the host. Then:
-
-- **Production** (`make up-prod`): nothing answers there, the startup check fails, and the worker
-  crash-loops. No indexing, generation or eval runs.
-- **Development** (`make up`): probably hidden, because the worker bind-mounts the working copy over
-  `/app` and so can read `backend/.env`.
-- **Either stack:** an operator who sets `CHAT_PROVIDER=anthropic` and a key in `infra/.env` changes
-  the API only. Answers use Anthropic; checklists and eval runs still try Ollama.
-
-**What it costs.** A production instance whose background work never starts, or, when it does
-start, generation running on a different model than the operator chose.
-
-**What we should do.** Move the `CHAT_*` block into the `x-app-env` block both services share, in
-both compose files. Also add `GENERATION_TIMEOUT_SECONDS`, which is in neither file today, only in
-`backend/.env.example:110`. Replace the stale comment, and the one at
-`infra/docker-compose.prod.yml:~319-322` that still names "probing embedding dimensions" as the
-worker's only failure mode. Then
-run `make up-prod` and confirm the worker passes its probe. About an hour.
-`.claude/rules/documentation.md` requires the production file to receive the same change.
-
-### §8.2 One failed step in the 60-second sweep makes it re-publish stranded jobs every minute — 🟠 latent risk
-
-**Evidence:** CONFIRMED mechanism (`backend/app/worker.py:226-264` — one session, one commit at the
-end). The trigger needs a later step to fail; no test forces one.
-
-**Where:** `backend/app/worker.py:226-264`, `:280`
-
-**What this is.** Every 60 seconds the worker's reconcile sweep finds jobs that were never picked
-up — an ingestion, a checklist or mock-data generation, an eval set or run — and publishes them
-again. For generation jobs it gives each re-publish a fresh job id, so a duplicate cannot be
-refused by its id; what stops the sweep publishing the same row forever is that it stamps the row's
-`updated_at` (`CLAUDE.md`, "The checklist sweep is the exception").
-
-**Why this can happen.** All of the sweep's steps share one transaction, committed once at the end
-after token, audit, notification and feedback pruning. Sequence: the sweep stamps three stranded
-rows → publishes their jobs to Kafka (this cannot be undone) → a later prune step raises → the
-transaction rolls back and the stamps are lost → next tick, the same rows look stranded again and
-are published again.
-
-**What it costs.** For as long as the later failure persists **and** the row stays unclaimed, one
-extra job is published per stranded row per minute. Once a worker claims the row, its live lease
-takes it out of `claim_stranded`'s reach, and the repeat stops. A duplicate generation that does
-run costs a full set of model calls. A duplicate eval run costs only the pairs not yet answered,
-because a resumed run skips them. This is real model spend on a hosted provider, in a failure that
-nobody sees. Eval is the third job kind on this path; checklist and mock data were already
-exposed.
-
-**What we should do.** Commit after each `reconcile_*_once`, and give the pruning steps their own
-session and `try`/`except`. Add a test that a failing prune does not undo a stamp. Two hours.
 
 ### §8.3 A failed eval run reports zero tallies and no finish time — 🟡 hygiene
 
@@ -986,6 +801,13 @@ has seven);
 still unsettled. The module docstring (`prompt_version.py:3-6`) and `prompts.py:189` say "any edit
 changes the version" deliberately, and nothing records a decision either way about scoping it to
 the answer path. The owner settles it.
+
+**Decision pending (2026-10-17).** The owner first chose "hash only the answer-path prompts". That
+was not implemented, because the same version is also stamped on checklist and mock-data
+change-set feedback, on every call record, and on eval runs, whose scores depend on the judge prompt.
+Answer-path-only would leave those stamps unchanged when the prompts behind them change, which is
+the comparison they exist for. The alternative put back to the owner: a version per feature, with
+eval runs stamping an answer version and a judge version.
 
 **Where:** `backend/app/rag/prompt_version.py:18-25`; stamped at `backend/app/services/feedback.py:116`,
 `backend/app/observability/recorder.py:110`, `:172`, `backend/app/eval/runner.py:132`

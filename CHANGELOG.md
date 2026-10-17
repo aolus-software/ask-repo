@@ -24,6 +24,49 @@ client can have received it, so it is recorded under Changed and allowed in a `M
 
 ### Fixed
 
+- **An administrator could recover when a feedback vote was cast, and with it the voter**
+  (audit §3.1). `createdFrom`/`createdTo` on `GET /feedback` and `GET /feedback/summary` took a
+  full timestamp, so halving the window around one vote recovered its second, which
+  `conversation.created` in the audit trail then names. Both are now UTC calendar days
+  (`YYYY-MM-DD`), inclusive at both ends, and a value carrying a time of day answers `422`.
+- **In Docker, the worker never received the chat model settings** (audit §8.1). `CHAT_*` was set
+  on the API service only, so checklist, mock-data and eval generation fell back to
+  `localhost:11434`, which inside a container is the container itself. In production that crash-looped
+  the worker; a hosted provider set in `infra/.env` reached answers but not generation. Both
+  compose files now share `CHAT_*` and `GENERATION_TIMEOUT_SECONDS` across the API and the worker.
+- **Deactivating a user now deletes their private conversations** (audit §3.2), as `docs/PRD.md`
+  §4.0 always said it did, and nulls the notes on their Ask votes in the same transaction. Deleting
+  a project now nulls the notes on its Ask votes too, as deleting one conversation already did
+  (audit §3.3).
+- **The eval routes' `404` code no longer tells a non-member whether an id exists** (audit §1.3).
+  A real eval set, pair or run in a project the caller holds no membership on now answers with the
+  same code a random id gets — `EVAL_SET_NOT_FOUND` for sets and pairs, `EVAL_RUN_NOT_FOUND` for
+  runs — rather than `PROJECT_NOT_FOUND`.
+- **One failing step in the worker's 60-second sweep could re-publish stranded jobs every minute**
+  (audit §8.2). Every step shared one transaction, so a prune that raised rolled back the stamp
+  `claim_stranded` had written while its Kafka publish stood. Each recovery and prune step now
+  commits on its own.
+- **The eval set screen no longer reports false states when a request fails** (UI audit §U7.7–§U7.11).
+  Its runs card showed "No runs yet" while loading and forever on an error, a project that failed
+  to load rendered "not found", the run sheet could say "Loading the run…" indefinitely, a
+  generating or failed set invited a run the page refused, and the compare section rendered
+  nothing while loading. Each now has a skeleton while loading and an error with retry.
+- **Excluding an eval pair or starting a run no longer fails silently** (UI audit §U6.12,
+  §U6.13). Both toast the server's message on failure, and a started run says so.
+- **Screens no longer show placeholder values as real ones** (UI audit §U7.12–§U7.14). The Answer
+  style tab shows skeletons until the saved style arrives, rather than "Default" on every dial. The
+  checklist and mock-data tabs say a generation is running rather than inviting another, and the
+  checklist chat waits for it as the mock-data chat already did. While the change-set list loads
+  or fails, the pending-review button is a skeleton or an error, not missing.
+- **Mock-data change-set rows now name the record they change** (UI audit §U8.9): update and
+  remove rows show the record's id, and two of its fields while it still exists.
+- **A stored answer shows its sources above the answer, as the live one does** (UI audit §U8.12),
+  so they no longer jump below it when a turn finishes.
+- **Breadcrumbs show names instead of ids** (UI audit §U9.6) on project, checklist module,
+  conversation and eval set pages.
+- **Lists, headings, tables and quotes in answers are styled** (UI audit §U10.11); they had rendered
+  as plain paragraphs on Ask and in both refinement chats.
+- **The dashboard and the feedback summary share one stat tile** (UI audit §U10.12).
 - **A stale duplicate job could re-claim a finished eval set or run.** A reconcile-sweep copy
   carries a fresh job id, so the claim's job-id check could not refuse it; the claim now also
   requires the row to still be `generating` / `running`. A re-claimed `ready` set appended a second
@@ -32,6 +75,11 @@ client can have received it, so it is recorded under Changed and allowed in a `M
   deleting an eval set takes the same row lock a run start does.
 
 ### Added
+
+- **Eval sets can be deleted from the UI** (UI audit §U6.14): a row action on the project's Eval
+  tab and a Delete action on the set screen, both behind `eval.run`, the permission
+  `DELETE /eval-sets/{id}` checks. The confirmation names the set and says its questions, runs and
+  results go with it.
 
 - **User feedback on model output** (`docs/PRD.md` §2.1, phase 2.5, stage 1, issue #55): a
   thumbs-up/down vote, with an optional reason code and note, on every model-authored output —

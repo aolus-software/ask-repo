@@ -651,6 +651,224 @@ the opposite of true.
 
 ---
 
+## Sweep 2026-10-04
+
+Swept at `df7594e` on `main`, read-only, and re-verified 2026-10-17. The findings below were fixed on `fix/audit-sweep-2026-10-17`; the rest of that sweep is still open in [`audit-findings.md`](audit-findings.md).
+
+### §3.1 An administrator can recover a vote's exact time through the feedback date filters — 🔴 bug — ✅ RESOLVED 2026-10-17
+
+> Fixed. `createdFrom`/`createdTo` are now `date`, compared as whole UTC days in `FeedbackRepository._apply`; a value with a time of day answers `422` (`tests/test_feedback_admin_api.py::test_date_filters_refuse_a_time_of_day`). `.claude/rules/feedback.md` rule 2 now says so. On `fix/audit-sweep-2026-10-17`.
+>
+> Original finding follows.
+
+**Evidence:** CONFIRMED by reading `backend/app/repositories/feedback.py:36-63`; not executed.
+Re-verified 2026-10-17.
+
+**Where:** `backend/app/schemas/feedback.py:59-60` (`created_from`, `created_to` are `datetime`),
+`backend/app/repositories/feedback.py:36-63` (`_apply`; the date filters are `:50-62`),
+`backend/app/services/feedback.py:252-268` (`_filters`)
+
+**What this is.** Users can give a thumbs-up or thumbs-down on an answer, with an optional note.
+Administrators read these in aggregate on `/settings/feedback`. The voter is never shown — and,
+deliberately, neither is the vote's time of day: `.claude/rules/feedback.md` rule 2 explains that
+the audit trail already records, to the second, when each user opened a conversation
+(`conversation.created`). A vote time to the second could be matched against that row and would
+name the voter. So the admin list shows only the **day** (`createdOn`) and orders within a day by
+a random id.
+
+**Why this can happen.** The filters `createdFrom` and `createdTo` are typed as full timestamps.
+Only a value at exactly midnight is widened to a whole day; any other value is compared to the
+second, and the same filter drives the list, its count and every aggregate. An administrator:
+
+1. filters to one project, one feature, and a 30-second window → sees whether a vote is inside it;
+2. halves the window repeatedly → recovers the vote's second;
+3. opens `/audit-events` for that project → finds whose `conversation.created` falls just before.
+
+**What it costs.** It defeats the specific protection the PRD and rule 2 promise, for every Ask
+vote on the instance, using only screens an administrator already has. A voter's note becomes
+attributable to them. (Rule 2 already calls day-only a mitigation rather than a guarantee: on a
+project with a single member, that member is the voter anyway. This finding is about every other
+project, where the day-only design does hide the voter and the filters undo it.)
+
+**What we should do.** Make the filters day-precision: type them as `date`, and compare
+`>= day` and `< day + 1` in UTC (the same day `createdOn` reports). Add a test that a sub-day
+window cannot narrow the result. One to two hours. See `.claude/rules/feedback.md` rule 2.
+
+
+### §8.1 The worker container never receives the chat model settings — 🔴 bug — ✅ RESOLVED 2026-10-17
+
+> Fixed. `CHAT_*` and `GENERATION_TIMEOUT_SECONDS` moved into `x-app-env` in both compose files, so the worker resolves them; the stale "API-only" comment is gone and the production worker comment names the chat probe. Verified with `docker compose config` on both files; `make up-prod` was not run. On `fix/audit-sweep-2026-10-17`.
+>
+> Original finding follows.
+
+**Evidence:** the configuration is CONFIRMED (`docker compose config` resolves no `CHAT_*`
+variable on `worker` in either file, and `worker` loads no env file). The production crash is
+inferred; `make up-prod` and the worker's log would confirm it.
+
+**Where:** `infra/docker-compose.yml:242-249`, `infra/docker-compose.prod.yml:263-269` (the
+`CHAT_*` block, under `backend:` only, commented "API-only: the worker indexes, it never answers a
+question"); `backend/app/config.py:175-177`; `backend/app/worker.py:284-298`
+
+**What this is.** The worker is the background process that runs long jobs. Since milestone 4 it
+also needs a chat model: checklist and mock-data generation, eval set generation and eval runs all
+run there, and at startup it checks the model can return structured output, refusing to boot if
+not (`docs/llm.md`). The two compose files pass the chat settings — provider, model, base URL,
+key — to the API container only. The comment explaining why is from milestone 2, when the worker
+only indexed.
+
+**Why this can happen.** With no `CHAT_*` in its environment, the worker uses the defaults in
+`Settings`: provider `ollama` at `http://localhost:11434`. Inside a container, `localhost` is the
+container itself, not the host. Then:
+
+- **Production** (`make up-prod`): nothing answers there, the startup check fails, and the worker
+  crash-loops. No indexing, generation or eval runs.
+- **Development** (`make up`): probably hidden, because the worker bind-mounts the working copy over
+  `/app` and so can read `backend/.env`.
+- **Either stack:** an operator who sets `CHAT_PROVIDER=anthropic` and a key in `infra/.env` changes
+  the API only. Answers use Anthropic; checklists and eval runs still try Ollama.
+
+**What it costs.** A production instance whose background work never starts, or, when it does
+start, generation running on a different model than the operator chose.
+
+**What we should do.** Move the `CHAT_*` block into the `x-app-env` block both services share, in
+both compose files. Also add `GENERATION_TIMEOUT_SECONDS`, which is in neither file today, only in
+`backend/.env.example:110`. Replace the stale comment, and the one at
+`infra/docker-compose.prod.yml:~319-322` that still names "probing embedding dimensions" as the
+worker's only failure mode. Then
+run `make up-prod` and confirm the worker passes its probe. About an hour.
+`.claude/rules/documentation.md` requires the production file to receive the same change.
+
+
+### §1.3 The eval routes' 404 code tells a non-member whether an id exists — 🟠 inconsistency — ✅ RESOLVED 2026-10-17
+
+> Fixed. `require_readable_project` takes an optional `not_found` error, and `EvalService._load_set` passes the resource's own, so a set, pair or run in a hidden project answers exactly as a random id does. The three tests now each pin one code. On `fix/audit-sweep-2026-10-17`.
+>
+> Original finding follows.
+
+**Evidence:** CONFIRMED by reading; not executed.
+
+**Where:** `backend/app/services/eval.py:348-365` (`_load_set`), `:201-208` (`set_excluded`),
+`:334-341` (`get_run`), and the module docstring `:1-7`; `backend/tests/test_eval_api.py:175-181`,
+`:606`, `:614`
+
+**What this is.** An eval set is a saved list of questions generated from a project's code. It
+belongs to one project, and only that project's members may see it. `CLAUDE.md` ("`403` vs `404`
+is a security decision") requires that someone with no membership cannot tell "this does not
+exist" from "you may not see this" — repository names are private inventory, and so is the
+existence of work done against them.
+
+**Why this can happen.** `_load_set` looks the set up by id first. A missing id answers
+`404 EVAL_SET_NOT_FOUND`. A real id then goes through `require_readable_project`, which answers a
+non-member with `404 PROJECT_NOT_FOUND`. Both are `404`, but the **code** differs, and the code is
+in the response body. So a former member who kept a set's id (or anyone who saw it in a URL) can
+tell whether it still exists. Runs and pairs follow the same path. One test
+(`test_eval_api.py:181`) accepts either code, so it does not catch this. The other two pin the
+current, split behaviour: `:606` asserts `PROJECT_NOT_FOUND` for a non-member and `:614` asserts
+`EVAL_RUN_NOT_FOUND` for an unknown run. The service docstring and the module docstring argue it
+is safe because the project is never named. That is true, but it is not the rule.
+
+**What it costs.** Small today — ids are random UUIDs, so this confirms a known id rather than
+enumerating. It is, however, the one place in the app where the answer differs; feedback
+(`FEEDBACK_TARGET_NOT_FOUND`) and checklist reads already give a single code.
+
+**What we should do.** Resolve the caller's access first and turn every miss into the resource's
+own code: `EVAL_SET_NOT_FOUND` for sets and pairs, `EVAL_RUN_NOT_FOUND` for runs. Tighten the loose
+test at `:181` to assert that one code, change `:606` to expect the resource's code, and correct both
+docstrings. About an hour. Owner decision (2026-10-04): treat as a finding.
+
+
+### §3.2 Deactivating a user leaves their private conversations live — 🟠 inconsistency — ✅ RESOLVED 2026-10-17
+
+> Fixed. `UserService.soft_delete` soft-deletes the user's conversations (`ConversationRepository.soft_delete_for_owner`) and nulls the notes on their Ask votes (`FeedbackRepository.clear_ask_notes_for_user`) in the deactivation's transaction. Test: `tests/test_users_api.py::test_deleting_a_user_deletes_their_conversations_and_ask_notes`. On `fix/audit-sweep-2026-10-17`.
+>
+> Original finding follows.
+
+**Evidence:** CONFIRMED.
+
+**Where:** `docs/PRD.md:448`; `backend/app/services/user.py:215-258` (`soft_delete`, through its
+audit record);
+`backend/app/repositories/conversation.py:87` (only `soft_delete_for_project` exists)
+
+**What this is.** Soft delete marks a row deleted (`deleted_at`) rather than removing it, so every
+query skips it. The PRD says that when an administrator deactivates an account, "their private
+conversations are soft-deleted with them".
+
+**Why this can happen.** `UserService.soft_delete` deactivates the user and revokes their refresh
+tokens, and does nothing else. Their conversations, and the notes on their Ask feedback, stay
+live. (Messages have no `deleted_at` of their own; they are reachable only through their
+conversation.) They are unreachable only because their owner can no longer sign in.
+
+**What it costs.** Rows the PRD promises are deleted are not. Anything that later reads
+conversations without going through the owner — a reactivation, an export, a future admin tool —
+would find them.
+
+**What we should do.** In the same transaction as the deactivation, soft-delete the user's
+conversations (a per-owner sibling of `soft_delete_for_project`) and null the notes on their Ask feedback (`UPDATE feedback SET note =
+NULL` for their `message` targets). Add a test. About two hours. Owner decision (2026-10-04): the
+PRD is right and the code should change.
+
+
+### §3.3 Deleting a project keeps the free-text notes on its Ask feedback — 🟡 hygiene — ✅ RESOLVED 2026-10-17
+
+> Fixed with §3.2. Project delete calls `FeedbackRepository.clear_ask_notes_for_project` before soft-deleting the feedback; change-set notes keep their text. Test: `tests/test_project_service.py::test_delete_nulls_the_notes_on_its_ask_feedback_only`. On `fix/audit-sweep-2026-10-17`.
+>
+> Original finding follows.
+
+**Evidence:** CONFIRMED.
+
+**Where:** `backend/app/services/project.py:347`, `:387`; `backend/app/repositories/feedback.py:150-166`
+(`clear_notes_for_conversation`, called only from `backend/app/services/conversation.py:199`)
+
+**What this is.** Deleting one conversation nulls the notes on its feedback, because a note is
+the user's own text about a private turn. Deleting a project soft-deletes all its conversations
+and its feedback.
+
+**Why this can happen.** The project delete soft-deletes the feedback rows but never nulls their
+notes, unlike the per-conversation path. Feedback retention defaults to keep-forever.
+
+**What it costs.** User-written text about private turns survives in deleted rows indefinitely.
+No route reads it, so nothing is exposed today; it is a second copy outside the lifecycle the
+conversation path enforces.
+
+**What we should do.** Null the project's Ask feedback notes in the delete transaction. The same
+statement serves §3.2. Half an hour.
+
+
+### §8.2 One failed step in the 60-second sweep makes it re-publish stranded jobs every minute — 🟠 latent risk — ✅ RESOLVED 2026-10-17
+
+> Fixed. `reconcile_tick` runs each recovery and prune step through `_run_step`, its own session and commit, so a failing step cannot undo another's stamp. The new test fails against the old single-transaction shape and passes with the fix; `.claude/rules/ingestion.md` records the rule. On `fix/audit-sweep-2026-10-17`.
+>
+> Original finding follows.
+
+**Evidence:** CONFIRMED mechanism (`backend/app/worker.py:226-264` — one session, one commit at the
+end). The trigger needs a later step to fail; no test forces one.
+
+**Where:** `backend/app/worker.py:226-264`, `:280`
+
+**What this is.** Every 60 seconds the worker's reconcile sweep finds jobs that were never picked
+up — an ingestion, a checklist or mock-data generation, an eval set or run — and publishes them
+again. For generation jobs it gives each re-publish a fresh job id, so a duplicate cannot be
+refused by its id; what stops the sweep publishing the same row forever is that it stamps the row's
+`updated_at` (`CLAUDE.md`, "The checklist sweep is the exception").
+
+**Why this can happen.** All of the sweep's steps share one transaction, committed once at the end
+after token, audit, notification and feedback pruning. Sequence: the sweep stamps three stranded
+rows → publishes their jobs to Kafka (this cannot be undone) → a later prune step raises → the
+transaction rolls back and the stamps are lost → next tick, the same rows look stranded again and
+are published again.
+
+**What it costs.** For as long as the later failure persists **and** the row stays unclaimed, one
+extra job is published per stranded row per minute. Once a worker claims the row, its live lease
+takes it out of `claim_stranded`'s reach, and the repeat stops. A duplicate generation that does
+run costs a full set of model calls. A duplicate eval run costs only the pairs not yet answered,
+because a resumed run skips them. This is real model spend on a hosted provider, in a failure that
+nobody sees. Eval is the third job kind on this path; checklist and mock data were already
+exposed.
+
+**What we should do.** Commit after each `reconcile_*_once`, and give the pruning steps their own
+session and `try`/`except`. Add a test that a failing prune does not undo a stamp. Two hours.
+
+
 # Frontend (`/audit-ui`)
 
 ## Sweep 2026-09-13
@@ -2809,6 +3027,364 @@ there. Both the navigation rule and `CLAUDE.md` say so.
 CONFIRMED.
 
 ---
+
+## Sweep 2026-10-04
+
+Swept at `df7594e` on `main`, read-only; bodies written and re-verified 2026-10-17. The findings below were fixed on `fix/audit-sweep-2026-10-17`; the rest of that sweep is still open in [`ui-audit-findings.md`](ui-audit-findings.md).
+
+### §U6.12 Excluding an eval pair fails silently — 🔴 bug — ✅ RESOLVED 2026-10-17
+
+> Fixed. The exclude switch toasts the server's message on failure (`components/eval/eval-pair-table.tsx`). On `fix/audit-sweep-2026-10-17`.
+>
+> Original finding follows.
+
+**Where:** `components/eval/eval-pair-table.tsx:81-84`; `hooks/use-eval.ts:114-124` (`useSetPairExcluded`)
+
+**What this is.** Each generated question in an eval set has a switch that excludes it from future
+runs. `docs/design.md` → Feedback requires every mutation to end in a toast, a field error or an
+alert.
+
+**Why this can happen.** The switch calls the mutation with no `onError`, and the hook has none
+either. The switch is controlled by the server's value, so when the request fails it snaps back.
+
+**What it costs.** A user excludes a bad question, the switch flicks back, and nothing says why. If
+they don't notice, the next run includes a question they removed, and its score is not the one
+they thought they asked for.
+
+**What we should do.** Add an `onError` toast that carries the server's message. Minutes.
+
+
+### §U6.13 Starting an eval run discards the server's error and has no success toast — 🟠 inconsistency — ✅ RESOLVED 2026-10-17
+
+> Fixed. Starting a run toasts "Run started", and the server's message on failure (`components/eval/eval-set-screen.tsx`). On `fix/audit-sweep-2026-10-17`.
+>
+> Original finding follows.
+
+**Where:** `components/eval/eval-set-screen.tsx:107-109`; `hooks/use-eval.ts:101-112`
+
+**What this is.** Starting a run is a long job, and the backend refuses it with a specific message
+in some cases, for example `409` while a reindex is running.
+
+**Why this can happen.** The failure path shows a fixed "The run could not be started.", which
+throws away the server's explanation, and the success path shows nothing.
+
+**What it costs.** A user refused because of a reindex is not told that waiting will fix it. A user
+who succeeds gets no confirmation until the row appears.
+
+**What we should do.** Toast the server's message on error (the shared error helper already
+extracts it) and add a success toast such as "Run started". Half an hour.
+
+
+### §U6.14 Eval sets cannot be deleted from the UI — 🟠 inconsistency — ✅ RESOLVED 2026-10-17
+
+> Fixed. New `components/eval/delete-eval-set-dialog.tsx`; a row action on the Eval tab and a header action on the set screen, both behind `eval.run`. Deleting from the set screen returns to the project's Eval tab. On `fix/audit-sweep-2026-10-17`.
+>
+> Original finding follows.
+
+**Where:** `hooks/use-eval.ts:126` (`useDeleteEvalSet`, unused); `components/eval/eval-set-table.tsx:63-89`;
+`components/eval/eval-set-screen.tsx:98-117`; `backend/app/api/routes/eval.py` (the delete route)
+
+**What this is.** The API can delete an eval set, and a hook for it already exists.
+
+**Why this can happen.** No screen calls the hook. The set table has no actions column, and the set
+screen's header holds only Run.
+
+**What it costs.** Old or broken eval sets pile up on the Eval tab with no way to remove them except
+the API directly. Owner decision (2026-10-04): it should be deletable.
+
+**What we should do.** Add a row action and a header action that open a `ConfirmDialog`. The dialog
+should name the set and say that its runs and results go with it, and the action should be gated on
+the eval permission the backend checks. Two hours.
+
+
+### §U7.7 An eval set's runs read "No runs yet" while loading, and forever if the request fails — 🔴 bug — ✅ RESOLVED 2026-10-17
+
+> Fixed. `EvalRunTable` takes the query's loading and error state and renders `TableSkeleton` / `ListError`. On `fix/audit-sweep-2026-10-17`.
+>
+> Original finding follows.
+
+**Where:** `components/eval/eval-set-screen.tsx:75`, `:140`; `components/eval/eval-run-table.tsx:26-33`
+
+**What this is.** Every surface that reads data must show a distinct loading, empty and error state
+(`docs/design.md`).
+
+**Why this can happen.** The screen takes `runsQuery.data?.items ?? []` and ignores loading and
+error, so the table always receives a list. An empty one renders the "No runs yet" empty state.
+
+**What it costs.** A user is told a set has never been run while the runs are loading, and
+indefinitely when the request fails. That is a false statement about their data, so it is red.
+
+**What we should do.** Render `TableSkeleton` while loading and `ListError` on error, as every
+other list does. Half an hour.
+
+
+### §U7.8 The eval set screen reports any project-load failure as "not found" — 🔴 bug — ✅ RESOLVED 2026-10-17
+
+> Fixed. A project-load error routes through `DetailError` before the not-found checks. On `fix/audit-sweep-2026-10-17`.
+>
+> Original finding follows.
+
+**Where:** `components/eval/eval-set-screen.tsx:70-72`; compare `:61-69` and
+`components/feedback/detail-error.tsx:25-31`
+
+**What this is.** The set screen loads the project and the set. The set's failure path is correct:
+`DetailError` turns `404` into Not found, `403` into Forbidden, and anything else into a retry
+alert.
+
+**Why this can happen.** The project query's error is never read. If the project fails to load,
+for any reason including a network blip, the set query stays disabled, and the screen falls through
+to `if (!set || !project) return <NotFound />`.
+
+**What it costs.** A transient error tells the user the eval set, and with it their work, does not
+exist.
+
+**What we should do.** Route the project query's error through `DetailError` before the set
+checks. Half an hour.
+
+
+### §U7.9 The eval run sheet has no error state and can say "Loading the run…" forever — 🟠 inconsistency — ✅ RESOLVED 2026-10-17
+
+> Fixed. The run sheet renders `DetailError` with retry on failure. On `fix/audit-sweep-2026-10-17`.
+>
+> Original finding follows.
+
+**Where:** `components/eval/eval-run-sheet.tsx:29-30`, `:41-43`, `:46`
+
+**What this is.** Clicking a run opens a side sheet with its answers and verdicts.
+
+**Why this can happen.** The sheet reads `query.data` and never `query.error`. Its title reads
+"Loading the run…" whenever there is no data, so a failed fetch leaves that text up for good. The
+skeleton below disappears once the request ends.
+
+**What it costs.** A failed run load looks like a slow one, indefinitely.
+
+**What we should do.** Show `DetailError` (or an alert with retry) when the query fails. Half an
+hour.
+
+
+### §U7.10 A generating or failed eval set shows empty tables and an invitation the page refuses — 🟠 inconsistency — ✅ RESOLVED 2026-10-17
+
+> Fixed. The pair and run cards branch on the set's status: "Generating questions…" while generating, no run invitation unless the set is ready. On `fix/audit-sweep-2026-10-17`.
+>
+> Original finding follows.
+
+**Where:** `components/eval/eval-set-screen.tsx:105`, `:126-128`, `:133`, `:140`;
+`components/eval/eval-pair-table.tsx:45-109`; `components/eval/eval-run-table.tsx:26-33`
+
+**What this is.** An eval set is `generating`, `ready` or `failed`, and only a ready set can be
+run.
+
+**Why this can happen.** The pair table has no empty state, so while generating it is a bare
+header row. The runs card shows "Run the set to ask each question…" while the Run button is
+disabled for any status other than `ready`.
+
+**What it costs.** The page invites an action it refuses, and shows an empty table where it should
+say questions are being generated.
+
+**What we should do.** Branch both cards on the set's status: "Generating questions…" while
+generating, nothing to invite while failed (the alert already explains). One hour.
+
+
+### §U7.11 The eval compare section is silent while loading or on error — 🟠 inconsistency — ✅ RESOLVED 2026-10-17
+
+> Fixed. The compare section shows a skeleton while either run loads and an alert if either fails. On `fix/audit-sweep-2026-10-17`.
+>
+> Original finding follows.
+
+**Where:** `components/eval/eval-set-screen.tsx:181-185`
+
+**What this is.** Choosing two runs shows a side-by-side comparison of their scores.
+
+**Why this can happen.** The compare card renders only when both runs' data has arrived, and
+`null` otherwise. Nothing checks loading or error.
+
+**What it costs.** After choosing two runs the user sees nothing at all, with no way to tell "still
+loading" from "failed".
+
+**What we should do.** A skeleton while either run loads, and an alert if either fails. Half an
+hour.
+
+
+### §U7.12 The Answer style tab shows "Default" for every dial while loading — 🟠 inconsistency — ✅ RESOLVED 2026-10-17
+
+> Fixed. The Answer style tab renders skeleton dials until the saved style arrives; no radio is shown with a placeholder value. On `fix/audit-sweep-2026-10-17`.
+>
+> Original finding follows.
+
+**Where:** `components/profile/answer-style-section.tsx:57-60`, `:77-80`, `:106`
+
+**What this is.** The profile's Answer style tab has radio groups for how answers are shaped
+(length, format and so on), each with a "Default" option.
+
+**Why this can happen.** Until the saved style arrives, the section falls back to "all unset", so
+every group shows Default as selected. The controls are disabled until load, which prevents
+overwriting, but nothing says the values are not real yet.
+
+**What it costs.** A user with saved preferences briefly sees them all reset to Default. On a slow
+connection that is long enough to believe it.
+
+**What we should do.** Show `Skeleton` rows until loaded, as the other profile sections do.
+Half an hour.
+
+
+### §U7.13 The test plan and mock data tabs invite generation while generation is running — 🟠 inconsistency — ✅ RESOLVED 2026-10-17
+
+> Fixed. `ItemGrid`, `RecordsTable` and the checklist `ChatPanel` take `isGenerating` and say a generation is running instead of inviting one. On `fix/audit-sweep-2026-10-17`.
+>
+> Original finding follows.
+
+**Where:** `components/checklist/item-grid.tsx:146-153`; `components/mock-data/records-table.tsx:91-98`;
+`app/(app)/checklist/[moduleId]/module-screen.tsx:240-244`, `:295`;
+`components/checklist/chat-panel.tsx:243-250`; compare `components/mock-data/chat-panel.tsx:201-209`
+
+**What this is.** A module's checklist and mock data are produced by a background generation, and
+while it runs, another cannot be started.
+
+**Why this can happen.** Both empty states ("Generate the checklist, or add one by hand." and
+"Generate a batch, or ask for one by chat.") render whatever the job status is, because neither
+component is given it. The checklist chat panel is not told about generation either, so it invites
+refinement mid-run. The mock-data chat panel does guard this.
+
+**What it costs.** A user is invited to start work that is already running, and on the checklist
+side can type a refinement that will land against rows about to change.
+
+**What we should do.** Pass the module's generation status to both empty states and the checklist
+chat panel, and show "Generating…" instead. One hour.
+
+
+### §U7.14 A failed change-set request hides a pending change set the tooltip points to — 🟠 inconsistency — ✅ RESOLVED 2026-10-17
+
+> Fixed. While the change-set list loads the review button is a skeleton; if it fails a `ListError` with retry appears. Both checklist and mock data. On `fix/audit-sweep-2026-10-17`.
+>
+> Original finding follows.
+
+**Where:** `app/(app)/checklist/[moduleId]/module-screen.tsx:69-74`, `:138-141`, `:212` (checklist);
+`:96-111`, `:345` (mock data)
+
+**What this is.** While a change set awaits review, Generate is disabled, with a tooltip saying to
+apply or discard it first. A "Review N changes" button opens it.
+
+**Why this can happen.** The tooltip depends only on the module's pending change-set id, but the
+review button needs the change-set list to have loaded. If that list is loading or has failed,
+there is no button and no error, and the tooltip points at something that is not on screen.
+
+**What it costs.** A user is told to deal with pending changes they cannot reach, with no
+indication that a request failed.
+
+**What we should do.** Show a skeleton for the button while the list loads, and an inline error
+with retry if it fails. One hour.
+
+
+### §U8.9 Mock-data change-set rows do not say which record they change — 🟠 inconsistency — ✅ RESOLVED 2026-10-17
+
+> Fixed. Update and remove rows name the record's id in `font-mono`, plus two of its fields while it still exists. On `fix/audit-sweep-2026-10-17`.
+>
+> Original finding follows.
+
+**Where:** `components/mock-data/change-set-panel.tsx:145-154`, `:47-53`
+
+**What this is.** A mock-data change set is a list of proposed operations (add, update, delete a
+record) that a reviewer ticks and applies.
+
+**Why this can happen.** Each row shows only the operation word and the field values. An update
+shows only the changed fields, and a delete shows nothing at all. `operation.recordId` is used
+only for an internal orphan check and is never displayed.
+
+**What it costs.** A reviewer approving "delete" cannot tell which record will be deleted. That is
+the decision the panel exists for, made blind.
+
+**What we should do.** Show the target record's identity on update and delete rows: its id in
+`font-mono`, or a few identifying fields. The checklist panel's handling of its target row is the
+model. One to two hours.
+
+
+### §U8.12 The sources panel moves from above the answer to below it on reconcile — 🟡 hygiene — ✅ RESOLVED 2026-10-17
+
+> Fixed, owner decision 2026-10-17: sources above. `message-list.tsx` now renders Sources then Answer, matching the live turn on all three surfaces. On `fix/audit-sweep-2026-10-17`.
+>
+> Original finding follows.
+
+**Where:** `app/(app)/ask/[conversationId]/conversation-screen.tsx:134-141`;
+`components/checklist/chat-panel.tsx` (the live turn, around `:270`); `components/ask/message-list.tsx:70-71`
+
+**What this is.** Citations arrive before the first token (`.claude/rules/rag.md`), so the live
+turn renders Sources above the Answer. Once the turn is stored, the live copy is replaced by the
+stored message.
+
+**Why this can happen.** The stored message renders Answer, then Sources. So the instant a turn
+reconciles, its sources jump from above the answer to below it.
+
+**What it costs.** A visible jump at the end of every answer, contradicting the "one visual
+language" comment at `conversation-screen.tsx:134-137`.
+
+**What we should do.** Pick one order and use it in both. Minutes, plus a decision on which order.
+
+
+### §U9.6 Breadcrumbs show raw ids instead of names — 🟠 inconsistency — ✅ RESOLVED 2026-10-17
+
+> Fixed. New `components/layout/breadcrumb-labels.tsx` (`useBreadcrumbLabel(href, name)`), applied by `resolveBreadcrumbs` only to id-derived crumbs; wired on project, module, conversation and eval set pages. `.claude/rules/navigation.md` §9 documents it. §U12.6 (that rule's stale §4 and §6) is still open. On `fix/audit-sweep-2026-10-17`.
+>
+> Original finding follows.
+
+**Where:** `lib/nav.ts:100-143` (raw ids at `:130`, `:133`, `:139`; the comment at `:95-99`);
+`components/layout/app-breadcrumbs.tsx:37-41`
+
+**What this is.** Breadcrumbs are built from the URL in `lib/nav.ts`.
+
+**Why this can happen.** For a detail route, the crumb label is the path segment, which is a UUID.
+The comment says "the page overrides once it knows the resource's name", but no override mechanism
+exists anywhere.
+
+**What it costs.** Every project, module, conversation and eval set page shows a 36-character UUID
+in its breadcrumb.
+
+**What we should do.** Add the override the comment promises, for example a small context a
+detail page fills with its resource name, and have the breadcrumb prefer it. Two to three hours.
+
+
+### §U10.11 Lists, headings and tables in answers render as plain paragraphs — 🟠 inconsistency — ✅ RESOLVED 2026-10-17
+
+> Fixed. `components/ask/answer.tsx` styles headings, lists, blockquotes, rules and tables with tokens; `docs/design.md` records the typography. On `fix/audit-sweep-2026-10-17`.
+>
+> Original finding follows.
+
+**Where:** `components/ask/answer.tsx:49-79`
+
+**What this is.** Answers are Markdown, rendered with `remark-gfm`, on Ask and in both refinement
+chats.
+
+**Why this can happen.** The renderer styles only `pre`, `code` and `a`. With no typography plugin
+and no styles for `ul`, `ol`, `li`, headings, tables, blockquotes or rules, Tailwind's reset
+strips list markers, heading sizes and table borders. The markup is there but unstyled.
+
+**What it costs.** Numbered steps and bullet lists read as run-on paragraphs, and tables as
+jumbled text. This matters more now that the Answer style tab offers a "bullets" format.
+
+**What we should do.** Add component overrides (or scoped styles) for lists, headings, tables and
+blockquotes using the existing type scale, and record them in `docs/design.md`. Two hours.
+
+
+### §U10.12 The feedback summary hand-rolls a third stat tile — 🟠 inconsistency — ✅ RESOLVED 2026-10-17
+
+> Fixed. New `components/feedback/stat-tile.tsx` (`StatTile`, `StatTileSkeleton`), used by the dashboard and the feedback summary. On `fix/audit-sweep-2026-10-17`.
+>
+> Original finding follows.
+
+**Where:** `components/output-feedback/feedback-summary.tsx:37-48`, `:65-79`; `app/(app)/dashboard-screen.tsx:49-76`
+
+**What this is.** A stat tile is a card holding one label and one big number.
+
+**Why this can happen.** There is no shared tile. The dashboard builds two, with `CardContent p-6`,
+a `text-sm` label and a `text-3xl` number. The feedback summary builds a third differently, with
+`CardHeader`/`CardTitle` and a `text-2xl` number.
+
+**What it costs.** The same idea looks different on two screens, and the next tile will be a fourth
+version.
+
+**What we should do.** Extract a `StatTile` into `components/feedback/` or `layout/` and use it in
+both places. One hour.
+
+
 
 ## See also
 

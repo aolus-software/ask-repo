@@ -35,25 +35,10 @@ excluded from every token, `dark:`, arbitrary-value and spacing check below.
 
 Every finding from the first three sweeps has been fixed and is in
 [`audit-finding-solved-logs.md`](audit-finding-solved-logs.md). Everything below was raised on
-2026-10-04 and is open.
+2026-10-04 and is still open; what was fixed on 2026-10-17 is in the log.
 
 | # | Finding | Severity | Raised |
 | --- | --- | --- | --- |
-| §U6.12 | Excluding an eval pair fails silently | 🔴 | 2026-10-04 |
-| §U7.7 | An eval set's runs read "No runs yet" while loading, and forever if the request fails | 🔴 | 2026-10-04 |
-| §U7.8 | The eval set screen reports any project-load failure as "not found" | 🔴 | 2026-10-04 |
-| §U6.13 | Starting an eval run discards the server's error and has no success toast | 🟠 | 2026-10-04 |
-| §U6.14 | Eval sets cannot be deleted from the UI | 🟠 | 2026-10-04 |
-| §U7.9 | The eval run sheet has no error state and can say "Loading the run…" forever | 🟠 | 2026-10-04 |
-| §U7.10 | A generating or failed eval set shows empty tables and an invitation the page refuses | 🟠 | 2026-10-04 |
-| §U7.11 | The eval compare section is silent while loading or on error | 🟠 | 2026-10-04 |
-| §U7.12 | The Answer style tab shows "Default" for every dial while loading | 🟠 | 2026-10-04 |
-| §U7.13 | The test plan and mock data tabs invite generation while generation is running | 🟠 | 2026-10-04 |
-| §U7.14 | A failed change-set request hides a pending change set the tooltip points to | 🟠 | 2026-10-04 |
-| §U8.9 | Mock-data change-set rows do not say which record they change | 🟠 | 2026-10-04 |
-| §U9.6 | Breadcrumbs show raw ids instead of names | 🟠 | 2026-10-04 |
-| §U10.11 | Lists, headings and tables in answers render as plain paragraphs | 🟠 | 2026-10-04 |
-| §U10.12 | The feedback summary hand-rolls a third stat tile | 🟠 | 2026-10-04 |
 | §U1.4 | White text on three status colours, and three status text colours, fall below contrast guidance | 🟡 | 2026-10-04 |
 | §U3.5 | `/settings/feedback` says "No feedback yet" when filters exclude everything | 🟡 | 2026-10-04 |
 | §U3.6 | `/settings/feedback` applies URL-only filters the screen cannot show or clear | 🟡 | 2026-10-04 |
@@ -66,7 +51,6 @@ Every finding from the first three sweeps has been fixed and is in
 | §U7.16 | A thumbs vote briefly reverts after a remount | 🟡 | 2026-10-04 |
 | §U8.10 | A stray separator in the mock-data change-set card | 🟡 | 2026-10-04 |
 | §U8.11 | A stored interrupted answer is worded differently from the live one | 🟡 | 2026-10-04 |
-| §U8.12 | The sources panel moves from above the answer to below it on reconcile | 🟡 | 2026-10-04 |
 | §U8.13 | "Try again" after a timeout exists on Ask only | 🟡 | 2026-10-04 |
 | §U8.14 | The chat composers say "no permission" while the project is still loading | 🟡 | 2026-10-04 |
 | §U9.5 | The eval set route answers a missing permission with `NotFound`, not `Forbidden` | 🟡 | 2026-10-04 |
@@ -80,23 +64,19 @@ Every finding from the first three sweeps has been fixed and is in
 | §U12.7 | `frontend/README.md`'s layout is stale | 📄 | 2026-10-04 |
 | §U12.8 | `design.md` lacks the feedback control, the drawer width, and two column rules (column rules SUSPECT) | 📄 | 2026-10-04 |
 
-## Top priorities (2026-10-04)
+## Top priorities (2026-10-17)
 
-1. **The eval set screen tells people false things when a request fails** — that a set has no runs
-   (§U7.7), that the whole set may have been deleted (§U7.8), or that a run is still loading
-   (§U7.9). Each needs its loading and error states wired the way the rest of the app already does.
-2. **Excluding an eval pair can fail with no message** (§U6.12): the switch snaps back and nobody is
-   told why. Add an error toast.
-3. **Answers lose their formatting** (§U10.11): bullet lists, numbered steps, headings and tables
-   in answers render as run-on paragraphs — more visible now that the Answer style tab offers
-   "bullets".
-4. **Some screens show placeholder values as if they were real**: "Default" on every answer-style
-   dial while loading (§U7.12), and "generate" invitations while generation is running (§U7.10,
-   §U7.13).
-5. **Reviewers cannot tell which record a mock-data change touches** (§U8.9), and breadcrumbs show
-   ids instead of names (§U9.6).
-6. **Eval sets cannot be deleted from the UI** (§U6.14) — the API supports it and the owner wants it.
-7. Then the hygiene items and the documentation (§U12.6–§U12.8).
+All three 🔴 bugs and all twelve 🟠 findings from 2026-10-04 were fixed on 2026-10-17, along with
+§U8.12, and are in the log. Everything still open is hygiene or documentation.
+
+1. **Contrast in light mode** (§U1.4): white text on the success, info and danger badges is 2.2–3.8
+   to 1, against a 4.5 target. It is the most-read signal on every list screen.
+2. **Small false states that remain**: the chat composers say "no permission" while the project
+   loads (§U8.14), a vote briefly reverts after a remount (§U7.16), and the feedback screen says
+   "No feedback yet" under a filter (§U3.5) and applies filters it cannot show (§U3.6).
+3. **Forms and accessibility**: unlabelled controls (§U5.9, §U11.8), colour-only signals
+   (§U11.6), a clickable run row with no control (§U11.7), and the stale thumbs-down popover (§U5.11).
+4. Then the hygiene items and the documentation (§U12.6–§U12.8).
 
 ---
 
@@ -542,195 +522,10 @@ compose it from the form shells. One to two hours.
 
 ## U6 Feedback and copy
 
-### §U6.12 Excluding an eval pair fails silently — 🔴 bug
-
-**Where:** `components/eval/eval-pair-table.tsx:81-84`; `hooks/use-eval.ts:114-124` (`useSetPairExcluded`)
-
-**What this is.** Each generated question in an eval set has a switch that excludes it from future
-runs. `docs/design.md` → Feedback requires every mutation to end in a toast, a field error or an
-alert.
-
-**Why this can happen.** The switch calls the mutation with no `onError`, and the hook has none
-either. The switch is controlled by the server's value, so when the request fails it snaps back.
-
-**What it costs.** A user excludes a bad question, the switch flicks back, and nothing says why. If
-they don't notice, the next run includes a question they removed, and its score is not the one
-they thought they asked for.
-
-**What we should do.** Add an `onError` toast that carries the server's message. Minutes.
-
-### §U6.13 Starting an eval run discards the server's error and has no success toast — 🟠 inconsistency
-
-**Where:** `components/eval/eval-set-screen.tsx:107-109`; `hooks/use-eval.ts:101-112`
-
-**What this is.** Starting a run is a long job, and the backend refuses it with a specific message
-in some cases, for example `409` while a reindex is running.
-
-**Why this can happen.** The failure path shows a fixed "The run could not be started.", which
-throws away the server's explanation, and the success path shows nothing.
-
-**What it costs.** A user refused because of a reindex is not told that waiting will fix it. A user
-who succeeds gets no confirmation until the row appears.
-
-**What we should do.** Toast the server's message on error (the shared error helper already
-extracts it) and add a success toast such as "Run started". Half an hour.
-
-### §U6.14 Eval sets cannot be deleted from the UI — 🟠 inconsistency
-
-**Where:** `hooks/use-eval.ts:126` (`useDeleteEvalSet`, unused); `components/eval/eval-set-table.tsx:63-89`;
-`components/eval/eval-set-screen.tsx:98-117`; `backend/app/api/routes/eval.py` (the delete route)
-
-**What this is.** The API can delete an eval set, and a hook for it already exists.
-
-**Why this can happen.** No screen calls the hook. The set table has no actions column, and the set
-screen's header holds only Run.
-
-**What it costs.** Old or broken eval sets pile up on the Eval tab with no way to remove them except
-the API directly. Owner decision (2026-10-04): it should be deletable.
-
-**What we should do.** Add a row action and a header action that open a `ConfirmDialog`. The dialog
-should name the set and say that its runs and results go with it, and the action should be gated on
-the eval permission the backend checks. Two hours.
+Every finding this sweep raised here (§U6.12–§U6.14) was resolved on 2026-10-17 and is in
+[`audit-finding-solved-logs.md`](audit-finding-solved-logs.md).
 
 ## U7 Loading, empty and error
-
-### §U7.7 An eval set's runs read "No runs yet" while loading, and forever if the request fails — 🔴 bug
-
-**Where:** `components/eval/eval-set-screen.tsx:75`, `:140`; `components/eval/eval-run-table.tsx:26-33`
-
-**What this is.** Every surface that reads data must show a distinct loading, empty and error state
-(`docs/design.md`).
-
-**Why this can happen.** The screen takes `runsQuery.data?.items ?? []` and ignores loading and
-error, so the table always receives a list. An empty one renders the "No runs yet" empty state.
-
-**What it costs.** A user is told a set has never been run while the runs are loading, and
-indefinitely when the request fails. That is a false statement about their data, so it is red.
-
-**What we should do.** Render `TableSkeleton` while loading and `ListError` on error, as every
-other list does. Half an hour.
-
-### §U7.8 The eval set screen reports any project-load failure as "not found" — 🔴 bug
-
-**Where:** `components/eval/eval-set-screen.tsx:70-72`; compare `:61-69` and
-`components/feedback/detail-error.tsx:25-31`
-
-**What this is.** The set screen loads the project and the set. The set's failure path is correct:
-`DetailError` turns `404` into Not found, `403` into Forbidden, and anything else into a retry
-alert.
-
-**Why this can happen.** The project query's error is never read. If the project fails to load,
-for any reason including a network blip, the set query stays disabled, and the screen falls through
-to `if (!set || !project) return <NotFound />`.
-
-**What it costs.** A transient error tells the user the eval set, and with it their work, does not
-exist.
-
-**What we should do.** Route the project query's error through `DetailError` before the set
-checks. Half an hour.
-
-### §U7.9 The eval run sheet has no error state and can say "Loading the run…" forever — 🟠 inconsistency
-
-**Where:** `components/eval/eval-run-sheet.tsx:29-30`, `:41-43`, `:46`
-
-**What this is.** Clicking a run opens a side sheet with its answers and verdicts.
-
-**Why this can happen.** The sheet reads `query.data` and never `query.error`. Its title reads
-"Loading the run…" whenever there is no data, so a failed fetch leaves that text up for good. The
-skeleton below disappears once the request ends.
-
-**What it costs.** A failed run load looks like a slow one, indefinitely.
-
-**What we should do.** Show `DetailError` (or an alert with retry) when the query fails. Half an
-hour.
-
-### §U7.10 A generating or failed eval set shows empty tables and an invitation the page refuses — 🟠 inconsistency
-
-**Where:** `components/eval/eval-set-screen.tsx:105`, `:126-128`, `:133`, `:140`;
-`components/eval/eval-pair-table.tsx:45-109`; `components/eval/eval-run-table.tsx:26-33`
-
-**What this is.** An eval set is `generating`, `ready` or `failed`, and only a ready set can be
-run.
-
-**Why this can happen.** The pair table has no empty state, so while generating it is a bare
-header row. The runs card shows "Run the set to ask each question…" while the Run button is
-disabled for any status other than `ready`.
-
-**What it costs.** The page invites an action it refuses, and shows an empty table where it should
-say questions are being generated.
-
-**What we should do.** Branch both cards on the set's status: "Generating questions…" while
-generating, nothing to invite while failed (the alert already explains). One hour.
-
-### §U7.11 The eval compare section is silent while loading or on error — 🟠 inconsistency
-
-**Where:** `components/eval/eval-set-screen.tsx:181-185`
-
-**What this is.** Choosing two runs shows a side-by-side comparison of their scores.
-
-**Why this can happen.** The compare card renders only when both runs' data has arrived, and
-`null` otherwise. Nothing checks loading or error.
-
-**What it costs.** After choosing two runs the user sees nothing at all, with no way to tell "still
-loading" from "failed".
-
-**What we should do.** A skeleton while either run loads, and an alert if either fails. Half an
-hour.
-
-### §U7.12 The Answer style tab shows "Default" for every dial while loading — 🟠 inconsistency
-
-**Where:** `components/profile/answer-style-section.tsx:57-60`, `:77-80`, `:106`
-
-**What this is.** The profile's Answer style tab has radio groups for how answers are shaped
-(length, format and so on), each with a "Default" option.
-
-**Why this can happen.** Until the saved style arrives, the section falls back to "all unset", so
-every group shows Default as selected. The controls are disabled until load, which prevents
-overwriting, but nothing says the values are not real yet.
-
-**What it costs.** A user with saved preferences briefly sees them all reset to Default. On a slow
-connection that is long enough to believe it.
-
-**What we should do.** Show `Skeleton` rows until loaded, as the other profile sections do.
-Half an hour.
-
-### §U7.13 The test plan and mock data tabs invite generation while generation is running — 🟠 inconsistency
-
-**Where:** `components/checklist/item-grid.tsx:146-153`; `components/mock-data/records-table.tsx:91-98`;
-`app/(app)/checklist/[moduleId]/module-screen.tsx:240-244`, `:295`;
-`components/checklist/chat-panel.tsx:243-250`; compare `components/mock-data/chat-panel.tsx:201-209`
-
-**What this is.** A module's checklist and mock data are produced by a background generation, and
-while it runs, another cannot be started.
-
-**Why this can happen.** Both empty states ("Generate the checklist, or add one by hand." and
-"Generate a batch, or ask for one by chat.") render whatever the job status is, because neither
-component is given it. The checklist chat panel is not told about generation either, so it invites
-refinement mid-run. The mock-data chat panel does guard this.
-
-**What it costs.** A user is invited to start work that is already running, and on the checklist
-side can type a refinement that will land against rows about to change.
-
-**What we should do.** Pass the module's generation status to both empty states and the checklist
-chat panel, and show "Generating…" instead. One hour.
-
-### §U7.14 A failed change-set request hides a pending change set the tooltip points to — 🟠 inconsistency
-
-**Where:** `app/(app)/checklist/[moduleId]/module-screen.tsx:69-74`, `:138-141`, `:212` (checklist);
-`:96-111`, `:345` (mock data)
-
-**What this is.** While a change set awaits review, Generate is disabled, with a tooltip saying to
-apply or discard it first. A "Review N changes" button opens it.
-
-**Why this can happen.** The tooltip depends only on the module's pending change-set id, but the
-review button needs the change-set list to have loaded. If that list is loading or has failed,
-there is no button and no error, and the tooltip points at something that is not on screen.
-
-**What it costs.** A user is told to deal with pending changes they cannot reach, with no
-indication that a request failed.
-
-**What we should do.** Show a skeleton for the button while the list loads, and an inline error
-with retry if it fails. One hour.
 
 ### §U7.15 The eval sets empty state has no action, and `ListError` sits flush in two cards — 🟡 hygiene
 
@@ -773,24 +568,6 @@ lands.
 
 ## U8 The streaming surfaces
 
-### §U8.9 Mock-data change-set rows do not say which record they change — 🟠 inconsistency
-
-**Where:** `components/mock-data/change-set-panel.tsx:145-154`, `:47-53`
-
-**What this is.** A mock-data change set is a list of proposed operations (add, update, delete a
-record) that a reviewer ticks and applies.
-
-**Why this can happen.** Each row shows only the operation word and the field values. An update
-shows only the changed fields, and a delete shows nothing at all. `operation.recordId` is used
-only for an internal orphan check and is never displayed.
-
-**What it costs.** A reviewer approving "delete" cannot tell which record will be deleted. That is
-the decision the panel exists for, made blind.
-
-**What we should do.** Show the target record's identity on update and delete rows: its id in
-`font-mono`, or a few identifying fields. The checklist panel's handling of its target row is the
-model. One to two hours.
-
 ### §U8.10 A stray separator in the mock-data change-set card — 🟡 hygiene
 
 **Where:** `components/mock-data/change-set-panel.tsx:181-182`; `components/form/form-error.tsx:10`;
@@ -817,23 +594,6 @@ stored copy.
 **What it costs.** The same event is described two ways on either side of a reload.
 
 **What we should do.** Use `INTERRUPTED_MESSAGE` in `message-list.tsx` too. Minutes.
-
-### §U8.12 The sources panel moves from above the answer to below it on reconcile — 🟡 hygiene
-
-**Where:** `app/(app)/ask/[conversationId]/conversation-screen.tsx:134-141`;
-`components/checklist/chat-panel.tsx` (the live turn, around `:270`); `components/ask/message-list.tsx:70-71`
-
-**What this is.** Citations arrive before the first token (`.claude/rules/rag.md`), so the live
-turn renders Sources above the Answer. Once the turn is stored, the live copy is replaced by the
-stored message.
-
-**Why this can happen.** The stored message renders Answer, then Sources. So the instant a turn
-reconciles, its sources jump from above the answer to below it.
-
-**What it costs.** A visible jump at the end of every answer, contradicting the "one visual
-language" comment at `conversation-screen.tsx:134-137`.
-
-**What we should do.** Pick one order and use it in both. Minutes, plus a decision on which order.
 
 ### §U8.13 "Try again" after a timeout exists on Ask only — 🟡 hygiene
 
@@ -889,23 +649,6 @@ answers a missing `eval.read` with `NotFound`.
 
 **What we should do.** Render `Forbidden` there. Minutes.
 
-### §U9.6 Breadcrumbs show raw ids instead of names — 🟠 inconsistency
-
-**Where:** `lib/nav.ts:100-143` (raw ids at `:130`, `:133`, `:139`; the comment at `:95-99`);
-`components/layout/app-breadcrumbs.tsx:37-41`
-
-**What this is.** Breadcrumbs are built from the URL in `lib/nav.ts`.
-
-**Why this can happen.** For a detail route, the crumb label is the path segment, which is a UUID.
-The comment says "the page overrides once it knows the resource's name", but no override mechanism
-exists anywhere.
-
-**What it costs.** Every project, module, conversation and eval set page shows a 36-character UUID
-in its breadcrumb.
-
-**What we should do.** Add the override the comment promises, for example a small context a
-detail page fills with its resource name, and have the breadcrumb prefer it. Two to three hours.
-
 ### §U9.7 Admin screens request data before their admin gate — 🟡 hygiene
 
 **Where:** `app/(app)/settings/users/users-screen.tsx:30` then `:37`; `settings/audit/audit-screen.tsx:42`
@@ -926,39 +669,6 @@ leaks, because the backend gates it. It is wasted traffic and a `403` in the con
 **What we should do.** Give each admin hook an `enabled` option and pass `user.isAdmin`. One hour.
 
 ## U10 Layout, spacing, typography
-
-### §U10.11 Lists, headings and tables in answers render as plain paragraphs — 🟠 inconsistency
-
-**Where:** `components/ask/answer.tsx:49-79`
-
-**What this is.** Answers are Markdown, rendered with `remark-gfm`, on Ask and in both refinement
-chats.
-
-**Why this can happen.** The renderer styles only `pre`, `code` and `a`. With no typography plugin
-and no styles for `ul`, `ol`, `li`, headings, tables, blockquotes or rules, Tailwind's reset
-strips list markers, heading sizes and table borders. The markup is there but unstyled.
-
-**What it costs.** Numbered steps and bullet lists read as run-on paragraphs, and tables as
-jumbled text. This matters more now that the Answer style tab offers a "bullets" format.
-
-**What we should do.** Add component overrides (or scoped styles) for lists, headings, tables and
-blockquotes using the existing type scale, and record them in `docs/design.md`. Two hours.
-
-### §U10.12 The feedback summary hand-rolls a third stat tile — 🟠 inconsistency
-
-**Where:** `components/output-feedback/feedback-summary.tsx:37-48`, `:65-79`; `app/(app)/dashboard-screen.tsx:49-76`
-
-**What this is.** A stat tile is a card holding one label and one big number.
-
-**Why this can happen.** There is no shared tile. The dashboard builds two, with `CardContent p-6`,
-a `text-sm` label and a `text-3xl` number. The feedback summary builds a third differently, with
-`CardHeader`/`CardTitle` and a `text-2xl` number.
-
-**What it costs.** The same idea looks different on two screens, and the next tile will be a fourth
-version.
-
-**What we should do.** Extract a `StatTile` into `components/feedback/` or `layout/` and use it in
-both places. One hour.
 
 ### §U10.13 Identifiers on the eval screens are in the body face — 🟡 hygiene
 
