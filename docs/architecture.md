@@ -11,7 +11,8 @@ built, read [`PRD.md`](PRD.md) §6 — it is the only place that records progres
 
 ## The shape
 
-Two applications, one background worker, four datastores.
+Two applications, one background worker, four datastores — and, opt-in, a self-hosted Langfuse
+for the AI call log (dashed below; off unless `LANGFUSE_ENABLED`).
 
 ```mermaid
 flowchart LR
@@ -29,6 +30,7 @@ flowchart LR
     end
     M{{"Chat model<br/>Ollama / OpenAI / Anthropic"}}
     E{{"Embedding model"}}
+    L["<b>Langfuse</b> (opt-in)<br/>AI call log :3001<br/><i>metadata only</i>"]
 
     B <--> F
     F <--> A
@@ -38,11 +40,19 @@ flowchart LR
     W --> P & Q
     A --> M
     W --> M & E
+    A -. call records .-> L
+    W -. call records .-> L
+
+    style L stroke-dasharray: 5 5
 ```
 
 Nothing else talks to the browser. `API_URL` is read **server-side only**, so the FastAPI
 service does not need to be reachable from a user's machine — under Compose it is the service
 name `http://backend:8000`.
+
+Langfuse is drawn as one box but is five containers with its own stores, and only a content-free
+record of each model call crosses into it — see
+[The AI call log](#the-ai-call-log-five-more-processes-and-only-metadata-crosses).
 
 ### Why a separate worker
 
@@ -67,7 +77,7 @@ an embedding model. The worker holds both.
 | **Postgres** | Every row: users, projects, conversations, checklist, mock data | API and worker, through `app/repositories/` |
 | **Qdrant** | Code chunks as vectors, with the chunk text in the payload | API (query) and worker (write) |
 | **Redis** | Login rate-limit counters, and each user's project-grant snapshot | API only |
-| **Kafka** | The job queue, on 16 topics | API publishes, worker consumes |
+| **Kafka** | The job queue, on 16 topics, plus one live-events topic | Jobs: API publishes, worker consumes. Live events: both publish, the API consumes |
 
 Two of these are commonly assumed wrong:
 
@@ -160,7 +170,7 @@ intact and still answering.
 
 ### 3. Generating a checklist
 
-Same shape as indexing — publish, claim a lease, run long, release — with two differences that
+Same shape as indexing — publish, claim a lease, run long, release — with three differences that
 matter:
 
 - **It runs a chat model, one call per file, plus one reduce call.** That makes
