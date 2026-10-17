@@ -31,6 +31,7 @@ Applied to the screens the PRD describes:
 | Confirm project reindex | none | `ConfirmDialog` |
 | Generate mock data | count | inline control beside the module's Generate button — one field, no dialog or page |
 | Edit QA pair | module, question, tags | dialog |
+| Export checklist and mock data | project, parts, modules (a checkbox picker), four checklist filters | page, `/checklist/export` |
 
 ## 2. Both shells take the same props
 

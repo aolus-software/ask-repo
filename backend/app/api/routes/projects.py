@@ -8,7 +8,7 @@ here, so `reindex` and `delete` cannot drift apart.
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Query, Request, status
+from fastapi import APIRouter, Depends, Query, Request, Response, status
 
 from app.api.deps import AuditRecorderDep, CurrentUser, SessionDep
 from app.config import Settings, get_settings
@@ -23,8 +23,10 @@ from app.schemas.project import (
     ProjectResponse,
     ReindexResponse,
 )
+from app.schemas.project_export import ProjectExportQuery
 from app.services.indexed_path import IndexedPathReader, IndexedPathService, shared_cache
 from app.services.project import ProjectService
+from app.services.project_export import ProjectExportService
 
 router = APIRouter(prefix="/projects", tags=["Projects"])
 
@@ -91,7 +93,17 @@ def get_indexed_path_service(
     return IndexedPathService(session, settings, reader=reader)
 
 
+def get_project_export_service(
+    session: SessionDep,
+    settings: Annotated[Settings, Depends(get_settings)],
+    recorder: AuditRecorderDep,
+) -> ProjectExportService:
+    """Provide the service with a request-scoped session."""
+    return ProjectExportService(session, settings, recorder=recorder)
+
+
 ProjectServiceDep = Annotated[ProjectService, Depends(get_project_service)]
+ProjectExportServiceDep = Annotated[ProjectExportService, Depends(get_project_export_service)]
 IndexedPathServiceDep = Annotated[IndexedPathService, Depends(get_indexed_path_service)]
 
 
@@ -146,6 +158,30 @@ async def list_indexed_paths(
     query parameter (`.claude/rules/rag.md`), and this route needs two.
     """
     return await service.list_entries(project_id, path=path, search=search, actor=current_user)
+
+
+@router.get(
+    "/{project_id}/export",
+    response_class=Response,
+    status_code=status.HTTP_200_OK,
+    summary="Export the test checklist and mock data of a project's modules",
+    # 404 for a non-member or a module id outside the project, 403 for a member whose
+    # role cannot read a requested part, 409 past a part's row cap.
+    responses={code: ERROR_RESPONSES[code] for code in (401, 403, 404, 409, 422)},
+)
+async def export_project(
+    project_id: uuid.UUID,
+    current_user: CurrentUser,
+    service: ProjectExportServiceDep,
+    query: Annotated[ProjectExportQuery, Query()],
+) -> Response:
+    """One `.xlsx` for one part, or a `.zip` of both, for every module or the chosen ones."""
+    exported = await service.export(project_id, query, actor=current_user)
+    return Response(
+        content=exported.content,
+        media_type=exported.media_type,
+        headers={"Content-Disposition": f'attachment; filename="{exported.filename}"'},
+    )
 
 
 @router.post(

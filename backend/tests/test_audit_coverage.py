@@ -32,6 +32,7 @@ EXPORT_ROUTES = frozenset(
         ("GET", "/checklist-items/export"),
         ("GET", "/checklist-modules/{module_id}/mock-data/export.json"),
         ("GET", "/checklist-modules/{module_id}/mock-data/export.xlsx"),
+        ("GET", "/projects/{project_id}/export"),
     }
 )
 
@@ -140,6 +141,9 @@ ROUTE_EVENTS: dict[tuple[str, str], AuditEventType | str] = {
         "GET",
         "/checklist-modules/{module_id}/mock-data/export.xlsx",
     ): AuditEventType.MOCK_DATA_EXPORTED,
+    # The multi-module export records one event per part it carries; the checklist
+    # event is named here and `tests/test_project_export.py` asserts both.
+    ("GET", "/projects/{project_id}/export"): AuditEventType.CHECKLIST_EXPORTED,
     # --- Task 11: conversations, metadata only ---
     ("POST", "/conversations"): AuditEventType.CONVERSATION_CREATED,
     ("DELETE", "/conversations/{conversation_id}"): AuditEventType.CONVERSATION_DELETED,

@@ -5,6 +5,7 @@ always reached through its already-scoped module.
 """
 
 import uuid
+from collections.abc import Collection
 from typing import Any, cast
 
 from sqlalchemy import CursorResult, func, select, update
@@ -31,6 +32,26 @@ class MockDataRecordRepository(BaseRepository[MockDataRecord]):
             self.active_select()
             .where(MockDataRecord.checklist_module_id == module_id)
             .order_by(
+                MockDataRecord.position.asc(),
+                MockDataRecord.created_at.asc(),
+                MockDataRecord.id.asc(),
+            )
+        )
+        return list(result.scalars().all())
+
+    async def list_for_modules(self, module_ids: Collection[uuid.UUID]) -> list[MockDataRecord]:
+        """Every live record of several modules, each module's in `list_for_module` order.
+
+        Unscoped like `list_for_module`: the caller resolved the modules through the
+        scoped `ChecklistModuleRepository.list_in_scope`.
+        """
+        if not module_ids:
+            return []
+        result = await self.session.execute(
+            self.active_select()
+            .where(MockDataRecord.checklist_module_id.in_(module_ids))
+            .order_by(
+                MockDataRecord.checklist_module_id.asc(),
                 MockDataRecord.position.asc(),
                 MockDataRecord.created_at.asc(),
                 MockDataRecord.id.asc(),

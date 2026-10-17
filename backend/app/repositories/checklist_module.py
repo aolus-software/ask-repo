@@ -95,6 +95,17 @@ class ChecklistModuleRepository(BaseRepository[ChecklistModule]):
         total = await self.session.execute(select(func.count()).select_from(base.subquery()))
         return list(rows.scalars().all()), total.scalar_one()
 
+    async def list_in_scope(
+        self, *, scope: ProjectScope, project_id: uuid.UUID
+    ) -> list[ChecklistModule]:
+        """Every live module of one project in the caller's scope, by name."""
+        result = await self.session.execute(
+            self._scoped(scope, project_id=project_id).order_by(
+                ChecklistModule.name.asc(), ChecklistModule.id.asc()
+            )
+        )
+        return list(result.scalars().all())
+
     async def get_in_scope(
         self, module_id: uuid.UUID, *, scope: ProjectScope
     ) -> ChecklistModule | None:

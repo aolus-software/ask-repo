@@ -89,6 +89,7 @@ The shape AskRepo is heading for:
 /ask                    Dev Knowledge — project picker + conversation
 /ask/[conversationId]   a conversation (private to the operator)
 /checklist              QA Checklist modules (shared)
+/checklist/export       export a project's checklist and mock data (a FormPage)
 /checklist/[moduleId]   the checklist grid, chat and review panel
 /settings               index route — redirects to its first reachable child
 /settings/users         admin only
@@ -128,6 +129,10 @@ Settings group for one, the same as it always has for every other child, which w
 already.
 
 ## 9. A detail page names its own crumb; `lib/nav.ts` still owns every label and href
+
+A fixed page below a nav item — `/checklist/export` is the one today — is not a resource id.
+Its label goes in `FIXED_CRUMBS` in `lib/nav.ts`, and the crumb it produces is never `fromId`,
+so no page can rename it.
 
 For a detail route the trailing crumb is the raw path segment, a UUID. A detail page replaces it
 with the resource's name by calling `useBreadcrumbLabel(href, name)`

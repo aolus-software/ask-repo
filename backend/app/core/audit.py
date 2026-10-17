@@ -194,14 +194,16 @@ CONTEXT_KEYS: dict[AuditEventType, frozenset[str]] = {
     # `projectCount` names how many distinct projects the export spanned, for the
     # turns `project_id` is `None` because the filter matched more than one -- see
     # `ChecklistItemService.export`.
-    AuditEventType.CHECKLIST_EXPORTED: frozenset({"format", "rowCount", "filter", "projectCount"}),
+    AuditEventType.CHECKLIST_EXPORTED: frozenset(
+        {"format", "rowCount", "filter", "projectCount", "moduleCount"}
+    ),
     AuditEventType.MOCK_DATA_GENERATION_REQUESTED: frozenset({"indexedGeneration"}),
     AuditEventType.MOCK_DATA_CHANGE_SET_APPLIED: frozenset(
         {"origin", "operationsProposed", "operationsApplied"}
     ),
     AuditEventType.MOCK_DATA_CHANGE_SET_DISCARDED: frozenset({"origin", "operationsProposed"}),
     AuditEventType.MOCK_DATA_RECORD_DELETED: frozenset({"position"}),
-    AuditEventType.MOCK_DATA_EXPORTED: frozenset({"format", "rowCount"}),
+    AuditEventType.MOCK_DATA_EXPORTED: frozenset({"format", "rowCount", "moduleCount"}),
     AuditEventType.CONVERSATION_DELETED: frozenset({"messageCount"}),
     AuditEventType.EVAL_SET_DELETED: frozenset({"pairCount", "runCount"}),
     # A run's answers and judge reasons are model output about a private repository and

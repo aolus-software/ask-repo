@@ -10,7 +10,7 @@ reached through its module, and the module read is already scoped.
 """
 
 import uuid
-from collections.abc import Sequence
+from collections.abc import Collection, Sequence
 from datetime import UTC, datetime, timedelta
 from typing import Any, cast
 
@@ -48,6 +48,17 @@ class MockDataDatasetRepository(BaseRepository[MockDataDataset]):
             self.active_select().where(MockDataDataset.checklist_module_id == module_id)
         )
         return result.scalar_one_or_none()
+
+    async def get_by_modules(
+        self, module_ids: Collection[uuid.UUID]
+    ) -> dict[uuid.UUID, MockDataDataset]:
+        """The dataset rows of several modules, keyed by module. A missing key means none."""
+        if not module_ids:
+            return {}
+        result = await self.session.execute(
+            self.active_select().where(MockDataDataset.checklist_module_id.in_(module_ids))
+        )
+        return {row.checklist_module_id: row for row in result.scalars().all()}
 
     async def get_or_create_for_module(self, module_id: uuid.UUID) -> MockDataDataset:
         """The dataset row for a module, creating an empty one on first use.

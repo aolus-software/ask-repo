@@ -1,6 +1,7 @@
 "use client";
 
-import { ClipboardCheck, Plus } from "lucide-react";
+import { ClipboardCheck, Download, Plus } from "lucide-react";
+import Link from "next/link";
 import { useState } from "react";
 
 import { CreateModuleDialog } from "@/components/checklist/create-module-dialog";
@@ -35,10 +36,29 @@ export function ChecklistScreen() {
         title="QA Checklist"
         description="Generated test plans for the modules of an indexed repository."
         action={
-          <Button onClick={() => setCreating(true)}>
-            <Plus className="size-4" />
-            Create module
-          </Button>
+          <div className="flex gap-2">
+            {/* Starts the export on whichever project the list is filtered to. */}
+            <Button
+              variant="outline"
+              nativeButton={false}
+              render={
+                <Link
+                  href={
+                    listParams.projectId
+                      ? `/checklist/export?projectId=${listParams.projectId}`
+                      : "/checklist/export"
+                  }
+                />
+              }
+            >
+              <Download className="size-4" />
+              Export
+            </Button>
+            <Button onClick={() => setCreating(true)}>
+              <Plus className="size-4" />
+              Create module
+            </Button>
+          </div>
         }
       />
 
