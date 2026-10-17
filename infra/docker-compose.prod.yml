@@ -71,6 +71,18 @@ x-app-env: &app-env
   EMBEDDING_MODEL: ${EMBEDDING_MODEL:-nomic-embed-text}
   EMBEDDING_BASE_URL: ${EMBEDDING_BASE_URL:-http://ollama:11434}
   EMBEDDING_API_KEY: ${EMBEDDING_API_KEY:-}
+  # Shared, not API-only: the API answers questions, and the worker runs checklist,
+  # mock-data and eval generation and eval runs, probing the model's structured output
+  # at startup (docs/llm.md). Set on the API alone, the worker falls back to Settings'
+  # `localhost:11434`, which inside a container is the container itself.
+  CHAT_PROVIDER: ${CHAT_PROVIDER:-ollama}
+  CHAT_MODEL: ${CHAT_MODEL:-qwen2.5-coder:14b}
+  CHAT_BASE_URL: ${CHAT_BASE_URL:-http://ollama:11434}
+  CHAT_API_KEY: ${CHAT_API_KEY:-}
+  CHAT_REASONING: ${CHAT_REASONING:-default}
+  CHAT_EXTRA_MODEL_KWARGS: ${CHAT_EXTRA_MODEL_KWARGS:-{}}
+  # Read by the worker's provider client only; harmless on the API.
+  GENERATION_TIMEOUT_SECONDS: ${GENERATION_TIMEOUT_SECONDS:-600}
   # Shared, not API-only: the API sends password-reset email and the worker runs
   # notification fan-out for ingestion and generation and its own `mail_loop`. A
   # MAIL_ENABLED that differs between them would queue email for some events and not
@@ -260,13 +272,6 @@ services:
       # the per-IP login limit becomes a single instance-wide limit — which is why a
       # production boot with 0 is refused outright (app/config.py).
       TRUSTED_PROXY_HOPS: ${TRUSTED_PROXY_HOPS:-1}
-      # API-only: the worker indexes, it never answers a question.
-      CHAT_PROVIDER: ${CHAT_PROVIDER:-ollama}
-      CHAT_MODEL: ${CHAT_MODEL:-qwen2.5-coder:14b}
-      CHAT_BASE_URL: ${CHAT_BASE_URL:-http://ollama:11434}
-      CHAT_API_KEY: ${CHAT_API_KEY:-}
-      CHAT_REASONING: ${CHAT_REASONING:-default}
-      CHAT_EXTRA_MODEL_KWARGS: ${CHAT_EXTRA_MODEL_KWARGS:-{}}
     depends_on:
       postgres:
         condition: service_healthy
@@ -308,8 +313,9 @@ services:
       - repo_scratch:/data/repos
     # There is deliberately no healthcheck. The worker exposes no endpoint and has no
     # liveness signal to probe — its failure mode (dying at startup while probing
-    # embedding dimensions against an unreachable model server) shows up as a restart
-    # loop in `make ps-prod`, which is what to watch for.
+    # embedding dimensions or the chat model's structured output against an
+    # unreachable model server) shows up as a restart loop in `make ps-prod`, which is
+    # what to watch for.
     depends_on:
       postgres:
         condition: service_healthy

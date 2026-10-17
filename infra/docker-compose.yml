@@ -52,6 +52,18 @@ x-app-env: &app-env
   # CHAT_BASE_URL to `http://ollama:11434` in infra/.env.
   EMBEDDING_BASE_URL: ${EMBEDDING_BASE_URL:-http://host.docker.internal:11434}
   EMBEDDING_API_KEY: ${EMBEDDING_API_KEY:-}
+  # Shared, not API-only: the API answers questions, and the worker runs checklist,
+  # mock-data and eval generation and eval runs, probing the model's structured output
+  # at startup (docs/llm.md). Set on the API alone, the worker falls back to Settings'
+  # `localhost:11434`, which inside a container is the container itself.
+  CHAT_PROVIDER: ${CHAT_PROVIDER:-ollama}
+  CHAT_MODEL: ${CHAT_MODEL:-qwen2.5-coder:14b}
+  CHAT_BASE_URL: ${CHAT_BASE_URL:-http://host.docker.internal:11434}
+  CHAT_API_KEY: ${CHAT_API_KEY:-}
+  CHAT_REASONING: ${CHAT_REASONING:-default}
+  CHAT_EXTRA_MODEL_KWARGS: ${CHAT_EXTRA_MODEL_KWARGS:-{}}
+  # Read by the worker's provider client only; harmless on the API.
+  GENERATION_TIMEOUT_SECONDS: ${GENERATION_TIMEOUT_SECONDS:-600}
   # Shared, not API-only: the API sends password-reset email and the worker runs
   # notification fan-out for ingestion and generation and its own `mail_loop`. A
   # MAIL_ENABLED that differs between them would queue email for some events and not
@@ -239,14 +251,6 @@ services:
       BOOTSTRAP_ADMIN_PASSWORD: ${BOOTSTRAP_ADMIN_PASSWORD}
       # Nothing sits in front of the API in the dev stack, so trust the socket address.
       TRUSTED_PROXY_HOPS: ${TRUSTED_PROXY_HOPS:-0}
-      # API-only: the worker indexes, it never answers a question. Same reasoning as
-      # EMBEDDING_BASE_URL for the host — `localhost` here is this container.
-      CHAT_PROVIDER: ${CHAT_PROVIDER:-ollama}
-      CHAT_MODEL: ${CHAT_MODEL:-qwen2.5-coder:14b}
-      CHAT_BASE_URL: ${CHAT_BASE_URL:-http://host.docker.internal:11434}
-      CHAT_API_KEY: ${CHAT_API_KEY:-}
-      CHAT_REASONING: ${CHAT_REASONING:-default}
-      CHAT_EXTRA_MODEL_KWARGS: ${CHAT_EXTRA_MODEL_KWARGS:-{}}
     # Docker Desktop resolves host.docker.internal on its own; the Linux daemon does
     # not, and `host-gateway` is what gives it the same name there. Both app services
     # need it because both talk to the model server on the host.
