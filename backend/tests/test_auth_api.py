@@ -757,3 +757,33 @@ def test_the_auth_prefix_is_gate_exempt() -> None:
     from app.core.middleware import GATE_EXEMPT_PREFIXES
 
     assert auth_router.prefix in GATE_EXEMPT_PREFIXES
+
+
+async def test_login_and_refresh_carry_the_stored_language(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    """The frontend sets its locale cookie from these, with no second request."""
+    user = await _make_user(db_session)
+    user.language = "id"
+    await db_session.commit()
+
+    login = await client.post(
+        "/auth/login", json={"email": "dev@example.com", "password": PASSWORD}
+    )
+    _present_cookie(client, login.cookies[get_settings().refresh_cookie_name])
+    refresh = await client.post("/auth/refresh")
+
+    assert login.json()["language"] == "id"
+    assert refresh.json()["language"] == "id"
+
+
+async def test_login_language_is_null_when_never_chosen(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    await _make_user(db_session)
+
+    login = await client.post(
+        "/auth/login", json={"email": "dev@example.com", "password": PASSWORD}
+    )
+
+    assert login.json()["language"] is None

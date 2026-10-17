@@ -116,6 +116,7 @@ class AuthService:
             access_token=access_token,
             expires_in=expires_in,
             user=UserResponse.model_validate(user),
+            language=user.language,
         )
         return response, raw_refresh
 
