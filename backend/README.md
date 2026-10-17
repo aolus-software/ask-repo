@@ -541,7 +541,7 @@ backend/
 │   ├── mail/             # outbound email: composer, SMTP sender, notification outbox
 │   ├── checklist/        # QA Checklist: modules, generation, chat, change sets
 │   ├── mockdata/          # Mock Data Generator: generation, model output contracts, change-set ops
-│   ├── eval/              # Eval harness: set generator, run + judge, chunk sampling, model output
+│   ├── eval/              # Eval harness: set generator, run + judge, chunk sampling, model output, outcome notifications
 │   ├── worker.py          # the worker entrypoint: four consumers + retry ladders + mail loop + sweep
 │   ├── models/            # SQLAlchemy models: User, RefreshToken, Project, Conversation,
 │   │                      #   Message, Role, RolePermission, ProjectMembership, ...

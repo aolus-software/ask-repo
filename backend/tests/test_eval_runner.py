@@ -11,6 +11,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import Settings
+from app.core.notifications import NotificationType
 from app.eval import runner as runner_module
 from app.eval.model_output import JudgeVerdict
 from app.eval.runner import EvalRunner, retrieval_hit
@@ -28,6 +29,7 @@ from app.models.eval import (
     EvalSetStatus,
     EvalVerdict,
 )
+from app.models.notification import Notification, NotificationEvent
 from app.rag.graph.state import Classification, EvidenceVerdict
 from app.rag.prompt_version import ANSWER_PROMPT_VERSION, JUDGE_PROMPT_VERSION
 from app.rag.prompts import READER_PREFERENCES_PREAMBLE
@@ -401,3 +403,44 @@ async def test_a_lost_lease_propagates_and_commits_no_results(
     assert await _results(db_session, setup.run_id) == []
     run = await _reload(db_session, setup.run_id)
     assert run.status == EvalRunStatus.RUNNING.value
+
+
+async def test_a_finished_run_notifies_eval_readers_and_links_its_set(
+    db_session: AsyncSession,
+) -> None:
+    setup = await _setup(db_session, pairs=2)
+    chat = _chat("correct", "wrong")
+
+    await _run(_runner(db_session, setup, chat), setup)
+
+    db_session.expire_all()
+    run = await _reload(db_session, setup.run_id)
+    (event,) = (
+        (
+            await db_session.execute(
+                select(NotificationEvent).where(
+                    NotificationEvent.event_type == NotificationType.EVAL_RUN_FINISHED.value
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    recipients = (
+        (
+            await db_session.execute(
+                select(Notification.user_id).where(Notification.event_id == event.id)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    assert recipients == [run.created_by]
+    # The set, not the run: a run's results live on its set's screen.
+    assert (event.target_type, event.target_id) == ("eval_set", run.set_id)
+    assert event.details == {
+        "projectName": "repo",
+        "setName": "s",
+        "pairsAnswered": 2,
+        "correct": 1,
+    }

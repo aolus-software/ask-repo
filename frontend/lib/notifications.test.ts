@@ -44,6 +44,19 @@ describe("notificationHref", () => {
     expect(notificationHref(mockData)).toBe("/checklist/m1");
   });
 
+  it("sends both eval families to the set's screen", () => {
+    for (const eventType of ["eval_set.ready", "eval_run.failed"]) {
+      expect(
+        notificationHref({
+          ...base,
+          eventType,
+          targetType: "eval_set",
+          targetId: "s1",
+        }),
+      ).toBe("/projects/p1/eval/s1");
+    }
+  });
+
   it("falls back to the project when the target id is missing", () => {
     expect(
       notificationHref({ ...base, eventType: "project.ready", targetId: null }),
@@ -59,6 +72,23 @@ describe("notificationTitle", () => {
       details: { projectName: "api" },
     });
     expect(title).toContain("api");
+  });
+
+  it("names the set and the project for an eval outcome", () => {
+    const title = notificationTitle({
+      ...base,
+      eventType: "eval_run.finished",
+      details: { projectName: "api", setName: "auth paths" },
+    });
+    expect(title).toContain("auth paths");
+    expect(title).toContain("api");
+  });
+
+  it("has a title and a category label for every known type", () => {
+    for (const eventType of NOTIFICATION_TYPES) {
+      expect(notificationTitle({ ...base, eventType })).not.toBe(eventType);
+      expect(notificationTitleForType(eventType)).not.toBe(eventType);
+    }
   });
 
   it("renders an unknown event type without throwing", () => {

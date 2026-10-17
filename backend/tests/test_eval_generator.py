@@ -6,18 +6,23 @@ from typing import Any, cast
 
 import pytest
 from langchain_core.language_models import BaseChatModel
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import Settings
+from app.core.notifications import NotificationType
+from app.core.permissions import VIEWER_NAME
 from app.eval import generator as generator_module
 from app.eval.generator import NO_PAIRS_ERROR, EvalSetGenerator
 from app.eval.model_output import GeneratedPair
 from app.ingestion.chunker import Chunk
 from app.ingestion.vector_store import InMemoryVectorStore
 from app.models.eval import EvalSet, EvalSetStatus
+from app.models.notification import Notification, NotificationEvent
 from app.rag.errors import RetryableChatError, TerminalChatError
 from app.repositories.eval_pair import EvalPairRepository
 from app.repositories.eval_set import EvalSetRepository
+from tests.conftest import GrantMembership
 from tests.factories import create_project, create_user
 from tests.fakes import StructuredScriptedChatModel
 
@@ -244,3 +249,82 @@ async def test_a_retryable_chat_error_propagates_and_writes_nothing(
     assert row.status == EvalSetStatus.GENERATING.value
     pairs = await EvalPairRepository(db_session).list_for_set(eval_set.id, include_excluded=True)
     assert pairs == []
+
+
+async def _announced(
+    session: AsyncSession, event_type: NotificationType
+) -> list[tuple[NotificationEvent, set[uuid.UUID]]]:
+    events = (
+        (
+            await session.execute(
+                select(NotificationEvent).where(NotificationEvent.event_type == event_type.value)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    return [
+        (
+            event,
+            set(
+                (
+                    await session.execute(
+                        select(Notification.user_id).where(Notification.event_id == event.id)
+                    )
+                )
+                .scalars()
+                .all()
+            ),
+        )
+        for event in events
+    ]
+
+
+async def test_a_ready_set_notifies_every_eval_reader_including_the_requester(
+    db_session: AsyncSession, grant_membership: GrantMembership
+) -> None:
+    eval_set, store, job = await _setup(db_session, ["a/x.py", "b/y.py"], count=2)
+    viewer = await create_user(db_session)
+    outsider = await create_user(db_session)
+    await grant_membership(viewer.id, eval_set.project_id, VIEWER_NAME)
+    chat = StructuredScriptedChatModel({GeneratedPair: [_pair(1), _pair(2)]})
+
+    await _run(_generator(db_session, store, chat), eval_set, job)
+
+    ((event, recipients),) = await _announced(db_session, NotificationType.EVAL_SET_READY)
+    # The requester owns the project in `_setup`; an outcome does not exclude its actor.
+    assert recipients == {eval_set.created_by, viewer.id}
+    assert outsider.id not in recipients
+    assert event.target_type == "eval_set"
+    assert event.target_id == eval_set.id
+    assert event.actor_user_id is None
+    assert event.details == {"projectName": "repo", "setName": "s", "pairCount": 2}
+    assert await _announced(db_session, NotificationType.EVAL_SET_FAILED) == []
+
+
+async def test_a_set_with_no_usable_pairs_announces_failure(db_session: AsyncSession) -> None:
+    eval_set, store, job = await _setup(db_session, ["a/x.py"], count=1)
+    chat = StructuredScriptedChatModel(
+        {GeneratedPair: [GeneratedPair(question="", reference_answer="")]}
+    )
+
+    await _run(_generator(db_session, store, chat), eval_set, job)
+
+    ((event, recipients),) = await _announced(db_session, NotificationType.EVAL_SET_FAILED)
+    assert recipients == {eval_set.created_by}
+    assert event.details == {"projectName": "repo", "setName": "s"}
+    assert await _announced(db_session, NotificationType.EVAL_SET_READY) == []
+
+
+async def test_a_generation_that_lost_its_lease_announces_nothing(
+    db_session: AsyncSession,
+) -> None:
+    eval_set, store, job = await _setup(db_session, ["a/x.py"], count=1)
+    chat = StructuredScriptedChatModel({GeneratedPair: [_pair(1)]})
+
+    # Another worker holds the lease, so this run's release matches no row.
+    await _generator(db_session, store, chat).run(
+        target_id=eval_set.id, job_id=job, worker_id="someone-else"
+    )
+
+    assert await _announced(db_session, NotificationType.EVAL_SET_READY) == []

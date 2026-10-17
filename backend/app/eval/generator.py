@@ -20,8 +20,10 @@ from langchain_core.runnables import Runnable, RunnableConfig
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import Settings
+from app.core.notifications import NotificationType
 from app.db.session import get_sessionmaker
 from app.eval.model_output import GeneratedPair
+from app.eval.notifications import announce_set
 from app.eval.sampling import SampledChunk, assign_types, names_its_file, sample_chunks
 from app.ingestion.errors import RetryableIngestionError, TerminalIngestionError
 from app.ingestion.vector_store import VectorStoreFactory
@@ -141,6 +143,17 @@ class EvalSetGenerator:
             await self.session.rollback()
             logger.warning("eval generation for set %s lost its lease; discarding", set_id)
             return
+        # Before the commit, deliberately -- the outcome and the notification of it
+        # are one transaction (`.claude/rules/notifications.md` rule 2).
+        await announce_set(
+            self.session,
+            set_id=set_id,
+            event_type=(
+                NotificationType.EVAL_SET_READY if pairs else NotificationType.EVAL_SET_FAILED
+            ),
+            mail_enabled=self.settings.mail_enabled,
+            pair_count=len(pairs) if pairs else None,
+        )
         await self.session.commit()
 
     async def _renew(self, *, set_id: uuid.UUID, worker_id: str) -> None:

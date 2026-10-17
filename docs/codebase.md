@@ -166,7 +166,7 @@ backend/app/
 │   └── graph/         build.py, nodes.py, state.py
 ├── checklist/         generator, model_output, operations, source
 ├── mockdata/          generator, model_output, operations
-├── eval/              generator, runner, sampling, model_output — the synthetic Q&A harness
+├── eval/              generator, runner, sampling, model_output, notifications — the synthetic Q&A harness
 ├── live/              kinds, events, staging, fanout, bus, kafka, stream — the live-update
 │                      stream behind `GET /events` (issue #48)
 └── mail/              compose, sender, outbox, recording, templates/ — outbound email

@@ -20,6 +20,8 @@ from typing import Protocol
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.config import Settings
+from app.core.notifications import NotificationType
+from app.eval.notifications import announce_run, announce_set
 from app.ingestion.errors import RetryableIngestionError, TerminalIngestionError
 from app.models.eval import EvalRunStatus, EvalSetStatus
 from app.queue.consumer import JobOutcome as JobOutcome
@@ -68,6 +70,10 @@ class EvalLease(Protocol):
         """Record a terminal failure and drop the lease."""
         ...
 
+    async def announce_failure(self, *, target_id: uuid.UUID, mail_enabled: bool) -> None:
+        """Tell the project's `eval.read` holders, inside the failure's transaction."""
+        ...
+
 
 @dataclass(frozen=True, slots=True)
 class EvalRunners:
@@ -109,6 +115,15 @@ class _SetLease:
             error=reason,
         )
 
+    async def announce_failure(self, *, target_id: uuid.UUID, mail_enabled: bool) -> None:
+        """Raise `eval_set.failed`."""
+        await announce_set(
+            self.repository.session,
+            set_id=target_id,
+            event_type=NotificationType.EVAL_SET_FAILED,
+            mail_enabled=mail_enabled,
+        )
+
 
 class _RunLease:
     """`EvalRunRepository` keyed by target id."""
@@ -142,6 +157,15 @@ class _RunLease:
             error=reason,
         )
 
+    async def announce_failure(self, *, target_id: uuid.UUID, mail_enabled: bool) -> None:
+        """Raise `eval_run.failed`."""
+        await announce_run(
+            self.repository.session,
+            run_id=target_id,
+            event_type=NotificationType.EVAL_RUN_FAILED,
+            mail_enabled=mail_enabled,
+        )
+
 
 async def handle_eval_message(
     message: EvalJobMessage,
@@ -151,6 +175,7 @@ async def handle_eval_message(
     producer: TopicProducer,
     worker_id: str,
     max_attempts: int,
+    mail_enabled: bool,
 ) -> JobOutcome:
     """Run one eval job. Every returned value means "commit the offset"."""
     lease: EvalLease
@@ -195,6 +220,7 @@ async def handle_eval_message(
             worker_id=worker_id,
             reason=f"{message.kind} failed: {type(error).__name__}.",
             session=session,
+            mail_enabled=mail_enabled,
         )
         await _route_failure(message, producer=producer, max_attempts=0)
         return JobOutcome.DEAD_LETTERED
@@ -217,6 +243,7 @@ async def handle_eval_message(
                     f"{type(error).__name__}."
                 ),
                 session=session,
+                mail_enabled=mail_enabled,
             )
             await _route_failure(message, producer=producer, max_attempts=max_attempts)
             return JobOutcome.DEAD_LETTERED
@@ -246,6 +273,7 @@ async def handle_eval_message(
                 worker_id=worker_id,
                 reason=f"{message.kind} failed with an unexpected {type(error).__name__}.",
                 session=session,
+                mail_enabled=mail_enabled,
             )
             await _route_failure(message, producer=producer, max_attempts=0)
             return JobOutcome.DEAD_LETTERED
@@ -284,12 +312,21 @@ async def _fail(
     worker_id: str,
     reason: str,
     session: AsyncSession,
+    mail_enabled: bool,
 ) -> None:
-    """Record a terminal failure on the target and drop the lease."""
+    """Record a terminal failure on the target and drop the lease.
+
+    Only a failure that is recorded announces itself: a lease this worker no longer
+    holds belongs to a run that may still finish, and a retry that is coming back
+    (`_defer`) announces nothing.
+    """
     await session.rollback()
     if await lease.fail(
         target_id=message.target_id, job_id=message.job_id, worker_id=worker_id, reason=reason
     ):
+        # Before the commit, like every fan-out: the `failed` status and the
+        # notification of it are one transaction.
+        await lease.announce_failure(target_id=message.target_id, mail_enabled=mail_enabled)
         await session.commit()
     else:
         await session.rollback()
@@ -359,4 +396,5 @@ class EvalConsumer(PausingConsumer[EvalJobMessage]):
                 producer=self.producer,
                 worker_id=self.worker_id,
                 max_attempts=self.settings.kafka_max_attempts,
+                mail_enabled=self.settings.mail_enabled,
             )

@@ -5,10 +5,13 @@ import uuid
 from typing import Literal
 
 import pytest
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.notifications import NotificationType
 from app.ingestion.errors import TerminalIngestionError
 from app.models.eval import EvalRun, EvalRunStatus, EvalSet, EvalSetStatus
+from app.models.notification import Notification, NotificationEvent
 from app.queue.consumer import JobOutcome
 from app.queue.eval import EvalRunners, handle_eval_message
 from app.queue.protocol import InMemoryIngestionQueue
@@ -97,6 +100,7 @@ async def _handle(
         producer=producer or InMemoryIngestionQueue(),
         worker_id="me",
         max_attempts=max_attempts,
+        mail_enabled=False,
     )
 
 
@@ -246,3 +250,80 @@ async def test_failure_text_never_carries_the_exception_message(
     assert MARKER not in run.error
     assert MARKER not in caplog.text
     assert "SECRET-MARKER" not in "".join(str(r.exc_info) for r in caplog.records if r.exc_info)
+
+
+async def _announced(db: AsyncSession) -> list[tuple[str, uuid.UUID | None, list[uuid.UUID]]]:
+    """Every notification event: its type, its target, and who received it."""
+    events = (await db.execute(select(NotificationEvent))).scalars().all()
+    return [
+        (
+            event.event_type,
+            event.target_id,
+            list(
+                (
+                    await db.execute(
+                        select(Notification.user_id).where(Notification.event_id == event.id)
+                    )
+                )
+                .scalars()
+                .all()
+            ),
+        )
+        for event in events
+    ]
+
+
+async def test_a_terminal_failure_announces_itself_against_the_set(
+    db_session: AsyncSession,
+) -> None:
+    eval_set = await _set(db_session)
+    run = await _run(db_session)
+
+    await _handle(
+        db_session,
+        _message("generate", eval_set.id),
+        generator=_Stub(raises=TerminalIngestionError("nothing to sample")),
+    )
+    await _handle(
+        db_session, _message("run", run.id), runner=_Stub(raises=TerminalChatError("bad schema"))
+    )
+
+    announced = sorted(await _announced(db_session))
+    assert announced == sorted(
+        [
+            (NotificationType.EVAL_SET_FAILED.value, eval_set.id, [eval_set.created_by]),
+            # A run's failure links its set, whose screen shows the run.
+            (NotificationType.EVAL_RUN_FAILED.value, run.set_id, [run.created_by]),
+        ]
+    )
+
+
+async def test_a_spent_ladder_announces_the_failure(db_session: AsyncSession) -> None:
+    row = await _run(db_session)
+
+    await _handle(
+        db_session,
+        _message("run", row.id, attempt=2),
+        runner=_Stub(raises=RetryableChatError("blip")),
+        max_attempts=3,
+    )
+
+    assert [event for event, _, _ in await _announced(db_session)] == [
+        NotificationType.EVAL_RUN_FAILED.value
+    ]
+
+
+async def test_a_failure_that_will_be_retried_announces_nothing(
+    db_session: AsyncSession,
+) -> None:
+    eval_set = await _set(db_session)
+    run = await _run(db_session)
+
+    await _handle(
+        db_session,
+        _message("generate", eval_set.id),
+        generator=_Stub(raises=RetryableChatError("blip")),
+    )
+    await _handle(db_session, _message("run", run.id), runner=_Stub(raises=ValueError("bug")))
+
+    assert await _announced(db_session) == []

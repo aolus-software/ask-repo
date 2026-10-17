@@ -1,7 +1,7 @@
 # Notifications
 
 Every long-running operation in AskRepo used to finish in silence. A twenty-minute index, a
-checklist generation, a mock-data generation — the only way to learn any of them finished was to
+checklist generation, a mock-data generation, an eval set or run — the only way to learn any of them finished was to
 reload the screen showing its status column. That was tolerable for the person who pressed the
 button and useless for everyone else, which is the wrong way round for a checklist §4.3 publishes
 to every member of its project: the reviewer who has to act is routinely not the person who
@@ -33,11 +33,23 @@ One row per `NotificationType` member, verified against the catalogue in
 | `mock_data_change_set.applied` | someone applies a mock-data change set | members with `mockdata.read`, **not** the actor | the module |
 | `mock_data_change_set.discarded` | someone discards one | members with `mockdata.read`, **not** the actor | the module |
 | `membership.granted` | someone is added to a project | the new member only | the project |
+| `eval_set.ready` | an eval set finishes generating | members with `eval.read` | the eval set |
+| `eval_set.failed` | an eval set fails — terminally, after its last retry, or with no usable pairs | members with `eval.read` | the eval set |
+| `eval_run.finished` | an eval run finishes | members with `eval.read` | the eval set |
+| `eval_run.failed` | an eval run fails — terminally, or after its last retry | members with `eval.read` | the eval set |
 
 Both change-set families link to the checklist module rather than to the change set's own id
 (`target_type` is `checklist_module` for all six), because the Mock Data tab lives at
 `/checklist/[moduleId]` rather than at a route of its own — a change set's own id names nothing a
 recipient could navigate to.
+
+Both eval families link to the set (`target_type` is `eval_set` for all four,
+`/projects/[id]/eval/[setId]`) for the same reason: a run's results live on its set's screen, and a
+run's own id names no route. A failure reaches every `eval.read` holder, not only the person who
+started the job — the same choice `project.reindex.failed` makes. A failure that is going to be
+retried announces nothing; only the attempt that records `failed` does. The four are raised from
+`app/eval/generator.py`, `app/eval/runner.py` and the terminal-failure path in
+`app/queue/eval.py`, all through `app/eval/notifications.py`.
 
 ---
 
@@ -47,7 +59,8 @@ recipient could navigate to.
 a change set is something you just did, and a notification about it is noise. You *are* told the
 reindex you started twenty minutes ago finished — that is something you cannot otherwise know,
 and it is the entire feature for the person who pressed the button and walked away. Neither
-`pending` event has an actor at all: a worker raised it.
+`pending` event has an actor at all: a worker raised it — nor has any eval event, and the person
+who started that job is a recipient like any other `eval.read` holder.
 
 **An administrator with no membership on a project receives nothing about it.** Permission to see
 a project is not interest in hearing about it. `require_permission` lets an administrator bypass

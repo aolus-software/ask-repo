@@ -27,8 +27,10 @@ from langchain_core.language_models import BaseChatModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import Settings
+from app.core.notifications import NotificationType
 from app.db.session import get_sessionmaker
 from app.eval.model_output import JudgeVerdict
+from app.eval.notifications import announce_run
 from app.ingestion.embedder import Embedder
 from app.ingestion.errors import RetryableIngestionError, TerminalIngestionError
 from app.ingestion.vector_store import VectorStoreFactory
@@ -197,6 +199,15 @@ class EvalRunner:
             await self.session.rollback()
             logger.warning("eval run %s lost its lease before release", run_id)
             raise RetryableIngestionError(f"eval run {run_id} lost its lease")
+        # Before the commit: the summary and the notification of it are one transaction.
+        await announce_run(
+            self.session,
+            run_id=run_id,
+            event_type=NotificationType.EVAL_RUN_FINISHED,
+            mail_enabled=self.settings.mail_enabled,
+            pairs_answered=len(rows),
+            correct=_count(rows, EvalVerdict.CORRECT),
+        )
         await self.session.commit()
 
     def _answerer(self, project: Project) -> Answerer:

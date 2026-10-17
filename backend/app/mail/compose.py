@@ -83,6 +83,22 @@ MESSAGES: dict[NotificationType, tuple[str, str]] = {
         "You were added to a project",
         "You were added to a project.",
     ),
+    NotificationType.EVAL_SET_READY: (
+        "Eval set ready",
+        "An eval set in a project you are a member of finished generating.",
+    ),
+    NotificationType.EVAL_SET_FAILED: (
+        "Eval set failed",
+        "An eval set in a project you are a member of failed to generate.",
+    ),
+    NotificationType.EVAL_RUN_FINISHED: (
+        "Eval run finished",
+        "An eval run in a project you are a member of finished.",
+    ),
+    NotificationType.EVAL_RUN_FAILED: (
+        "Eval run failed",
+        "An eval run in a project you are a member of failed.",
+    ),
 }
 
 RESET_MESSAGE = "Reset your password"
@@ -104,6 +120,9 @@ def _link(target_type: str | None, target_id: uuid.UUID | None, project_id: uuid
     # The Mock Data tab lives on the module page, so both change-set kinds link there.
     if target_type == "checklist_module" and target_id is not None:
         return f"/checklist/{target_id}"
+    # A run's results live on its set's screen, so both eval families target the set.
+    if target_type == "eval_set" and target_id is not None:
+        return f"/projects/{project_id}/eval/{target_id}"
     return f"/projects/{project_id}"
 
 

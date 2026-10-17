@@ -1,10 +1,12 @@
 # Notifications Rules
 
 Everything under `app/core/notifications.py`, `app/services/notification_fanout.py`,
-`app/services/notification.py`, the nine fan-out call sites in `app/ingestion/pipeline.py`,
+`app/services/notification.py`, the thirteen fan-out call sites in `app/ingestion/pipeline.py`,
 `app/checklist/generator.py`, `app/mockdata/generator.py`,
-`app/services/checklist_change_set.py`, `app/services/mock_data_change_set.py` and
-`app/services/membership.py`, the email half of `app/mail/`, and the routes under `app/api/routes/notifications.py` and
+`app/services/checklist_change_set.py`, `app/services/mock_data_change_set.py`,
+`app/services/membership.py`, and — through the one helper in `app/eval/notifications.py` —
+`app/eval/generator.py`, `app/eval/runner.py` and the terminal-failure path of
+`app/queue/eval.py`, the email half of `app/mail/`, and the routes under `app/api/routes/notifications.py` and
 `app/api/routes/notification_preferences.py`. Read `audit-trail.md` alongside this — the two
 systems share a shape (a catalogue, an allowlist, a per-event decision about who and what) and
 diverge on purpose in exactly the places called out below.
