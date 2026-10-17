@@ -2,9 +2,9 @@
 
 Every method decides access through `app/core/access.py` -- `require_readable_project`
 for "may this caller know the project exists" and `require_permission` for what they
-may do to it. A set has no scope of its own: it inherits its project's, so a set id
-resolves to its project first and a caller with no membership there gets
-`PROJECT_NOT_FOUND`, never a hint that the set exists.
+may do to it. A set has no scope of its own: it inherits its project's. A set, pair or
+run id that does not exist and one in a project the caller holds no membership on give
+the same answer, the resource's own `404` code, so an id never hints that it exists.
 """
 
 import time
@@ -335,10 +335,10 @@ class EvalService:
         """One run with its results. Resolves through the set's project like every read."""
         run = await self.runs.get(run_id)
         if run is None:
-            raise AppError(
-                status.HTTP_404_NOT_FOUND, ErrorCode.EVAL_RUN_NOT_FOUND, "Eval run not found."
-            )
-        await self._load_set(run.set_id, actor, Permission.EVAL_READ)
+            raise self._run_not_found()
+        await self._load_set(
+            run.set_id, actor, Permission.EVAL_READ, not_found=self._run_not_found()
+        )
         results = await self.results.list_for_run(run.id)
         return EvalRunDetail(
             **EvalRunSummary.model_validate(run).model_dump(),
@@ -346,20 +346,27 @@ class EvalService:
         )
 
     async def _load_set(
-        self, set_id: uuid.UUID, actor: AuthenticatedUser, permission: Permission
+        self,
+        set_id: uuid.UUID,
+        actor: AuthenticatedUser,
+        permission: Permission,
+        *,
+        not_found: AppError | None = None,
     ) -> tuple[EvalSet, Project]:
         """A set the caller may act on.
 
-        `404 EVAL_SET_NOT_FOUND` for a set that does not exist, `404 PROJECT_NOT_FOUND`
-        for a real set in a project the caller holds no membership on, `403` for a
-        member whose role lacks `permission`. Both `404`s are safe: neither confirms a
-        private project exists, because a random id and a non-member's id each answer
-        `404` without naming anything.
+        One `404` for a set that does not exist and for a real set in a project the
+        caller holds no membership on — `not_found`, or `EVAL_SET_NOT_FOUND` by default,
+        so a run or pair lookup answers with its own code both ways. `403` for a member
+        whose role lacks `permission`.
         """
+        missing = not_found or self._set_not_found()
         eval_set = await self.sets.get(set_id)
         if eval_set is None:
-            raise self._set_not_found()
-        project = await access.require_readable_project(self.projects, eval_set.project_id, actor)
+            raise missing
+        project = await access.require_readable_project(
+            self.projects, eval_set.project_id, actor, not_found=missing
+        )
         access.require_permission(actor, project.id, permission)
         return eval_set, project
 
@@ -367,6 +374,12 @@ class EvalService:
     def _set_not_found() -> AppError:
         return AppError(
             status.HTTP_404_NOT_FOUND, ErrorCode.EVAL_SET_NOT_FOUND, "Eval set not found."
+        )
+
+    @staticmethod
+    def _run_not_found() -> AppError:
+        return AppError(
+            status.HTTP_404_NOT_FOUND, ErrorCode.EVAL_RUN_NOT_FOUND, "Eval run not found."
         )
 
     @staticmethod

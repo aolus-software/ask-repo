@@ -134,7 +134,11 @@ class ProjectReader(Protocol):
 
 
 async def require_readable_project(
-    projects: ProjectReader, project_id: uuid.UUID, actor: AuthenticatedUser
+    projects: ProjectReader,
+    project_id: uuid.UUID,
+    actor: AuthenticatedUser,
+    *,
+    not_found: AppError | None = None,
 ) -> Project:
     """Load a project the caller may see, or raise `404`.
 
@@ -144,11 +148,18 @@ async def require_readable_project(
     `require_permission` carries: once projects are not shared, a project this
     caller holds no membership on must be indistinguishable from one that does
     not exist at all.
+
+    `not_found` is for a child resource reached by its own id (an eval set, an eval
+    run). A missing child already answers with its own code, so a real child in a
+    project the caller cannot see must answer with that same code; `PROJECT_NOT_FOUND`
+    there would tell a non-member the id exists.
     """
     scope = resolve_project_scope(actor)
     project = await projects.get(project_id)
     if project is None or not (scope.unrestricted or project.id in scope.ids):
-        raise AppError(status.HTTP_404_NOT_FOUND, ErrorCode.PROJECT_NOT_FOUND, "Project not found.")
+        raise not_found or AppError(
+            status.HTTP_404_NOT_FOUND, ErrorCode.PROJECT_NOT_FOUND, "Project not found."
+        )
     return project
 
 
