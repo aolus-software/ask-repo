@@ -329,6 +329,54 @@ async def test_deleting_a_user_soft_deletes_and_revokes_their_tokens(
     assert stored.revoked_reason == "user_deactivated"
 
 
+async def test_deleting_a_user_deletes_their_conversations_and_ask_notes(
+    client: AsyncClient, db_session: AsyncSession
+) -> None:
+    """docs/PRD.md §4.0: a deactivated user's private conversations are soft-deleted
+    with them, and the notes on their Ask votes are nulled. A colleague's are untouched."""
+    from sqlalchemy import select
+
+    from app.core.feedback import FeedbackFeature, FeedbackTarget
+    from app.models.conversation import Conversation
+    from app.models.feedback import Feedback
+    from tests.factories import create_conversation, create_feedback, create_project
+
+    admin = await _make_user(db_session, is_admin=True)
+    target = await _make_user(db_session)
+    colleague = await _make_user(db_session)
+    project = await create_project(db_session)
+    theirs = await create_conversation(db_session, user_id=target.id, project_id=project.id)
+    kept = await create_conversation(db_session, user_id=colleague.id, project_id=project.id)
+    ask_note = await create_feedback(
+        db_session, user_id=target.id, project_id=project.id, note="private words"
+    )
+    shared_note = await create_feedback(
+        db_session,
+        user_id=target.id,
+        project_id=project.id,
+        target_type=FeedbackTarget.CHECKLIST_CHANGE_SET,
+        feature=FeedbackFeature.GENERATE_CHECKLIST,
+        note="about the plan",
+    )
+    await db_session.commit()
+
+    response = await client.delete(f"/users/{target.id}", headers=_auth(admin))
+
+    assert response.status_code == 204
+    db_session.expire_all()
+    conversations = {
+        row.id: row.deleted_at
+        for row in (await db_session.execute(select(Conversation))).scalars().all()
+    }
+    notes = {
+        row.id: row.note for row in (await db_session.execute(select(Feedback))).scalars().all()
+    }
+    assert conversations[theirs.id] is not None
+    assert conversations[kept.id] is None
+    assert notes[ask_note.id] is None
+    assert notes[shared_note.id] == "about the plan"
+
+
 async def test_reset_password_forces_a_change_and_revokes_sessions(
     client: AsyncClient, db_session: AsyncSession
 ) -> None:

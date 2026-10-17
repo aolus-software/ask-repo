@@ -349,10 +349,10 @@ the same sequence back out as page position. See `.claude/rules/feedback.md` §2
 | Event | Effect on feedback |
 | --- | --- |
 | Conversation deleted | Rows on its messages keep `rating`, `reason_codes`, `feature`, `project_id`; `note` set to `NULL`, in the same transaction |
-| Project deleted | That project's rows soft-deleted in the same operation |
+| Project deleted | That project's rows soft-deleted in the same operation, after the `note` on its Ask (`message`) rows is set to `NULL` |
 | Change set discarded, applied, or superseded | Unchanged — the subject still exists |
 | User withdraws a vote | Row hard-deleted |
-| User deactivated | Unchanged, consistent with memberships |
+| User deactivated | The `note` on their Ask (`message`) rows set to `NULL`, in the same transaction that soft-deletes their conversations; rows on change sets and refinement replies unchanged |
 | `FEEDBACK_RETENTION_DAYS` elapsed (default `0`, keep forever) | Hard-deleted by the worker's 60-second tick |
 
 Recording, revising or withdrawing a vote records **no** audit event — the seventh named
@@ -377,7 +377,7 @@ operation** — and the vector delete runs *before* the commit, so if Qdrant ref
 stays visible rather than becoming a soft-deleted project whose content is still queryable.
 
 Deleting a project also sweeps its conversations, checklist, mock data and eval sets, pairs, runs and results. Not scoped by owner:
-a project has members, so the conversations belong to several people and all of them go. Deleting an eval set soft-deletes its pairs, runs and results in the same transaction, and is refused with `409 EVAL_RUN_IN_PROGRESS` while a run is live.
+a project has members, so the conversations belong to several people and all of them go. Deactivating a user sweeps the other axis: every conversation they own, across every project, in the deactivation's own transaction (`docs/PRD.md` §4.0). Deleting an eval set soft-deletes its pairs, runs and results in the same transaction, and is refused with `409 EVAL_RUN_IN_PROGRESS` while a run is live.
 
 ### 2. The lease is the deduplication boundary
 

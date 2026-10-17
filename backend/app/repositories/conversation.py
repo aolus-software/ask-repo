@@ -84,6 +84,20 @@ class ConversationRepository(BaseRepository[Conversation]):
         )
         return list(rows.scalars().all()), total.scalar_one()
 
+    async def soft_delete_for_owner(self, owner_id: uuid.UUID) -> int:
+        """Soft-delete every conversation a user owns, across every project.
+
+        For deactivation (`docs/PRD.md` §4.0): a person's private conversations go with
+        their account. Bulk, so `updated_at` is set from the database clock for the
+        reasons `soft_delete_for_project` gives.
+        """
+        result = await self.session.execute(
+            update(Conversation)
+            .where(Conversation.user_id == owner_id, Conversation.deleted_at.is_(None))
+            .values(deleted_at=func.now(), updated_at=func.now())
+        )
+        return cast(CursorResult[Any], result).rowcount
+
     async def soft_delete_for_project(self, project_id: uuid.UUID) -> int:
         """Soft-delete every conversation against a project, for every owner.
 

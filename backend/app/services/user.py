@@ -18,6 +18,8 @@ from app.core.middleware import AuthenticatedUser
 from app.core.passwords import PasswordPolicyError, check_password, get_common_passwords
 from app.core.security import hash_password
 from app.models.user import User
+from app.repositories.conversation import ConversationRepository
+from app.repositories.feedback import FeedbackRepository
 from app.repositories.membership import MembershipRepository
 from app.repositories.project import ProjectRepository
 from app.repositories.refresh_token import RefreshTokenRepository
@@ -213,10 +215,13 @@ class UserService:
         return UserResponse.model_validate(user)
 
     async def soft_delete(self, user_id: uuid.UUID, *, actor: AuthenticatedUser) -> None:
-        """Deactivate an account and end every session it holds.
+        """Deactivate an account, end every session it holds, and delete its private
+        conversations.
 
         The token revocation is what makes `docs/PRD.md:101`'s "immediately" true for
-        refresh; the middleware's per-request row load covers the access token.
+        refresh; the middleware's per-request row load covers the access token. The
+        conversations and the notes on their Ask votes go in the same transaction
+        (`docs/PRD.md` §4.0), so nothing private outlives the account it belonged to.
         """
         user = await self._load(user_id)
         await self._guard_last_admin(user)
@@ -243,6 +248,8 @@ class UserService:
         target_label = user.email
         await self.users.soft_delete(user)
         await self.tokens.revoke_all_for_user(user.id, reason="user_deactivated")
+        await FeedbackRepository(self.session).clear_ask_notes_for_user(user.id)
+        await ConversationRepository(self.session).soft_delete_for_owner(user.id)
         await self.session.commit()
 
         await self._recorder.record(
