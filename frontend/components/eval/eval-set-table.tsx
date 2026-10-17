@@ -1,12 +1,21 @@
 "use client";
 
-import { FlaskConical } from "lucide-react";
+import { FlaskConical, MoreHorizontal, Trash2 } from "lucide-react";
 import Link from "next/link";
+import { useState } from "react";
 
+import { DeleteEvalSetDialog } from "@/components/eval/delete-eval-set-dialog";
 import { EvalStatusBadge } from "@/components/eval/eval-status-badge";
 import { EmptyState } from "@/components/feedback/empty-state";
 import { ListError } from "@/components/feedback/list-error";
 import { TableSkeleton } from "@/components/feedback/table-skeleton";
+import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
   Table,
   TableBody,
@@ -25,8 +34,16 @@ function tally(run: EvalRunSummary): string {
 }
 
 /** Column order is fixed by `docs/design.md`: identity, status, results, timestamps. */
-export function EvalSetTable({ projectId }: { projectId: string }) {
+export function EvalSetTable({
+  projectId,
+  canDelete = false,
+}: {
+  projectId: string;
+  /** `eval.run`, the permission the delete route checks. The backend still enforces it. */
+  canDelete?: boolean;
+}) {
   const query = useEvalSets(projectId);
+  const [deleting, setDeleting] = useState<{ id: string; name: string } | null>(null);
   const sets = query.data?.items ?? [];
 
   if (query.error) {
@@ -54,11 +71,12 @@ export function EvalSetTable({ projectId }: { projectId: string }) {
             <TableHead>Status</TableHead>
             <TableHead>Latest run</TableHead>
             <TableHead>Created</TableHead>
+            {canDelete ? <TableHead className="text-right">Actions</TableHead> : null}
           </TableRow>
         </TableHeader>
         <TableBody>
           {query.isLoading ? (
-            <TableSkeleton columns={6} />
+            <TableSkeleton columns={canDelete ? 7 : 6} />
           ) : (
             sets.map((set) => (
               <TableRow key={set.id}>
@@ -86,11 +104,43 @@ export function EvalSetTable({ projectId }: { projectId: string }) {
                 >
                   {formatRelative(set.createdAt)}
                 </TableCell>
+                {canDelete ? (
+                  <TableCell className="text-right">
+                    <DropdownMenu>
+                      <DropdownMenuTrigger
+                        render={
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            aria-label={`Actions for ${set.name}`}
+                          />
+                        }
+                      >
+                        <MoreHorizontal className="size-4" />
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuItem
+                          onClick={() => setDeleting({ id: set.id, name: set.name })}
+                        >
+                          <Trash2 className="size-4" />
+                          Delete
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </TableCell>
+                ) : null}
               </TableRow>
             ))
           )}
         </TableBody>
       </Table>
+      <DeleteEvalSetDialog
+        projectId={projectId}
+        set={deleting}
+        onOpenChange={(open) => {
+          if (!open) setDeleting(null);
+        }}
+      />
     </div>
   );
 }

@@ -25,7 +25,7 @@ from app.observability.features import (
     CallFeature,
 )
 from app.observability.record import CallRecord, CallSink, CallStart
-from app.rag.prompt_version import PROMPT_VERSION
+from app.rag.prompt_version import CALL_PROMPT_VERSIONS
 
 logger = logging.getLogger(__name__)
 
@@ -42,6 +42,17 @@ class _Open:
     trace_seed: str | None
     project_id: uuid.UUID | None
     attempt: int | None
+
+
+def _prompt_version(feature: str) -> str:
+    """The version of the prompts this call's feature sends (`app/rag/prompt_version.py`).
+
+    A tag outside `CallFeature` is recorded as untagged elsewhere, so it versions as one.
+    """
+    try:
+        return CALL_PROMPT_VERSIONS[CallFeature(feature)]
+    except ValueError:
+        return CALL_PROMPT_VERSIONS[CallFeature.UNTAGGED]
 
 
 def _uuid_or_none(value: object) -> uuid.UUID | None:
@@ -107,7 +118,7 @@ class CallRecorder(AsyncCallbackHandler):
                     trace_seed=opened.trace_seed,
                     project_id=opened.project_id,
                     attempt=opened.attempt,
-                    prompt_version=PROMPT_VERSION,
+                    prompt_version=_prompt_version(opened.feature),
                 ),
             ),
         )
@@ -169,7 +180,7 @@ class CallRecorder(AsyncCallbackHandler):
                     trace_seed=opened.trace_seed,
                     project_id=opened.project_id,
                     attempt=opened.attempt,
-                    prompt_version=PROMPT_VERSION,
+                    prompt_version=_prompt_version(opened.feature),
                 ),
             ),
         )

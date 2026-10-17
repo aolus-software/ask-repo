@@ -155,30 +155,36 @@ async def test_a_non_member_gets_404_on_every_set_route(
     pair = await create_eval_pair(db_session, set_id=eval_set.id)
     await db_session.commit()
 
-    responses = [
+    by_project = [
         await authed_client.post(f"/projects/{project.id}/eval-sets", json=BODY),
         await authed_client.get(f"/projects/{project.id}/eval-sets"),
+    ]
+    # Reached by the set's or pair's own id: the same code a random id gets, so a
+    # former member holding an id cannot tell whether it still exists.
+    by_set_id = [
         await authed_client.get(f"/eval-sets/{eval_set.id}"),
         await authed_client.delete(f"/eval-sets/{eval_set.id}"),
         await authed_client.put(f"/eval-pairs/{pair.id}/excluded", json={"excluded": True}),
     ]
 
-    for response in responses:
+    for response in by_project:
         assert response.status_code == 404
         assert response.json()["detail"]["code"] == "PROJECT_NOT_FOUND"
+    for response in by_set_id:
+        assert response.status_code == 404
+        assert response.json()["detail"]["code"] == "EVAL_SET_NOT_FOUND"
 
 
 @pytest.mark.asyncio
 async def test_an_unknown_set_in_a_visible_project_is_404_eval_set_not_found(
     authed_client: AsyncClient,
 ) -> None:
-    """A random id has no project to check, so it is `EVAL_SET_NOT_FOUND`; a real set in a
-    project the caller cannot see is `PROJECT_NOT_FOUND`. Both are `404`, and neither
-    confirms that a private project exists."""
+    """A random id answers exactly as a real set in a hidden project does
+    (`test_a_non_member_gets_404_on_every_set_route`), so the code cannot tell them apart."""
     response = await authed_client.get(f"/eval-sets/{uuid.uuid4()}")
 
     assert response.status_code == 404
-    assert response.json()["detail"]["code"] in {"EVAL_SET_NOT_FOUND", "PROJECT_NOT_FOUND"}
+    assert response.json()["detail"]["code"] == "EVAL_SET_NOT_FOUND"
 
 
 @pytest.mark.asyncio
@@ -595,15 +601,17 @@ async def test_a_non_member_gets_404_on_every_run_route(
     )
     await db_session.commit()
 
-    responses = [
+    by_set_id = [
         await authed_client.post(f"/eval-sets/{eval_set.id}/runs"),
         await authed_client.get(f"/eval-sets/{eval_set.id}/runs"),
-        await authed_client.get(f"/eval-runs/{run.id}"),
     ]
+    by_run_id = await authed_client.get(f"/eval-runs/{run.id}")
 
-    for response in responses:
+    for response in by_set_id:
         assert response.status_code == 404
-        assert response.json()["detail"]["code"] == "PROJECT_NOT_FOUND"
+        assert response.json()["detail"]["code"] == "EVAL_SET_NOT_FOUND"
+    assert by_run_id.status_code == 404
+    assert by_run_id.json()["detail"]["code"] == "EVAL_RUN_NOT_FOUND"
 
 
 @pytest.mark.asyncio

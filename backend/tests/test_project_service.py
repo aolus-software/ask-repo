@@ -11,6 +11,7 @@ from app.config import get_settings
 from app.core.access import ProjectScope
 from app.core.audit import AuditRecorder
 from app.core.errors import AppError, ErrorCode
+from app.core.feedback import FeedbackFeature, FeedbackTarget
 from app.core.permissions import VIEWER_NAME
 from app.db.session import get_sessionmaker
 from app.ingestion.chunker import Chunk
@@ -223,6 +224,34 @@ async def test_delete_soft_deletes_the_projects_feedback(db_session: AsyncSessio
     db_session.expire_all()
     row = (await db_session.execute(select(Feedback))).scalar_one()
     assert row.deleted_at is not None
+
+
+async def test_delete_nulls_the_notes_on_its_ask_feedback_only(db_session: AsyncSession) -> None:
+    """An Ask note is the user's words about a private turn, so it goes with the
+    project as it goes with one deleted conversation; a change-set note judges a
+    shared document and keeps its text in the soft-deleted row."""
+    owner = await create_user(db_session)
+    project = await create_project(db_session, created_by=owner.id)
+    ask = await create_feedback(
+        db_session, user_id=owner.id, project_id=project.id, note="private words"
+    )
+    shared = await create_feedback(
+        db_session,
+        user_id=owner.id,
+        project_id=project.id,
+        target_type=FeedbackTarget.CHECKLIST_CHANGE_SET,
+        feature=FeedbackFeature.GENERATE_CHECKLIST,
+        note="about the plan",
+    )
+    await db_session.commit()
+
+    service = service_for(db_session, InMemoryIngestionQueue())
+    await service.delete(project.id, actor=await authenticated(db_session, owner))
+
+    db_session.expire_all()
+    rows = {row.id: row for row in (await db_session.execute(select(Feedback))).scalars().all()}
+    assert rows[ask.id].note is None
+    assert rows[shared.id].note == "about the plan"
 
 
 async def test_delete_does_not_touch_qdrant_when_nothing_was_ever_indexed(

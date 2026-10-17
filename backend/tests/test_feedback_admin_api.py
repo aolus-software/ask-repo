@@ -106,6 +106,20 @@ async def test_filters_narrow_the_list(
     assert [i["projectName"] for i in by_rating.json()["items"]] == ["beta"]
 
 
+async def test_date_filters_refuse_a_time_of_day(client_for_admin: AsyncClient) -> None:
+    """A sub-day window would recover the vote time `createdOn` withholds, and with it
+    the voter via `conversation.created` (`.claude/rules/feedback.md` rule 2)."""
+    for path in ("/feedback", "/feedback/summary"):
+        for key in ("createdFrom", "createdTo"):
+            response = await client_for_admin.get(path, params={key: "2026-10-17T10:15:30Z"})
+            assert response.status_code == 422, (path, key)
+
+    whole_day = await client_for_admin.get(
+        "/feedback", params={"createdFrom": "2026-10-17", "createdTo": "2026-10-17"}
+    )
+    assert whole_day.status_code == 200
+
+
 async def test_summary_counts_votes_reasons_and_prompt_versions(
     client_for_admin: AsyncClient, db_session: AsyncSession
 ) -> None:
@@ -135,7 +149,9 @@ async def test_summary_counts_votes_reasons_and_prompt_versions(
     body = response.json()
     assert body["byFeature"] == [{"feature": "answer", "up": 1, "down": 1}]
     assert body["byReason"] == [{"feature": "answer", "reasonCode": "wrong_file_cited", "count": 1}]
-    assert body["byPromptVersion"] == [{"promptVersion": "aaaaaaaaaaaa", "up": 1, "down": 1}]
+    assert body["byPromptVersion"] == [
+        {"feature": "answer", "promptVersion": "aaaaaaaaaaaa", "up": 1, "down": 1}
+    ]
 
 
 @asynccontextmanager

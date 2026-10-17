@@ -24,6 +24,7 @@ import { DetailError } from "@/components/feedback/detail-error";
 import { JobFailureAlert } from "@/components/feedback/job-failure-alert";
 import { ListError } from "@/components/feedback/list-error";
 import { NotFound } from "@/components/feedback/not-found";
+import { useBreadcrumbLabel } from "@/components/layout/breadcrumb-labels";
 import { PageHeader } from "@/components/layout/page-header";
 import { GenerateMockDataControl } from "@/components/mock-data/generate-control";
 import { MockDataChangeSetPanel } from "@/components/mock-data/change-set-panel";
@@ -52,6 +53,7 @@ export function ModuleScreen({ moduleId }: { moduleId: string }) {
   const clearResults = useClearChecklistResults(moduleId);
 
   const checklistModule = query.data;
+  useBreadcrumbLabel(`/checklist/${moduleId}`, checklistModule?.name);
   // Mirrors the backend gate; it does not replace it. A 403 still surfaces as an
   // error. Every permission check on this screen -- checklist and mock data alike --
   // reads off this one fetch, since both tabs belong to the same project.
@@ -228,6 +230,10 @@ export function ModuleScreen({ moduleId }: { moduleId: string }) {
                       canApply={canApplyChangeSet}
                     />
                   </RefinementDrawer>
+                ) : pendingChangeSetId && changeSets.isLoading ? (
+                  // The tooltip above already points at this button; hold its place
+                  // until the list arrives (a failure is the inline error below).
+                  <Skeleton className="h-9 w-36" />
                 ) : null}
 
                 <RefinementDrawer
@@ -240,6 +246,7 @@ export function ModuleScreen({ moduleId }: { moduleId: string }) {
                   <ChatPanel
                     moduleId={moduleId}
                     hasPendingChangeSet={pendingChangeSetId !== null}
+                    isGenerating={isGenerating}
                     canSend={canGenerate}
                   />
                 </RefinementDrawer>
@@ -268,6 +275,10 @@ export function ModuleScreen({ moduleId }: { moduleId: string }) {
             }
           />
 
+          {pendingChangeSetId && changeSets.isError ? (
+            <ListError error={changeSets.error} onRetry={() => changeSets.refetch()} />
+          ) : null}
+
           {checklistModule.status === "failed" && checklistModule.error ? (
             <JobFailureAlert
               title="The last generation failed"
@@ -292,7 +303,7 @@ export function ModuleScreen({ moduleId }: { moduleId: string }) {
             </div>
           ) : null}
 
-          <ItemGrid items={items} moduleId={moduleId} />
+          <ItemGrid items={items} moduleId={moduleId} isGenerating={isGenerating} />
 
           <ConfirmDialog
             open={confirmingClear}
@@ -363,6 +374,8 @@ export function ModuleScreen({ moduleId }: { moduleId: string }) {
                     canApply={canEditMockData}
                   />
                 </RefinementDrawer>
+              ) : mockDataPendingChangeSetId && mockDataChangeSets.isLoading ? (
+                <Skeleton className="h-9 w-36" />
               ) : null}
 
               <RefinementDrawer
@@ -398,6 +411,13 @@ export function ModuleScreen({ moduleId }: { moduleId: string }) {
             </div>
           </div>
 
+          {mockDataPendingChangeSetId && mockDataChangeSets.isError ? (
+            <ListError
+              error={mockDataChangeSets.error}
+              onRetry={() => mockDataChangeSets.refetch()}
+            />
+          ) : null}
+
           {mockData.data?.status === "failed" && mockData.data.error ? (
             <JobFailureAlert
               title="The last generation failed"
@@ -424,6 +444,7 @@ export function ModuleScreen({ moduleId }: { moduleId: string }) {
               moduleId={moduleId}
               records={mockData.data?.records ?? []}
               canEdit={canEditMockData}
+              isGenerating={mockData.data?.status === "generating"}
             />
           )}
         </TabsContent>

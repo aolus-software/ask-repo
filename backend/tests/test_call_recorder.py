@@ -12,6 +12,7 @@ from typing_extensions import TypedDict
 from app.observability.features import CallFeature, call_config, scope_config
 from app.observability.record import CallRecord, CallStart
 from app.observability.recorder import CallRecorder
+from app.rag.prompt_version import CALL_PROMPT_VERSIONS
 
 SECRET_PROMPT = "the private repository's code: def launch_codes(): ..."
 SECRET_ANSWER = "the model's answer about launch_codes"
@@ -71,7 +72,8 @@ async def test_a_call_is_recorded_with_usage_and_feature() -> None:
     assert (call.input_tokens, call.output_tokens) == (12, 5)
     assert call.trace_seed == "cs-1" and call.project_id == project and call.attempt == 2
     assert call.duration_ms >= 0
-    assert len(call.prompt_version) == 12
+    # The reduce call's own version: only the prompts a reduce sends (audit §9.31).
+    assert call.prompt_version == CALL_PROMPT_VERSIONS[CallFeature.REDUCE]
 
 
 async def test_one_start_precedes_one_record_sharing_a_run_id() -> None:

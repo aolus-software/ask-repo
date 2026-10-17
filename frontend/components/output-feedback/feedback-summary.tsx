@@ -1,5 +1,6 @@
+import { StatTile, StatTileSkeleton } from "@/components/feedback/stat-tile";
 import { REASON_LABELS } from "@/components/output-feedback/reason-labels";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Table,
@@ -36,15 +37,7 @@ export function FeedbackSummarySkeleton() {
     <div className="space-y-6">
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {Array.from({ length: 4 }, (_, index) => (
-          <Card key={index}>
-            <CardHeader>
-              <Skeleton className="h-4 w-24" />
-            </CardHeader>
-            <CardContent>
-              <Skeleton className="h-8 w-16" />
-              <Skeleton className="mt-2 h-3 w-28" />
-            </CardContent>
-          </Card>
+          <StatTileSkeleton key={index} withHint />
         ))}
       </div>
       <div className="grid gap-6 lg:grid-cols-2">
@@ -64,19 +57,12 @@ export function FeedbackSummary({ summary }: { summary: Summary }) {
     <div className="space-y-6">
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {summary.byFeature.map((row) => (
-          <Card key={row.feature}>
-            <CardHeader>
-              <CardTitle className="text-sm font-medium">
-                {FEATURE_LABELS[row.feature]}
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="text-2xl font-semibold">{downRate(row.up, row.down)}</p>
-              <p className="text-muted-foreground text-xs">
-                down-voted · {row.up + row.down} votes
-              </p>
-            </CardContent>
-          </Card>
+          <StatTile
+            key={row.feature}
+            label={FEATURE_LABELS[row.feature]}
+            value={downRate(row.up, row.down)}
+            hint={`down-voted · ${row.up + row.down} votes`}
+          />
         ))}
       </div>
 
@@ -106,6 +92,7 @@ export function FeedbackSummary({ summary }: { summary: Summary }) {
           <Table>
             <TableHeader>
               <TableRow>
+                <TableHead>Feature</TableHead>
                 <TableHead>Prompt version</TableHead>
                 <TableHead className="text-right">Votes</TableHead>
                 <TableHead className="text-right">Down-voted</TableHead>
@@ -113,7 +100,8 @@ export function FeedbackSummary({ summary }: { summary: Summary }) {
             </TableHeader>
             <TableBody>
               {summary.byPromptVersion.map((row) => (
-                <TableRow key={row.promptVersion}>
+                <TableRow key={`${row.feature}:${row.promptVersion}`}>
+                  <TableCell>{FEATURE_LABELS[row.feature]}</TableCell>
                   <TableCell className="font-mono text-xs">
                     {row.promptVersion}
                   </TableCell>
@@ -128,8 +116,10 @@ export function FeedbackSummary({ summary }: { summary: Summary }) {
         </Card>
       </div>
       <p className="text-muted-foreground text-xs">
-        A vote is stamped with the prompt version running when it was cast, which for a
-        change set reviewed days later can be newer than the one that generated it.
+        A vote is stamped with the version of its feature&apos;s prompts running when it
+        was cast, which for a change set reviewed days later can be newer than the one
+        that generated it. Each feature has its own version, so compare versions within
+        a feature.
       </p>
     </div>
   );

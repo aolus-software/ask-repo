@@ -7,11 +7,13 @@ from httpx import AsyncClient
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.feedback import FeedbackFeature
 from app.core.permissions import VIEWER_NAME
 from app.models.checklist import ChangeSetOrigin
 from app.models.conversation import MessageRole
 from app.models.feedback import Feedback
 from app.models.user import User
+from app.services.feedback import FEATURE_PROMPT_VERSIONS
 from tests.conftest import GrantMembership
 from tests.factories import (
     create_checklist_change_set,
@@ -45,7 +47,8 @@ async def test_voting_on_my_own_answer_records_it(
     row = (await db_session.execute(select(Feedback))).scalar_one()
     assert row.feature == "answer"
     assert row.project_id == conversation.project_id
-    assert len(row.prompt_version) == 12
+    # The answer graph's version, not one hash over every prompt (audit §9.31).
+    assert row.prompt_version == FEATURE_PROMPT_VERSIONS[FeedbackFeature.ANSWER]
 
 
 async def test_a_second_put_changes_the_vote_in_place(

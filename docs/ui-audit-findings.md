@@ -5,8 +5,14 @@ verified-correct notes so the next sweep can tell "clean" from "not audited". A 
 been fixed moves, verbatim, to [`audit-finding-solved-logs.md`](audit-finding-solved-logs.md).
 A number cited below that is not in this file (§U7.1, §U11.3 and so on) is there.
 
-**Sweeps:** 2026-09-13, 2026-09-19 and 2026-09-27. All three were read-only. The first two were
-each followed by a separate, explicitly requested fix pass; the third has had none.
+**Sweeps:** 2026-09-13, 2026-09-19, 2026-09-27 and 2026-10-04. All four were read-only. The first
+three were each followed by a separate, explicitly requested fix pass; the fourth has had none.
+
+**Re-verified 2026-10-17**, still at `df7594e` (no frontend change). The 2026-10-04 sweep had
+recorded its findings only as table rows; their bodies are now written out under
+[Sweep 2026-10-04](#sweep-2026-10-04). Every row was re-checked against the code. None was
+refuted. Ten SUSPECTs were settled as CONFIRMED, and §U1.4 and §U7.16 were narrowed to what
+reproduces. The one part still unverified is which two column rules §U12.8 meant.
 
 **Ground truth:** [`design.md`](design.md), `.claude/rules/design-system.md`,
 `.claude/rules/forms.md`, `.claude/rules/navigation.md`, `frontend/app/globals.css`, and
@@ -27,10 +33,50 @@ excluded from every token, `dark:`, arbitrary-value and spacing check below.
 
 ## Open findings
 
-**None.** Every finding raised so far has been fixed. The most recent ones were fixed on
-`fix/audit-sweep-2026-09-27`, the same day they were found, and each is in
-[`audit-finding-solved-logs.md`](audit-finding-solved-logs.md) under the sweep that raised it.
-The next sweep adds its findings here.
+Every finding from the first three sweeps has been fixed and is in
+[`audit-finding-solved-logs.md`](audit-finding-solved-logs.md). Everything below was raised on
+2026-10-04 and is still open; what was fixed on 2026-10-17 is in the log.
+
+| # | Finding | Severity | Raised |
+| --- | --- | --- | --- |
+| §U1.4 | White text on three status colours, and three status text colours, fall below contrast guidance | 🟡 | 2026-10-04 |
+| §U3.5 | `/settings/feedback` says "No feedback yet" when filters exclude everything | 🟡 | 2026-10-04 |
+| §U3.6 | `/settings/feedback` applies URL-only filters the screen cannot show or clear | 🟡 | 2026-10-04 |
+| §U3.7 | Eval tables have no pagination and stop at 100 rows | 🟡 | 2026-10-04 |
+| §U4.7 | The "Negative" test-case badge is coloured at two call sites | 🟡 | 2026-10-04 |
+| §U5.9 | The generate-eval-set dialog: two unassociated labels and a silent blank name | 🟡 | 2026-10-04 |
+| §U5.10 | The eval sizes 10/25/50 restate a backend rule without saying so | 🟡 | 2026-10-04 |
+| §U5.11 | The thumbs-down popover keeps stale reasons and sits outside the form contract | 🟡 | 2026-10-04 |
+| §U7.15 | The eval sets empty state has no action, and `ListError` sits flush in two cards | 🟡 | 2026-10-04 |
+| §U7.16 | A thumbs vote briefly reverts after a remount | 🟡 | 2026-10-04 |
+| §U8.10 | A stray separator in the mock-data change-set card | 🟡 | 2026-10-04 |
+| §U8.11 | A stored interrupted answer is worded differently from the live one | 🟡 | 2026-10-04 |
+| §U8.13 | "Try again" after a timeout exists on Ask only | 🟡 | 2026-10-04 |
+| §U8.14 | The chat composers say "no permission" while the project is still loading | 🟡 | 2026-10-04 |
+| §U9.5 | The eval set route answers a missing permission with `NotFound`, not `Forbidden` | 🟡 | 2026-10-04 |
+| §U9.7 | Admin screens request data before their admin gate | 🟡 | 2026-10-04 |
+| §U10.13 | Identifiers on the eval screens are in the body face | 🟡 | 2026-10-04 |
+| §U10.14 | Off-scale spacing and a `text-[10px]` badge | 🟡 | 2026-10-04 |
+| §U11.6 | Excluded pairs and pressed thumbs are signalled by colour alone | 🟡 | 2026-10-04 |
+| §U11.7 | Eval run rows are clickable without a visible or accessible control | 🟡 | 2026-10-04 |
+| §U11.8 | The compare selects and the date filters lose their visible labels | 🟡 | 2026-10-04 |
+| §U12.6 | `navigation.md` §4 and §6 are stale | 📄 | 2026-10-04 |
+| §U12.7 | `frontend/README.md`'s layout is stale | 📄 | 2026-10-04 |
+| §U12.8 | `design.md` lacks the feedback control, the drawer width, and two column rules (column rules SUSPECT) | 📄 | 2026-10-04 |
+
+## Top priorities (2026-10-17)
+
+All three 🔴 bugs and all twelve 🟠 findings from 2026-10-04 were fixed on 2026-10-17, along with
+§U8.12, and are in the log. Everything still open is hygiene or documentation.
+
+1. **Contrast in light mode** (§U1.4): white text on the success, info and danger badges is 2.2–3.8
+   to 1, against a 4.5 target. It is the most-read signal on every list screen.
+2. **Small false states that remain**: the chat composers say "no permission" while the project
+   loads (§U8.14), a vote briefly reverts after a remount (§U7.16), and the feedback screen says
+   "No feedback yet" under a filter (§U3.5) and applies filters it cannot show (§U3.6).
+3. **Forms and accessibility**: unlabelled controls (§U5.9, §U11.8), colour-only signals
+   (§U11.6), a clickable run row with no control (§U11.7), and the stale thumbs-down popover (§U5.11).
+4. Then the hygiene items and the documentation (§U12.6–§U12.8).
 
 ---
 
@@ -289,6 +335,466 @@ An IP address counts as an identifier and takes `font-mono` (§U10.10).
   is not filed.
 - **Not filed, by the docs:** "Mark all read" has no confirmation. No rule asks for one, and it
   destroys no content: it changes a flag the user can still see on every row.
+
+---
+
+# Sweep 2026-10-04
+
+**Scope:** the surfaces that landed after 2026-09-27, weighted toward Phase 2.5 and Phase 2.6. That
+means the feedback control on answers and change sets (`components/output-feedback/`), the admin
+`/settings/feedback` screen, the project Eval tab, the eval set screen
+(`/projects/[id]/eval/[setId]`) with its run sheet and compare section, and the profile's Answer
+style tab. Every streaming surface and both change-set panels were re-read.
+
+**Read-only.** Nothing below has been fixed. All paths are under `frontend/` unless they start with
+`docs/` or `.claude/`.
+
+**How this section came to exist.** The 2026-10-04 sweep put its 40 findings into the "Open
+findings" table and the "Top priorities" list, but never wrote their bodies. That breaks
+`.claude/rules/audit-findings.md`, which requires every finding to be readable on its own. On
+2026-10-17, still at `df7594e` with no frontend change, every row was re-verified against the code
+and written out below. Numbers are unchanged. None was refuted. Ten SUSPECT tags were settled as
+CONFIRMED. §U1.4 and §U7.16 were narrowed to what actually reproduces. One owner decision from
+2026-10-04 survives in the Top priorities: eval sets should be deletable from the UI (§U6.14). A
+second frontend decision mentioned in the backend report was never written down, and is not
+reconstructed here.
+
+**Evidence:** every finding below is CONFIRMED by reading the code on 2026-10-17. None was executed
+in a browser.
+
+## U1 Tokens and theme
+
+### §U1.4 White text on three status colours, and three status text colours, fall below contrast guidance — 🟡 hygiene
+
+**Where:** `app/globals.css:36-43` (light-mode `--success`, `--danger`, `--info` and their
+`-foreground`); `components/feedback/status-badge.tsx:11`, `:13`, `:15`;
+`components/users/user-role-badge.tsx:11`; `text-warning`/`text-success`/`text-danger` at
+`components/eval/eval-run-sheet.tsx:68`, `components/checklist/item-grid.tsx:204`,
+`components/checklist/change-set-panel.tsx:186`, `components/form/password-field.tsx:88`, `:111`
+
+**What this is.** Status badges (Ready, Failed, Indexing…) are small coloured pills, and a few
+places colour a line of text to signal a state. Web Content Accessibility Guidelines (WCAG)
+contrast asks for at least 4.5:1 between small text and its background, so that people with
+reduced vision can read it.
+
+**Why this can happen.** In light mode, the status colours are bright mid-tones with white text on
+top. Measured ratios: success badge 2.22, info badge 2.37, danger badge 3.81. The warning badge
+uses dark text and passes, at 8.31. Used as text colour on a card, warning is 2.15, success 2.22
+and danger 3.81, and each is lower again on the page background. All of these are `text-xs` or
+`text-sm`, so 4.5:1 applies.
+
+**What it costs.** Status pills, the single most-read signal on the list screens, are hard to read
+in light mode for anyone with reduced contrast sensitivity, and in bright light for everyone.
+`docs/design.md:41` claims AA (the 4.5:1 level) only for `muted-foreground`, so nothing promised
+otherwise. But nothing warns against it either.
+
+**What we should do.** Darken the light-mode `--success`, `--info` and `--danger` until white
+reaches 4.5:1, or switch their `-foreground` to the dark ink the warning badge already uses. Add
+separate darker `*-text` tokens for coloured text. Record the ratios in `docs/design.md`. Roughly
+half a day, most of it checking the results look right.
+
+## U3 The list skeleton
+
+### §U3.5 `/settings/feedback` says "No feedback yet" when filters exclude everything — 🟡 hygiene
+
+**Where:** `app/(app)/settings/feedback/feedback-screen.tsx:89-94`
+
+**What this is.** The admin feedback screen lists votes and can be filtered by feature, vote,
+reason and date.
+
+**Why this can happen.** Whenever the result is empty, the screen renders the same "No feedback yet"
+empty state, whether or not a filter is active.
+
+**What it costs.** An administrator who filters to a narrow window is told nobody has ever voted,
+which is false.
+
+**What we should do.** Branch on whether any filter is set, the way the audit screen does: "No
+feedback matches these filters", with a clear-filters action. Half an hour.
+
+### §U3.6 `/settings/feedback` applies URL-only filters the screen cannot show or clear — 🟡 hygiene
+
+**Where:** `app/(app)/settings/feedback/feedback-screen.tsx:23-31`, `:33-38` (`changedKey`);
+`hooks/use-feedback.ts:32`, `:36`; `components/output-feedback/feedback-filters.tsx:34-150`
+
+**What this is.** Filters on this screen live in the URL so a filtered view can be shared.
+
+**Why this can happen.** The screen reads `projectId` and `promptVersion` from the URL and sends
+them to the API, but the filter row has controls only for feature, vote, reason, from and to. A
+link that carries `?projectId=…` filters the list with nothing on screen saying so, and no control
+can remove it.
+
+**What it costs.** An administrator opens a shared link, sees a fraction of the feedback, and has
+no visible reason or way back except editing the URL by hand.
+
+**What we should do.** Either render a control (or at least a removable chip) for each filter the
+URL can carry, or stop reading the two the screen cannot show. One to two hours.
+
+### §U3.7 Eval tables have no pagination and stop at 100 rows — 🟡 hygiene
+
+**Where:** `hooks/use-eval.ts:29-32` (sets), `:62-65` (runs); `backend/app/schemas/pagination.py:13`
+(`MAX_PAGE_SIZE = 100`)
+
+**What this is.** Every other list in the app has a pagination footer (`docs/design.md` → Lists).
+
+**Why this can happen.** The eval set list and the run list each fetch one page with `?limit=100`,
+which is the backend's maximum. No eval component reads `totalCount` or renders a pager. Pair
+lists are not affected, since a set has at most 50 pairs.
+
+**What it costs.** The 101st eval set on a project, or the 101st run of a set, silently never
+appears. That is unlikely soon, but invisible when it happens.
+
+**What we should do.** Use `PaginationFooter` on both tables, as the project and checklist lists do.
+One to two hours.
+
+## U4 Status and semantic colour
+
+### §U4.7 The "Negative" test-case badge is coloured at two call sites — 🟡 hygiene
+
+**Where:** `components/checklist/item-grid.tsx:201-207`, `components/checklist/change-set-panel.tsx:183-189`
+
+**What this is.** `.claude/rules/design-system.md` §5 says a status maps to its colour in one
+module and renders through `StatusBadge`. A checklist test case can be marked "Negative" (a test
+that expects a failure).
+
+**Why this can happen.** Both places build the badge by hand with the same `text-warning
+border-warning/60` classes, instead of using one shared mapping.
+
+**What it costs.** Nothing yet, as the two copies match. The next change to one will not reach the
+other. Both also inherit §U1.4's low contrast.
+
+**What we should do.** Give the test-case kind a tone in one module and render both through
+`StatusBadge`. Half an hour.
+
+## U5 Forms
+
+### §U5.9 The generate-eval-set dialog has two unassociated labels and a silent blank name — 🟡 hygiene
+
+**Where:** `components/eval/generate-eval-set-dialog.tsx:139`, `:146`, `:160`, `:165`, `:72`
+
+**What this is.** `.claude/rules/forms.md` requires every control to have an `id` and its label an
+`htmlFor`, so that clicking the label focuses the control and screen readers announce it. Required
+fields show an error when empty.
+
+**Why this can happen.** The "Questions" and "Mix" labels have no `htmlFor`, and their selects have
+no `id`. Submitting with a blank name hits `if (!values.name.trim()) return;`, which simply does
+nothing: no error, no required marker.
+
+**What it costs.** A user presses Generate and nothing happens, with no explanation. Screen-reader
+users hear two unlabelled dropdowns.
+
+**What we should do.** Add `id`/`htmlFor` to both selects, mark Name required, and show a field
+error on a blank name. Half an hour.
+
+### §U5.10 The eval sizes 10/25/50 restate a backend rule without saying so — 🟡 hygiene
+
+**Where:** `components/eval/generate-eval-set-dialog.tsx:24`, `lib/api/types.ts:673`;
+`backend/app/schemas/eval.py:24`; `docs/PRD.md` §2.1 Phase 2.6
+
+**What this is.** `forms.md` says the client must not restate a backend rule. The backend accepts
+only 10, 25 or 50 questions.
+
+**Why this can happen.** The dialog hard-codes `[10, 25, 50]` and the type mirrors it, with no
+comment linking either to the backend.
+
+**What it costs.** Nothing while the numbers agree. If the backend's options change, the dialog
+offers a choice that fails with a `422`.
+
+**What we should do.** At minimum, comment both sites as mirroring `schemas/eval.py`. Better, serve
+the options from the API. Minutes for the comment.
+
+### §U5.11 The thumbs-down popover keeps stale reasons and sits outside the form contract — 🟡 hygiene
+
+**Where:** `components/output-feedback/feedback-control.tsx:61-64`, `:84-88`, `:98`, `:78-81`, `:154-183`
+
+**What this is.** Thumbs-down opens a small popover where a user picks reasons and may add a note.
+
+**Why this can happen.** The reasons and note are seeded once, and later re-seeding only updates
+the vote. So closing without sending, removing a vote, or a failed save all leave the old ticks and
+text in place the next time it opens. The popover also uses a raw `Label`/`Textarea` rather than
+`Field`/`FieldLabel`/`FieldError`. Its textarea has an `aria-label` but no `id`. A failed save only
+toasts. The character limit and counter restate a backend limit.
+
+**What it costs.** A user who changed their mind sees reasons they did not mean to send pre-ticked,
+and can send them by accident.
+
+**What we should do.** Reset reasons and note whenever the popover opens on a fresh vote, and
+compose it from the form shells. One to two hours.
+
+## U6 Feedback and copy
+
+Every finding this sweep raised here (§U6.12–§U6.14) was resolved on 2026-10-17 and is in
+[`audit-finding-solved-logs.md`](audit-finding-solved-logs.md).
+
+## U7 Loading, empty and error
+
+### §U7.15 The eval sets empty state has no action, and `ListError` sits flush in two cards — 🟡 hygiene
+
+**Where:** `components/eval/eval-set-table.tsx:33-43`; `app/(app)/projects/[id]/project-detail-screen.tsx:162-164`,
+`:183`, `:188-190`; `components/members/member-table.tsx:166`; `components/feedback/list-error.tsx:18`
+
+**What this is.** `docs/design.md` says an empty state carries the primary action. List errors sit
+inside the list's card.
+
+**Why this can happen.** The eval empty state has no `action`; the only Generate control is in the
+tab header. On both the Eval and Members tabs, `ListError` renders inside a `Card className="p-0"`,
+and `ListError` has no padding of its own, so the alert touches the card's edges.
+
+**What it costs.** Cosmetic, plus a small extra step for a first-time user.
+
+**What we should do.** Pass the generate dialog trigger as the empty state's action, and give
+`ListError` padding when it is inside a zero-padding card. Half an hour.
+
+### §U7.16 A thumbs vote briefly reverts after a remount — 🟡 hygiene
+
+**Where:** `components/output-feedback/feedback-control.tsx:68-82`, `:84-88`; `lib/query/client.ts:18`
+
+> **Narrowed 2026-10-17.** First filed as "saved choices briefly revert after a save or a vote".
+> The save half does not reproduce: `answer-style-section.tsx:108-113` clears its draft only after
+> the refetch lands, because TanStack awaits the hook's `invalidateQueries` first. Only the vote
+> half is confirmed.
+
+**What this is.** A vote's state comes from `myFeedback` on the message or change-set read, which
+is cached.
+
+**Why this can happen.** Casting a vote never writes back to that cache. When the control remounts
+(navigating back to a conversation, or a chat list re-rendering from cache within its 30-second
+stale time), it re-seeds from the stale cached value. The vote shows as un-cast until the refetch
+lands.
+
+**What it costs.** A user who just voted sees their vote disappear and may vote again.
+
+**What we should do.** On success, update `myFeedback` in the cached message or change set with
+`setQueryData`, or invalidate it. Half an hour.
+
+## U8 The streaming surfaces
+
+### §U8.10 A stray separator in the mock-data change-set card — 🟡 hygiene
+
+**Where:** `components/mock-data/change-set-panel.tsx:181-182`; `components/form/form-error.tsx:10`;
+compare `components/checklist/change-set-panel.tsx:247`
+
+**Why this can happen.** A `<Separator />` renders unconditionally above `FormError`, which renders
+nothing when there is no error. The result is a dangling rule at the bottom of the card. The
+checklist twin has no such separator.
+
+**What we should do.** Remove it, or render it only with the error. Minutes.
+
+### §U8.11 A stored interrupted answer is worded differently from the live one — 🟡 hygiene
+
+**Where:** `components/ask/message-list.tsx:72-78`; `components/ask/interrupted-note.ts:9-10`;
+`components/ask/interrupted-note.tsx:4-8`
+
+**What this is.** When a stream drops mid-answer, the partial answer is kept and a note says so.
+
+**Why this can happen.** The live note reads "The connection dropped. What arrived above is kept."
+After reload, the stored message reads "This answer was interrupted. What arrived is kept." The
+`interrupted-note` comment claims one shared sentence across surfaces, which is untrue for the
+stored copy.
+
+**What it costs.** The same event is described two ways on either side of a reload.
+
+**What we should do.** Use `INTERRUPTED_MESSAGE` in `message-list.tsx` too. Minutes.
+
+### §U8.13 "Try again" after a timeout exists on Ask only — 🟡 hygiene
+
+**Where:** `app/(app)/ask/[conversationId]/conversation-screen.tsx:163-172`;
+`components/checklist/chat-panel.tsx`, `components/mock-data/chat-panel.tsx` (no `finishReason` in
+their turn state); `lib/checklist/stream.ts:32`
+
+**What this is.** All three streaming surfaces share one backend and one terminator contract, and
+every terminator carries a `finishReason`.
+
+**Why this can happen.** Ask keeps `finishReason` and offers "Try again" on `timeout`. The two
+refinement chats drop it, though their streams carry it, so a timeout there offers nothing.
+
+**What it costs.** The same failure gives a one-click recovery on one screen, and on the other two
+the user has to retype.
+
+**What we should do.** Keep `finishReason` in both chats' turn state and render the same retry.
+One hour.
+
+### §U8.14 The chat composers say "no permission" while the project is still loading — 🟡 hygiene
+
+**Where:** `app/(app)/checklist/[moduleId]/module-screen.tsx:59-65`, `:112-113`, `:142-143`, `:243`,
+`:379`; `components/checklist/chat-panel.tsx:244-245`; `components/mock-data/chat-panel.tsx:207-208`
+
+**What this is.** The module screen decides who may generate or refine from the project's
+permissions.
+
+**Why this can happen.** Before the project loads (or if it fails), the permission flags are
+`false`. Both composers' placeholders then read "You do not have permission to refine…", and the
+Generate tooltips say the same.
+
+**What it costs.** Every user is briefly told they lack a permission they have. If the project
+request fails, they are told it permanently, which hides the real error.
+
+**What we should do.** Treat "not yet known" as disabled with no reason given, and show the
+project error where there is one. Half an hour.
+
+## U9 Navigation and route gating
+
+### §U9.5 The eval set route answers a missing permission with `NotFound`, not `Forbidden` — 🟡 hygiene
+
+**Where:** `components/eval/eval-set-screen.tsx:60`; `backend/app/core/access.py:99-100`; compare
+`app/(app)/settings/feedback/feedback-screen.tsx:53`, `app/(app)/settings/roles/[id]/role-matrix-screen.tsx:64`
+
+**What this is.** `CLAUDE.md` ("`403` vs `404` is a security decision"): a member who can see a
+project but lacks a permission gets *forbidden*, because *not found* would contradict the screen
+they just came from.
+
+**Why this can happen.** The project has loaded, which proves the user is a member, but the screen
+answers a missing `eval.read` with `NotFound`.
+
+**What it costs.** A viewer following a link is told an eval set does not exist when it does.
+
+**What we should do.** Render `Forbidden` there. Minutes.
+
+### §U9.7 Admin screens request data before their admin gate — 🟡 hygiene
+
+**Where:** `app/(app)/settings/users/users-screen.tsx:30` then `:37`; `settings/audit/audit-screen.tsx:42`
+then `:48`; `settings/audit/[eventId]/audit-event-screen.tsx:26` then `:31`;
+`settings/roles/roles-screen.tsx:21-22` then `:35`; `settings/roles/[id]/role-matrix-screen.tsx:29-31`
+then `:50`; `settings/feedback/feedback-screen.tsx:47-48` then `:51`; `hooks/use-roles.ts:17`
+
+**What this is.** Admin screens render `Forbidden` for a non-admin. The backend is the real
+control, and it answers `403`.
+
+**Why this can happen.** React hooks must run before any early return, so each screen fires its
+data request before checking `isAdmin`. Only `useRoles` takes an `enabled` option, and no screen
+passes it.
+
+**What it costs.** A non-admin who types an admin URL sends a request that is refused. No data
+leaks, because the backend gates it. It is wasted traffic and a `403` in the console.
+
+**What we should do.** Give each admin hook an `enabled` option and pass `user.isAdmin`. One hour.
+
+## U10 Layout, spacing, typography
+
+### §U10.13 Identifiers on the eval screens are in the body face — 🟡 hygiene
+
+**Where:** `components/eval/eval-set-screen.tsx:79` (`sourcePath` in the header description);
+`components/eval/eval-run-table.tsx:69` (`chatModel`); `components/eval/eval-run-sheet.tsx:59`,
+`components/eval/eval-compare.tsx:53` (raw `pairId` fallback)
+
+**What this is.** `docs/design.md:80`, `:90`: paths and identifiers use `font-mono text-sm`. The
+eval Path and Source columns already do.
+
+**Why this can happen.** These four places render a path, a model id and a pair id in the body
+font.
+
+**What we should do.** Wrap each in `font-mono`. Minutes.
+
+### §U10.14 Off-scale spacing and a `text-[10px]` badge — 🟡 hygiene
+
+**Where:** `components/notifications/notification-bell.tsx:35` (`text-[10px]`, `-top-0.5 -right-0.5`);
+`gap-1.5` at `components/form/password-field.tsx:87`, `components/roles/role-badge.tsx:10`,
+`components/audit/audit-event-detail.tsx:25`, `components/audit/audit-change-list.tsx:92`; `py-2.5` at
+`audit-change-list.tsx:92`; `mb-1.5` at `components/eval/eval-pair-table.tsx:98`; `mt-0.5` at
+`eval-pair-table.tsx:64`, `:66`; `py-0.5` at `components/ask/answer.tsx:60`
+
+**What this is.** `docs/design.md:121`: spacing uses steps 1, 2, 3, 4, 6, 8 and 12 only. Type comes
+from the seven-row scale.
+
+**What we should do.** Snap each to the nearest step, or document an exception for the bell's
+count badge. Half an hour.
+
+## U11 Icons and accessibility
+
+### §U11.6 Excluded pairs and pressed thumbs are signalled by colour alone — 🟡 hygiene
+
+**Where:** `components/eval/eval-pair-table.tsx:52`; `components/output-feedback/feedback-control.tsx:124-125`, `:138-139`
+
+**What this is.** A state shown only by colour cannot be seen by colour-blind users, or in a
+greyscale screenshot.
+
+**Why this can happen.** An excluded pair is shown only by dimming its row's text. A pressed thumb
+differs from an unpressed one only by colour, with the same icon. Screen readers are covered,
+because the thumbs carry `aria-pressed` and the exclude switch is a labelled control. The gap is
+for sighted users.
+
+**What we should do.** Fill the pressed thumb icon, and add an "Excluded" badge on the row.
+Half an hour.
+
+### §U11.7 Eval run rows are clickable without a visible or accessible control — 🟡 hygiene
+
+**Where:** `components/eval/eval-run-table.tsx:48-56`; compare `components/eval/eval-pair-table.tsx:57-61`
+
+**Why this can happen.** The whole run row has `onClick`, `tabIndex={0}` and an Enter handler, with
+no button, link, role or accessible name, and Space does nothing. The only cue is the pointer
+cursor. The pair table beside it uses a real `<button aria-expanded>`.
+
+**What it costs.** Screen-reader users hear a row of cells with no hint it opens anything.
+Keyboard users get half the expected keys.
+
+**What we should do.** Put a real button (for example on the run's name or an "Open" control) in
+the row, as the pair table does. Half an hour.
+
+### §U11.8 The compare selects and the date filters lose their visible labels — 🟡 hygiene
+
+**Where:** `components/eval/eval-set-screen.tsx:151-176`; `components/output-feedback/feedback-filters.tsx:127-152`;
+`components/audit/audit-filters.tsx:138-161`; `.claude/rules/forms.md:66-67`
+
+**Why this can happen.** These controls carry only an `aria-label`. The compare selects show "Base
+run" or "Head run" as a placeholder, and once a run is chosen that text is replaced by the run's
+name, so nothing on screen says which side is which. The date inputs have no visible label at all.
+The feedback screen's feature, vote and reason selects are in the same state.
+
+**What we should do.** Give each a visible `FieldLabel` with `htmlFor`, which `forms.md` requires.
+One hour.
+
+## U12 Documentation drift
+
+### §U12.6 `navigation.md` §4 and §6 are stale — 📄 doc
+
+**Where:** `.claude/rules/navigation.md:48-57`, `:83-99`; `lib/nav-child.ts:14`; `docs/PRD.md:34`
+
+§4 still says "Phase 1 has exactly one axis of authority — `is_admin`… Do not invent a permission
+system" and that "Phase 2 will add per-project access". Phase 2.1's per-project roles shipped long
+ago, along with `lib/can.ts`. `lib/nav-child.ts:14` repeats the sentence. §6's "shape AskRepo is
+heading for" route list omits `/projects/[id]/eval/[setId]`, `/settings/feedback`, `/notifications`,
+`/profile` and the `/settings/notifications` redirect, all of which exist. **Fix:** rewrite §4
+around `lib/can.ts`, list the real routes in §6 in the present tense, and fix the comment.
+
+### §U12.7 `frontend/README.md`'s layout is stale — 📄 doc
+
+**Where:** `frontend/README.md:6-26`, `:98-137`
+
+The `(auth)/` line lists only `/login` and `/change-password` (the tree also has
+`forgot-password` and `reset-password`). Settings omits `/settings/feedback`. `components/` omits
+`audit/`, `change-sets/`, `live/` and `output-feedback/`. `lib/` omits `checklist/`, `live/`,
+`mock-data/` and eight files. `app/api/` omits `auth/password-policy` and `auth/password-reset`.
+The prose never mentions the feedback screen or the vote control. **Fix:** regenerate the layout
+block from the tree.
+
+### §U12.8 `design.md` lacks the feedback control, the drawer widths, and two column rules — 📄 doc
+
+**Where:** `docs/design.md:148-152` (inventory: `sheet` with no widths), `:178-179` (column rules),
+`:208` (the Feedback section, which covers loading and mutations only);
+`components/output-feedback/feedback-control.tsx`; sheet widths at
+`components/eval/eval-run-sheet.tsx:35`, `components/checklist/refinement-drawer.tsx:180-190`,
+`components/ask/conversation-rail.tsx:425`; `components/output-feedback/feedback-table.tsx:73`, `:76`
+
+`design.md` never describes the thumbs control, and three sheets use three different widths with
+no rule. The two column rules are SUSPECT: the original row did not name them. The likely
+candidates are a `font-mono` identifier column (`feedback-table.tsx:76`,
+`feedback-summary.tsx:117`) and a wrapped free-text column (`max-w-xs whitespace-pre-wrap`,
+`feedback-table.tsx:73`). **Fix:** add the control, a drawer-width rule, and those column rules.
+
+## Verified correct in this sweep (2026-10-04, re-checked 2026-10-17)
+
+- **The read half of the older screens still holds.** None of the 2026-09-13 to 2026-09-27
+  resolutions has regressed. The new loading, empty and error gaps (§U7.7–§U7.16) are all on
+  surfaces added in Phases 2.5 and 2.6.
+- **The eval Path and pair Source columns use `font-mono`** (`eval-set-table.tsx:73`,
+  `eval-pair-table.tsx:74`). §U10.13 covers only the four places that do not.
+- **The eval set's own failure path is right.** `eval-set-screen.tsx:61-69` routes through
+  `DetailError`. Only the project half (§U7.8) and the permission branch (§U9.5) are wrong.
+- **The pair table's expand control is a real `<button aria-expanded>`** (`eval-pair-table.tsx:57-61`),
+  which is the model §U11.7 asks the run table to follow.
+- **The mock-data chat already refuses refinement during generation** (`mock-data/chat-panel.tsx:201-209`).
+  §U7.13 asks the checklist chat to match it.
+- **The answer-style save does not flash old values.** Its draft clears only after the refetch
+  lands, which is why §U7.16 was narrowed to votes.
 
 ---
 

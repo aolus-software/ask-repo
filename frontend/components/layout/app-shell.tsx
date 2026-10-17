@@ -1,4 +1,5 @@
 import { AppBreadcrumbs } from "@/components/layout/app-breadcrumbs";
+import { BreadcrumbLabelsProvider } from "@/components/layout/breadcrumb-labels";
 import { AppNavbar } from "@/components/layout/app-navbar";
 import { AppSidebar } from "@/components/layout/app-sidebar";
 import { SessionProvider } from "@/components/layout/session-context";
@@ -21,10 +22,12 @@ export function AppShell({
           <AppNavbar />
           <AppSidebar />
           <SidebarInset>
-            <main className="mt-16 p-4 md:p-8">
-              <AppBreadcrumbs />
-              {children}
-            </main>
+            <BreadcrumbLabelsProvider>
+              <main className="mt-16 p-4 md:p-8">
+                <AppBreadcrumbs />
+                {children}
+              </main>
+            </BreadcrumbLabelsProvider>
           </SidebarInset>
         </SidebarProvider>
       </LiveEventsProvider>

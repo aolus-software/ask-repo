@@ -41,6 +41,11 @@ out as page position instead of a printed clock time. This is a mitigation, not 
 a project with exactly one member, that member is the voter regardless of how coarse the
 timestamp is — day-only narrows the set of suspects, it does not always widen it past one.
 
+**The filters are day-only for the same reason.** `createdFrom`/`createdTo` are `date`, never
+`datetime`: a timestamp filter lets an administrator halve a window around one vote until it
+recovers the second the read withholds, so a value with a time of day answers `422`.
+`tests/test_feedback_admin_api.py` pins it.
+
 ## 3. Every write-side miss is one `404`
 
 `FEEDBACK_TARGET_NOT_FOUND` for a missing id, a user-role message, someone else's conversation,

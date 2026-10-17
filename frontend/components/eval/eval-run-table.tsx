@@ -4,6 +4,8 @@ import { FlaskConical } from "lucide-react";
 
 import { EvalStatusBadge } from "@/components/eval/eval-status-badge";
 import { EmptyState } from "@/components/feedback/empty-state";
+import { ListError } from "@/components/feedback/list-error";
+import { TableSkeleton } from "@/components/feedback/table-skeleton";
 import {
   Table,
   TableBody,
@@ -12,17 +14,55 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import type { EvalRunSummary } from "@/lib/api/types";
+import type { EvalRunSummary, EvalSetStatus } from "@/lib/api/types";
 import { formatAbsolute, formatRelative } from "@/lib/dates";
 
 /** Runs of one set, newest first. A row opens the run's results. */
 export function EvalRunTable({
   runs,
   onSelect,
+  isLoading = false,
+  error = null,
+  onRetry,
+  setStatus = "ready",
 }: {
   runs: EvalRunSummary[];
   onSelect: (runId: string) => void;
+  isLoading?: boolean;
+  error?: unknown;
+  onRetry?: () => void;
+  /** Only a ready set can be run, so only a ready set is invited to be. */
+  setStatus?: EvalSetStatus;
 }) {
+  if (error) {
+    return (
+      <div className="p-4">
+        <ListError error={error} onRetry={() => onRetry?.()} />
+      </div>
+    );
+  }
+  if (isLoading) {
+    return (
+      <Table>
+        <TableBody>
+          <TableSkeleton columns={4} />
+        </TableBody>
+      </Table>
+    );
+  }
+  if (runs.length === 0 && setStatus !== "ready") {
+    return (
+      <EmptyState
+        icon={FlaskConical}
+        title={setStatus === "generating" ? "Generating questions…" : "No runs"}
+        description={
+          setStatus === "generating"
+            ? "The set can be run once its questions are ready."
+            : "A set whose generation failed cannot be run."
+        }
+      />
+    );
+  }
   if (runs.length === 0) {
     return (
       <EmptyState

@@ -186,7 +186,10 @@ async def test_aggregates_count_by_feature_reason_and_prompt_version(
         ("answer", "missed_something", 1),
         ("answer", "wrong_file_cited", 1),
     ]
-    assert sorted(by_version) == [("aaaaaaaaaaaa", "down", 1), ("bbbbbbbbbbbb", "up", 1)]
+    assert sorted(by_version) == [
+        ("answer", "aaaaaaaaaaaa", "down", 1),
+        ("answer", "bbbbbbbbbbbb", "up", 1),
+    ]
 
 
 async def test_page_joins_the_project_name_and_filters(db_session: AsyncSession) -> None:
@@ -309,7 +312,7 @@ async def test_page_filters_by_created_from(db_session: AsyncSession) -> None:
     )
 
     _, total = await FeedbackRepository(db_session).page(
-        limit=10, offset=0, filters={"created_from": datetime.now(UTC) - timedelta(days=1)}
+        limit=10, offset=0, filters={"created_from": (datetime.now(UTC) - timedelta(days=1)).date()}
     )
 
     assert total == 1
@@ -318,8 +321,8 @@ async def test_page_filters_by_created_from(db_session: AsyncSession) -> None:
 async def test_page_filters_by_created_to_includes_the_whole_selected_day(
     db_session: AsyncSession,
 ) -> None:
-    """A bare calendar day (from `<input type="date">`) must not exclude votes cast
-    that same day — the same fix `AuditEventRepository` already applies."""
+    """A day filter is inclusive: From == To selects every vote cast on that UTC day
+    and none from the next."""
     user = await create_user(db_session)
     project = await create_project(db_session)
     today = await create_feedback(db_session, user_id=user.id, project_id=project.id)
@@ -340,7 +343,7 @@ async def test_page_filters_by_created_to_includes_the_whole_selected_day(
     _, total = await FeedbackRepository(db_session).page(
         limit=10,
         offset=0,
-        filters={"created_from": today_midnight, "created_to": today_midnight},
+        filters={"created_from": today_midnight.date(), "created_to": today_midnight.date()},
     )
 
     assert total == 1

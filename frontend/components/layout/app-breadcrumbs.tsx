@@ -12,13 +12,15 @@ import {
   BreadcrumbPage,
   BreadcrumbSeparator,
 } from "@/components/ui/breadcrumb";
+import { useBreadcrumbLabels } from "@/components/layout/breadcrumb-labels";
 import { useSession } from "@/hooks/use-session";
 import { resolveBreadcrumbs } from "@/lib/nav";
 
 export function AppBreadcrumbs() {
   const user = useSession();
   const pathname = usePathname();
-  const trail = resolveBreadcrumbs(pathname, user);
+  const labels = useBreadcrumbLabels();
+  const trail = resolveBreadcrumbs(pathname, user, labels);
 
   if (trail.length === 0) return null;
 

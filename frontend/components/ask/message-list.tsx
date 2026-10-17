@@ -67,8 +67,10 @@ function AssistantMessage({
 }) {
   return (
     <AssistantTurn>
-      <Answer content={message.content} />
+      {/* Sources above the answer, as on the live turn: citations arrive before the
+          first token (`.claude/rules/rag.md`), and reconciling must not move them. */}
       <Sources citations={message.citations ?? []} citedIndexes={[]} />
+      <Answer content={message.content} />
       {message.finishReason && message.finishReason !== "stop" ? (
         <p className="text-muted-foreground mt-2 text-xs">
           {message.finishReason === "disconnected"

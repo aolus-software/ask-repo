@@ -33,6 +33,7 @@ class EvalRunSummary(ApiModel):
     status: EvalRunStatus
     error: str | None
     prompt_version: str | None
+    judge_prompt_version: str | None
     chat_provider: str | None
     chat_model: str | None
     judge_model: str | None

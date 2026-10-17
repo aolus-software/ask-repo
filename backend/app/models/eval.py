@@ -141,7 +141,10 @@ class EvalRun(Base, TimestampMixin, SoftDeleteMixin):
     )
     status: Mapped[str] = mapped_column(String(16), nullable=False)
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # The answer graph's prompt version and the judge's, recorded apart because a
+    # change to either moves the score (`app/rag/prompt_version.py`).
     prompt_version: Mapped[str | None] = mapped_column(String(12), nullable=True)
+    judge_prompt_version: Mapped[str | None] = mapped_column(String(12), nullable=True)
     chat_provider: Mapped[str | None] = mapped_column(String(64), nullable=True)
     chat_model: Mapped[str | None] = mapped_column(String(255), nullable=True)
     judge_model: Mapped[str | None] = mapped_column(String(255), nullable=True)

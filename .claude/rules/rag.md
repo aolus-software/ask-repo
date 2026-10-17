@@ -172,7 +172,8 @@ when broken:
 
 - **Every sentence is a constant in `app/rag/prompts.py`, never user text.** That is what
   makes prompt injection by preference impossible rather than mitigated, and what puts the
-  sentences under `PROMPT_VERSION`. Adding free text is a PRD decision (§2.1), not a field.
+  sentences under the answer prompt version (`app/rag/prompt_version.py`). Adding free text
+  is a PRD decision (§2.1), not a field.
 - **The slot precedes the grounding rules, and no fragment touches them.** No fragment may
   mention citing, evidence, confidence or guessing (`tests/test_answer_style_prompt.py`).
   An unset style renders `""` and the prompt is byte-identical to the default one — which

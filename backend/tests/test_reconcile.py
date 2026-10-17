@@ -9,8 +9,10 @@ eager and it duplicates live work, too lazy and jobs are silently lost.
 import uuid
 from datetime import UTC, datetime, timedelta
 
-from sqlalchemy.ext.asyncio import AsyncSession
+import pytest
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from app.config import get_settings
 from app.models.checklist import ChecklistModuleStatus
 from app.models.eval import EvalRun, EvalRunStatus, EvalSet, EvalSetStatus
 from app.models.mock_data import MockDataDatasetStatus
@@ -32,12 +34,14 @@ from app.repositories.eval_run import EvalRunRepository
 from app.repositories.eval_set import EvalSetRepository
 from app.repositories.mock_data_dataset import MockDataDatasetRepository
 from app.repositories.project import LEASE_SECONDS, ProjectRepository
+from app.repositories.refresh_token import RefreshTokenRepository
 from app.worker import (
     RECONCILE_INTERVAL_SECONDS,
     reconcile_eval_once,
     reconcile_mock_data_once,
     reconcile_modules_once,
     reconcile_once,
+    reconcile_tick,
 )
 from tests.factories import create_checklist_module, create_project, create_user
 
@@ -378,3 +382,35 @@ async def test_stranded_eval_sets_and_runs_are_republished(db_session: AsyncSess
     assert by_kind["run"].target_id == run.id
     assert {m.attempt for m in by_kind.values()} == {0}
     assert len({m.job_id for m in by_kind.values()}) == 2
+
+
+async def test_a_failing_prune_step_does_not_undo_a_sweep_stamp(
+    db_session: AsyncSession,
+    sessionmaker: async_sessionmaker[AsyncSession],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Every step commits alone. When they shared one transaction, a prune raising
+    after the sweep rolled back `claim_stranded`'s stamp while the Kafka publish
+    stood, so the next tick published the same stranded module again, every minute."""
+    module = await create_checklist_module(db_session, status=ChecklistModuleStatus.GENERATING)
+    module.lease_expires_at = datetime.now(UTC) - timedelta(seconds=1)
+    module.updated_at = datetime.now(UTC) - timedelta(seconds=600)
+    await db_session.commit()
+
+    async def broken(self: RefreshTokenRepository) -> int:
+        raise RuntimeError("prune failed")
+
+    monkeypatch.setattr(RefreshTokenRepository, "delete_expired_and_revoked", broken)
+    queue = InMemoryIngestionQueue()
+    topics = {
+        "topic": "askrepo.ingest.jobs",
+        "checklist_topic": CHECKLIST_TOPIC,
+        "mock_data_topic": "askrepo.mockdata.jobs",
+        "eval_topic": "askrepo.eval.jobs",
+    }
+
+    for _ in range(2):
+        await reconcile_tick(sessionmaker, producer=queue, settings=get_settings(), **topics)
+
+    modules = [m for t, m in queue.produced if t == CHECKLIST_TOPIC]
+    assert [m.module_id for m in modules if isinstance(m, ChecklistJobMessage)] == [module.id]

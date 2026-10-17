@@ -56,8 +56,11 @@ class FeedbackFilterFields(ApiModel):
     rating: FeedbackRating | None = None
     reason_code: ReasonCode | None = None
     prompt_version: str | None = Field(default=None, max_length=16)
-    created_from: datetime | None = None
-    created_to: datetime | None = None
+    # Calendar days, never timestamps: a window narrower than a day would recover the
+    # vote's time that `FeedbackAdminRead.created_on` withholds (`.claude/rules/feedback.md`
+    # rule 2). A datetime with a non-zero time is refused with a 422.
+    created_from: date | None = None
+    created_to: date | None = None
 
 
 class FeedbackListQuery(ListQuery, FeedbackFilterFields):
@@ -109,6 +112,10 @@ class ReasonCount(ApiModel):
 
 
 class PromptVersionVotes(ApiModel):
+    """Votes for one feature at one prompt version. Versions are computed per feature
+    (`app/rag/prompt_version.py`), so the pair is the key, never the version alone."""
+
+    feature: FeedbackFeature
     prompt_version: str
     up: int
     down: int

@@ -7,7 +7,7 @@ target exists and is visible to it. The admin reads take `project_ids` from
 
 import uuid
 from collections.abc import Sequence
-from datetime import datetime, time, timedelta
+from datetime import UTC, date, datetime, time, timedelta
 from typing import Any, TypedDict, cast
 
 from sqlalchemy import Select, and_, delete, func, select, update
@@ -29,8 +29,13 @@ class FeedbackFilters(TypedDict, total=False):
     rating: str | None
     reason_code: str | None
     prompt_version: str | None
-    created_from: datetime | None
-    created_to: datetime | None
+    created_from: date | None
+    created_to: date | None
+
+
+def _start_of(day: date) -> datetime:
+    """The first instant of a UTC day, the same day `FeedbackAdminRead.created_on` reports."""
+    return datetime.combine(day, time.min, tzinfo=UTC)
 
 
 def _apply(statement: Select[Any], filters: FeedbackFilters) -> Select[Any]:
@@ -47,19 +52,13 @@ def _apply(statement: Select[Any], filters: FeedbackFilters) -> Select[Any]:
         statement = statement.where(Feedback.reason_codes.any_() == reason_code)
     if prompt_version := filters.get("prompt_version"):
         statement = statement.where(Feedback.prompt_version == prompt_version)
+    # Whole UTC days only, both ends inclusive. A finer window is the leak rule 2 of
+    # `.claude/rules/feedback.md` closes: halving a timestamp window against one vote
+    # recovers its second, which `conversation.created` in the audit trail then names.
     if created_from := filters.get("created_from"):
-        statement = statement.where(Feedback.created_at >= created_from)
+        statement = statement.where(Feedback.created_at >= _start_of(created_from))
     if created_to := filters.get("created_to"):
-        # `<input type="date">` on the admin filter screen submits a bare calendar day
-        # (`2026-09-27`), which pydantic parses as midnight. A `<=` comparison against
-        # midnight excludes every vote actually cast that day, so From == To would
-        # always return nothing. `AuditEventRepository._filtered` solves the same
-        # problem the same way: a value with no time component is treated as the
-        # whole day and compared exclusively against the start of the next one.
-        if created_to.time() == time.min:
-            statement = statement.where(Feedback.created_at < created_to + timedelta(days=1))
-        else:
-            statement = statement.where(Feedback.created_at <= created_to)
+        statement = statement.where(Feedback.created_at < _start_of(created_to + timedelta(days=1)))
     return statement
 
 
@@ -165,6 +164,41 @@ class FeedbackRepository(BaseRepository[Feedback]):
         )
         return cast(CursorResult[Any], result).rowcount
 
+    async def clear_ask_notes_for_user(self, user_id: uuid.UUID) -> int:
+        """Null the notes on a user's Ask feedback, for deactivation; keep the counts.
+
+        Only the conversation's owner can vote on its answers, so the voter is the
+        owner and `user_id` selects exactly the notes on their private turns. Notes on
+        change sets and refinement replies judge shared documents and stay.
+        """
+        result = await self.session.execute(
+            update(Feedback)
+            .where(
+                Feedback.user_id == user_id,
+                Feedback.target_type == FeedbackTarget.MESSAGE.value,
+                Feedback.note.is_not(None),
+            )
+            .values(note=None, updated_at=func.now())
+        )
+        return cast(CursorResult[Any], result).rowcount
+
+    async def clear_ask_notes_for_project(self, project_id: uuid.UUID) -> int:
+        """Null the notes on a project's Ask feedback, for project delete; keep the counts.
+
+        The same rule `clear_notes_for_conversation` applies to one conversation: the
+        note is the user's words about a private turn, and it goes when the turn does.
+        """
+        result = await self.session.execute(
+            update(Feedback)
+            .where(
+                Feedback.project_id == project_id,
+                Feedback.target_type == FeedbackTarget.MESSAGE.value,
+                Feedback.note.is_not(None),
+            )
+            .values(note=None, updated_at=func.now())
+        )
+        return cast(CursorResult[Any], result).rowcount
+
     async def soft_delete_for_project(self, project_id: uuid.UUID) -> int:
         """Soft-delete a project's feedback, alongside every other project-owned row."""
         result = await self.session.execute(
@@ -225,9 +259,13 @@ class FeedbackRepository(BaseRepository[Feedback]):
 
     async def counts_by_prompt_version(
         self, filters: FeedbackFilters
-    ) -> list[tuple[str, str, int]]:
-        """(prompt_version, rating, count)."""
+    ) -> list[tuple[str, str, str, int]]:
+        """(feature, prompt_version, rating, count). Versions are per feature, so a
+        version is only meaningful beside the feature it was computed for."""
         statement = _apply(
-            select(Feedback.prompt_version, Feedback.rating, func.count(Feedback.id)), filters
-        ).group_by(Feedback.prompt_version, Feedback.rating)
-        return [(v, r, c) for v, r, c in (await self.session.execute(statement)).all()]
+            select(
+                Feedback.feature, Feedback.prompt_version, Feedback.rating, func.count(Feedback.id)
+            ),
+            filters,
+        ).group_by(Feedback.feature, Feedback.prompt_version, Feedback.rating)
+        return [(f, v, r, c) for f, v, r, c in (await self.session.execute(statement)).all()]

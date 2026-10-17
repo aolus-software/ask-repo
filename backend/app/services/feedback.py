@@ -35,8 +35,9 @@ from app.models.checklist import ChangeSetOrigin, ChecklistChangeSet
 from app.models.conversation import MessageRole
 from app.models.feedback import Feedback
 from app.models.mock_data import MockDataChangeSet
+from app.observability.features import CallFeature
 from app.observability.trace_ids import trace_url
-from app.rag.prompt_version import PROMPT_VERSION
+from app.rag.prompt_version import ANSWER_GRAPH, version_for
 from app.repositories.checklist_change_set import ChecklistChangeSetRepository
 from app.repositories.checklist_message import ChecklistMessageRepository
 from app.repositories.checklist_module import ChecklistModuleRepository
@@ -70,6 +71,27 @@ def _not_found() -> AppError:
     return AppError(
         status.HTTP_404_NOT_FOUND, ErrorCode.FEEDBACK_TARGET_NOT_FOUND, "Nothing to rate here."
     )
+
+
+# The model calls behind each feature's output, so a vote is stamped with the version of
+# the prompts that actually shaped what was judged (`app/rag/prompt_version.py`). A chat
+# reply and the change set it proposes both come out of the answer graph plus its
+# trailing propose node; a generated change set comes from the batch pipeline alone.
+_REFINE_CHECKLIST_CALLS = (*ANSWER_GRAPH, CallFeature.PROPOSE_CHECKLIST)
+_REFINE_MOCK_DATA_CALLS = (*ANSWER_GRAPH, CallFeature.PROPOSE_MOCK_DATA)
+FEATURE_CALLS: dict[FeedbackFeature, tuple[CallFeature, ...]] = {
+    FeedbackFeature.ANSWER: ANSWER_GRAPH,
+    FeedbackFeature.REFINE_CHECKLIST: _REFINE_CHECKLIST_CALLS,
+    FeedbackFeature.PROPOSE_CHECKLIST: _REFINE_CHECKLIST_CALLS,
+    FeedbackFeature.GENERATE_CHECKLIST: (CallFeature.MAP, CallFeature.REDUCE),
+    FeedbackFeature.REFINE_MOCK_DATA: _REFINE_MOCK_DATA_CALLS,
+    FeedbackFeature.PROPOSE_MOCK_DATA: _REFINE_MOCK_DATA_CALLS,
+    FeedbackFeature.GENERATE_MOCK_DATA: (CallFeature.GENERATE_MOCK_DATA,),
+}
+
+FEATURE_PROMPT_VERSIONS: dict[FeedbackFeature, str] = {
+    feature: version_for(calls) for feature, calls in FEATURE_CALLS.items()
+}
 
 
 class FeedbackService:
@@ -113,7 +135,7 @@ class FeedbackService:
             rating=payload.rating.value,
             reason_codes=reason_codes,
             note=(payload.note or "").strip() or None,
-            prompt_version=PROMPT_VERSION,
+            prompt_version=FEATURE_PROMPT_VERSIONS[subject.feature],
         )
         response = FeedbackRead(
             target_type=target_type,
@@ -228,9 +250,15 @@ class FeedbackService:
         by_feature: dict[str, dict[str, int]] = defaultdict(lambda: {"up": 0, "down": 0})
         for feature, rating, count in await self._feedback.counts_by_feature(filters):
             by_feature[feature][rating] = count
-        by_version: dict[str, dict[str, int]] = defaultdict(lambda: {"up": 0, "down": 0})
-        for version, rating, count in await self._feedback.counts_by_prompt_version(filters):
-            by_version[version][rating] = count
+        # Keyed by feature as well: each feature has its own version, so a bare version
+        # row would not say which feature's prompts it describes.
+        by_version: dict[tuple[str, str], dict[str, int]] = defaultdict(
+            lambda: {"up": 0, "down": 0}
+        )
+        for feature, version, rating, count in await self._feedback.counts_by_prompt_version(
+            filters
+        ):
+            by_version[(feature, version)][rating] = count
         reasons = await self._feedback.counts_by_reason(filters)
         return FeedbackSummary(
             by_feature=[
@@ -244,8 +272,10 @@ class FeedbackService:
                 for feature, reason, count in sorted(reasons, key=lambda r: (r[0], -r[2], r[1]))
             ],
             by_prompt_version=[
-                PromptVersionVotes(prompt_version=version, **votes)
-                for version, votes in sorted(by_version.items())
+                PromptVersionVotes(
+                    feature=FeedbackFeature(feature), prompt_version=version, **votes
+                )
+                for (feature, version), votes in sorted(by_version.items())
             ],
         )
 

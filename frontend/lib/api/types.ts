@@ -133,7 +133,13 @@ export interface FeedbackSummary {
     reasonCode: FeedbackReasonCode;
     count: number;
   }[];
-  byPromptVersion: { promptVersion: string; up: number; down: number }[];
+  // Versions are per feature, so a row is keyed by the pair, never the version alone.
+  byPromptVersion: {
+    feature: FeedbackFeature;
+    promptVersion: string;
+    up: number;
+    down: number;
+  }[];
 }
 
 export interface FeedbackListParams extends ListParams {
@@ -685,6 +691,7 @@ export interface EvalRunSummary {
   status: EvalRunStatus;
   error: string | null;
   promptVersion: string | null;
+  judgePromptVersion: string | null;
   chatProvider: string | null;
   chatModel: string | null;
   judgeModel: string | null;

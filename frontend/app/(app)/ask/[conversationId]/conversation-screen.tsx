@@ -21,6 +21,7 @@ import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useAskStream } from "@/hooks/use-ask-stream";
 import { useConversation } from "@/hooks/use-conversations";
+import { useBreadcrumbLabel } from "@/components/layout/breadcrumb-labels";
 import { useProject } from "@/hooks/use-projects";
 import { takePendingQuestion } from "@/lib/ask/pending";
 import { PHASE_LABELS } from "@/lib/ask/phase-labels";
@@ -34,6 +35,12 @@ export function ConversationScreen({ conversationId }: { conversationId: string 
   // conversation resolves. PreflightError reads the same query key, so it now hits
   // the cache instead of issuing a second request.
   const project = useProject(conversation.data?.projectId ?? "");
+  useBreadcrumbLabel(
+    `/ask/${conversationId}`,
+    conversation.data
+      ? (conversation.data.title ?? "Untitled conversation")
+      : undefined,
+  );
   const { state, ask } = useAskStream(conversationId);
   const [askError, setAskError] = useState<unknown>(null);
   const askedRef = useRef(false);

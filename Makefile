@@ -217,7 +217,7 @@ dev-frontend: ## Run the frontend dev server only
 
 # No --reload: the worker holds Kafka group memberships and a database lease, and a
 # reload mid-job drops both, leaving the row to be recovered by the stranded sweep.
-worker: ollama-check ## Run the ingestion + checklist worker only
+worker: ollama-check ## Run the worker only (ingestion, checklist, mock-data and eval jobs)
 	cd $(BACKEND) && uv run python -m app.worker
 
 ## ─── Quality ───────────────────────────────────────────────────────────────

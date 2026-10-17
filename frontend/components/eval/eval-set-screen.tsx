@@ -1,8 +1,10 @@
 "use client";
 
-import { Play } from "lucide-react";
+import { Play, Trash2 } from "lucide-react";
+import { useRouter } from "next/navigation";
 import { useState } from "react";
 
+import { DeleteEvalSetDialog } from "@/components/eval/delete-eval-set-dialog";
 import { EvalCompare } from "@/components/eval/eval-compare";
 import { EvalPairTable } from "@/components/eval/eval-pair-table";
 import { EvalRunSheet } from "@/components/eval/eval-run-sheet";
@@ -11,7 +13,9 @@ import { EvalStatusBadge } from "@/components/eval/eval-status-badge";
 import { DetailError } from "@/components/feedback/detail-error";
 import { JobFailureAlert } from "@/components/feedback/job-failure-alert";
 import { NotFound } from "@/components/feedback/not-found";
+import { useBreadcrumbLabel } from "@/components/layout/breadcrumb-labels";
 import { PageHeader } from "@/components/layout/page-header";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import {
@@ -25,6 +29,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useEvalRun, useEvalRuns, useEvalSet, useStartEvalRun } from "@/hooks/use-eval";
 import { useProject } from "@/hooks/use-projects";
 import { can, PERMISSION } from "@/lib/can";
+import { isApiError } from "@/lib/api/errors";
 import { formatAbsolute } from "@/lib/dates";
 import { toast } from "sonner";
 
@@ -42,10 +47,14 @@ export function EvalSetScreen({
     : false;
   const setQuery = useEvalSet(setId, mayRead);
   const runsQuery = useEvalRuns(setId, mayRead);
+  useBreadcrumbLabel(`/projects/${projectId}`, projectQuery.data?.name);
+  useBreadcrumbLabel(`/projects/${projectId}/eval/${setId}`, setQuery.data?.name);
   const startRun = useStartEvalRun(setId, projectId);
   const [selectedRun, setSelectedRun] = useState<string | null>(null);
   const [baseId, setBaseId] = useState<string | null>(null);
   const [headId, setHeadId] = useState<string | null>(null);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const router = useRouter();
   const baseRun = useEvalRun(baseId ?? "");
   const headRun = useEvalRun(headId ?? "");
 
@@ -55,6 +64,15 @@ export function EvalSetScreen({
         <Skeleton className="h-10 w-64" />
         <Skeleton className="h-32 w-full" />
       </div>
+    );
+  }
+  if (projectQuery.error) {
+    return (
+      <DetailError
+        error={projectQuery.error}
+        notFoundMessage="That project does not exist, or you do not have access to it."
+        onRetry={() => projectQuery.refetch()}
+      />
     );
   }
   if (projectQuery.data && !mayRead) return <NotFound />;
@@ -73,6 +91,7 @@ export function EvalSetScreen({
 
   const canRun = can(project, PERMISSION.EVAL_RUN);
   const runs = runsQuery.data?.items ?? [];
+  const generating = set.status === "generating";
   const doneRuns = runs.filter((run) => run.status === "done");
   const running = runs.some((run) => run.status === "running");
   const description = [
@@ -101,17 +120,33 @@ export function EvalSetScreen({
         description={description}
         action={
           canRun ? (
-            <Button
-              disabled={running || set.status !== "ready" || startRun.isPending}
-              onClick={() =>
-                startRun.mutate(undefined, {
-                  onError: () => toast.error("The run could not be started."),
-                })
-              }
-            >
-              <Play className="size-4" />
-              Run
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                onClick={() => setConfirmingDelete(true)}
+                aria-label={`Delete ${set.name}`}
+              >
+                <Trash2 className="size-4" />
+                Delete
+              </Button>
+              <Button
+                disabled={running || set.status !== "ready" || startRun.isPending}
+                onClick={() =>
+                  startRun.mutate(undefined, {
+                    onSuccess: () => toast.success("Run started"),
+                    onError: (error) =>
+                      toast.error(
+                        isApiError(error)
+                          ? error.message
+                          : "The run could not be started",
+                      ),
+                  })
+                }
+              >
+                <Play className="size-4" />
+                Run
+              </Button>
+            </div>
           ) : null
         }
       />
@@ -130,14 +165,26 @@ export function EvalSetScreen({
       <section className="space-y-3">
         <h2 className="text-xl font-semibold tracking-tight">Pairs</h2>
         <Card className="p-0">
-          <EvalPairTable setId={setId} pairs={set.pairs} canRun={canRun} />
+          <EvalPairTable
+            setId={setId}
+            pairs={set.pairs}
+            canRun={canRun}
+            generating={generating}
+          />
         </Card>
       </section>
 
       <section className="space-y-3">
         <h2 className="text-xl font-semibold tracking-tight">Runs</h2>
         <Card className="p-0">
-          <EvalRunTable runs={runs} onSelect={setSelectedRun} />
+          <EvalRunTable
+            runs={runs}
+            onSelect={setSelectedRun}
+            isLoading={runsQuery.isLoading}
+            error={runsQuery.error}
+            onRetry={() => runsQuery.refetch()}
+            setStatus={set.status}
+          />
         </Card>
       </section>
 
@@ -178,13 +225,31 @@ export function EvalSetScreen({
               );
             })}
           </div>
-          {baseRun.data && headRun.data && baseId && headId ? (
+          {baseId && headId && (baseRun.error || headRun.error) ? (
+            <Alert variant="destructive">
+              <AlertTitle>Could not load the comparison</AlertTitle>
+              <AlertDescription>
+                {isApiError(baseRun.error ?? headRun.error)
+                  ? (baseRun.error ?? headRun.error)?.message
+                  : "Something went wrong."}
+              </AlertDescription>
+            </Alert>
+          ) : baseId && headId && !(baseRun.data && headRun.data) ? (
+            <Skeleton className="h-32 w-full" />
+          ) : baseRun.data && headRun.data && baseId && headId ? (
             <Card className="px-4">
               <EvalCompare base={baseRun.data} head={headRun.data} pairs={set.pairs} />
             </Card>
           ) : null}
         </section>
       ) : null}
+
+      <DeleteEvalSetDialog
+        projectId={projectId}
+        set={confirmingDelete ? { id: set.id, name: set.name } : null}
+        onOpenChange={setConfirmingDelete}
+        onDeleted={() => router.push(`/projects/${projectId}#eval`)}
+      />
 
       <EvalRunSheet
         runId={selectedRun}

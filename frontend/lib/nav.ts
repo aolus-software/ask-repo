@@ -94,14 +94,30 @@ export interface Crumb {
 
 /**
  * The breadcrumb trail for a path, resolved by longest matching nav item. A trailing
- * segment that matches no nav item (a resource id) becomes a final crumb whose label
- * the page overrides once it knows the resource's name.
+ * segment that matches no nav item (a resource id) becomes a final crumb labelled with
+ * the raw segment, which `labels` overrides once a page knows the resource's name
+ * (`useBreadcrumbLabel`). `labels` is keyed by crumb `href`; a nav item's own title
+ * is never overridden, only the id-derived crumbs.
  */
-export function resolveBreadcrumbs(pathname: string, user: NavUser): Crumb[] {
+export function resolveBreadcrumbs(
+  pathname: string,
+  user: NavUser,
+  labels: Record<string, string> = {},
+): Crumb[] {
+  return resolveRawBreadcrumbs(pathname, user).map((crumb) =>
+    crumb.fromId && labels[crumb.href]
+      ? { href: crumb.href, label: labels[crumb.href] }
+      : { href: crumb.href, label: crumb.label },
+  );
+}
+
+type RawCrumb = Crumb & { fromId?: boolean };
+
+function resolveRawBreadcrumbs(pathname: string, user: NavUser): RawCrumb[] {
   if (pathname === "/") return [];
 
   const tree = visibleNavTree(user);
-  const trail: Crumb[] = [];
+  const trail: RawCrumb[] = [];
 
   for (const item of tree) {
     if (item.href === "/" || !pathname.startsWith(item.href)) continue;
@@ -128,15 +144,19 @@ export function resolveBreadcrumbs(pathname: string, user: NavUser): Crumb[] {
     const projectHref = `/projects/${evalSet[1]}`;
     return [
       ...trail,
-      { href: projectHref, label: evalSet[1] },
+      { href: projectHref, label: evalSet[1], fromId: true },
       { href: `${projectHref}#eval`, label: "Eval" },
-      { href: pathname, label: evalSet[2] },
+      { href: pathname, label: evalSet[2], fromId: true },
     ];
   }
 
   const deepest = trail.at(-1);
   if (deepest && deepest.href !== pathname) {
-    trail.push({ href: pathname, label: pathname.slice(deepest.href.length + 1) });
+    trail.push({
+      href: pathname,
+      label: pathname.slice(deepest.href.length + 1),
+      fromId: true,
+    });
   }
 
   return trail;

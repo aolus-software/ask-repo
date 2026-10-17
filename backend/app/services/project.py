@@ -383,8 +383,12 @@ class ProjectService:
         await EvalSetRepository(self.session).soft_delete_for_project(project.id)
 
         # A project's feedback goes with the project it judged, like every other
-        # project-owned row. Soft, and in the same transaction as the rest.
-        await FeedbackRepository(self.session).soft_delete_for_project(project.id)
+        # project-owned row. Soft, and in the same transaction as the rest. The notes
+        # on its Ask votes are nulled first, as deleting one conversation does
+        # (`.claude/rules/feedback.md` §4): a soft-deleted row is still a copy.
+        feedback = FeedbackRepository(self.session)
+        await feedback.clear_ask_notes_for_project(project.id)
+        await feedback.soft_delete_for_project(project.id)
 
         if project.embedding_collection:
             store = self.store_factory(project.embedding_collection)

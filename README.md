@@ -109,6 +109,7 @@ The same graph, with one extra node, powers the QA Checklist and Mock Data refin
 **Backend** FastAPI · Python 3.13 · uv · SQLAlchemy + Alembic · LangGraph · LangChain
 **Frontend** Next.js 16 · React 19 · TypeScript · Tailwind CSS 4 · Bun
 **Data** Postgres 17 · Qdrant · Redis · Kafka
+**Observability** self-hosted Langfuse for the AI call log — opt-in, off by default
 **Models** Ollama (qwen2.5-coder, qwen3), run on the host rather than in Compose, or any
 OpenAI-compatible endpoint, or Anthropic — the answering model is a setting, not a rebuild
 **Infra** Docker Compose · Caddy · VPN/Tailscale only, not internet-facing
@@ -200,9 +201,10 @@ hosted embedding or chat provider correctly has no Ollama.
 | Redis | `localhost:6379` |
 | Kafka | `localhost:9092` |
 | Ollama | `localhost:11434` (embeddings + answers) — **runs on the host, not in Compose** |
+| Langfuse | <http://localhost:3001> (AI call log) — **only with `make infra LANGFUSE=1`** |
 
-The **worker** publishes no port — it is reached through Kafka, not HTTP. It consumes both
-ingestion and checklist-generation jobs, so nothing indexes and no checklist is generated
+The **worker** publishes no port — it is reached through Kafka, not HTTP. It consumes
+ingestion, checklist, mock-data and eval jobs, so nothing indexes and nothing is generated
 without one. `make up` runs two replicas, one per ingest partition; `make dev` runs a single
 one alongside the dev servers, and `make worker` runs one on its own. See
 [`backend/README.md`](backend/README.md#the-ingestion-worker).
@@ -234,15 +236,16 @@ clears that flag.
 | --- | --- |
 | `make setup` | Install backend + frontend dependencies |
 | `make infra` | Start postgres + qdrant + redis + kafka, wait until healthy |
+| `make infra LANGFUSE=1` | The same, plus the opt-in AI call log (five Langfuse containers); creates the `langfuse` database too — see [`docs/langfuse.md`](docs/langfuse.md) |
 | `make pull-models` | Pull the configured embedding + chat models into the host Ollama |
 | `make migrate` | Apply database migrations |
 | `make seed` | Create the bootstrap admin accounts (idempotent) |
 | `make dev` | Both dev servers and the worker together |
 | `make dev-backend` / `make dev-frontend` | One dev server |
-| `make worker` | The ingestion + checklist worker on its own |
+| `make worker` | The worker on its own (ingestion, checklist, mock-data and eval jobs) |
 | `make check` | lint + format-check + typecheck + test — what CI runs |
 | `make lint` / `make format` | Both apps |
-| `make test` | Backend test suite |
+| `make test` | Backend (pytest) and frontend (Vitest) test suites |
 | `make test-one T=tests/test_api_model.py` | One test file, or `T=-k\ camel_case` |
 | `make build` | Production frontend build |
 | `make up` / `make down` | Whole stack in Docker (development) |

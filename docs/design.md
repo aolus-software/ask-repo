@@ -92,6 +92,21 @@ header cannot disagree.
 Never set a font family in a component. Never use `font-bold` — `font-semibold` is the heaviest
 weight in the system.
 
+**Answer typography.** Answers are Markdown and Tailwind's reset strips list markers, heading
+sizes and table borders, with no typography plugin to put them back, so `components/ask/answer.tsx`
+overrides each element from this scale: `h1`/`h2` are `text-xl font-semibold`, `h3`/`h4`
+`text-base font-semibold`, `h5`/`h6` `text-sm font-semibold`; lists are `list-disc`/`list-decimal`
+with `pl-6`; a table scrolls inside its own `overflow-x-auto` wrapper with `border-border` rules and
+a `bg-muted` head; a blockquote is a `border-l-4` with `text-muted-foreground`. Add an element there,
+never a `prose` class.
+
+## Stat tiles
+
+A card holding one label and one big number is `StatTile` (`components/feedback/stat-tile.tsx`):
+`p-6`, a `text-sm font-medium` muted label, a `text-3xl font-semibold` value, and an optional
+`text-xs` muted hint. `loading` and `StatTileSkeleton` render the same box with skeletons. Do not
+hand-roll a tile from `Card` parts — the dashboard and the feedback summary share this one.
+
 ## Radius
 
 `--radius: 0.5rem` with `sm`/`md`/`lg`/`xl` derived from it. The generated `Card` and `Dialog`
