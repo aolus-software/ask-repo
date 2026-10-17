@@ -1,11 +1,29 @@
 """Application settings, loaded from the environment (and `.env` in development)."""
 
+import tomllib
 from functools import lru_cache
 from pathlib import Path
 from typing import Any, Literal, Self
 
 from pydantic import Field, SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+_PYPROJECT = Path(__file__).resolve().parent.parent / "pyproject.toml"
+
+
+def _release_version() -> str:
+    """The release version, from `backend/pyproject.toml`, which every release bumps.
+
+    The project is never installed (`[tool.uv] package = false`), so package metadata is
+    not available; both Dockerfiles copy `pyproject.toml` beside `app/`. `"unknown"` if
+    it is somehow missing, rather than a number that looks real.
+    """
+    try:
+        with _PYPROJECT.open("rb") as handle:
+            return str(tomllib.load(handle)["project"]["version"])
+    except (OSError, KeyError, tomllib.TOMLDecodeError):
+        return "unknown"
+
 
 PLACEHOLDER_SECRET_KEY = "dev-insecure-change-me"
 PLACEHOLDER_PAT_KEY = "dev-insecure-change-me"
@@ -20,7 +38,8 @@ class Settings(BaseSettings):
 
     # Application
     app_name: str = "AskRepo API"
-    app_version: str = "0.1.0"
+    # Read from the release version so it cannot be forgotten at a bump (audit §9.18).
+    app_version: str = Field(default_factory=lambda: _release_version())
     app_env: str = "development"
     debug: bool = True
 
