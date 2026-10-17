@@ -13,6 +13,8 @@ client can have received it, so it is recorded under Changed and allowed in a `M
 
 ## [Unreleased]
 
+## [2.3.0] — 2026-10-17
+
 ### Added
 
 - **User feedback on model output** (`docs/PRD.md` §2.1, phase 2.5, stage 1, issue #55): a
@@ -823,7 +825,8 @@ None of these is a defect. Each is a documented, deliberate scope decision:
 
 ---
 
-[Unreleased]: https://github.com/aolus-software/ask-repo/compare/v2.2.0...HEAD
+[Unreleased]: https://github.com/aolus-software/ask-repo/compare/v2.3.0...HEAD
+[2.3.0]: https://github.com/aolus-software/ask-repo/compare/v2.2.0...v2.3.0
 [2.2.0]: https://github.com/aolus-software/ask-repo/compare/v2.1.0...v2.2.0
 [2.1.0]: https://github.com/aolus-software/ask-repo/compare/v2.0.0...v2.1.0
 [2.0.0]: https://github.com/aolus-software/ask-repo/compare/v1.1.0...v2.0.0
