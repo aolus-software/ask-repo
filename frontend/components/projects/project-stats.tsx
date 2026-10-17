@@ -1,3 +1,7 @@
+"use client";
+
+import { useLocale } from "next-intl";
+
 import { Card, CardContent } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import type { ProjectResponse } from "@/lib/api/types";
@@ -33,10 +37,14 @@ function Stat({
 }
 
 export function ProjectStats({ project }: { project: ProjectResponse }) {
+  const locale = useLocale();
   return (
     <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-4">
-      <Stat label="Files indexed" value={project.fileCount?.toLocaleString() ?? "—"} />
-      <Stat label="Chunks" value={project.chunkCount?.toLocaleString() ?? "—"} />
+      <Stat
+        label="Files indexed"
+        value={project.fileCount?.toLocaleString(locale) ?? "—"}
+      />
+      <Stat label="Chunks" value={project.chunkCount?.toLocaleString(locale) ?? "—"} />
       <Stat
         label="Last indexed commit"
         value={project.lastIndexedCommit?.slice(0, 7) ?? "—"}

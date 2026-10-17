@@ -11,7 +11,8 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import type { UserResponse } from "@/lib/api/types";
-import { formatAbsolute, formatRelative } from "@/lib/dates";
+import { formatAbsolute } from "@/lib/dates";
+import { useFormatRelative } from "@/hooks/use-format-date";
 
 export function UserTable({
   users,
@@ -22,6 +23,7 @@ export function UserTable({
   isLoading: boolean;
   rowActions: (user: UserResponse) => React.ReactNode;
 }) {
+  const formatRelative = useFormatRelative();
   return (
     <Table>
       <TableHeader>

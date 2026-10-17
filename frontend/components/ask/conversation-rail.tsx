@@ -32,8 +32,9 @@ import { useConversations, useDeleteConversation } from "@/hooks/use-conversatio
 import { useProjects } from "@/hooks/use-projects";
 import { SORT } from "@/lib/api/endpoints";
 import type { ProjectResponse } from "@/lib/api/types";
-import { formatAbsolute, formatRelative } from "@/lib/dates";
+import { formatAbsolute } from "@/lib/dates";
 import { cn } from "@/lib/utils";
+import { useFormatRelative } from "@/hooks/use-format-date";
 
 function DeleteConversationButton({
   id,
@@ -106,6 +107,7 @@ function ConversationList({
    * where the sheet's own close affordance already covers this. */
   collapseAction?: React.ReactNode;
 }) {
+  const formatRelative = useFormatRelative();
   const router = useRouter();
 
   const [searchInput, setSearchInput] = useState("");

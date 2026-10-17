@@ -10,15 +10,31 @@ const UNITS: [Intl.RelativeTimeFormatUnit, number][] = [
   ["minute", 60 * 1000],
 ];
 
-const relative = new Intl.RelativeTimeFormat("en", { numeric: "auto" });
+const formatters = new Map<string, Intl.RelativeTimeFormat>();
 
-export function formatRelative(iso: string): string {
-  const elapsed = new Date(iso).getTime() - Date.now();
+function relativeFormat(locale: string): Intl.RelativeTimeFormat {
+  let formatter = formatters.get(locale);
+  if (!formatter) {
+    formatter = new Intl.RelativeTimeFormat(locale, { numeric: "auto" });
+    formatters.set(locale, formatter);
+  }
+  return formatter;
+}
+
+/** "3 days ago" in the given locale; `now` is injectable so tests are deterministic. */
+export function formatRelative(
+  iso: string,
+  locale: string,
+  now: number = Date.now(),
+): string {
+  const elapsed = new Date(iso).getTime() - now;
+  const relative = relativeFormat(locale);
   for (const [unit, size] of UNITS) {
     if (Math.abs(elapsed) >= size)
       return relative.format(Math.round(elapsed / size), unit);
   }
-  return "just now";
+  // `numeric: "auto"` renders 0 seconds as the locale's own word for now.
+  return relative.format(0, "second");
 }
 
 export function formatAbsolute(iso: string | null): string | undefined {

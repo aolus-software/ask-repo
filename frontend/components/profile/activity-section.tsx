@@ -20,8 +20,9 @@ import {
 import { useActivity, useMemberships } from "@/hooks/use-profile";
 import type { ActivityEntry, MembershipSummary } from "@/lib/api/types";
 import { auditEventLabel } from "@/lib/audit";
-import { formatAbsolute, formatRelative } from "@/lib/dates";
+import { formatAbsolute } from "@/lib/dates";
 import { auditOutcomeLabel, auditOutcomeTone } from "@/lib/status";
+import { useFormatRelative } from "@/hooks/use-format-date";
 
 const PAGE_SIZE = 20;
 
@@ -55,6 +56,7 @@ function targetCell(
  * here with the address it came from — it is recorded with you as the actor.
  */
 export function ActivitySection() {
+  const formatRelative = useFormatRelative();
   const [page, setPage] = useState(1);
   const activity = useActivity({ page, limit: PAGE_SIZE });
   const memberships = useMemberships();

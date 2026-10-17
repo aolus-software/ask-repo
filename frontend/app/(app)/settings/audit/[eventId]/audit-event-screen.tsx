@@ -18,10 +18,11 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useAuditEvent } from "@/hooks/use-audit-events";
 import { useSession } from "@/hooks/use-session";
 import { auditEventLabel } from "@/lib/audit";
-import { formatRelative } from "@/lib/dates";
 import { auditOutcomeLabel, auditOutcomeTone } from "@/lib/status";
+import { useFormatRelative } from "@/hooks/use-format-date";
 
 export function AuditEventScreen({ id }: { id: string }) {
+  const formatRelative = useFormatRelative();
   const user = useSession();
   const query = useAuditEvent(id);
 

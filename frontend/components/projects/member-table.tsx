@@ -30,7 +30,8 @@ import { useRoleOptions } from "@/hooks/use-role-options";
 import { isApiError } from "@/lib/api/errors";
 import type { MemberResponse } from "@/lib/api/types";
 import { can, PERMISSION } from "@/lib/can";
-import { formatAbsolute, formatRelative } from "@/lib/dates";
+import { formatAbsolute } from "@/lib/dates";
+import { useFormatRelative } from "@/hooks/use-format-date";
 
 /** The granter's name, resolved from the same member list — they hold a role here too
  * unless they have since been revoked, in which case there is nothing to resolve. */
@@ -150,6 +151,7 @@ export function MemberTable({
   projectId: string;
   permissions: string[];
 }) {
+  const formatRelative = useFormatRelative();
   const query = useMembers(projectId);
   const roleOptions = useRoleOptions();
   const canGrant = can({ permissions }, PERMISSION.MEMBERSHIP_GRANT);

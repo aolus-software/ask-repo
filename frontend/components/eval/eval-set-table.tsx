@@ -26,7 +26,8 @@ import {
 } from "@/components/ui/table";
 import { useEvalSets } from "@/hooks/use-eval";
 import type { EvalRunSummary } from "@/lib/api/types";
-import { formatAbsolute, formatRelative } from "@/lib/dates";
+import { formatAbsolute } from "@/lib/dates";
+import { useFormatRelative } from "@/hooks/use-format-date";
 
 /** The tally a run's list row shows. Counts only — never a question or an answer. */
 function tally(run: EvalRunSummary): string {
@@ -42,6 +43,7 @@ export function EvalSetTable({
   /** `eval.run`, the permission the delete route checks. The backend still enforces it. */
   canDelete?: boolean;
 }) {
+  const formatRelative = useFormatRelative();
   const query = useEvalSets(projectId);
   const [deleting, setDeleting] = useState<{ id: string; name: string } | null>(null);
   const sets = query.data?.items ?? [];

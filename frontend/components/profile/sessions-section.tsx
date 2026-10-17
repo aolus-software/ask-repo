@@ -21,10 +21,12 @@ import { useRevokeSession, useSessions } from "@/hooks/use-profile";
 import { useSession } from "@/hooks/use-session";
 import type { SessionSummary } from "@/lib/api/types";
 import { signOut } from "@/lib/auth/sign-out";
-import { formatAbsolute, formatRelative } from "@/lib/dates";
+import { formatAbsolute } from "@/lib/dates";
 import { deviceLabel } from "@/lib/user-agent";
+import { useFormatRelative } from "@/hooks/use-format-date";
 
 export function SessionsSection() {
+  const formatRelative = useFormatRelative();
   const user = useSession();
   const sessions = useSessions();
   const revoke = useRevokeSession();
