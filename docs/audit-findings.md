@@ -60,23 +60,18 @@ Every finding from the 2026-09-19 and 2026-09-27 sweeps has been fixed and is in
 | §9.28 | The eval harness is missing from `docs/langfuse.md` and the timeout docs | 📄 | 2026-10-04 |
 | §9.29 | `CHANGELOG.md` `[Unreleased]` has duplicate headings and misfiled entries | 📄 | 2026-10-04 |
 | §9.30 | Stale comments in the feedback schema and the audit coverage test | 📄 | 2026-10-04 |
-| §9.31 | `PROMPT_VERSION` changes when a non-answer prompt changes (SUSPECT) | 📄 | 2026-10-04 |
 
 ## Top priorities (2026-10-17)
 
-Both 🔴 bugs and all three 🟠 findings from 2026-10-04 were fixed on 2026-10-17, along with §3.3,
-and are in the log. Everything still open is hygiene or documentation.
+Both 🔴 bugs and all three 🟠 findings from 2026-10-04 were fixed on 2026-10-17, along with §3.3
+and §9.31, and are in the log. Everything still open is hygiene or documentation.
 
-1. **One owner decision is waiting: §9.31.** One prompt version is stamped on every vote, every
-   model call and every eval run. Hashing only the answer prompts (the option first chosen) would
-   stop checklist, mock-data and judge prompt edits from moving the version on the records that
-   depend on them. Recommended instead: a version per feature.
-2. **The eval job edge cases** (§5.1, §8.3–§8.6): about a minute of orphan results after a
+1. **The eval job edge cases** (§5.1, §8.3–§8.6): about a minute of orphan results after a
    mid-run project delete, a failed run's empty tallies, a generator that never checks its lease,
    a resumed run's overwritten stamp, and audit-after-publish ordering.
-3. **The response-contract gaps** (§7.1–§7.3), the duplication (§9.19–§9.22), and the scope
+2. **The response-contract gaps** (§7.1–§7.3), the duplication (§9.19–§9.22), and the scope
    plumbing in two services (§2.2).
-4. **The documentation** (§9.18, §9.23–§9.30), in particular §9.26: the PRD still does not record
+3. **The documentation** (§9.18, §9.23–§9.30), in particular §9.26: the PRD still does not record
    Phase 2.6 as shipped, and must before a release is cut.
 
 ---
@@ -794,29 +789,6 @@ has seven);
 `backend/app/api/routes/auth.py:327`)
 
 **Fix:** reword to "the named exemptions" and rename `test_every_exemption_is_one_of_the_five`.
-
-### §9.31 `PROMPT_VERSION` changes when a non-answer prompt changes — 📄 doc
-
-**Evidence:** SUSPECT — whether this is intended is a design question. Re-checked 2026-10-17 and
-still unsettled. The module docstring (`prompt_version.py:3-6`) and `prompts.py:189` say "any edit
-changes the version" deliberately, and nothing records a decision either way about scoping it to
-the answer path. The owner settles it.
-
-**Decision pending (2026-10-17).** The owner first chose "hash only the answer-path prompts". That
-was not implemented, because the same version is also stamped on checklist and mock-data
-change-set feedback, on every call record, and on eval runs, whose scores depend on the judge prompt.
-Answer-path-only would leave those stamps unchanged when the prompts behind them change, which is
-the comparison they exist for. The alternative put back to the owner: a version per feature, with
-eval runs stamping an answer version and a judge version.
-
-**Where:** `backend/app/rag/prompt_version.py:18-25`; stamped at `backend/app/services/feedback.py:116`,
-`backend/app/observability/recorder.py:110`, `:172`, `backend/app/eval/runner.py:132`
-
-`PROMPT_VERSION` hashes every upper-case constant in `app/rag/prompts.py`, including the
-checklist, mock-data and eval judge prompts. Editing the judge prompt therefore changes the version
-stamped on Ask answers and feedback, though the answer prompt did not change — which weakens the
-PRD's "an eval score is comparable only against a fixed prompt". **Fix:** document it, or hash
-only the answer-path prompts.
 
 ## Verified correct in this sweep (2026-10-04), with what was checked
 

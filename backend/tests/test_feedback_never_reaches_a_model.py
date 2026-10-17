@@ -48,7 +48,7 @@ def test_forbidden_regex_matches_every_import_form() -> None:
 
 def test_forbidden_regex_does_not_match_unrelated_imports() -> None:
     non_matching = [
-        "from app.rag.prompt_version import PROMPT_VERSION",
+        "from app.rag.prompt_version import ANSWER_PROMPT_VERSION",
         "from app.core import access",
         "import app.rag.prompts",
         "from app.services import project_service",

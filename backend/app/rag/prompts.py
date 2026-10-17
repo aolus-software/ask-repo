@@ -186,7 +186,7 @@ def to_langchain_history(turns: list[Turn]) -> list[BaseMessage]:
 
 
 # The answer style's sentences (`app/rag/answer_style.py`). Upper-case `str`
-# constants, so `PROMPT_VERSION` moves when any of them is edited. They shape length
+# constants, so the answer prompt version moves when any of them is edited. They shape length
 # and layout only: none may mention citing, evidence or confidence, because the
 # grounding rules that follow them own those, and a preference that touches them is
 # a preference arguing with a guardrail (`tests/test_answer_style_prompt.py`).

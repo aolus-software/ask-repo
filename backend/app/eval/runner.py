@@ -37,7 +37,7 @@ from app.models.project import Project
 from app.observability.features import CallFeature, call_config
 from app.rag.answerer import Answerer
 from app.rag.errors import classify_chat_error
-from app.rag.prompt_version import PROMPT_VERSION
+from app.rag.prompt_version import ANSWER_PROMPT_VERSION, JUDGE_PROMPT_VERSION
 from app.rag.prompts import build_eval_judge_prompt
 from app.rag.retriever import CodeRetriever
 from app.repositories.eval_pair import EvalPairRepository
@@ -129,7 +129,8 @@ class EvalRunner:
         set_id = run.set_id
         answerer = self._answerer(project)
 
-        run.prompt_version = PROMPT_VERSION
+        run.prompt_version = ANSWER_PROMPT_VERSION
+        run.judge_prompt_version = JUDGE_PROMPT_VERSION
         run.chat_provider = self.settings.chat_provider
         run.chat_model = self.settings.chat_model
         run.judge_model = self.settings.chat_model

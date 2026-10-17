@@ -259,9 +259,13 @@ class FeedbackRepository(BaseRepository[Feedback]):
 
     async def counts_by_prompt_version(
         self, filters: FeedbackFilters
-    ) -> list[tuple[str, str, int]]:
-        """(prompt_version, rating, count)."""
+    ) -> list[tuple[str, str, str, int]]:
+        """(feature, prompt_version, rating, count). Versions are per feature, so a
+        version is only meaningful beside the feature it was computed for."""
         statement = _apply(
-            select(Feedback.prompt_version, Feedback.rating, func.count(Feedback.id)), filters
-        ).group_by(Feedback.prompt_version, Feedback.rating)
-        return [(v, r, c) for v, r, c in (await self.session.execute(statement)).all()]
+            select(
+                Feedback.feature, Feedback.prompt_version, Feedback.rating, func.count(Feedback.id)
+            ),
+            filters,
+        ).group_by(Feedback.feature, Feedback.prompt_version, Feedback.rating)
+        return [(f, v, r, c) for f, v, r, c in (await self.session.execute(statement)).all()]

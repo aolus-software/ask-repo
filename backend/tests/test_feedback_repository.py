@@ -186,7 +186,10 @@ async def test_aggregates_count_by_feature_reason_and_prompt_version(
         ("answer", "missed_something", 1),
         ("answer", "wrong_file_cited", 1),
     ]
-    assert sorted(by_version) == [("aaaaaaaaaaaa", "down", 1), ("bbbbbbbbbbbb", "up", 1)]
+    assert sorted(by_version) == [
+        ("answer", "aaaaaaaaaaaa", "down", 1),
+        ("answer", "bbbbbbbbbbbb", "up", 1),
+    ]
 
 
 async def test_page_joins_the_project_name_and_filters(db_session: AsyncSession) -> None:

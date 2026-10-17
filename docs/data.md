@@ -200,7 +200,7 @@ checklist failed, and one lease does not block the other.
 | --- | --- |
 | `eval_sets` | A frozen set of synthetic pairs for a project or one `source_path`: `requested_count` (10, 25 or 50), `mix`, `status`, the lease, `pair_count` and the `indexed_generation` it was generated from |
 | `eval_pairs` | One `question` and `reference_answer` grounded in one chunk, with `source_file`, its line range, `question_type` (`explain` or `locate`), `position`, and `excluded_at` |
-| `eval_runs` | One pass of a set through the answer graph: `status`, the lease, the tallies (`pairs_answered`, `hits`, `correct`, `partial`, `wrong`, `errors`) and the stamp — `prompt_version`, `chat_provider`, `chat_model`, `judge_model`, `embedding_model`, `project_generation` |
+| `eval_runs` | One pass of a set through the answer graph: `status`, the lease, the tallies (`pairs_answered`, `hits`, `correct`, `partial`, `wrong`, `errors`) and the stamp — `prompt_version` (the answer graph's), `judge_prompt_version` (the judge's), `chat_provider`, `chat_model`, `judge_model`, `embedding_model`, `project_generation` |
 | `eval_results` | One row per pair per run: `retrieval_hit`, `verdict` (`correct` / `partial` / `wrong` / `error`), `judge_reason`, the `answer` as streamed, `grounding_warnings` and `retrieval_attempts` |
 
 A set is `generating` → `ready` / `failed` and a run is `running` → `done` / `failed`. The request
@@ -325,7 +325,7 @@ working rather than an accepted, logged gap. See `.claude/rules/notifications.md
 | `rating` | `up` \| `down` |
 | `reason_codes` | `text[]`, validated against the catalogue in `app/core/feedback.py`; empty allowed for `up` only |
 | `note` | `varchar(500)`, nullable — the user's own words, bounded for storage, not politeness |
-| `prompt_version` | First 12 hex characters of a SHA-256 over the prompt strings, stamped at the moment the vote is **cast**, not when the output was generated |
+| `prompt_version` | First 12 hex characters of a SHA-256 over the prompt strings **that row's `feature` sends** (`app/rag/prompt_version.py`), stamped at the moment the vote is **cast**, not when the output was generated. Versions are per feature, so one is only comparable with another of the same `feature` |
 | `created_at`, `updated_at` | `TimestampMixin` |
 | `deleted_at` | `SoftDeleteMixin` — used by project deletion only; withdrawing a vote hard-deletes the row instead |
 
@@ -496,7 +496,7 @@ immediately, and the middleware reads that row from Postgres on every request to
 
 ## Migrations
 
-Alembic, in `backend/alembic/versions/` — 10 revisions. Run them with `make migrate` (or
+Alembic, in `backend/alembic/versions/` — 19 revisions. Run them with `make migrate` (or
 `uv run alembic upgrade head` from `backend/`). The production entrypoint chains
 `alembic upgrade head && python -m app.cli seed-admins && uvicorn …`, so a deploy migrates
 before it serves.

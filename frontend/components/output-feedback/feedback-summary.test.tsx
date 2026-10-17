@@ -10,7 +10,9 @@ describe("FeedbackSummary", () => {
         summary={{
           byFeature: [{ feature: "answer", up: 3, down: 1 }],
           byReason: [{ feature: "answer", reasonCode: "wrong_file_cited", count: 1 }],
-          byPromptVersion: [{ promptVersion: "abcdefabcdef", up: 3, down: 1 }],
+          byPromptVersion: [
+            { feature: "answer", promptVersion: "abcdefabcdef", up: 3, down: 1 },
+          ],
         }}
       />,
     );

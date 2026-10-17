@@ -84,7 +84,7 @@ class ProposedOperation(BaseModel):
     # File paths the expectation came from. Resolved to full citations by the
     # generator, which knows the line ranges; the model is not asked for those,
     # because a model asked for line numbers invents plausible ones. These descriptions
-    # are outside `prompts.py`, so editing them does not move `PROMPT_VERSION`.
+    # are outside `prompts.py`, so editing them moves no prompt version.
     citation_paths: list[str] = Field(
         default_factory=list,
         description="the files this expectation came from -- the only place a file is ever named",

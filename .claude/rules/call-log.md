@@ -20,8 +20,9 @@ preferences.
 `CallRecord` and `CallStart` (`app/observability/record.py`) are the only things the sink ever
 sees. Neither has a field that could hold a prompt, a completion, a question, a message, retrieved
 code or a user id: `feature`, `provider`, `model`, timing, `outcome`, `error_class`, token
-counts, `trace_seed`, `project_id`, `attempt` and `prompt_version`. `CallStart` is the content-free
-announcement of a call beginning and its fields are a subset of `CallRecord`'s.
+counts, `trace_seed`, `project_id`, `attempt` and `prompt_version` (that call's own feature's
+version, `CALL_PROMPT_VERSIONS`). `CallStart` is the content-free announcement of a call
+beginning and its fields are a subset of `CallRecord`'s.
 
 The rule is not "mask the content" — it is "never accept it". The recorder ignores the `messages`
 argument of `on_chat_model_start` and the generations of `on_llm_end` except for the usage

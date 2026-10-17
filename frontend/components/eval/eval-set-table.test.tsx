@@ -11,6 +11,7 @@ const RUN: EvalRunSummary = {
   status: "done",
   error: null,
   promptVersion: "v1",
+  judgePromptVersion: "j1",
   chatProvider: "ollama",
   chatModel: "m",
   judgeModel: "m",

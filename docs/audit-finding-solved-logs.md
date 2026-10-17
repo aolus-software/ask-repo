@@ -868,6 +868,33 @@ exposed.
 **What we should do.** Commit after each `reconcile_*_once`, and give the pruning steps their own
 session and `try`/`except`. Add a test that a failing prune does not undo a stamp. Two hours.
 
+### §9.31 `PROMPT_VERSION` changes when a non-answer prompt changes — 📄 doc — ✅ RESOLVED 2026-10-17
+
+> Fixed, owner decision 2026-10-17: a version per feature. `app/rag/prompt_version.py` maps each call feature to the prompts it sends (`CALL_PROMPTS`); a call record stamps its own call's version, a vote its feature's union (`FEATURE_CALLS` in `app/services/feedback.py`), and an eval run the answer graph's and, in the new `judge_prompt_version` column, the judge's. `tests/test_prompt_version.py` fails on a prompt no feature claims. The summary's `byPromptVersion` now groups by feature. On `fix/audit-sweep-2026-10-17`.
+>
+> Original finding follows.
+
+**Evidence:** SUSPECT — whether this is intended is a design question. Re-checked 2026-10-17 and
+still unsettled. The module docstring (`prompt_version.py:3-6`) and `prompts.py:189` say "any edit
+changes the version" deliberately, and nothing records a decision either way about scoping it to
+the answer path. The owner settles it.
+
+**Decision pending (2026-10-17).** The owner first chose "hash only the answer-path prompts". That
+was not implemented, because the same version is also stamped on checklist and mock-data
+change-set feedback, on every call record, and on eval runs, whose scores depend on the judge prompt.
+Answer-path-only would leave those stamps unchanged when the prompts behind them change, which is
+the comparison they exist for. The alternative put back to the owner: a version per feature, with
+eval runs stamping an answer version and a judge version.
+
+**Where:** `backend/app/rag/prompt_version.py:18-25`; stamped at `backend/app/services/feedback.py:116`,
+`backend/app/observability/recorder.py:110`, `:172`, `backend/app/eval/runner.py:132`
+
+`PROMPT_VERSION` hashes every upper-case constant in `app/rag/prompts.py`, including the
+checklist, mock-data and eval judge prompts. Editing the judge prompt therefore changes the version
+stamped on Ask answers and feedback, though the answer prompt did not change — which weakens the
+PRD's "an eval score is comparable only against a fixed prompt". **Fix:** document it, or hash
+only the answer-path prompts.
+
 
 # Frontend (`/audit-ui`)
 

@@ -263,7 +263,7 @@ Seven constants in `app/rag/prompts.py` hold every word that can appear there: t
 (`READER_PREFERENCES_PREAMBLE`) and one sentence per dial value (`ANSWER_DETAIL_BRIEF`,
 `ANSWER_DETAIL_THOROUGH`, `ANSWER_FAMILIARITY_NEW`, `ANSWER_FAMILIARITY_EXPERT`,
 `ANSWER_FORMAT_PROSE`, `ANSWER_FORMAT_BULLETS`). No user text is ever stored or rendered, and
-because they are constants they sit under `PROMPT_VERSION`. No sentence may mention citing,
+because they are constants they sit under the answer prompt version. No sentence may mention citing,
 evidence or confidence.
 
 With no dial set, `render_reader_preferences` returns `""` and the prompt is byte-for-byte the
@@ -313,8 +313,16 @@ judges the answer against the reference. Two signals are recorded per pair and n
 **Personas are off.** The runner never passes an `answer_style` and reads no `users.answer_*`
 column, so `Answerer` renders the default prompt byte-for-byte; an eval score is comparable only
 against a fixed prompt. A run writes no `conversations` or `messages` row, sends no feedback, and
-stamps itself with the prompt version, the chat and embedding models and the project generation
-it read.
+stamps itself with the answer graph's prompt version and the judge's, the chat and embedding
+models and the project generation it read.
+
+**Prompt versions are per feature** (`app/rag/prompt_version.py`). `CALL_PROMPTS` names the
+constants each model call's feature sends, and a version hashes only those, so an edit moves
+the version of exactly the features it reaches. A call record carries its own feature's version,
+a vote carries the union of its feature's calls (an Ask answer is the whole answer graph; a
+refinement reply is the graph plus its propose prompt), and an eval run carries the answer
+graph's and the judge's separately. `tests/test_prompt_version.py` fails on a prompt constant no
+feature claims, because such a prompt would change output without moving any version.
 
 Comparing two runs of a set happens client-side on the pairs both answered. The judge is the
 chat model, so comparing two chat models compares two judges too; the screen warns whenever the

@@ -92,6 +92,7 @@ export function FeedbackSummary({ summary }: { summary: Summary }) {
           <Table>
             <TableHeader>
               <TableRow>
+                <TableHead>Feature</TableHead>
                 <TableHead>Prompt version</TableHead>
                 <TableHead className="text-right">Votes</TableHead>
                 <TableHead className="text-right">Down-voted</TableHead>
@@ -99,7 +100,8 @@ export function FeedbackSummary({ summary }: { summary: Summary }) {
             </TableHeader>
             <TableBody>
               {summary.byPromptVersion.map((row) => (
-                <TableRow key={row.promptVersion}>
+                <TableRow key={`${row.feature}:${row.promptVersion}`}>
+                  <TableCell>{FEATURE_LABELS[row.feature]}</TableCell>
                   <TableCell className="font-mono text-xs">
                     {row.promptVersion}
                   </TableCell>
@@ -114,8 +116,10 @@ export function FeedbackSummary({ summary }: { summary: Summary }) {
         </Card>
       </div>
       <p className="text-muted-foreground text-xs">
-        A vote is stamped with the prompt version running when it was cast, which for a
-        change set reviewed days later can be newer than the one that generated it.
+        A vote is stamped with the version of its feature&apos;s prompts running when it
+        was cast, which for a change set reviewed days later can be newer than the one
+        that generated it. Each feature has its own version, so compare versions within
+        a feature.
       </p>
     </div>
   );

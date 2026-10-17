@@ -29,7 +29,7 @@ from app.models.eval import (
     EvalVerdict,
 )
 from app.rag.graph.state import Classification, EvidenceVerdict
-from app.rag.prompt_version import PROMPT_VERSION
+from app.rag.prompt_version import ANSWER_PROMPT_VERSION, JUDGE_PROMPT_VERSION
 from app.rag.prompts import READER_PREFERENCES_PREAMBLE
 from app.repositories.eval_result import EvalResultRepository
 from app.repositories.eval_run import EvalRunRepository
@@ -214,7 +214,8 @@ async def test_a_run_records_a_result_per_included_pair_and_the_summary(
     assert run.pairs_answered == 2
     assert run.hits == hit_count == 2
     assert (run.correct, run.partial, run.wrong, run.errors) == (1, 0, 1, 0)
-    assert run.prompt_version == PROMPT_VERSION
+    assert run.prompt_version == ANSWER_PROMPT_VERSION
+    assert run.judge_prompt_version == JUDGE_PROMPT_VERSION
     assert run.judge_model == run.chat_model == Settings().chat_model
     assert run.chat_provider == Settings().chat_provider
     assert run.embedding_model == "fake"

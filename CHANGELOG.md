@@ -22,6 +22,15 @@ client can have received it, so it is recorded under Changed and allowed in a `M
   reuses the existing error code (no new member). Starting a run and requesting a reindex now
   serialise on the project row, so neither can slip past the other.
 
+- **Prompt versions are per feature** (audit §9.31). `promptVersion` used to hash every prompt in
+  `app/rag/prompts.py`, so editing the eval judge's prompt moved the version stamped on Ask
+  answers. Each version now hashes only the prompts its feature sends: a call record carries its
+  own call's version, a vote its feature's (an Ask answer is the whole answer graph, a refinement
+  reply the graph plus its propose prompt), and an eval run both the answer graph's
+  (`promptVersion`) and, in a new `judgePromptVersion` field, the judge's. `byPromptVersion` on
+  `GET /feedback/summary` now carries `feature` and is grouped by it, since a version is only
+  comparable within its feature. One migration adds `eval_runs.judge_prompt_version`.
+
 ### Fixed
 
 - **An administrator could recover when a feedback vote was cast, and with it the voter**

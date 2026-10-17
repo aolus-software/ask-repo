@@ -149,7 +149,9 @@ async def test_summary_counts_votes_reasons_and_prompt_versions(
     body = response.json()
     assert body["byFeature"] == [{"feature": "answer", "up": 1, "down": 1}]
     assert body["byReason"] == [{"feature": "answer", "reasonCode": "wrong_file_cited", "count": 1}]
-    assert body["byPromptVersion"] == [{"promptVersion": "aaaaaaaaaaaa", "up": 1, "down": 1}]
+    assert body["byPromptVersion"] == [
+        {"feature": "answer", "promptVersion": "aaaaaaaaaaaa", "up": 1, "down": 1}
+    ]
 
 
 @asynccontextmanager

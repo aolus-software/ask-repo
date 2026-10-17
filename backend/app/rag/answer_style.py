@@ -7,8 +7,9 @@ cycle. Each enum holds only the *non-default* values: the middle position of a d
 a dial ends up rendering differently from what the UI shows.
 
 The sentences themselves live in `app/rag/prompts.py`, as upper-case constants, so
-`PROMPT_VERSION` changes when one is edited. No user text is ever stored or rendered:
-see `.claude/rules/rag.md`, "The reader-preference slot".
+the answer prompt version (`app/rag/prompt_version.py`) changes when one is edited. No
+user text is ever stored or rendered: see `.claude/rules/rag.md`, "The reader-preference
+slot".
 """
 
 from dataclasses import dataclass

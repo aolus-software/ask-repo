@@ -112,6 +112,10 @@ class ReasonCount(ApiModel):
 
 
 class PromptVersionVotes(ApiModel):
+    """Votes for one feature at one prompt version. Versions are computed per feature
+    (`app/rag/prompt_version.py`), so the pair is the key, never the version alone."""
+
+    feature: FeedbackFeature
     prompt_version: str
     up: int
     down: int

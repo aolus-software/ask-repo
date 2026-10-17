@@ -1,8 +1,8 @@
 """What the eval generator and judge return, as structured output.
 
 The `Field(description=...)` strings are sent to the model as part of its instructions,
-yet they sit outside `PROMPT_VERSION`'s hash (it covers `app/rag/prompts.py` constants
-only). Editing one changes behaviour without changing the version.
+yet they sit outside every prompt version's hash (`app/rag/prompt_version.py` covers
+`app/rag/prompts.py` constants only). Editing one changes behaviour without changing the version.
 """
 
 from typing import Literal

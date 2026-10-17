@@ -1,9 +1,10 @@
-"""The eval prompts fence their inputs as data and are under PROMPT_VERSION."""
+"""The eval prompts fence their inputs as data and each has its own prompt version."""
 
 from app.eval.sampling import SampledChunk
 from app.models.eval import EvalQuestionType
+from app.observability.features import CallFeature
 from app.rag import prompts
-from app.rag.prompt_version import compute_prompt_version
+from app.rag.prompt_version import CALL_PROMPTS
 from app.rag.prompts import build_eval_judge_prompt, build_eval_pair_prompt
 
 CHUNK = SampledChunk(
@@ -43,6 +44,5 @@ def test_the_judge_rubric_is_stated() -> None:
 
 
 def test_both_prompts_are_hashed() -> None:
-    names = {name for name in vars(prompts) if name.isupper()}
-    assert {"EVAL_PAIR_SYSTEM", "EVAL_JUDGE_SYSTEM"} <= names
-    assert compute_prompt_version(prompts)
+    assert CALL_PROMPTS[CallFeature.EVAL_GENERATE] == {"EVAL_PAIR_SYSTEM"}
+    assert CALL_PROMPTS[CallFeature.EVAL_JUDGE] == {"EVAL_JUDGE_SYSTEM"}
