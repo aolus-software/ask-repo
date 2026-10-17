@@ -8,6 +8,7 @@ import {
   cookieOptions,
 } from "@/lib/auth/cookies";
 import { forwardedHeaders } from "@/lib/auth/forwarded";
+import { applyLocale } from "@/lib/auth/locale-cookie";
 import { refreshSession } from "@/lib/auth/session";
 
 /**
@@ -34,6 +35,7 @@ export async function POST(request: Request): Promise<Response> {
     result.sessionCookie,
     cookieOptions(SESSION_MAX_AGE_SECONDS),
   );
+  applyLocale(response, result.language);
   return response;
 }
 

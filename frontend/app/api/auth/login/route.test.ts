@@ -23,9 +23,10 @@ function loginRequest(headers: Record<string, string> = {}): Request {
   });
 }
 
-function backendOk(): Response {
+function backendOk(language?: string | null): Response {
   return new Response(
     JSON.stringify({
+      ...(language === undefined ? {} : { language }),
       accessToken: "jwt-value",
       tokenType: "bearer",
       expiresIn: 900,
@@ -42,6 +43,24 @@ function backendOk(): Response {
 }
 
 describe("POST /api/auth/login", () => {
+  it("mirrors a stored language onto the locale cookie", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => backendOk("ko")),
+    );
+    const response = await POST(loginRequest());
+    expect(response.headers.getSetCookie().join("\n")).toContain("askrepo_locale=ko");
+  });
+
+  it("leaves the locale cookie alone when the account has no language", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => backendOk(null)),
+    );
+    const response = await POST(loginRequest());
+    expect(response.headers.getSetCookie().join("\n")).not.toContain("askrepo_locale");
+  });
+
   it("never returns the access token to the browser", async () => {
     vi.stubGlobal(
       "fetch",

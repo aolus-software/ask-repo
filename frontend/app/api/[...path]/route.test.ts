@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { GET, POST } from "@/app/api/[...path]/route";
+import { GET, POST, PUT } from "@/app/api/[...path]/route";
 import { __resetRefreshFlight } from "@/lib/auth/session";
 
 const ORIGINAL_API_URL = process.env.API_URL;
@@ -46,12 +46,13 @@ function unauthorized(): Response {
   );
 }
 
-function refreshOk(): Response {
+function refreshOk(language?: string | null): Response {
   return new Response(
     JSON.stringify({
       accessToken: "fresh-jwt",
       tokenType: "bearer",
       expiresIn: 900,
+      ...(language === undefined ? {} : { language }),
       user: {},
     }),
     {
@@ -311,5 +312,78 @@ describe("the proxy", () => {
 
     const [, init] = spy.mock.calls[0] as unknown as [string, RequestInit];
     expect(init.signal).toBe(request.signal);
+  });
+});
+
+describe("the proxy and the locale cookie", () => {
+  const COOKIES = "askrepo_access=jwt; askrepo_session=s%3D1";
+
+  function putLanguage(): NextRequest {
+    return new NextRequest(new URL("/api/me/language", "http://localhost:3000"), {
+      method: "PUT",
+      headers: { cookie: COOKIES, "content-type": "application/json" },
+      body: JSON.stringify({ language: "id" }),
+    });
+  }
+
+  it("mirrors the refreshed language on the refresh-and-retry path", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockResolvedValueOnce(unauthorized())
+        .mockResolvedValueOnce(refreshOk("ja"))
+        .mockResolvedValueOnce(jsonOk({ ok: true })),
+    );
+
+    const response = await GET(
+      proxyRequest("/api/projects", "askrepo_access=stale; askrepo_session=s%3D1"),
+      context(["projects"]),
+    );
+    const cookies = response.headers.getSetCookie().join("\n");
+
+    expect(cookies).toContain("askrepo_locale=ja");
+    expect(cookies).toContain("askrepo_access=fresh-jwt");
+    expect(cookies).toContain("askrepo_session=");
+  });
+
+  it("sets the cookie after PUT /me/language and relays the body untouched", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => jsonOk({ language: "id" })),
+    );
+
+    const response = await PUT(putLanguage(), context(["me", "language"]));
+
+    expect(response.headers.getSetCookie().join("\n")).toContain("askrepo_locale=id");
+    expect(await response.json()).toEqual({ language: "id" });
+  });
+
+  it("expires the cookie when PUT /me/language answers null", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => jsonOk({ language: null })),
+    );
+
+    const response = await PUT(putLanguage(), context(["me", "language"]));
+
+    expect(response.headers.getSetCookie().join("\n")).toMatch(
+      /askrepo_locale=;.*Max-Age=0/,
+    );
+    expect(await response.json()).toEqual({ language: null });
+  });
+
+  it("writes nothing for GET /me/language", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => jsonOk({ language: "id" })),
+    );
+
+    const response = await GET(
+      proxyRequest("/api/me/language", COOKIES),
+      context(["me", "language"]),
+    );
+
+    expect(response.headers.getSetCookie().join("\n")).not.toContain("askrepo_locale");
   });
 });

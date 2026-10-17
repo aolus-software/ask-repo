@@ -10,6 +10,8 @@ export interface RefreshResult {
   expiresIn: number;
   /** The rotated `name=value` pair to store back in the session cookie. */
   sessionCookie: string;
+  /** The stored language from the refresh response; `applyLocale` decides what to do with it. */
+  language?: unknown;
 }
 
 /**
@@ -79,15 +81,17 @@ async function performRefresh(
 
   if (typeof body !== "object" || body === null) return null;
 
-  const { accessToken, expiresIn } = body as {
+  const { accessToken, expiresIn, language } = body as {
     accessToken?: unknown;
     expiresIn?: unknown;
+    language?: unknown;
   };
   if (typeof accessToken !== "string" || typeof expiresIn !== "number") return null;
 
   return {
     accessToken,
     expiresIn,
+    language,
     // A rotation that sets no cookie leaves the old pair in place rather than clearing it.
     sessionCookie: extractSessionCookie(response) ?? sessionCookie,
   };
