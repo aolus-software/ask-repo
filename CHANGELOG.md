@@ -13,82 +13,7 @@ client can have received it, so it is recorded under Changed and allowed in a `M
 
 ## [Unreleased]
 
-### Changed
-
-- **`POST /projects/{id}/reindex` now answers `409 EVAL_RUN_IN_PROGRESS` while one of the
-  project's eval runs is `running`.** A reindex deletes the generation a run is reading, so its
-  remaining pairs would score against nothing and the run would still finish `done`. The refusal
-  comes before the reindex flag is raised and before the publish, writes no audit event, and
-  reuses the existing error code (no new member). Starting a run and requesting a reindex now
-  serialise on the project row, so neither can slip past the other.
-
-- **Prompt versions are per feature** (audit §9.31). `promptVersion` used to hash every prompt in
-  `app/rag/prompts.py`, so editing the eval judge's prompt moved the version stamped on Ask
-  answers. Each version now hashes only the prompts its feature sends: a call record carries its
-  own call's version, a vote its feature's (an Ask answer is the whole answer graph, a refinement
-  reply the graph plus its propose prompt), and an eval run both the answer graph's
-  (`promptVersion`) and, in a new `judgePromptVersion` field, the judge's. `byPromptVersion` on
-  `GET /feedback/summary` now carries `feature` and is grouped by it, since a version is only
-  comparable within its feature. One migration adds `eval_runs.judge_prompt_version`.
-
-### Fixed
-
-- **An administrator could recover when a feedback vote was cast, and with it the voter**
-  (audit §3.1). `createdFrom`/`createdTo` on `GET /feedback` and `GET /feedback/summary` took a
-  full timestamp, so halving the window around one vote recovered its second, which
-  `conversation.created` in the audit trail then names. Both are now UTC calendar days
-  (`YYYY-MM-DD`), inclusive at both ends, and a value carrying a time of day answers `422`.
-- **In Docker, the worker never received the chat model settings** (audit §8.1). `CHAT_*` was set
-  on the API service only, so checklist, mock-data and eval generation fell back to
-  `localhost:11434`, which inside a container is the container itself. In production that crash-looped
-  the worker; a hosted provider set in `infra/.env` reached answers but not generation. Both
-  compose files now share `CHAT_*` and `GENERATION_TIMEOUT_SECONDS` across the API and the worker.
-- **Deactivating a user now deletes their private conversations** (audit §3.2), as `docs/PRD.md`
-  §4.0 always said it did, and nulls the notes on their Ask votes in the same transaction. Deleting
-  a project now nulls the notes on its Ask votes too, as deleting one conversation already did
-  (audit §3.3).
-- **The eval routes' `404` code no longer tells a non-member whether an id exists** (audit §1.3).
-  A real eval set, pair or run in a project the caller holds no membership on now answers with the
-  same code a random id gets — `EVAL_SET_NOT_FOUND` for sets and pairs, `EVAL_RUN_NOT_FOUND` for
-  runs — rather than `PROJECT_NOT_FOUND`.
-- **One failing step in the worker's 60-second sweep could re-publish stranded jobs every minute**
-  (audit §8.2). Every step shared one transaction, so a prune that raised rolled back the stamp
-  `claim_stranded` had written while its Kafka publish stood. Each recovery and prune step now
-  commits on its own.
-- **The eval set screen no longer reports false states when a request fails** (UI audit §U7.7–§U7.11).
-  Its runs card showed "No runs yet" while loading and forever on an error, a project that failed
-  to load rendered "not found", the run sheet could say "Loading the run…" indefinitely, a
-  generating or failed set invited a run the page refused, and the compare section rendered
-  nothing while loading. Each now has a skeleton while loading and an error with retry.
-- **Excluding an eval pair or starting a run no longer fails silently** (UI audit §U6.12,
-  §U6.13). Both toast the server's message on failure, and a started run says so.
-- **Screens no longer show placeholder values as real ones** (UI audit §U7.12–§U7.14). The Answer
-  style tab shows skeletons until the saved style arrives, rather than "Default" on every dial. The
-  checklist and mock-data tabs say a generation is running rather than inviting another, and the
-  checklist chat waits for it as the mock-data chat already did. While the change-set list loads
-  or fails, the pending-review button is a skeleton or an error, not missing.
-- **Mock-data change-set rows now name the record they change** (UI audit §U8.9): update and
-  remove rows show the record's id, and two of its fields while it still exists.
-- **A stored answer shows its sources above the answer, as the live one does** (UI audit §U8.12),
-  so they no longer jump below it when a turn finishes.
-- **Breadcrumbs show names instead of ids** (UI audit §U9.6) on project, checklist module,
-  conversation and eval set pages.
-- **Lists, headings, tables and quotes in answers are styled** (UI audit §U10.11); they had rendered
-  as plain paragraphs on Ask and in both refinement chats.
-- **The dashboard and the feedback summary share one stat tile** (UI audit §U10.12).
-- **A stale duplicate job could re-claim a finished eval set or run.** A reconcile-sweep copy
-  carries a fresh job id, so the claim's job-id check could not refuse it; the claim now also
-  requires the row to still be `generating` / `running`. A re-claimed `ready` set appended a second
-  batch of pairs at duplicate positions, and a re-claimed `done` run restarted and cleared its
-  error. A lease heartbeat on a soft-deleted eval set or run now fails, so the job abandons, and
-  deleting an eval set takes the same row lock a run start does.
-
 ### Added
-
-- **Eval sets can be deleted from the UI** (UI audit §U6.14): a row action on the project's Eval
-  tab and a Delete action on the set screen, both behind `eval.run`, the permission
-  `DELETE /eval-sets/{id}` checks. The confirmation names the set and says its questions, runs and
-  results go with it.
 
 - **User feedback on model output** (`docs/PRD.md` §2.1, phase 2.5, stage 1, issue #55): a
   thumbs-up/down vote, with an optional reason code and note, on every model-authored output —
@@ -98,6 +23,16 @@ client can have received it, so it is recorded under Changed and allowed in a `M
   `GET /feedback/summary` (admin-only aggregate and notes, never the voter).
 - `myFeedback` on conversation detail, on the checklist and mock-data refinement chats, and on
   checklist/mock-data change-set reads — the caller's own vote, loaded with the list.
+- Votes never name or time the voter to an administrator. `FeedbackAdminRead` reports `createdOn`,
+  the UTC **day** a vote was cast, with no time and no `updatedAt`, and the list is ordered
+  within a day by `id`; a second-precision time could be matched against the audit trail's
+  `conversation.created` row to identify the voter. For the same reason the `createdFrom` /
+  `createdTo` filters are UTC calendar days (`YYYY-MM-DD`, both inclusive) and a value with a time
+  of day answers `422`.
+- `traceUrl` on `GET /feedback`: a link to the Langfuse trace of the output a vote judges, for
+  change-set votes and for checklist and mock-data chat replies, when `LANGFUSE_ENABLED` is on.
+  It is `null` for an Ask answer — a trace's second-precision times would identify the voter —
+  and for a change set that has been deleted.
 - `ErrorCode.FEEDBACK_TARGET_NOT_FOUND` (404, every write-side miss) and
   `ErrorCode.FEEDBACK_REASON_NOT_APPLICABLE` (400, a reason code that does not apply to the
   target type).
@@ -125,22 +60,35 @@ client can have received it, so it is recorded under Changed and allowed in a `M
   `LANGFUSE_SECRET_KEY`, `LANGFUSE_PROJECT_ID` and `LANGFUSE_UI_URL`. Enabling it without both
   keys stops the instance at boot.
 - `.claude/rules/call-log.md`.
+
+- **Prompt versions, one per feature** (`app/rag/prompt_version.py`). A version hashes only the
+  prompts its feature sends, so editing one feature's prompt never moves another's: a call record
+  carries its own call's version, a vote its feature's (an Ask answer is the whole answer graph,
+  a refinement reply the graph plus its propose prompt), and an eval run the answer graph's
+  (`promptVersion`) and the judge's (`judgePromptVersion`) apart. `byPromptVersion` on
+  `GET /feedback/summary` is keyed by `feature` and version together, since a version is only
+  comparable within its feature. A test fails on a prompt no feature claims.
+
 - **Per-user answer style** (`docs/PRD.md` §2.1, phase 2.6, #22): `GET`/`PUT /me/answer-style`,
   three dials (detail, familiarity, format) on the profile's new Answer style tab, applied to
   your own Ask answers only — never to the QA Checklist or Mock Data. Each dial maps to a fixed
   sentence in `app/rag/prompts.py`; no user text reaches a prompt.
 - Audit event `user.answer_style.updated`.
-- **The synthetic Q&A eval harness** (`docs/PRD.md` §2.1, phase 2.6): generate a fixed set of 10,
-  25 or 50 question and reference-answer pairs from a project's indexed code (optionally under one
-  path, `explain` and `locate` questions only), then run the set through the real answer graph as
-  often as you like. Each run records two signals side by side: whether first-pass retrieval
-  found the pair's source file, and an LLM judge's `correct` / `partial` / `wrong` verdict. A run
-  answers with no persona, writes no conversation, and is stamped with the prompt version, the
-  chat and embedding models and the project generation it read. Excluding a pair is the only
-  curation; two runs compare on the pairs both answered. The project page gains an Eval tab and
-  a set opens at `/projects/[id]/eval/[setId]`.
+
+- **The synthetic Q&A eval harness** (`docs/PRD.md` §2.1, phase 2.6, #21): generate a fixed set
+  of 10, 25 or 50 question and reference-answer pairs from a project's indexed code (optionally
+  under one path, `explain` and `locate` questions only), then run the set through the real answer
+  graph as often as you like. Each run records two signals side by side: whether first-pass
+  retrieval found the pair's source file, and an LLM judge's `correct` / `partial` / `wrong`
+  verdict. A run answers with no persona, writes no conversation, and is stamped with the answer
+  graph's and the judge's prompt versions, the chat and embedding models and the project
+  generation it read. Excluding a pair is the only curation; two runs compare on the pairs both
+  answered. The project page gains an Eval tab and a set opens at `/projects/[id]/eval/[setId]`,
+  where a set can also be deleted.
 - Eight routes: `POST`/`GET /projects/{id}/eval-sets`, `GET`/`DELETE /eval-sets/{id}`,
   `PUT /eval-pairs/{id}/excluded`, `POST`/`GET /eval-sets/{id}/runs` and `GET /eval-runs/{id}`.
+  A set, pair or run in a project the caller holds no membership on answers with the same `404`
+  code a random id gets, so an id never confirms that it exists.
 - Permissions `eval.read` (viewer, editor, owner) and `eval.run` (editor, owner). Run
   `python -m app.cli restore-system-roles` after migrating so cached grants pick them up; custom
   roles gain neither.
@@ -153,31 +101,61 @@ client can have received it, so it is recorded under Changed and allowed in a `M
   `KAFKA_EVAL_PARTITIONS` (`1`), `EVAL_SCROLL_PAGE_SIZE` (`256`) and `EVAL_ANSWER_CONCURRENCY`
   (`2`).
 
+- **Members and Eval shortcuts in the project list's row actions menu** (#61), so a project's
+  Members or Eval tab opens straight from `/projects`.
+
 ### Changed
 
-- `GET /feedback`'s `traceUrl` is now populated: a link to the Langfuse trace of the output a
-  vote judges, for change-set votes and for checklist and mock-data chat replies, when
-  `LANGFUSE_ENABLED` is on. It stays `null` for an Ask answer — a trace's second-precision times
-  would let an administrator match a vote to its voter — and for a change set that has been
-  deleted.
-- `GET /feedback`'s `FeedbackAdminRead` reports `createdOn`, the UTC **day** a vote was cast,
-  in place of `createdAt`; `updatedAt` is dropped. A second-precision timestamp could be matched
-  against the audit trail's `conversation.created` row for the same actor and project to
-  identify the voter. The list is now ordered within a day by `id`, not by `created_at`, so
-  paging order cannot leak the same sequence back out.
+- **`POST /projects/{id}/reindex` now answers `409 EVAL_RUN_IN_PROGRESS` while one of the
+  project's eval runs is `running`.** A reindex deletes the generation a run is reading, so its
+  remaining pairs would score against nothing and the run would still finish `done`. The refusal
+  comes before the reindex flag is raised and before the publish, and writes no audit event; the
+  code is new in this release (see Added). Starting a run and requesting a reindex now serialise
+  on the project row, so neither can slip past the other.
 - Generated QA Checklist test cases — from generation and from the module chat — are written in
   plain language for any tester: no file paths, code names, HTTP details or error codes. Sources
   stay in the sources panel. Existing rows are not rewritten.
 - The `409 PROJECT_NOT_READY` message for a re-index in progress now ends "…then try again." (it
   said "…then generate."), because eval runs take the same guard. The code and status are
   unchanged.
+- **`APP_VERSION` now defaults to the release version** in `backend/pyproject.toml`, so `/` and
+  `/health` report it without a separate bump; it had stayed at `0.1.0` through every release. An
+  explicit `APP_VERSION` still wins: remove the `APP_VERSION="0.1.0"` line an older
+  `backend/.env` copied from the example.
 
 ### Fixed
 
+- **In Docker, the worker never received the chat model settings** (audit §8.1). `CHAT_*` was set
+  on the API service only, so checklist and mock-data generation fell back to `localhost:11434`,
+  which inside a container is the container itself. In production that crash-looped the worker; a
+  hosted provider set in `infra/.env` reached answers but not generation. Both compose files now
+  share `CHAT_*` and `GENERATION_TIMEOUT_SECONDS` across the API and the worker.
+- **Deactivating a user now deletes their private conversations** (audit §3.2), as `docs/PRD.md`
+  §4.0 always said it did, and nulls the notes on their Ask votes in the same transaction. Deleting
+  a project now nulls the notes on its Ask votes too, as deleting one conversation already did
+  (audit §3.3).
+- **One failing step in the worker's 60-second sweep could re-publish stranded jobs every minute**
+  (audit §8.2). Every step shared one transaction, so a prune that raised rolled back the stamp
+  `claim_stranded` had written while its Kafka publish stood. Each recovery and prune step now
+  commits on its own.
 - A chat-proposed checklist edit written with snake_case field names (`expected_result`), or with
   its new text outside `changes`, no longer applies as a silent no-op. Keys are canonicalised to
   camelCase when the operation is stored and again on apply, so change sets already pending are
   covered too; the update allowlist is unchanged.
+- **The checklist and mock-data tabs no longer invite a generation that is already running**
+  (UI audit §U7.13, §U7.14). They say a generation is running, the checklist chat waits for it as
+  the mock-data chat already did, and while the change-set list loads or fails the pending-review
+  button is a skeleton or an error rather than missing.
+- **Mock-data change-set rows now name the record they change** (UI audit §U8.9): update and
+  remove rows show the record's id, and two of its fields while it still exists.
+- **A stored answer shows its sources above the answer, as the live one does** (UI audit §U8.12),
+  so they no longer jump below it when a turn finishes.
+- **Breadcrumbs show names instead of ids** (UI audit §U9.6) on project, checklist module,
+  conversation and eval set pages.
+- **Lists, headings, tables and quotes in answers are styled** (UI audit §U10.11); they had rendered
+  as plain paragraphs on Ask and in both refinement chats.
+- **The dashboard's stat tiles now share one component with the feedback summary's** (UI audit
+  §U10.12), so the two no longer drift apart.
 
 ## [2.2.0] — 2026-09-27
 

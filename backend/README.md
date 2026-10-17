@@ -57,10 +57,10 @@ The API is then on <http://localhost:8000>, with interactive docs at
 <http://localhost:8000/docs>. Log in as `superuser@example.com` or `admin@example.com`
 with the password you set; both are seeded with `must_change_password` set.
 
-### The ingestion worker
+### The worker
 
-The API only *enqueues* indexing and checklist-generation jobs. Nothing indexes and no
-checklist is generated until a worker is running, so a new project sits at `pending` and a
+The API only *enqueues* indexing, checklist, mock-data and eval jobs. Nothing indexes and
+nothing is generated until a worker is running, so a new project sits at `pending` and a
 module sits at `generating` until one is. `make dev` starts one for you; to run a lone one:
 
 ```bash
@@ -69,9 +69,11 @@ cd backend && uv run python -m app.worker
 ```
 
 It is the same codebase with a different entrypoint, so it reads the same `Settings` and
-the same `.env`. One process runs the ingest consumer, the checklist consumer, one consumer
-per retry rung of each, and a sweep every 60 seconds that re-enqueues jobs whose produce
-failed or whose worker died, and prunes expired refresh tokens. Run more than one and they share the ingest topic's
+the same `.env`. One process runs four consumers (ingestion, checklist, mock-data and eval), one consumer
+per retry rung of each, the mail loop (only when `MAIL_ENABLED` is true), and a sweep every
+60 seconds that re-enqueues jobs whose produce failed or whose worker died, and prunes dead
+refresh tokens, dead password reset tokens, audit events past retention, and old
+notifications. Run more than one and they share the ingest topic's
 partitions — two is the configured cap (`KAFKA_INGEST_PARTITIONS`).
 
 ## Running in Docker
@@ -502,6 +504,7 @@ backend/
 │   │   ├── grant_cache.py # Redis read-through cache for a user's project grants
 │   │   ├── logging.py    # the one log format, shared by all four processes
 │   │   ├── middleware.py # AuthContextMiddleware — identity, grants, password-change gate
+│   │   ├── notifications.py # the notification catalogue, recipient permissions, actor exclusion
 │   │   ├── passwords.py  # password policy (length, common-password blocklist)
 │   │   ├── permissions.py # the permission catalogue + the viewer/editor/owner sets
 │   │   ├── rate_limit.py # Redis-backed login rate limiting
@@ -533,21 +536,18 @@ backend/
 │   │       ├── state.py  # TurnState — the shared dict every node reads and writes
 │   │       ├── nodes.py  # classify → retrieve → grade/loop → generate, each with a fallback
 │   │       └── build.py  # wires the nodes into the compiled graph, incl. routing edges
+│   ├── observability/    # the AI call log: recorder, record, Langfuse sink, trace ids
+│   ├── live/             # the live-update stream behind GET /events
+│   ├── mail/             # outbound email: composer, SMTP sender, notification outbox
 │   ├── checklist/        # QA Checklist: modules, generation, chat, change sets
 │   ├── mockdata/          # Mock Data Generator: generation, model output contracts, change-set ops
 │   ├── eval/              # Eval harness: set generator, run + judge, chunk sampling, model output
-│   ├── worker.py          # the worker entrypoint: consumers + the reconcile sweep
+│   ├── worker.py          # the worker entrypoint: four consumers + retry ladders + mail loop + sweep
 │   ├── models/            # SQLAlchemy models: User, RefreshToken, Project, Conversation,
 │   │                      #   Message, Role, RolePermission, ProjectMembership, ...
 │   ├── repositories/      # the only layer that issues `select`
-│   ├── schemas/
-│   │   ├── base.py       # ApiModel — the snake_case → camelCase boundary
-│   │   ├── auth.py
-│   │   ├── errors.py
-│   │   ├── pagination.py
-│   │   ├── project.py
-│   │   └── user.py
-│   └── services/          # AuthService, UserService, ProjectService
+│   ├── schemas/           # 18 modules, all on ApiModel (base.py — the snake_case → camelCase boundary)
+│   └── services/          # 21 services plus path_tree.py and index_guards.py
 └── tests/
     ├── conftest.py           # app/client/db_session fixtures, real Postgres + Redis
     ├── factories.py          # create_user / create_project
@@ -558,6 +558,8 @@ backend/
     ├── test_m0_acceptance.py # PRD §7's M0 success criterion, end to end
     └── test_m1_acceptance.py # PRD §7's M1 access/gating/scoping criteria
 ```
+
+The tree above is abridged; [`../docs/codebase.md`](../docs/codebase.md) has the full one.
 
 ## Configuration
 

@@ -232,7 +232,7 @@ it covered.
 | --- | --- | --- |
 | `CHAT_MAX_CONCURRENCY` | 2 | Simultaneous *answer* streams, instance-wide. A semaphore on `app.state`, shared by all three streaming routes |
 | `CHAT_TIMEOUT_SECONDS` | 180 | How long **any one interactive model call** may take — the answer stream's whole-answer budget, and the per-request timeout on the API process's client, so classify and grade are bounded too |
-| `GENERATION_TIMEOUT_SECONDS` | 600 | The same bound on the **worker's** client, where checklist map/reduce and mock-data generation run. Longer on purpose: nothing is streaming and nobody is waiting |
+| `GENERATION_TIMEOUT_SECONDS` | 600 | The same bound on the **worker's** client, where checklist map/reduce, mock-data generation, eval generation, eval answers and the eval judge run. Longer on purpose: nothing is streaming and nobody is waiting |
 | `CHECKLIST_MAP_CONCURRENCY` | 4 | Simultaneous per-file calls within one generation run |
 
 The answer semaphore is held for the length of a stream and **released when the answerer is

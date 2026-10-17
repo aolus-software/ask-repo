@@ -51,28 +51,20 @@ Every finding from the 2026-09-19 and 2026-09-27 sweeps has been fixed and is in
 | §9.20 | The lease and heartbeat mechanism is copied across five repositories | 🟡 | 2026-10-04 |
 | §9.21 | Four dead `STRANDED_AFTER_SECONDS` constants | 🟡 | 2026-10-04 |
 | §9.22 | Eval does not normalise `sourcePath` the way checklist modules do | 🟡 | 2026-10-04 |
-| §9.18 | `APP_VERSION` defaults to `0.1.0` on a 2.2.0 release | 📄 | 2026-10-04 |
-| §9.23 | `docs/README.md` and `docs/architecture.md` carry stale counts | 📄 | 2026-10-04 |
-| §9.24 | `docs/codebase.md`'s tree misses modules | 📄 | 2026-10-04 |
-| §9.25 | `backend/README.md`'s layout and worker description are stale | 📄 | 2026-10-04 |
-| §9.26 | `docs/PRD.md` §6 does not record Phase 2.6 as shipped | 📄 | 2026-10-04 |
-| §9.27 | `docs/notifications.md` carries an "in progress" banner | 📄 | 2026-10-04 |
-| §9.28 | The eval harness is missing from `docs/langfuse.md` and the timeout docs | 📄 | 2026-10-04 |
-| §9.29 | `CHANGELOG.md` `[Unreleased]` has duplicate headings and misfiled entries | 📄 | 2026-10-04 |
 | §9.30 | Stale comments in the feedback schema and the audit coverage test | 📄 | 2026-10-04 |
 
 ## Top priorities (2026-10-17)
 
-Both 🔴 bugs and all three 🟠 findings from 2026-10-04 were fixed on 2026-10-17, along with §3.3
-and §9.31, and are in the log. Everything still open is hygiene or documentation.
+Both 🔴 bugs and all three 🟠 findings from 2026-10-04 were fixed on 2026-10-17, along with §3.3,
+§9.18, §9.23–§9.29 and §9.31, and are in the log. Everything still open is hygiene or documentation.
 
 1. **The eval job edge cases** (§5.1, §8.3–§8.6): about a minute of orphan results after a
    mid-run project delete, a failed run's empty tallies, a generator that never checks its lease,
    a resumed run's overwritten stamp, and audit-after-publish ordering.
 2. **The response-contract gaps** (§7.1–§7.3), the duplication (§9.19–§9.22), and the scope
    plumbing in two services (§2.2).
-3. **The documentation** (§9.18, §9.23–§9.30), in particular §9.26: the PRD still does not record
-   Phase 2.6 as shipped, and must before a release is cut.
+3. **The documentation** left (§9.30): stale comments in the feedback schema and the audit coverage
+   test.
 
 ---
 
@@ -657,15 +649,6 @@ The bind address comes from the uvicorn command (`Makefile:207`,
 nothing, so an operator who sets `PORT=9000` changes nothing. **Fix:** delete the two fields and
 their example and doc rows, or pass them to uvicorn. Every other of the 108 settings is read.
 
-### §9.18 `APP_VERSION` defaults to `0.1.0` on a 2.2.0 release — 📄 doc
-
-**Where:** `backend/app/config.py:23`, `backend/.env.example:7`, `docs/configuration.md:74`;
-`backend/pyproject.toml:3`, `frontend/package.json:3`
-
-`/` and `/health` report `0.1.0`; both package files say `2.2.0`. **Fix:** decide whether
-`APP_VERSION` tracks the release; if it does, read it from the package metadata rather than a
-default someone must remember to bump.
-
 ### §9.19 The "project is indexed" guard exists in three copies — 🟡 hygiene
 
 **Where:** `backend/app/services/index_guards.py:16-26`, `backend/app/core/access.py:155-181`
@@ -710,73 +693,6 @@ A checklist module strips whitespace and slashes from its path, so `src/` and `/
 passes it raw, so the same input answers `400 MODULE_PATH_NOT_INDEXED`. Eval also caps the path at
 1024 characters where checklist uses 512, and repeats the 120-character name limit as its own
 constant. **Fix:** one shared normaliser and the shared length constants. One hour.
-
-### §9.23 `docs/README.md` and `docs/architecture.md` carry stale counts — 📄 doc
-
-| Claim | Where | Actual | How counted |
-| --- | --- | --- | --- |
-| "81 routes" | `docs/README.md:83` | 95 | `grep -rhE "^@[a-z_]+\.(get\|post\|put\|patch\|delete)\(" backend/app/api/routes \| wc -l` (`docs/codebase.md:148` says 95) |
-| "20 tables" | `docs/README.md:27` | 26 | `grep -rh __tablename__ backend/app/models \| wc -l` (`docs/data.md:14` says 26) |
-| "All 104 backend settings" | `docs/README.md:40` | 108 | `len(Settings.model_fields)` |
-| "All 80 settings" | `docs/architecture.md:393` | 108 | same |
-
-The same class as §9.7 and §9.15. **Fix:** correct the numbers, or drop the two settings counts and
-link to `docs/configuration.md`.
-
-### §9.24 `docs/codebase.md`'s tree misses modules — 📄 doc
-
-**Where:** `docs/codebase.md:160` (`ingestion/`), `:163` (`rag/`), `:157` (`services/`), `:168`
-(`live/`)
-
-`ingestion/` lacks `errors.py`; `rag/` lacks `answer_style.py` and `prompt_version.py`; the
-service count says 22 where there are 21 services plus `path_tree.py` and `index_guards.py`, and
-`index_guards.py` is not mentioned; `mail/` is absent; the `live/` line omits `stream.py`. The
-route, model and repository counts are right. **Fix:** update the tree.
-
-### §9.25 `backend/README.md`'s layout and worker description are stale — 📄 doc
-
-**Where:** `backend/README.md:59-75`, `:460-560`; `backend/app/worker.py:383`, `:397`, `:411`,
-`:435` (the four consumers), `:508-512` (the mail loop)
-
-The worker section still says "the API only enqueues indexing and checklist-generation jobs" and
-lists two consumers; there are four, plus their retry consumers, the mail loop and the sweeps. The
-layout block has no `observability/`, `live/` or `mail/`, lists six of 18 schema files, and describes `services/` as
-three services. **Fix:** update both, linking to `docs/codebase.md` for the tree.
-
-### §9.26 `docs/PRD.md` §6 does not record Phase 2.6 as shipped — 📄 doc
-
-**Where:** `docs/PRD.md:1047`; compare `:1046` (Phase 2.5, "Shipped in two stages…")
-
-PR #58 merged the eval harness and answer style, and #61 polished the eval screen. §6 is the only
-place progress is recorded (`.claude/rules/documentation.md`). **Fix:** add a "Shipped" sentence
-naming #58 and #61, in Phase 2.5's style.
-
-### §9.27 `docs/notifications.md` carries an "in progress" banner — 📄 doc
-
-**Where:** `docs/notifications.md:96` ("Amendment (2026-09-27, in progress)"); `docs/PRD.md:1027`
-
-Progress belongs in the PRD only, which records live updates as shipped. **Fix:** drop "in
-progress".
-
-### §9.28 The eval harness is missing from `docs/langfuse.md` and the timeout docs — 📄 doc
-
-**Where:** `docs/langfuse.md:41`, `:152-160` (the traces table), `:167-178`, `:426`; `docs/configuration.md:270`,
-`docs/llm.md:235`
-
-`docs/langfuse.md` never mentions eval: its feature table lacks `eval_generate` and `eval_judge`,
-and it does not say an eval answer is one trace seeded from its result id (which `docs/llm.md`
-does). `GENERATION_TIMEOUT_SECONDS` is documented as covering checklist and mock-data generation
-only; it also bounds eval generation, answers and the judge. **Fix:** add eval to each.
-
-### §9.29 `CHANGELOG.md` `[Unreleased]` has duplicate headings and misfiled entries — 📄 doc
-
-**Where:** `CHANGELOG.md:16`, `:25`, `:34`, `:99`, `:118`; `:101-110`; `:22`
-
-The section reads Changed, Fixed, Added, Changed, Fixed. The `traceUrl` and `createdOn` entries
-are filed as Changed, but feedback has never been released, so they describe the feature as it
-ships and belong in its Added entry. Line 22 says the reindex refusal "reuses the existing error
-code", which is itself new in this release. **Fix:** merge the headings and move the two entries
-before the release is cut.
 
 ### §9.30 Stale comments in the feedback schema and the audit coverage test — 📄 doc
 

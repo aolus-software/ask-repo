@@ -390,7 +390,7 @@ retention are in [`langfuse.md`](langfuse.md). How a call is tagged, grouped and
 
 **Configuration flows one way**: environment → `.env` → the defaults in `Settings`
 (`app/config.py`). `get_settings()` is `lru_cache`d and injected with `Depends`; nothing else
-reads `os.environ`. All 80 settings are documented in [`configuration.md`](configuration.md).
+reads `os.environ`. Every setting is documented in [`configuration.md`](configuration.md).
 
 **Identity is resolved once, in middleware.** `AuthContextMiddleware` decodes the bearer token,
 then — in a session of its own, opened and closed before the handler's session exists — loads

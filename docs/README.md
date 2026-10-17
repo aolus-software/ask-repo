@@ -24,7 +24,7 @@ Read these in order the first time. Roughly two hours end to end.
 | # | Page | Answers |
 | --- | --- | --- |
 | 1 | **[`architecture.md`](architecture.md)** | What runs where? Why is there a worker? Why four datastores? What happens, step by step, when someone asks a question or adds a repository? |
-| 2 | **[`data.md`](data.md)** | Where does everything get stored? What are the 20 tables and how do they relate? Why does a delete reach into Qdrant? What is a lease? |
+| 2 | **[`data.md`](data.md)** | Where does everything get stored? What are the 26 tables and how do they relate? Why does a delete reach into Qdrant? What is a lease? |
 | 3 | **[`rag.md`](rag.md)** | How does a repository become searchable? What is chunking, embedding, a vector? How is the right code found for a question, and how do we know the answer is grounded in it? |
 | 4 | **[`llm.md`](llm.md)** | Which model gets called, and how? How do we get structured data out of a model instead of prose? What stops a broken provider burning money or a retry ladder? |
 | 5 | **[`langgraph.md`](langgraph.md)** | Why a graph instead of a chain? How does the self-critique loop work? How does an answer stream to the browser, and how is it saved if the user closes the tab? |
@@ -37,7 +37,7 @@ Read these in order the first time. Roughly two hours end to end.
 | Page | Use it when |
 | --- | --- |
 | **[`installation.md`](installation.md)** | Setting up locally. Three paths — everything in Docker, datastores only in Docker, or no `make` at all — plus first login and troubleshooting |
-| **[`configuration.md`](configuration.md)** | Any question about a setting. All 104 backend settings, the frontend variable, and the Compose `.env`, each with what it does and what to change before production |
+| **[`configuration.md`](configuration.md)** | Any question about a setting. Every backend setting, the frontend variable, and the Compose `.env`, each with what it does and what to change before production |
 | **[`deployment.md`](deployment.md)** | Running it for a team. Production images, TLS with Caddy, secrets, first boot, backups |
 | **[`langfuse.md`](langfuse.md)** | Turning on the AI call log. Setup for development and production, reading the traces, outbound network access, retention, troubleshooting |
 
@@ -80,7 +80,7 @@ deduplication boundary" → `.claude/rules/ingestion.md`.
 
 ## Also worth knowing
 
-- **[`../backend/README.md`](../backend/README.md)** — the exhaustive route table (81 routes), the
+- **[`../backend/README.md`](../backend/README.md)** — the exhaustive route table (95 routes), the
   backend layout, and dev commands.
 - **[`../frontend/README.md`](../frontend/README.md)** — frontend scripts, env, and the BFF layout.
 - **[`../CLAUDE.md`](../CLAUDE.md)** — the invariants a coding agent must not break. It states
