@@ -21,6 +21,9 @@ class ErrorResponse(ApiModel):
 
 class ValidationErrorBody(ErrorBody):
     fields: dict[str, str]
+    # Pydantic's error type per field, keyed like `fields`, so a client can translate
+    # the message rather than display the English one.
+    field_types: dict[str, str]
 
 
 class ValidationErrorResponse(ApiModel):

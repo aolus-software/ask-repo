@@ -145,11 +145,13 @@ async def _handle_validation_error(request: Request, error: Exception) -> JSONRe
     """Reshape FastAPI's `loc`-array payload into the API's one error envelope."""
     if not isinstance(error, RequestValidationError):
         raise error
-    fields = {_field_name(item["loc"]): item["msg"] for item in error.errors()}
+    errors = error.errors()
+    fields = {_field_name(item["loc"]): item["msg"] for item in errors}
+    field_types = {_field_name(item["loc"]): item["type"] for item in errors}
     detail = error_detail(ErrorCode.VALIDATION_ERROR, "Request validation failed.")
     return JSONResponse(
         status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
-        content={"detail": {**detail, "fields": fields}},
+        content={"detail": {**detail, "fields": fields, "fieldTypes": field_types}},
     )
 
 

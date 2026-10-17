@@ -130,3 +130,18 @@ def test_message_not_found_is_retired() -> None:
     change (CHANGELOG's versioning note). Same precedent as
     `test_qa_error_codes_are_retired` above."""
     assert "MESSAGE_NOT_FOUND" not in ErrorCode.__members__
+
+
+async def test_validation_field_types_name_each_error() -> None:
+    """`fieldTypes` lets the frontend translate a field error without parsing English.
+
+    It is a sibling of `fields`, not a change to it: `fields` stays `dict[str, str]`
+    so no existing client breaks.
+    """
+    async with await _client(_build_app()) as client:
+        response = await client.post("/validated", json={})
+
+    assert response.status_code == 422
+    detail = response.json()["detail"]
+    assert isinstance(detail["fields"]["newPassword"], str)
+    assert detail["fieldTypes"] == {"newPassword": "missing"}
