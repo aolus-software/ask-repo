@@ -27,7 +27,7 @@
     "propose_mock_data": "목 데이터 채팅 제안"
   },
   "summary": {
-    "hint": "비추천 · 투표 {votes}개",
+    "hint": "비추천 · {votes, plural, other {투표 #개}}",
     "feature": "기능",
     "reason": "이유",
     "count": "횟수",

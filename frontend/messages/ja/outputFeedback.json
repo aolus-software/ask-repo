@@ -27,7 +27,7 @@
     "propose_mock_data": "モックデータのチャット提案"
   },
   "summary": {
-    "hint": "低評価 · {votes} 票",
+    "hint": "低評価 · {votes, plural, other {# 票}}",
     "feature": "機能",
     "reason": "理由",
     "count": "件数",

@@ -37,6 +37,8 @@
       "lastActive": "Last active",
       "actions": "Actions"
     },
+    "device": "{browser} on {system}",
+    "unknownDevice": "Unknown device",
     "thisDevice": "This device",
     "logOut": "Log out",
     "logOutEverywhere": "Log out everywhere",

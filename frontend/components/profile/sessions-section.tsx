@@ -23,7 +23,7 @@ import { useSession } from "@/hooks/use-session";
 import type { SessionSummary } from "@/lib/api/types";
 import { signOut } from "@/lib/auth/sign-out";
 import { formatAbsolute } from "@/lib/dates";
-import { deviceLabel } from "@/lib/user-agent";
+import { parseDevice } from "@/lib/user-agent";
 import { useFormatRelative } from "@/hooks/use-format-date";
 
 export function SessionsSection() {
@@ -33,6 +33,14 @@ export function SessionsSection() {
   const sessions = useSessions();
   const revoke = useRevokeSession();
   const [pending, setPending] = useState<SessionSummary | null>(null);
+
+  const deviceText = (userAgent: string | null): string => {
+    const device = parseDevice(userAgent);
+    if (!device) return t("unknownDevice");
+    if (device.browser && device.system)
+      return t("device", { browser: device.browser, system: device.system });
+    return device.browser ?? device.system ?? userAgent ?? t("unknownDevice");
+  };
 
   const lastSignedIn = t.rich("lastSignedIn", {
     time: user.lastLoginAt ? formatRelative(user.lastLoginAt) : t("never"),
@@ -80,7 +88,7 @@ export function SessionsSection() {
                     <TableCell>
                       <div className="flex flex-wrap items-center gap-2">
                         <span title={session.userAgent ?? undefined}>
-                          {deviceLabel(session.userAgent)}
+                          {deviceText(session.userAgent)}
                         </span>
                         {session.current ? (
                           <StatusBadge tone="info" label={t("thisDevice")} />

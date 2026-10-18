@@ -27,7 +27,7 @@
     "propose_mock_data": "Usulan obrolan data tiruan"
   },
   "summary": {
-    "hint": "dinilai buruk · {votes} suara",
+    "hint": "dinilai buruk · {votes, plural, other {# suara}}",
     "feature": "Fitur",
     "reason": "Alasan",
     "count": "Jumlah",

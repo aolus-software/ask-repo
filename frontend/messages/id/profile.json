@@ -37,6 +37,8 @@
       "lastActive": "Terakhir aktif",
       "actions": "Aksi"
     },
+    "device": "{browser} di {system}",
+    "unknownDevice": "Perangkat tidak dikenal",
     "thisDevice": "Perangkat ini",
     "logOut": "Keluar",
     "logOutEverywhere": "Keluar dari semua perangkat",

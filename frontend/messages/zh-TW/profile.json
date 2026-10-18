@@ -22,7 +22,10 @@
   "account": {
     "adminNote": "身為管理員，你可以看到所有專案。下方清單僅列出你所屬的專案。",
     "empty": "你目前還不是任何專案的成員。",
-    "columns": { "project": "專案", "role": "角色" }
+    "columns": {
+      "project": "專案",
+      "role": "角色"
+    }
   },
   "sessions": {
     "lastSignedIn": "上次登入於 <when>{time}</when>",
@@ -34,6 +37,8 @@
       "lastActive": "最近活動",
       "actions": "操作"
     },
+    "device": "{system} 上的 {browser}",
+    "unknownDevice": "未知裝置",
     "thisDevice": "此裝置",
     "logOut": "登出",
     "logOutEverywhere": "登出所有裝置",
@@ -58,7 +63,11 @@
     "default": "預設",
     "save": "儲存回答風格",
     "saved": "已儲存回答風格",
-    "dials": { "detail": "詳細程度", "familiarity": "熟悉程度", "format": "格式" },
+    "dials": {
+      "detail": "詳細程度",
+      "familiarity": "熟悉程度",
+      "format": "格式"
+    },
     "options": {
       "brief": "簡短",
       "thorough": "詳盡",

@@ -37,6 +37,8 @@
       "lastActive": "最終アクティブ",
       "actions": "操作"
     },
+    "device": "{system} の {browser}",
+    "unknownDevice": "不明なデバイス",
     "thisDevice": "このデバイス",
     "logOut": "ログアウト",
     "logOutEverywhere": "すべての端末からログアウト",

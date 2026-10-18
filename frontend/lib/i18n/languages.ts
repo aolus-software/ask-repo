@@ -55,7 +55,10 @@ function rankedTags(header: string): string[] {
       const q = params.find((p) => p.trim().startsWith("q="));
       return { tag: tag.trim(), q: q ? Number(q.trim().slice(2)) : 1, index };
     })
-    .filter((entry) => entry.tag && entry.tag !== "*" && !Number.isNaN(entry.q))
+    .filter(
+      (entry) =>
+        entry.tag && entry.tag !== "*" && !Number.isNaN(entry.q) && entry.q > 0,
+    )
     .sort((a, b) => b.q - a.q || a.index - b.index)
     .map((entry) => entry.tag);
 }

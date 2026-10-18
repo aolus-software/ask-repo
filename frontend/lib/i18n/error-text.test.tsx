@@ -8,7 +8,7 @@ describe("useErrorText", () => {
   it("translates a known code", () => {
     const { result } = renderHook(() => useErrorText());
     expect(
-      result.current(new ApiError(404, "PROJECT_NOT_FOUND", "Project not found.")),
+      result.current(new ApiError(404, "PROJECT_NOT_FOUND", "raw backend text")),
     ).toBe("Project not found.");
   });
 

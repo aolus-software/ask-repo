@@ -15,6 +15,11 @@ describe("resolveLocale", () => {
     expect(resolveLocale(undefined, "fr;q=0.9,ms;q=0.8,en;q=0.1")).toBe("ms");
   });
 
+  it("skips a language the client marked not acceptable", () => {
+    expect(resolveLocale(undefined, "ja;q=0,id;q=0.5")).toBe("id");
+    expect(resolveLocale(undefined, "ja;q=0")).toBe("en");
+  });
+
   it("matches a region to its base language", () => {
     expect(resolveLocale(undefined, "id-ID")).toBe("id");
     expect(resolveLocale(undefined, "en-GB")).toBe("en");

@@ -94,10 +94,15 @@ async function handle(request: NextRequest, context: RouteContext): Promise<Resp
   // The one response this proxy reads rather than only relays: a language change has
   // to reach the locale cookie, or the next render would keep the old language. A
   // clone is read, so the body still reaches the browser untouched.
-  const languageChange =
-    request.method === "PUT" && path.join("/") === "me/language" && upstream.ok
-      ? ((await upstream.clone().json()) as { language?: unknown })
-      : null;
+  // A body that does not parse skips the cookie update and is still relayed.
+  let languageChange: { language?: unknown } | null = null;
+  if (request.method === "PUT" && path.join("/") === "me/language" && upstream.ok) {
+    try {
+      languageChange = (await upstream.clone().json()) as { language?: unknown };
+    } catch {
+      languageChange = null;
+    }
+  }
 
   // Body passed through untouched, so an SSE stream is never accumulated.
   const response = new NextResponse(upstream.body, {

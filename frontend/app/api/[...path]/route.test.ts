@@ -373,6 +373,19 @@ describe("the proxy and the locale cookie", () => {
     expect(await response.json()).toEqual({ language: null });
   });
 
+  it("relays the response and sets no cookie when the PUT body is not JSON", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response("not json", { status: 200 })),
+    );
+
+    const response = await PUT(putLanguage(), context(["me", "language"]));
+
+    expect(response.status).toBe(200);
+    expect(response.headers.getSetCookie().join("\n")).not.toContain("askrepo_locale");
+    expect(await response.text()).toBe("not json");
+  });
+
   it("writes nothing for GET /me/language", async () => {
     vi.stubGlobal(
       "fetch",

@@ -27,7 +27,7 @@
     "propose_mock_data": "Cadangan sembang data olok-olok"
   },
   "summary": {
-    "hint": "undi turun · {votes} undi",
+    "hint": "undi turun · {votes, plural, other {# undi}}",
     "feature": "Ciri",
     "reason": "Sebab",
     "count": "Bilangan",

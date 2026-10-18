@@ -27,7 +27,7 @@
     "propose_mock_data": "模擬資料聊天建議"
   },
   "summary": {
-    "hint": "不贊成 · {votes} 票",
+    "hint": "不贊成 · {votes, plural, other {# 票}}",
     "feature": "功能",
     "reason": "原因",
     "count": "數量",

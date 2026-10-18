@@ -27,7 +27,7 @@
     "propose_mock_data": "Mock-data chat proposals"
   },
   "summary": {
-    "hint": "down-voted · {votes} votes",
+    "hint": "down-voted · {votes, plural, one {# vote} other {# votes}}",
     "feature": "Feature",
     "reason": "Reason",
     "count": "Count",
