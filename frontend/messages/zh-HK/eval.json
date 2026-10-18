@@ -1,0 +1,127 @@
+{
+  "questionTypes": {
+    "explain": "解釋",
+    "locate": "定位"
+  },
+  "mix": {
+    "balanced": "均衡",
+    "explain": "只限解釋",
+    "locate": "只限定位"
+  },
+  "tally": {
+    "summary": "命中 {hits}/{answered} · 正確 {correct} · 部分正確 {partial} · 錯誤 {wrong}",
+    "summaryWithErrors": "命中 {hits}/{answered} · 正確 {correct} · 部分正確 {partial} · 錯誤 {wrong} · 出錯 {errors}"
+  },
+  "wholeProject": "整個專案",
+  "setTable": {
+    "emptyTitle": "暫無評測集",
+    "emptyDescription": "生成一組附有參考答案的問題，然後執行以查看助手在此專案上的表現。",
+    "columns": {
+      "set": "評測集",
+      "path": "路徑",
+      "pairs": "問答對",
+      "status": "狀態",
+      "latestRun": "最近一次執行",
+      "created": "建立時間",
+      "actions": "操作"
+    },
+    "noRuns": "尚未執行",
+    "actionsFor": "{name} 的操作",
+    "delete": "刪除"
+  },
+  "deleteDialog": {
+    "titleNamed": "刪除 {name}？",
+    "title": "刪除評測集？",
+    "description": "其問題、每次執行及所有結果都會一併刪除，對所有人生效。",
+    "confirm": "刪除評測集",
+    "deleted": "已刪除評測集"
+  },
+  "pairTable": {
+    "generatingTitle": "正在生成問題…",
+    "emptyTitle": "暫無問題",
+    "generatingDescription": "生成完成後，問題會隨即顯示在這裏。",
+    "emptyDescription": "此評測集沒有問題。",
+    "columns": {
+      "question": "問題",
+      "type": "類型",
+      "source": "來源",
+      "excluded": "已排除"
+    },
+    "excludeLabel": "排除：{question}",
+    "referenceAnswer": "參考答案",
+    "saveFailed": "未能儲存。請再試一次"
+  },
+  "runTable": {
+    "generatingTitle": "正在生成問題…",
+    "noRunsTitle": "沒有執行記錄",
+    "generatingDescription": "問題準備好後，便可執行此評測集。",
+    "failedDescription": "生成失敗的評測集無法執行。",
+    "emptyTitle": "尚未執行",
+    "emptyDescription": "執行評測集以逐一提問，並對照參考答案評判回答。",
+    "columns": {
+      "started": "開始時間",
+      "status": "狀態",
+      "results": "結果",
+      "model": "模型"
+    }
+  },
+  "runSheet": {
+    "title": "執行結果",
+    "loadFailed": "無法載入該次執行",
+    "loading": "正在載入執行記錄…",
+    "notFound": "該次執行不存在，或已被刪除。",
+    "failedTitle": "執行失敗",
+    "retrievalHit": "檢索命中",
+    "retrievalMiss": "檢索未命中",
+    "judge": "評判：{reason}",
+    "warnings": "警告：{warnings}"
+  },
+  "compare": {
+    "judgeChanged": "這些執行由不同的模型評判。評判結果的變化可能源自評判模型，而非回答本身。檢索命中不受影響。",
+    "comparedOn": "已就兩次執行都有回答的 {count, plural, other {# 個問答對}}作比較",
+    "base": "基準",
+    "head": "對比",
+    "tally": "命中 {hits}/{total} · 正確 {correct} · 部分正確 {partial} · 錯誤 {wrong} · 出錯 {errors}",
+    "noChange": "這些執行之間沒有任何問答對有變化。",
+    "retrievalChange": "檢索：{from} → {to}",
+    "hit": "命中",
+    "miss": "未命中"
+  },
+  "generateDialog": {
+    "trigger": "生成評測集",
+    "title": "生成評測集",
+    "description": "根據此專案已索引的程式碼生成附有參考答案的問題，用以衡量助手的表現。",
+    "submit": "生成",
+    "started": "已開始生成",
+    "nameLabel": "名稱",
+    "namePlaceholder": "例如：驗證相關問題",
+    "pathLabel": "路徑",
+    "pathHelp": "留空代表整個專案，或選擇要涵蓋的資料夾或檔案。",
+    "questionsLabel": "問題數量",
+    "countAria": "問題數量",
+    "mixLabel": "組合",
+    "mixAria": "問題組合"
+  },
+  "screen": {
+    "pairCount": "{count, plural, other {# 個問答對}}",
+    "generatedFrom": "生成自第 {generation} 代",
+    "projectNotFound": "該專案不存在，或你沒有存取權限。",
+    "setNotFound": "該評測集不存在，或已被刪除。",
+    "selectRun": "選擇一次執行",
+    "runLabel": "第 {number} 次執行 · {date}",
+    "deleteAria": "刪除 {name}",
+    "delete": "刪除",
+    "run": "執行",
+    "runStarted": "已開始執行",
+    "runStartFailed": "無法開始執行",
+    "projectNowAt": "專案目前為第 {generation} 代。",
+    "generationFailed": "生成失敗",
+    "pairs": "問答對",
+    "runs": "執行記錄",
+    "compare": "比較",
+    "baseRun": "基準執行",
+    "headRun": "對比執行",
+    "compareFailed": "無法載入比較結果",
+    "somethingWrong": "發生錯誤。"
+  }
+}
