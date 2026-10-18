@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { ApiError, fieldError, isApiError, parseApiError } from "@/lib/api/errors";
+import { ApiError, isApiError, parseApiError } from "@/lib/api/errors";
 
 function jsonResponse(body: unknown, status: number): Response {
   return new Response(JSON.stringify(body), {
@@ -85,24 +85,6 @@ describe("parseApiError", () => {
       jsonResponse({ detail: { code: "LAST_ADMIN", message: "Nope." } }, 409),
     );
     expect(error.extra).toEqual({});
-  });
-});
-
-describe("fieldError", () => {
-  it("returns the message for a named field", () => {
-    const error = new ApiError(422, "VALIDATION_ERROR", "Invalid.", {
-      email: "Required.",
-    });
-    expect(fieldError(error, "email")).toBe("Required.");
-  });
-
-  it("returns undefined for an unnamed field, and for a non-ApiError", () => {
-    const error = new ApiError(422, "VALIDATION_ERROR", "Invalid.", {
-      email: "Required.",
-    });
-    expect(fieldError(error, "name")).toBeUndefined();
-    expect(fieldError(new Error("boom"), "email")).toBeUndefined();
-    expect(fieldError(null, "email")).toBeUndefined();
   });
 });
 

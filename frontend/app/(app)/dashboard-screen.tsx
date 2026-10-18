@@ -21,6 +21,7 @@ import { useFormatRelative } from "@/hooks/use-format-date";
 
 export function DashboardScreen() {
   const t = useTranslations("dashboard");
+  const tCommon = useTranslations("common");
   const formatRelative = useFormatRelative();
   const user = useSession();
 
@@ -89,7 +90,9 @@ export function DashboardScreen() {
               <EmptyState
                 icon={FolderGit2}
                 title={t("recentProjects.emptyTitle")}
-                description={t("recentProjects.emptyDescription")}
+                description={t("recentProjects.emptyDescription", {
+                  appName: tCommon("appName"),
+                })}
                 action={
                   <Button nativeButton={false} render={<Link href="/projects" />}>
                     <Plus className="size-4" />

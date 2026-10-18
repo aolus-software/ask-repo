@@ -1,6 +1,6 @@
 {
   "title": "Notifications",
-  "description": "Everything AskRepo has told you about, newest first.",
+  "description": "Everything {appName} has told you about, newest first.",
   "markAllRead": "Mark all read",
   "seeAll": "See all",
   "unread": "Unread",

@@ -9,7 +9,7 @@
     "title": "Recent projects",
     "viewAll": "View all",
     "emptyTitle": "No projects yet",
-    "emptyDescription": "Add a repository and AskRepo will clone and index it.",
+    "emptyDescription": "Add a repository and {appName} will clone and index it.",
     "emptyAction": "Add one"
   },
   "recentQuestions": {

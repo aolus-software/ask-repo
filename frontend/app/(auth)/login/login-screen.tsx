@@ -25,6 +25,7 @@ import { safeNext } from "@/lib/safe-next";
 
 export function LoginScreen({ resetEnabled }: { resetEnabled: boolean }) {
   const t = useTranslations("auth");
+  const tCommon = useTranslations("common");
   const searchParams = useSearchParams();
 
   const [email, setEmail] = useState("");
@@ -99,7 +100,9 @@ export function LoginScreen({ resetEnabled }: { resetEnabled: boolean }) {
         />
       </div>
       <CardHeader>
-        <CardTitle className="text-xl font-semibold">{t("login.title")}</CardTitle>
+        <CardTitle className="text-xl font-semibold">
+          {t("login.title", { appName: tCommon("appName") })}
+        </CardTitle>
         <CardDescription>{t("login.description")}</CardDescription>
       </CardHeader>
       <CardContent>

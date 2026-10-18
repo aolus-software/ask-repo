@@ -3,19 +3,9 @@ import nextVitals from "eslint-config-next/core-web-vitals";
 import nextTs from "eslint-config-next/typescript";
 import i18next from "eslint-plugin-i18next";
 
-// Areas whose strings come from messages/*.json. Each migration task appends its
-// directory; the last one replaces the list with the whole tree (plan Task 19).
-const MIGRATED = [
-  "components/profile/language-section.tsx",
-  "components/auth/**/*.tsx",
-  "components/form/**/*.tsx",
-  "components/feedback/**/*.tsx",
-  "components/layout/**/*.tsx",
-  "app/(auth)/**/*.tsx",
-  "app/(app)/layout.tsx",
-  "app/(app)/page.tsx",
-  "app/(app)/dashboard-screen.tsx",
-];
+// Every screen's strings come from messages/<locale>/; tests and the CLI-managed
+// shadcn components are excluded below (plan Task 19).
+const TRANSLATED = ["app/**/*.tsx", "components/**/*.tsx"];
 
 const eslintConfig = defineConfig([
   ...nextVitals,
@@ -29,7 +19,7 @@ const eslintConfig = defineConfig([
     "next-env.d.ts",
   ]),
   {
-    files: MIGRATED,
+    files: TRANSLATED,
     ignores: ["**/*.test.tsx", "components/ui/**"],
     plugins: { i18next },
     rules: {

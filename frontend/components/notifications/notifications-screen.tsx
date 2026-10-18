@@ -39,6 +39,7 @@ function changedKey(
 
 export function NotificationsScreen() {
   const t = useTranslations("notifications");
+  const tCommon = useTranslations("common");
   const { params, setPage, setParam } = useListParams(
     { limit: 25 },
     { extraParams: EXTRA_PARAMS },
@@ -55,7 +56,7 @@ export function NotificationsScreen() {
     <div className="mx-auto w-full max-w-7xl">
       <PageHeader
         title={t("title")}
-        description={t("description")}
+        description={t("description", { appName: tCommon("appName") })}
         action={
           <Button
             variant="outline"

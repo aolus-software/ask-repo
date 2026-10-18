@@ -113,8 +113,3 @@ export function networkError(): ApiError {
     "Could not reach the server. Check your connection and try again.",
   );
 }
-
-/** Read one field's error. Returns undefined for anything that is not an ApiError. */
-export function fieldError(error: unknown, name: string): string | undefined {
-  return isApiError(error) ? error.fieldErrors[name] : undefined;
-}
