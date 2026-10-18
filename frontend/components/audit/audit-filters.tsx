@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { useMemo } from "react";
 
 import {
@@ -11,7 +12,7 @@ import {
   ComboboxList,
 } from "@/components/ui/combobox";
 import { Input } from "@/components/ui/input";
-import { AUDIT_EVENT_TYPES, auditEventLabel } from "@/lib/audit";
+import { AUDIT_EVENT_TYPES, useAuditEventLabel } from "@/lib/audit";
 import type { AuditEventListParams, AuditOutcome } from "@/lib/api/types";
 
 /**
@@ -28,12 +29,6 @@ const ANY = "any";
  */
 type FilterOption = { value: string; label: string };
 
-const OUTCOME_OPTIONS: FilterOption[] = [
-  { value: ANY, label: "All outcomes" },
-  { value: "success", label: "Success" },
-  { value: "failure", label: "Failure" },
-];
-
 export function AuditFilters({
   currentFilters,
   onFiltersChange,
@@ -41,19 +36,31 @@ export function AuditFilters({
   currentFilters: Partial<AuditEventListParams>;
   onFiltersChange: (filters: Partial<AuditEventListParams>) => void;
 }) {
+  const t = useTranslations("audit.filters");
+  const tStatus = useTranslations("status");
+  const auditEventLabel = useAuditEventLabel();
+  const outcomeOptions = useMemo<FilterOption[]>(
+    () => [
+      { value: ANY, label: t("allOutcomes") },
+      { value: "success", label: tStatus("auditOutcome.success") },
+      { value: "failure", label: tStatus("auditOutcome.failure") },
+    ],
+    [t, tStatus],
+  );
+
   // 39 event types is past the point where a plain select is usable -- finding
   // `checklist_item.results_cleared` means scrolling a menu that does not narrow.
   // A combobox filters as you type, which is what makes the list a tool rather than
   // an inventory.
   const eventOptions = useMemo<FilterOption[]>(
     () => [
-      { value: ANY, label: "All events" },
+      { value: ANY, label: t("allEvents") },
       ...AUDIT_EVENT_TYPES.map((eventType) => ({
         value: eventType,
         label: auditEventLabel(eventType),
       })),
     ],
-    [],
+    [t, auditEventLabel],
   );
 
   const selectedEvent =
@@ -61,9 +68,8 @@ export function AuditFilters({
     eventOptions[0];
 
   const selectedOutcome =
-    OUTCOME_OPTIONS.find(
-      (option) => option.value === (currentFilters.outcome ?? ANY),
-    ) ?? OUTCOME_OPTIONS[0];
+    outcomeOptions.find((option) => option.value === (currentFilters.outcome ?? ANY)) ??
+    outcomeOptions[0];
 
   return (
     // A fragment, not a grid: these are dropped into `ListToolbar`'s own filter row
@@ -86,11 +92,11 @@ export function AuditFilters({
         >
           <ComboboxInput
             className="w-full"
-            placeholder="All events"
-            aria-label="Event type"
+            placeholder={t("allEvents")}
+            aria-label={t("eventType")}
           />
           <ComboboxContent>
-            <ComboboxEmpty>No event type matches.</ComboboxEmpty>
+            <ComboboxEmpty>{t("noEventMatches")}</ComboboxEmpty>
             <ComboboxList>
               {(option: FilterOption) => (
                 <ComboboxItem key={option.value} value={option}>
@@ -104,7 +110,7 @@ export function AuditFilters({
 
       <div>
         <Combobox
-          items={OUTCOME_OPTIONS}
+          items={outcomeOptions}
           value={selectedOutcome}
           onValueChange={(next: FilterOption | null) =>
             onFiltersChange({
@@ -117,11 +123,11 @@ export function AuditFilters({
         >
           <ComboboxInput
             className="w-full"
-            placeholder="All outcomes"
-            aria-label="Outcome"
+            placeholder={t("allOutcomes")}
+            aria-label={t("outcome")}
           />
           <ComboboxContent>
-            <ComboboxEmpty>No outcome matches.</ComboboxEmpty>
+            <ComboboxEmpty>{t("noOutcomeMatches")}</ComboboxEmpty>
             <ComboboxList>
               {(option: FilterOption) => (
                 <ComboboxItem key={option.value} value={option}>
@@ -144,7 +150,7 @@ export function AuditFilters({
               occurredFrom: event.target.value || undefined,
             })
           }
-          aria-label="From date"
+          aria-label={t("fromDate")}
         />
       </div>
 
@@ -159,7 +165,7 @@ export function AuditFilters({
               occurredTo: event.target.value || undefined,
             })
           }
-          aria-label="To date"
+          aria-label={t("toDate")}
         />
       </div>
     </>

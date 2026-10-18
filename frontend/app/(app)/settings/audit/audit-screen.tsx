@@ -1,6 +1,7 @@
 "use client";
 
 import { ScrollText } from "lucide-react";
+import { useTranslations } from "next-intl";
 
 import { AuditFilters } from "@/components/audit/audit-filters";
 import { AuditTable } from "@/components/audit/audit-table";
@@ -33,6 +34,7 @@ function changedKey(
 }
 
 export function AuditScreen() {
+  const t = useTranslations("audit");
   const user = useSession();
   const { params, searchInput, setSearch, setPage, setParam } = useListParams(
     { limit: 25 },
@@ -45,19 +47,15 @@ export function AuditScreen() {
   // The route body is wrapped in its gate. Hiding the nav item is not gating the
   // route — an operator can type the URL (navigation.md §6). This mirrors the
   // backend's ADMIN_REQUIRED; it does not replace it.
-  if (!user.isAdmin)
-    return <Forbidden message="Only administrators can read the audit trail." />;
+  if (!user.isAdmin) return <Forbidden message={t("forbidden")} />;
 
   return (
     <div className="mx-auto w-full max-w-7xl">
-      <PageHeader
-        title="Audit trail"
-        description="Every write and export on this instance, newest first."
-      />
+      <PageHeader title={t("title")} description={t("description")} />
 
       <ListToolbar
         initialSearch={searchInput}
-        placeholder="Search actor, target or address"
+        placeholder={t("searchPlaceholder")}
         onSearchChange={setSearch}
         // Search plus four filters, so the row needs a fifth cell -- at the default
         // four the dates wrap onto a line of their own.
@@ -81,11 +79,11 @@ export function AuditScreen() {
         ) : !query.isLoading && events.length === 0 ? (
           <EmptyState
             icon={ScrollText}
-            title={listParams.search ? "No events match" : "No events yet"}
+            title={listParams.search ? t("empty.noMatchTitle") : t("empty.noneTitle")}
             description={
               listParams.search
-                ? "Try a different search or a wider date range."
-                : "Writes and exports on this instance will appear here."
+                ? t("empty.noMatchDescription")
+                : t("empty.noneDescription")
             }
           />
         ) : (

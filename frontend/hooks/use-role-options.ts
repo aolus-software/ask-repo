@@ -1,5 +1,7 @@
 "use client";
 
+import { useTranslations } from "next-intl";
+
 import { useSession } from "@/hooks/use-session";
 import { useRoles } from "@/hooks/use-roles";
 
@@ -7,14 +9,11 @@ import { useRoles } from "@/hooks/use-roles";
  * The three roles `role_seed.py` guarantees always exist, for callers that cannot
  * fetch the full catalogue (see below).
  */
-const SYSTEM_ROLE_LABELS: Record<string, string> = {
-  viewer: "Viewer",
-  editor: "Editor",
-  owner: "Owner",
-};
+const SYSTEM_ROLES = ["viewer", "editor", "owner"] as const;
+type SystemRole = (typeof SYSTEM_ROLES)[number];
 
-function label(name: string): string {
-  return SYSTEM_ROLE_LABELS[name] ?? name.charAt(0).toUpperCase() + name.slice(1);
+function isSystemRole(name: string): name is SystemRole {
+  return (SYSTEM_ROLES as readonly string[]).includes(name);
 }
 
 /**
@@ -29,9 +28,15 @@ function label(name: string): string {
 export function useRoleOptions(): { name: string; label: string }[] {
   const user = useSession();
   const query = useRoles({ enabled: user.isAdmin });
+  const t = useTranslations("roles.systemRoles");
+
+  // A system role's label is translated; a custom role's name is the admin's own and
+  // is shown as written (capitalised, as it always was).
+  const label = (name: string): string =>
+    isSystemRole(name) ? t(name) : name.charAt(0).toUpperCase() + name.slice(1);
 
   if (user.isAdmin && query.data) {
     return query.data.map((role) => ({ name: role.name, label: label(role.name) }));
   }
-  return Object.keys(SYSTEM_ROLE_LABELS).map((name) => ({ name, label: label(name) }));
+  return SYSTEM_ROLES.map((name) => ({ name, label: label(name) }));
 }

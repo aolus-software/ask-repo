@@ -1,5 +1,7 @@
 "use client";
 
+import { useTranslations } from "next-intl";
+
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   Select,
@@ -11,7 +13,7 @@ import {
 import { useProjects } from "@/hooks/use-projects";
 import { SORT } from "@/lib/api/endpoints";
 import type { NotificationListParams, ProjectResponse } from "@/lib/api/types";
-import { NOTIFICATION_TYPES } from "@/lib/notifications";
+import { NOTIFICATION_TYPES, notificationTypeLabel } from "@/lib/notifications";
 
 /**
  * "No filter" needs a real option value, the same sentinel every other list screen's
@@ -20,18 +22,14 @@ import { NOTIFICATION_TYPES } from "@/lib/notifications";
  */
 const ANY = "any";
 
-const ALL_TYPES = "All types";
-const ALL_PROJECTS = "All projects";
-
-/** "project.ready" -> "Project ready". Mirrors `auditEventLabel` in `lib/audit.ts`. */
-function typeLabel(eventType: string): string {
-  const words = eventType.replace(/[._]/g, " ");
-  return words.charAt(0).toUpperCase() + words.slice(1);
-}
-
-function projectLabel(value: string, projects: ProjectResponse[]): string {
-  if (value === ANY) return ALL_PROJECTS;
-  return projects.find((project) => project.id === value)?.name ?? ALL_PROJECTS;
+/** The project's own name as written; the "all projects" text when unset or gone. */
+function projectLabel(
+  value: string,
+  projects: ProjectResponse[],
+  allProjects: string,
+): string {
+  if (value === ANY) return allProjects;
+  return projects.find((project) => project.id === value)?.name ?? allProjects;
 }
 
 export function NotificationFilters({
@@ -41,6 +39,9 @@ export function NotificationFilters({
   currentFilters: Partial<NotificationListParams>;
   onFiltersChange: (filters: Partial<NotificationListParams>) => void;
 }) {
+  const t = useTranslations("notifications");
+  const allTypes = t("filters.allTypes");
+  const allProjects = t("filters.allProjects");
   // Matches `ModuleFilters`' cap — beyond a hundred projects this wants a searchable
   // combobox instead, which is why the value stays a plain id either way.
   const projectsQuery = useProjects({
@@ -62,15 +63,15 @@ export function NotificationFilters({
             })
           }
         >
-          <SelectTrigger className="w-full" aria-label="Filter by project">
+          <SelectTrigger className="w-full" aria-label={t("filters.byProject")}>
             {/* Base UI renders the raw value, not the chosen item's label, so an
                 unset filter would read "any". Resolve it to the project's name. */}
             <SelectValue>
-              {(value: string) => projectLabel(value, projects)}
+              {(value: string) => projectLabel(value, projects, allProjects)}
             </SelectValue>
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value={ANY}>{ALL_PROJECTS}</SelectItem>
+            <SelectItem value={ANY}>{allProjects}</SelectItem>
             {projects.map((project) => (
               <SelectItem key={project.id} value={project.id}>
                 {project.name}
@@ -90,16 +91,18 @@ export function NotificationFilters({
             })
           }
         >
-          <SelectTrigger className="w-full" aria-label="Filter by type">
+          <SelectTrigger className="w-full" aria-label={t("filters.byType")}>
             <SelectValue>
-              {(value: string) => (value === ANY ? ALL_TYPES : typeLabel(value))}
+              {(value: string) =>
+                value === ANY ? allTypes : notificationTypeLabel(value, t)
+              }
             </SelectValue>
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value={ANY}>{ALL_TYPES}</SelectItem>
+            <SelectItem value={ANY}>{allTypes}</SelectItem>
             {NOTIFICATION_TYPES.map((eventType) => (
               <SelectItem key={eventType} value={eventType}>
-                {typeLabel(eventType)}
+                {notificationTypeLabel(eventType, t)}
               </SelectItem>
             ))}
           </SelectContent>
@@ -118,7 +121,7 @@ export function NotificationFilters({
           }
         />
         <label htmlFor="unread-only" className="text-foreground text-sm">
-          Unread only
+          {t("filters.unreadOnly")}
         </label>
       </div>
     </>

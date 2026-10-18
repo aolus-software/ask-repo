@@ -1,6 +1,7 @@
 "use client";
 
 import { Bell } from "lucide-react";
+import { useTranslations } from "next-intl";
 import Link from "next/link";
 
 import { NotificationList } from "@/components/notifications/notification-list";
@@ -17,6 +18,7 @@ import {
 const POPOVER_LIMIT = 8;
 
 export function NotificationBell() {
+  const t = useTranslations("notifications");
   const count = useUnreadNotificationCount();
   const recent = useNotifications({ limit: POPOVER_LIMIT });
   const markRead = useMarkNotificationRead();
@@ -28,25 +30,25 @@ export function NotificationBell() {
     <Popover>
       <PopoverTrigger
         render={<Button variant="ghost" size="icon" className="relative" />}
-        aria-label={`Notifications (${unread} unread)`}
+        aria-label={t("bellLabel", { count: unread })}
       >
         <Bell className="size-4" />
         {unread > 0 && (
           <span className="bg-primary text-primary-foreground absolute -top-0.5 -right-0.5 flex min-w-4 items-center justify-center rounded-full px-1 text-[10px] font-medium">
-            {unread > 99 ? "99+" : unread}
+            {unread > 99 ? t("overflow") : unread}
           </span>
         )}
       </PopoverTrigger>
       <PopoverContent align="end" className="w-90 p-0">
         <div className="border-border flex items-center justify-between border-b px-4 py-2">
-          <span className="text-foreground text-sm font-medium">Notifications</span>
+          <span className="text-foreground text-sm font-medium">{t("title")}</span>
           <Button
             variant="ghost"
             size="sm"
             disabled={unread === 0 || markAllRead.isPending}
             onClick={() => markAllRead.mutate()}
           >
-            Mark all read
+            {t("markAllRead")}
           </Button>
         </div>
         <ScrollArea className="max-h-96">
@@ -57,7 +59,7 @@ export function NotificationBell() {
         </ScrollArea>
         <div className="border-border border-t px-4 py-2 text-center">
           <Link href="/notifications" className="text-primary text-sm hover:underline">
-            See all
+            {t("seeAll")}
           </Link>
         </div>
       </PopoverContent>

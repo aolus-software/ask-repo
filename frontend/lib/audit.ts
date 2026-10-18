@@ -1,3 +1,5 @@
+import { useTranslations } from "next-intl";
+
 /**
  * The audit trail's event-type vocabulary, mirrored from `AuditEventType` in
  * `backend/app/core/audit.py`. `event_type` is a plain string on the wire — the
@@ -55,4 +57,31 @@ export const AUDIT_EVENT_TYPES = [
 export function auditEventLabel(eventType: string): string {
   const words = eventType.replace(/[._]/g, " ");
   return words.charAt(0).toUpperCase() + words.slice(1);
+}
+
+/**
+ * The translated label for an event type, read from `audit.events` in the catalogue.
+ * The catalogue key is the event name with `.` replaced by `_`; an event type this
+ * client has never heard of renders as the raw name rather than a missing-key error,
+ * since the backend may ship one before the frontend catalogue does.
+ */
+export function useAuditEventLabel(): (eventType: string) => string {
+  const t = useTranslations("audit.events");
+  return (eventType) => {
+    const key = eventType.replaceAll(".", "_");
+    return t.has(key as never) ? t(key as never) : eventType;
+  };
+}
+
+/** A changed field's label (`isAdmin` → "Is admin"), derived when the catalogue has none. */
+export function useAuditFieldLabel(): (field: string) => string {
+  const t = useTranslations("audit.fields");
+  return (field) => (t.has(field as never) ? t(field as never) : humanizeField(field));
+}
+
+/** "isAdmin" -> "Is admin": the fallback for a field the catalogue does not name. */
+function humanizeField(key: string): string {
+  const spaced = key.replace(/([A-Z])/g, " $1").trim();
+  const lower = spaced.toLowerCase();
+  return lower.charAt(0).toUpperCase() + lower.slice(1);
 }
