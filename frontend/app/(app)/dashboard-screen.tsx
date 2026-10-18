@@ -15,9 +15,11 @@ import { useConversations } from "@/hooks/use-conversations";
 import { useProjects } from "@/hooks/use-projects";
 import { useSession } from "@/hooks/use-session";
 import { SORT } from "@/lib/api/endpoints";
-import { formatAbsolute, formatRelative } from "@/lib/dates";
+import { formatAbsolute } from "@/lib/dates";
+import { useFormatRelative } from "@/hooks/use-format-date";
 
 export function DashboardScreen() {
+  const formatRelative = useFormatRelative();
   const user = useSession();
 
   // Five each. The stat tiles read `totalCount` off THESE queries — it comes back on

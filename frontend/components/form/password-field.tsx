@@ -1,6 +1,7 @@
 "use client";
 
 import { Check, X } from "lucide-react";
+import { useTranslations } from "next-intl";
 import { useState } from "react";
 
 import { PasswordInput } from "@/components/form/password-input";
@@ -37,6 +38,7 @@ export function PasswordField({
   serverError?: string;
   autoComplete?: string;
 }) {
+  const t = useTranslations("forms.passwordField");
   const { data: policy } = usePasswordPolicy();
   const [focused, setFocused] = useState(false);
   const [touched, setTouched] = useState(false);
@@ -103,16 +105,13 @@ export function PasswordField({
         <FieldError>{serverError}</FieldError>
       ) : showInvalid ? (
         <FieldError>
-          {checks.find((check) => !check.passed)?.label ??
-            "That password is not accepted."}
+          {checks.find((check) => !check.passed)?.label ?? t("notAccepted")}
         </FieldError>
       ) : showValid ? (
         // Not "valid" — the wordlist check still happens server-side.
-        <FieldDescription className="text-success">Looks good so far.</FieldDescription>
+        <FieldDescription className="text-success">{t("looksGood")}</FieldDescription>
       ) : (
-        <FieldDescription>
-          Choose a strong password you do not use anywhere else.
-        </FieldDescription>
+        <FieldDescription>{t("hint")}</FieldDescription>
       )}
     </Field>
   );

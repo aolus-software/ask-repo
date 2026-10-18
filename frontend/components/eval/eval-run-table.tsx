@@ -15,7 +15,8 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import type { EvalRunSummary, EvalSetStatus } from "@/lib/api/types";
-import { formatAbsolute, formatRelative } from "@/lib/dates";
+import { formatAbsolute } from "@/lib/dates";
+import { useFormatRelative } from "@/hooks/use-format-date";
 
 /** Runs of one set, newest first. A row opens the run's results. */
 export function EvalRunTable({
@@ -34,6 +35,7 @@ export function EvalRunTable({
   /** Only a ready set can be run, so only a ready set is invited to be. */
   setStatus?: EvalSetStatus;
 }) {
+  const formatRelative = useFormatRelative();
   if (error) {
     return (
       <div className="p-4">

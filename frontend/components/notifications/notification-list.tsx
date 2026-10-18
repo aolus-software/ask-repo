@@ -2,10 +2,10 @@
 
 import Link from "next/link";
 
-import { formatRelative } from "@/lib/dates";
 import { notificationHref, notificationTitle } from "@/lib/notifications";
 import type { NotificationSummary } from "@/lib/api/types";
 import { cn } from "@/lib/utils";
+import { useFormatRelative } from "@/hooks/use-format-date";
 
 type Props = {
   notifications: NotificationSummary[];
@@ -15,6 +15,7 @@ type Props = {
 
 /** The shared row rendering, used by both the popover and `/notifications`. */
 export function NotificationList({ notifications, onRead, emptyMessage }: Props) {
+  const formatRelative = useFormatRelative();
   if (notifications.length === 0) {
     return (
       <p className="text-muted-foreground px-4 py-6 text-center text-sm">

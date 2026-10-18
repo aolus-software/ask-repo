@@ -1,6 +1,7 @@
 "use client";
 
 import { Loader2 } from "lucide-react";
+import { useTranslations } from "next-intl";
 
 import { SIZES } from "@/components/form/form-dialog";
 import { FormError } from "@/components/form/form-error";
@@ -41,6 +42,7 @@ export function ConfirmDialog({
    */
   children?: React.ReactNode;
 }) {
+  const t = useTranslations("common");
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className={SIZES.sm}>
@@ -56,7 +58,7 @@ export function ConfirmDialog({
             onClick={() => onOpenChange(false)}
             disabled={isPending}
           >
-            Cancel
+            {t("cancel")}
           </Button>
           <Button variant="destructive" onClick={onConfirm} disabled={isPending}>
             {isPending ? <Loader2 className="size-4 animate-spin" /> : null}

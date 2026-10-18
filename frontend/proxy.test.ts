@@ -84,6 +84,35 @@ describe("the proxy gate", () => {
     );
   });
 
+  it("mirrors the refreshed language onto the locale cookie", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        async () =>
+          new Response(
+            JSON.stringify({
+              accessToken: "fresh",
+              tokenType: "bearer",
+              expiresIn: 900,
+              language: "ms",
+              user: {},
+            }),
+            {
+              status: 200,
+              headers: {
+                "content-type": "application/json",
+                "set-cookie": "askrepo_refresh=rotated; Path=/auth",
+              },
+            },
+          ),
+      ),
+    );
+
+    const response = await proxy(request("/projects", SESSION));
+
+    expect(response.headers.getSetCookie().join("\n")).toContain("askrepo_locale=ms");
+  });
+
   it("clears the session and redirects when the refresh is refused", async () => {
     vi.stubGlobal(
       "fetch",

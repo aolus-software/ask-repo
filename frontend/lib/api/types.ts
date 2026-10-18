@@ -9,6 +9,8 @@
  * alias generator to every request and response schema.
  */
 
+import type { Language } from "@/lib/i18n/languages";
+
 export type ProjectStatus = "pending" | "cloning" | "indexing" | "ready" | "failed";
 export type FinishReason = "stop" | "error" | "timeout" | "disconnected";
 export type MessageRole = "user" | "assistant";
@@ -658,6 +660,11 @@ export interface AnswerStyle {
   detail: "brief" | "thorough" | null;
   familiarity: "new" | "expert" | null;
   format: "prose" | "bullets" | null;
+}
+
+/** `GET`/`PUT /me/language`. `null` is "never chose": the browser's language decides. */
+export interface LanguageSetting {
+  language: Language | null;
 }
 
 /** `GET /me/sessions` — one live sign-in. `id` is the refresh-token family. */

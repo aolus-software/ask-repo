@@ -9,6 +9,7 @@ import {
   cookieOptions,
 } from "@/lib/auth/cookies";
 import { forwardedHeaders } from "@/lib/auth/forwarded";
+import { applyLocale } from "@/lib/auth/locale-cookie";
 import { userAgentHeader } from "@/lib/auth/user-agent-header";
 import { apiUrl, extractSessionCookie } from "@/lib/auth/session";
 
@@ -46,6 +47,7 @@ export async function POST(request: Request): Promise<Response> {
     accessToken: string;
     expiresIn: number;
     user: unknown;
+    language?: unknown;
   };
   const sessionCookie = extractSessionCookie(upstream);
 
@@ -73,5 +75,6 @@ export async function POST(request: Request): Promise<Response> {
     sessionCookie,
     cookieOptions(SESSION_MAX_AGE_SECONDS),
   );
+  applyLocale(response, payload.language);
   return response;
 }

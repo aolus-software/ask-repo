@@ -9,7 +9,9 @@ describe("FormError", () => {
     render(
       <FormError error={new ApiError(409, "LAST_ADMIN", "That is the last admin.")} />,
     );
-    expect(screen.getByRole("alert")).toHaveTextContent("That is the last admin.");
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "This is the only administrator account. Promote another admin first.",
+    );
   });
 
   it("renders NOTHING when the backend named fields", () => {

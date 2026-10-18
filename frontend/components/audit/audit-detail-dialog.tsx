@@ -18,7 +18,7 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { useAuditEvent } from "@/hooks/use-audit-events";
 import { auditEventLabel } from "@/lib/audit";
-import { formatRelative } from "@/lib/dates";
+import { useFormatRelative } from "@/hooks/use-format-date";
 
 /**
  * One event, read without leaving the list.
@@ -37,6 +37,7 @@ export function AuditDetailDialog({
   eventId: string | null;
   onOpenChange: (open: boolean) => void;
 }) {
+  const formatRelative = useFormatRelative();
   const query = useAuditEvent(eventId ?? "");
   const event = query.data;
 

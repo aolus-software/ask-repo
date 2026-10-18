@@ -8,6 +8,7 @@ import {
   cookieOptions,
 } from "@/lib/auth/cookies";
 import { forwardedHeaders } from "@/lib/auth/forwarded";
+import { applyLocale } from "@/lib/auth/locale-cookie";
 import { refreshSession } from "@/lib/auth/session";
 
 /** Pages a signed-out visitor must reach. Everything else redirects to /login. */
@@ -77,6 +78,7 @@ export async function proxy(request: NextRequest): Promise<NextResponse> {
     refreshed.sessionCookie,
     cookieOptions(SESSION_MAX_AGE_SECONDS),
   );
+  applyLocale(response, refreshed.language);
   return response;
 }
 

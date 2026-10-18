@@ -112,3 +112,21 @@ describe("isApiError", () => {
     expect(isApiError(new Error("boom"))).toBe(false);
   });
 });
+
+it("keeps the field types beside the field messages", async () => {
+  const error = await parseApiError(
+    Response.json(
+      {
+        detail: {
+          code: "VALIDATION_ERROR",
+          message: "Request validation failed.",
+          fields: { name: "Field required" },
+          fieldTypes: { name: "missing" },
+        },
+      },
+      { status: 422 },
+    ),
+  );
+  expect(error.fieldTypes).toEqual({ name: "missing" });
+  expect(error.extra).not.toHaveProperty("fieldTypes");
+});

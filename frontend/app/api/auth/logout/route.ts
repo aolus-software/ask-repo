@@ -11,6 +11,7 @@ import { apiUrl } from "@/lib/auth/session";
  * Cookies are cleared regardless of what the backend answers: a logout that fails
  * server-side but leaves the browser holding a session is the worst outcome
  * available, so clearing locally always is the safe direction.
+ * The locale cookie is left in place: it is a display preference, not a credential.
  */
 export async function POST(request: Request): Promise<Response> {
   const { all } = await readBody(request);

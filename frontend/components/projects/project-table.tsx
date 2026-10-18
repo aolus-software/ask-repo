@@ -13,7 +13,8 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import type { ProjectResponse } from "@/lib/api/types";
-import { formatAbsolute, formatRelative } from "@/lib/dates";
+import { formatAbsolute } from "@/lib/dates";
+import { useFormatRelative } from "@/hooks/use-format-date";
 
 /** Column order is fixed by `docs/design.md`: identity, status, timestamps, actions. */
 export function ProjectTable({
@@ -25,6 +26,7 @@ export function ProjectTable({
   isLoading: boolean;
   rowActions: (project: ProjectResponse) => React.ReactNode;
 }) {
+  const formatRelative = useFormatRelative();
   return (
     <Table>
       <TableHeader>

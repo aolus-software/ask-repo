@@ -17,7 +17,8 @@ import {
 } from "@/components/ui/table";
 import { auditEventLabel } from "@/lib/audit";
 import type { AuditEventSummary } from "@/lib/api/types";
-import { formatAbsolute, formatRelative } from "@/lib/dates";
+import { formatAbsolute } from "@/lib/dates";
+import { useFormatRelative } from "@/hooks/use-format-date";
 
 /** Column order: event, outcome, actor, target, changed fields, time, actions.
  *
@@ -33,6 +34,7 @@ export function AuditTable({
   events: AuditEventSummary[];
   isLoading: boolean;
 }) {
+  const formatRelative = useFormatRelative();
   // `null` closes the dialog and is what stops it fetching, so one piece of state
   // carries both which row is open and whether anything is open at all.
   const [openEventId, setOpenEventId] = useState<string | null>(null);

@@ -1,6 +1,7 @@
 "use client";
 
 import { ArrowLeft, Loader2 } from "lucide-react";
+import { useTranslations } from "next-intl";
 import Link from "next/link";
 
 import type { FormShellProps } from "@/components/form/form-dialog";
@@ -47,6 +48,7 @@ export function FormPage({
    */
   hideSubmit?: boolean;
 }) {
+  const t = useTranslations("common");
   return (
     <div className={cn("mx-auto w-full", WIDTHS[width])}>
       {backHref ? (
@@ -58,7 +60,7 @@ export function FormPage({
           render={<Link href={backHref} />}
         >
           <ArrowLeft className="size-4" />
-          Back
+          {t("back")}
         </Button>
       ) : null}
 

@@ -17,7 +17,8 @@ import {
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { ModuleRowActions } from "@/components/checklist/module-row-actions";
 import type { ChecklistModuleResponse } from "@/lib/api/types";
-import { formatAbsolute, formatRelative } from "@/lib/dates";
+import { formatAbsolute } from "@/lib/dates";
+import { useFormatRelative } from "@/hooks/use-format-date";
 
 /** Column order is fixed by `docs/design.md`: identity, status, timestamps, actions. */
 export function ModuleTable({
@@ -27,6 +28,7 @@ export function ModuleTable({
   modules: ChecklistModuleResponse[];
   isLoading: boolean;
 }) {
+  const formatRelative = useFormatRelative();
   return (
     <div className="overflow-x-auto">
       <Table>
