@@ -27,15 +27,17 @@ export function LastOwnerNotice({ error }: { error: unknown }) {
   if (!(error instanceof ApiError) || error.code !== "LAST_OWNER") return null;
 
   const projects = (error.extra.projects ?? []) as BlockingProject[];
-  const byName = new Map(projects.map((project) => [project.name, project]));
   const parts = new Intl.ListFormat(locale, { type: "conjunction" }).formatToParts(
     projects.map((project) => project.name),
   );
 
+  // `element` parts arrive in input order, so a running index maps each one back to
+  // its project even when two projects share a name.
+  let next = 0;
   const message = t.rich("lastOwner", {
     projects: () =>
       parts.map((part, index) => {
-        const project = part.type === "element" ? byName.get(part.value) : null;
+        const project = part.type === "element" ? projects[next++] : null;
         return (
           <Fragment key={index}>
             {project ? (
