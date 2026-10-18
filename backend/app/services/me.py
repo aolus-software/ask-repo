@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.access import memberships_for, resolve_project_scope
 from app.core.audit import AuditEntry, AuditEventType, AuditRecorder, ChangedValue
 from app.core.errors import AppError, ErrorCode
+from app.core.language import Language
 from app.core.middleware import AuthenticatedUser
 from app.models.user import User
 from app.rag.answer_style import AnswerStyle
@@ -197,7 +198,7 @@ class MeService:
     async def language(self, user: AuthenticatedUser) -> LanguageSetting:
         """The caller's stored interface language, `None` if they never chose one."""
         row = await self._own_row(user)
-        return LanguageSetting(language=row.language)
+        return LanguageSetting(language=Language(row.language) if row.language else None)
 
     async def update_language(
         self, user: AuthenticatedUser, payload: LanguageSetting
