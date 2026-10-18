@@ -1,9 +1,9 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { useState } from "react";
 import { toast } from "sonner";
 
-import { KIND_LABELS } from "@/components/checklist/item-grid";
 import { FormDialog } from "@/components/form/form-dialog";
 import { Field, FieldDescription, FieldError, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
@@ -16,8 +16,10 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { useCreateChecklistItem } from "@/hooks/use-checklist-mutations";
-import { fieldError } from "@/lib/api/errors";
+import { useFieldErrorText } from "@/lib/i18n/error-text";
 import type { ChecklistItemKind } from "@/lib/api/types";
+
+const KINDS: ChecklistItemKind[] = ["positive", "negative"];
 
 const EMPTY = {
   feature: "",
@@ -52,8 +54,13 @@ export function CreateItemDialog({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
+  const t = useTranslations("checklist.createItemDialog");
+  const fieldErrorText = useFieldErrorText();
   const [values, setValues] = useState(EMPTY);
   const mutation = useCreateChecklistItem(moduleId);
+  const featureError = fieldErrorText(mutation.error, "feature");
+  const testNameError = fieldErrorText(mutation.error, "testName");
+  const expectedResultError = fieldErrorText(mutation.error, "expectedResult");
 
   function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -69,7 +76,7 @@ export function CreateItemDialog({
       },
       {
         onSuccess: () => {
-          toast.success("Test case added");
+          toast.success(t("added"));
           setValues(EMPTY);
           onOpenChange(false);
         },
@@ -84,74 +91,62 @@ export function CreateItemDialog({
         if (!next) setValues(EMPTY);
         onOpenChange(next);
       }}
-      title="Add a test case"
-      description="A test you want on this checklist that generation did not propose."
-      submitLabel="Add test case"
+      title={t("title")}
+      description={t("description")}
+      submitLabel={t("submit")}
       isPending={mutation.isPending}
       error={mutation.error}
       onSubmit={handleSubmit}
     >
       <Field>
         <FieldLabel htmlFor="new-item-feature">
-          Feature <span className="text-danger">*</span>
+          {t("feature")} <span className="text-danger">*</span>
         </FieldLabel>
         <Input
           id="new-item-feature"
-          placeholder="e.g., Login"
+          placeholder={t("featurePlaceholder")}
           value={values.feature}
           onChange={(event) => setValues({ ...values, feature: event.target.value })}
-          aria-invalid={Boolean(fieldError(mutation.error, "feature"))}
+          aria-invalid={Boolean(featureError)}
         />
-        <FieldDescription>
-          The grid groups by feature. An existing name files this test alongside the
-          others; a new one starts a new group.
-        </FieldDescription>
-        {fieldError(mutation.error, "feature") ? (
-          <FieldError>{fieldError(mutation.error, "feature")}</FieldError>
-        ) : null}
+        <FieldDescription>{t("featureHint")}</FieldDescription>
+        {featureError ? <FieldError>{featureError}</FieldError> : null}
       </Field>
 
       <Field>
         <FieldLabel htmlFor="new-item-name">
-          Test name <span className="text-danger">*</span>
+          {t("testName")} <span className="text-danger">*</span>
         </FieldLabel>
         <Input
           id="new-item-name"
-          placeholder="e.g., Rejects an expired reset token"
+          placeholder={t("testNamePlaceholder")}
           value={values.testName}
           onChange={(event) => setValues({ ...values, testName: event.target.value })}
-          aria-invalid={Boolean(fieldError(mutation.error, "testName"))}
+          aria-invalid={Boolean(testNameError)}
         />
-        {fieldError(mutation.error, "testName") ? (
-          <FieldError>{fieldError(mutation.error, "testName")}</FieldError>
-        ) : null}
+        {testNameError ? <FieldError>{testNameError}</FieldError> : null}
       </Field>
 
       <Field>
         <FieldLabel htmlFor="new-item-expected">
-          Expected result <span className="text-danger">*</span>
+          {t("expectedResult")} <span className="text-danger">*</span>
         </FieldLabel>
         <Textarea
           id="new-item-expected"
           className="min-h-24"
-          placeholder="e.g., 410 with code TOKEN_EXPIRED"
+          placeholder={t("expectedResultPlaceholder")}
           value={values.expectedResult}
           onChange={(event) =>
             setValues({ ...values, expectedResult: event.target.value })
           }
-          aria-invalid={Boolean(fieldError(mutation.error, "expectedResult"))}
+          aria-invalid={Boolean(expectedResultError)}
         />
-        <FieldDescription>
-          What a correct implementation should do, specifically. Not what it currently
-          does — that is the result a tester records.
-        </FieldDescription>
-        {fieldError(mutation.error, "expectedResult") ? (
-          <FieldError>{fieldError(mutation.error, "expectedResult")}</FieldError>
-        ) : null}
+        <FieldDescription>{t("expectedResultHint")}</FieldDescription>
+        {expectedResultError ? <FieldError>{expectedResultError}</FieldError> : null}
       </Field>
 
       <Field>
-        <FieldLabel htmlFor="new-item-kind">Kind</FieldLabel>
+        <FieldLabel htmlFor="new-item-kind">{t("kind")}</FieldLabel>
         <Select
           value={values.kind}
           onValueChange={(value: string | null | undefined) =>
@@ -160,21 +155,18 @@ export function CreateItemDialog({
         >
           <SelectTrigger id="new-item-kind" className="w-full">
             <SelectValue>
-              {(value: string) => KIND_LABELS[value as ChecklistItemKind]}
+              {(value: string) => t(`kinds.${value as ChecklistItemKind}`)}
             </SelectValue>
           </SelectTrigger>
           <SelectContent>
-            {Object.entries(KIND_LABELS).map(([value, label]) => (
+            {KINDS.map((value) => (
               <SelectItem key={value} value={value}>
-                {label}
+                {t(`kinds.${value}`)}
               </SelectItem>
             ))}
           </SelectContent>
         </Select>
-        <FieldDescription>
-          Negative means the feature should refuse something — bad input, a missing
-          permission, an expired token.
-        </FieldDescription>
+        <FieldDescription>{t("kindHint")}</FieldDescription>
       </Field>
     </FormDialog>
   );

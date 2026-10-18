@@ -1,6 +1,7 @@
 "use client";
 
 import { Edit2, Eye, MoreHorizontal, Play, Trash2 } from "lucide-react";
+import { useTranslations } from "next-intl";
 import Link from "next/link";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -25,11 +26,14 @@ import {
   useUpdateChecklistModule,
 } from "@/hooks/use-checklist-mutations";
 import { useProject } from "@/hooks/use-projects";
-import { fieldError, isApiError } from "@/lib/api/errors";
+import { useErrorText, useFieldErrorText } from "@/lib/i18n/error-text";
 import type { ChecklistModuleResponse } from "@/lib/api/types";
 import { PERMISSION, can } from "@/lib/can";
 
 export function ModuleRowActions({ module }: { module: ChecklistModuleResponse }) {
+  const t = useTranslations("checklist.rowActions");
+  const errorText = useErrorText();
+  const fieldErrorText = useFieldErrorText();
   const [editingName, setEditingName] = useState(module.name);
   const [editingPath, setEditingPath] = useState(module.sourcePath);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
@@ -37,6 +41,8 @@ export function ModuleRowActions({ module }: { module: ChecklistModuleResponse }
 
   const generate = useGenerateChecklistModule(module.id);
   const update = useUpdateChecklistModule(module.id);
+  const nameError = fieldErrorText(update.error, "name");
+  const sourcePathError = fieldErrorText(update.error, "sourcePath");
   const remove = useDeleteChecklistModule(module.id);
   const project = useProject(module.projectId);
   const canEditModule = project.data
@@ -54,11 +60,11 @@ export function ModuleRowActions({ module }: { module: ChecklistModuleResponse }
   // (`docs/audit-finding-solved-logs.md` §U6.5).
   const generateDisabledReason =
     module.status === "generating"
-      ? "Generation is already in progress"
+      ? t("generationInProgress")
       : module.pendingChangeSetId
-        ? "Review pending changes before generating again"
+        ? t("reviewPendingFirst")
         : !canGenerate
-          ? "You do not have permission to generate this checklist"
+          ? t("noGeneratePermission")
           : undefined;
   const isGenerating = generateDisabledReason !== undefined;
 
@@ -76,7 +82,7 @@ export function ModuleRowActions({ module }: { module: ChecklistModuleResponse }
 
     update.mutate(changes, {
       onSuccess: () => {
-        toast.success("Module updated");
+        toast.success(t("updated"));
         setEditingDialog(false);
       },
     });
@@ -90,7 +96,7 @@ export function ModuleRowActions({ module }: { module: ChecklistModuleResponse }
             <Button
               variant="ghost"
               size="icon"
-              aria-label={`Actions for ${module.name}`}
+              aria-label={t("actionsFor", { name: module.name })}
             />
           }
         >
@@ -104,14 +110,14 @@ export function ModuleRowActions({ module }: { module: ChecklistModuleResponse }
           */}
           <DropdownMenuItem render={<Link href={`/checklist/${module.id}`} />}>
             <Eye className="size-4" />
-            View detail
+            {t("viewDetail")}
           </DropdownMenuItem>
           {isGenerating ? (
             <Tooltip>
               <TooltipTrigger>
                 <DropdownMenuItem disabled>
                   <Play className="size-4" />
-                  Generate
+                  {t("generate")}
                 </DropdownMenuItem>
               </TooltipTrigger>
               <TooltipContent>{generateDisabledReason}</TooltipContent>
@@ -120,18 +126,13 @@ export function ModuleRowActions({ module }: { module: ChecklistModuleResponse }
             <DropdownMenuItem
               onClick={() =>
                 generate.mutate(undefined, {
-                  onSuccess: () => toast.success("Generation started"),
-                  onError: (error) =>
-                    toast.error(
-                      isApiError(error)
-                        ? error.message
-                        : "That did not start. Try again.",
-                    ),
+                  onSuccess: () => toast.success(t("generationStarted")),
+                  onError: (error) => toast.error(errorText(error)),
                 })
               }
             >
               <Play className="size-4" />
-              Generate
+              {t("generate")}
             </DropdownMenuItem>
           )}
 
@@ -150,13 +151,13 @@ export function ModuleRowActions({ module }: { module: ChecklistModuleResponse }
               }}
             >
               <Edit2 className="size-4" />
-              Edit
+              {t("edit")}
             </DropdownMenuItem>
           ) : null}
           {canDeleteModule ? (
             <DropdownMenuItem onClick={() => setConfirmingDelete(true)}>
               <Trash2 className="size-4" />
-              Delete
+              {t("delete")}
             </DropdownMenuItem>
           ) : null}
         </DropdownMenuContent>
@@ -165,56 +166,49 @@ export function ModuleRowActions({ module }: { module: ChecklistModuleResponse }
       <FormDialog
         open={editingDialog}
         onOpenChange={setEditingDialog}
-        title="Edit module"
-        submitLabel="Update"
+        title={t("editTitle")}
+        submitLabel={t("update")}
         isPending={update.isPending}
         error={update.error}
         onSubmit={handleEditSubmit}
       >
         <Field>
-          <FieldLabel htmlFor="edit-name">Name</FieldLabel>
+          <FieldLabel htmlFor="edit-name">{t("name")}</FieldLabel>
           <Input
             id="edit-name"
             value={editingName}
             onChange={(e) => setEditingName(e.target.value)}
-            aria-invalid={Boolean(fieldError(update.error, "name"))}
+            aria-invalid={Boolean(nameError)}
           />
-          {fieldError(update.error, "name") ? (
-            <FieldError>{fieldError(update.error, "name")}</FieldError>
-          ) : null}
+          {nameError ? <FieldError>{nameError}</FieldError> : null}
         </Field>
 
         <Field>
-          <FieldLabel htmlFor="edit-path">Source path</FieldLabel>
+          <FieldLabel htmlFor="edit-path">{t("sourcePath")}</FieldLabel>
           <PathPicker
             projectId={module.projectId}
             value={editingPath}
             onValueChange={setEditingPath}
             inputId="edit-path"
-            invalid={Boolean(fieldError(update.error, "sourcePath"))}
+            invalid={Boolean(sourcePathError)}
           />
-          <FieldDescription>
-            Browse or search the indexed repository, or type a repository-relative path.
-            Re-pointing at a path that matches nothing is refused.
-          </FieldDescription>
-          {fieldError(update.error, "sourcePath") ? (
-            <FieldError>{fieldError(update.error, "sourcePath")}</FieldError>
-          ) : null}
+          <FieldDescription>{t("sourcePathHint")}</FieldDescription>
+          {sourcePathError ? <FieldError>{sourcePathError}</FieldError> : null}
         </Field>
       </FormDialog>
 
       <ConfirmDialog
         open={confirmingDelete}
         onOpenChange={setConfirmingDelete}
-        title={`Delete ${module.name}?`}
-        description="This deletes the module's test cases, its proposed changes, and its chat. Recorded results go with them."
-        confirmLabel="Delete module"
+        title={t("deleteTitle", { name: module.name })}
+        description={t("deleteDescription")}
+        confirmLabel={t("deleteConfirm")}
         isPending={remove.isPending}
         error={remove.error}
         onConfirm={() =>
           remove.mutate(undefined, {
             onSuccess: () => {
-              toast.success("Module deleted");
+              toast.success(t("deleted"));
               setConfirmingDelete(false);
             },
           })

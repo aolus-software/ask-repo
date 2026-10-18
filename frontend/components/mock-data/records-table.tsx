@@ -1,6 +1,7 @@
 "use client";
 
 import { Database, Trash2 } from "lucide-react";
+import { useTranslations } from "next-intl";
 import { useState } from "react";
 import { toast } from "sonner";
 
@@ -17,7 +18,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { useDeleteMockDataRecord } from "@/hooks/use-mock-data-mutations";
-import { isApiError } from "@/lib/api/errors";
+import { useErrorText } from "@/lib/i18n/error-text";
 import type { MockDataRecordResponse } from "@/lib/api/types";
 
 /** Every field key across every record, first-seen order -- the columns are dynamic
@@ -33,6 +34,8 @@ function columnsFor(records: MockDataRecordResponse[]): string[] {
 }
 
 function DeleteRecordButton({ moduleId, id }: { moduleId: string; id: string }) {
+  const t = useTranslations("mockData.recordsTable");
+  const errorText = useErrorText();
   const [confirming, setConfirming] = useState(false);
   const remove = useDeleteMockDataRecord(moduleId);
 
@@ -41,7 +44,7 @@ function DeleteRecordButton({ moduleId, id }: { moduleId: string; id: string }) 
       <Button
         variant="ghost"
         size="icon"
-        aria-label="Delete record"
+        aria-label={t("deleteAria")}
         onClick={() => setConfirming(true)}
       >
         <Trash2 className="size-4" />
@@ -51,21 +54,19 @@ function DeleteRecordButton({ moduleId, id }: { moduleId: string; id: string }) 
       <ConfirmDialog
         open={confirming}
         onOpenChange={setConfirming}
-        title="Delete this record?"
-        description="This cannot be undone."
-        confirmLabel="Delete"
+        title={t("deleteTitle")}
+        description={t("deleteDescription")}
+        confirmLabel={t("delete")}
         isPending={remove.isPending}
         error={remove.error}
         onConfirm={() =>
           remove.mutate(id, {
             onSuccess: () => {
-              toast.success("Record deleted");
+              toast.success(t("deleted"));
               setConfirming(false);
             },
             onError: (error) => {
-              toast.error(
-                isApiError(error) ? error.message : "That did not delete. Try again.",
-              );
+              toast.error(errorText(error));
             },
           })
         }
@@ -87,6 +88,7 @@ export function RecordsTable({
   /** Mirrors the backend's `mockdata.edit` gate; it does not replace it. */
   canEdit: boolean;
 }) {
+  const t = useTranslations("mockData.recordsTable");
   const columns = columnsFor(records);
 
   // Every table sits inside a Card — `.claude/rules/design-system.md` §11 — so this
@@ -96,11 +98,9 @@ export function RecordsTable({
       <Card className="p-0">
         <EmptyState
           icon={Database}
-          title={isGenerating ? "Generating mock data…" : "No mock data yet"}
+          title={isGenerating ? t("generatingTitle") : t("emptyTitle")}
           description={
-            isGenerating
-              ? "A generation is running. The records appear here when it finishes."
-              : "Generate a batch, or ask for one by chat."
+            isGenerating ? t("generatingDescription") : t("emptyDescription")
           }
         />
       </Card>
