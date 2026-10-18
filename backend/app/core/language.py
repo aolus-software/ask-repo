@@ -19,3 +19,15 @@ class Language(StrEnum):
     ZH_HK = "zh-HK"
     ZH_TW = "zh-TW"
     KO = "ko"
+
+
+def parse_language(value: str | None) -> Language | None:
+    """A stored language tag as a `Language`, or `None` when unset or not shipped.
+
+    `users.language` is a plain string, so a row can hold a tag a later release no
+    longer ships; that must read as "no preference" rather than fail the request.
+    """
+    try:
+        return Language(value) if value else None
+    except ValueError:
+        return None

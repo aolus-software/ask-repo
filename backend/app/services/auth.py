@@ -15,7 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import Settings
 from app.core.audit import AuditEntry, AuditEventType, AuditRecorder
 from app.core.errors import AppError, ErrorCode
-from app.core.language import Language
+from app.core.language import parse_language
 from app.core.passwords import validate_and_hash_new_password
 from app.core.rate_limit import LoginAttemptLimiter
 from app.core.security import (
@@ -117,7 +117,7 @@ class AuthService:
             access_token=access_token,
             expires_in=expires_in,
             user=UserResponse.model_validate(user),
-            language=Language(user.language) if user.language else None,
+            language=parse_language(user.language),
         )
         return response, raw_refresh
 
