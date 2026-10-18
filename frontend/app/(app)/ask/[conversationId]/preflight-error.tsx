@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { toast } from "sonner";
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -8,6 +9,7 @@ import { useReindexProject } from "@/hooks/use-project-mutations";
 import { useProject } from "@/hooks/use-projects";
 import { isApiError } from "@/lib/api/errors";
 import { PERMISSION, can } from "@/lib/can";
+import { useErrorText } from "@/lib/i18n/error-text";
 
 /**
  * Pre-flight failures arrive as ordinary HTTP errors before any body, so they render
@@ -26,15 +28,17 @@ export function PreflightError({
   error: unknown;
   projectId: string;
 }) {
+  const t = useTranslations("ask");
+  const errorText = useErrorText();
   const project = useProject(projectId);
   const reindex = useReindexProject(projectId);
 
   if (!isApiError(error)) {
     return (
       <Alert variant="destructive">
-        <AlertTitle>That question could not be answered</AlertTitle>
+        <AlertTitle>{t("preflight.couldNotAnswer")}</AlertTitle>
         <AlertDescription>
-          {error instanceof Error ? error.message : "Something went wrong."}
+          {error instanceof Error ? error.message : t("preflight.genericError")}
         </AlertDescription>
       </Alert>
     );
@@ -46,13 +50,9 @@ export function PreflightError({
       : false;
     return (
       <Alert variant="destructive">
-        <AlertTitle>This project needs re-indexing</AlertTitle>
+        <AlertTitle>{t("preflight.needsReindexTitle")}</AlertTitle>
         <AlertDescription className="space-y-3">
-          <p>
-            It was indexed with a different embedding model, so its stored vectors
-            cannot be searched with the one this instance runs now. Re-index it and
-            questions will work again.
-          </p>
+          <p>{t("preflight.needsReindexBody")}</p>
           {canManage ? (
             <Button
               size="sm"
@@ -62,18 +62,16 @@ export function PreflightError({
                   onSuccess: (result) =>
                     toast.success(
                       result.enqueued
-                        ? "Re-index started"
-                        : "A re-index is already running",
+                        ? t("preflight.reindexStarted")
+                        : t("preflight.reindexAlreadyRunning"),
                     ),
                 })
               }
             >
-              Re-index now
+              {t("preflight.reindexNow")}
             </Button>
           ) : (
-            <p className="text-sm">
-              Ask the person who added it, or an administrator, to re-index.
-            </p>
+            <p className="text-sm">{t("preflight.askToReindex")}</p>
           )}
         </AlertDescription>
       </Alert>
@@ -83,18 +81,16 @@ export function PreflightError({
   if (error.code === "PROJECT_NOT_READY") {
     return (
       <Alert variant="info">
-        <AlertTitle>This project is not ready yet</AlertTitle>
-        <AlertDescription>
-          It is still cloning or indexing. Questions work once it reaches “Ready”.
-        </AlertDescription>
+        <AlertTitle>{t("preflight.notReadyTitle")}</AlertTitle>
+        <AlertDescription>{t("preflight.notReadyBody")}</AlertDescription>
       </Alert>
     );
   }
 
   return (
     <Alert variant="destructive">
-      <AlertTitle>That question could not be answered</AlertTitle>
-      <AlertDescription>{error.message}</AlertDescription>
+      <AlertTitle>{t("preflight.couldNotAnswer")}</AlertTitle>
+      <AlertDescription>{errorText(error)}</AlertDescription>
     </Alert>
   );
 }

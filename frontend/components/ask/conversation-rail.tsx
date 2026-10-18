@@ -2,6 +2,7 @@
 
 import { MessagesSquare, PanelLeft, Plus, Search, Trash2 } from "lucide-react";
 import Link from "next/link";
+import { useTranslations } from "next-intl";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { toast } from "sonner";
@@ -43,6 +44,7 @@ function DeleteConversationButton({
   id: string;
   onDeleted: () => void;
 }) {
+  const t = useTranslations("ask");
   const [confirming, setConfirming] = useState(false);
   const remove = useDeleteConversation(id);
 
@@ -51,7 +53,7 @@ function DeleteConversationButton({
       <Button
         variant="ghost"
         size="icon"
-        aria-label="Delete conversation"
+        aria-label={t("rail.deleteConversation")}
         className="opacity-0 group-hover:opacity-100"
         onClick={(event) => {
           event.preventDefault();
@@ -63,15 +65,15 @@ function DeleteConversationButton({
       <ConfirmDialog
         open={confirming}
         onOpenChange={setConfirming}
-        title="Delete this conversation?"
-        description="Only you can see it, and it cannot be recovered."
-        confirmLabel="Delete"
+        title={t("rail.deleteTitle")}
+        description={t("rail.deleteDescription")}
+        confirmLabel={t("rail.delete")}
         isPending={remove.isPending}
         error={remove.error}
         onConfirm={() =>
           remove.mutate(undefined, {
             onSuccess: () => {
-              toast.success("Conversation deleted");
+              toast.success(t("rail.deleted"));
               setConfirming(false);
               onDeleted();
             },
@@ -107,6 +109,7 @@ function ConversationList({
    * where the sheet's own close affordance already covers this. */
   collapseAction?: React.ReactNode;
 }) {
+  const t = useTranslations("ask");
   const formatRelative = useFormatRelative();
   const router = useRouter();
 
@@ -149,12 +152,12 @@ function ConversationList({
   return (
     <div className="flex h-full min-h-0 flex-col">
       <div className="mb-4 flex items-center justify-between gap-1">
-        <h2 className="text-sm font-medium">Conversations</h2>
+        <h2 className="text-sm font-medium">{t("rail.conversations")}</h2>
         <div className="flex items-center">
           <Button
             variant="ghost"
             size="icon"
-            aria-label="New conversation"
+            aria-label={t("rail.newConversation")}
             nativeButton={false}
             render={<Link href="/ask" onClick={onNavigate} />}
           >
@@ -169,8 +172,8 @@ function ConversationList({
           <Search className="text-muted-foreground pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2" />
           <Input
             className="pl-9"
-            placeholder="Search conversations"
-            aria-label="Search conversations"
+            placeholder={t("rail.searchConversations")}
+            aria-label={t("rail.searchConversations")}
             value={searchInput}
             onChange={(event) => setSearchInput(event.target.value)}
           />
@@ -191,16 +194,20 @@ function ConversationList({
           <ComboboxInput
             className="w-full"
             showClear
-            placeholder={projectsQuery.isLoading ? "Loading projects…" : "All projects"}
-            aria-label="Filter by project"
+            placeholder={
+              projectsQuery.isLoading
+                ? t("rail.loadingProjects")
+                : t("rail.allProjects")
+            }
+            aria-label={t("rail.filterByProject")}
           />
           <ComboboxContent>
             <ComboboxEmpty>
               {projectsQuery.isLoading
-                ? "Loading…"
+                ? t("rail.loading")
                 : projectsQuery.isError
-                  ? "Could not load projects."
-                  : "No project matches."}
+                  ? t("rail.couldNotLoadProjects")
+                  : t("rail.noProjectMatches")}
             </ComboboxEmpty>
             <ComboboxList>
               {(item: ProjectResponse) => (
@@ -236,9 +243,7 @@ function ConversationList({
           <EmptyState
             size="compact"
             description={
-              isFiltered
-                ? "No conversation matches."
-                : "Nothing yet. Pick a project and ask a question."
+              isFiltered ? t("rail.noConversationMatches") : t("rail.nothingYet")
             }
           />
         ) : (
@@ -254,7 +259,7 @@ function ConversationList({
                   )}
                 >
                   <span className="block truncate">
-                    {conversation.title ?? "Untitled conversation"}
+                    {conversation.title ?? t("rail.untitled")}
                   </span>
                   <span className="text-muted-foreground flex items-center gap-1 text-xs">
                     {/* Absent when the project is outside the page of 100 fetched
@@ -378,6 +383,7 @@ function useCollapsedPreference(): boolean {
 export function ConversationRail() {
   const params = useParams<{ conversationId?: string }>();
   const activeId = params?.conversationId;
+  const t = useTranslations("ask");
   const [mobileOpen, setMobileOpen] = useState(false);
   const collapsed = useCollapsedPreference();
 
@@ -392,7 +398,7 @@ export function ConversationRail() {
           <Button
             variant="ghost"
             size="icon"
-            aria-label="Show conversations"
+            aria-label={t("rail.showConversations")}
             onClick={toggleCollapsed}
           >
             <PanelLeft className="size-4" />
@@ -406,7 +412,7 @@ export function ConversationRail() {
               <Button
                 variant="ghost"
                 size="icon"
-                aria-label="Hide conversations"
+                aria-label={t("rail.hideConversations")}
                 onClick={toggleCollapsed}
               >
                 <PanelLeft className="size-4" />
@@ -422,11 +428,11 @@ export function ConversationRail() {
             render={<Button variant="outline" className="w-full justify-start" />}
           >
             <MessagesSquare className="size-4" />
-            Conversations
+            {t("rail.conversations")}
           </SheetTrigger>
           <SheetContent side="left" className="flex w-full flex-col gap-0 sm:max-w-sm">
             <SheetHeader className="border-border border-b">
-              <SheetTitle>Conversations</SheetTitle>
+              <SheetTitle>{t("rail.conversations")}</SheetTitle>
             </SheetHeader>
             <div className="min-h-0 flex-1 p-4">
               <ConversationList

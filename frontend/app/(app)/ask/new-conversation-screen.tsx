@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useState } from "react";
 
@@ -11,6 +12,7 @@ import { useCreateConversation } from "@/hooks/use-conversations";
 import { setPendingQuestion } from "@/lib/ask/pending";
 
 export function NewConversationScreen() {
+  const t = useTranslations("ask");
   const router = useRouter();
   const searchParams = useSearchParams();
   const [projectId, setProjectId] = useState<string | null>(
@@ -38,8 +40,8 @@ export function NewConversationScreen() {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Ask"
-        description="Questions are answered from the indexed code, with citations. Only you can see them."
+        title={t("newConversation.title")}
+        description={t("newConversation.description")}
       />
 
       <FormError error={create.error} />
@@ -51,8 +53,8 @@ export function NewConversationScreen() {
         disabled={!projectId || create.isPending}
         placeholder={
           projectId
-            ? "How does the withdrawal calculation work?"
-            : "Choose a project first"
+            ? t("newConversation.placeholderReady")
+            : t("newConversation.placeholderChooseProject")
         }
       />
     </div>

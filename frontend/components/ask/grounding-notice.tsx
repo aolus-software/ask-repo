@@ -1,4 +1,5 @@
 import { AlertTriangle } from "lucide-react";
+import { useTranslations } from "next-intl";
 
 import { Alert, AlertDescription } from "@/components/ui/alert";
 
@@ -13,18 +14,15 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
  * (`docs/audit-finding-solved-logs.md` §U6.3), so "pay attention to this" looks the same way
  * everywhere in the app.
  */
-const MESSAGES: Record<string, string> = {
-  no_context:
-    "Nothing relevant was found in this project, so no answer was generated from its code.",
-  uncited_answer:
-    "This answer does not cite any of the excerpts it was given. Treat it carefully.",
-  unknown_paths:
-    "This answer names files that were not among the excerpts retrieved. Those references may not exist.",
-  weak_evidence:
-    "The retrieved code may not fully cover this question. The answer names what it could not determine.",
-};
+const KNOWN_WARNINGS: ReadonlySet<string> = new Set([
+  "no_context",
+  "uncited_answer",
+  "unknown_paths",
+  "weak_evidence",
+]);
 
 export function GroundingNotice({ warnings }: { warnings: string[] }) {
+  const t = useTranslations("ask");
   if (warnings.length === 0) return null;
 
   return (
@@ -34,7 +32,9 @@ export function GroundingNotice({ warnings }: { warnings: string[] }) {
         <ul className="space-y-1">
           {warnings.map((warning) => (
             <li key={warning}>
-              {MESSAGES[warning] ?? `Grounding warning: ${warning}`}
+              {KNOWN_WARNINGS.has(warning)
+                ? t(`groundingWarnings.${warning as "no_context"}`)
+                : t("groundingWarnings.unknown", { warning })}
             </li>
           ))}
         </ul>

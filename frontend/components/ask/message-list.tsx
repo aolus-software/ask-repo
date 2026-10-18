@@ -1,6 +1,7 @@
 "use client";
 
 import { ChevronDown, ChevronUp, User } from "lucide-react";
+import { useTranslations } from "next-intl";
 import { useState } from "react";
 
 import { Answer } from "@/components/ask/answer";
@@ -20,6 +21,7 @@ type MessageFeedbackTarget = "message" | "checklist_message" | "mock_data_messag
  * around it rather than floating with nothing to mark whose turn it is.
  */
 function UserTurn({ content }: { content: string }) {
+  const t = useTranslations("ask");
   // Local and per-message: collapsing one long question must not touch any other
   // turn, and nothing here needs to survive a remount.
   const [collapsed, setCollapsed] = useState(false);
@@ -43,7 +45,7 @@ function UserTurn({ content }: { content: string }) {
             variant="ghost"
             size="icon-sm"
             className="shrink-0"
-            aria-label={collapsed ? "Show full message" : "Collapse message"}
+            aria-label={collapsed ? t("messages.showFull") : t("messages.collapse")}
             onClick={() => setCollapsed((current) => !current)}
           >
             {collapsed ? (
@@ -65,6 +67,8 @@ function AssistantMessage({
   message: MessageResponse;
   feedbackTarget: MessageFeedbackTarget;
 }) {
+  const t = useTranslations("ask");
+
   return (
     <AssistantTurn>
       {/* Sources above the answer, as on the live turn: citations arrive before the
@@ -74,8 +78,8 @@ function AssistantMessage({
       {message.finishReason && message.finishReason !== "stop" ? (
         <p className="text-muted-foreground mt-2 text-xs">
           {message.finishReason === "disconnected"
-            ? "This answer was interrupted. What arrived is kept."
-            : `This answer ended early (${message.finishReason}).`}
+            ? t("messages.interrupted")
+            : t("messages.endedEarly", { reason: message.finishReason })}
         </p>
       ) : null}
       <FeedbackControl

@@ -1,6 +1,7 @@
 "use client";
 
 import { useQueryClient } from "@tanstack/react-query";
+import { useTranslations } from "next-intl";
 import { useCallback, useRef, useState } from "react";
 
 import { apiFetchRaw } from "@/lib/api/client";
@@ -95,6 +96,7 @@ export function reduceAskEvent(state: AskState, event: SseEvent): AskState {
 }
 
 export function useAskStream(conversationId: string) {
+  const t = useTranslations("ask");
   const queryClient = useQueryClient();
   const [state, setState] = useState<AskState | null>(null);
   const abortRef = useRef<AbortController | null>(null);
@@ -136,7 +138,7 @@ export function useAskStream(conversationId: string) {
           },
         );
 
-        if (!response.body) throw new Error("The server sent no answer stream.");
+        if (!response.body) throw new Error(t("stream.noStream"));
 
         setState(current);
         started = true;
@@ -190,7 +192,7 @@ export function useAskStream(conversationId: string) {
           isStreaming: false,
           terminal: "error",
           finishReason: "error",
-          errorMessage: error instanceof Error ? error.message : "The answer failed.",
+          errorMessage: error instanceof Error ? error.message : t("stream.failed"),
         };
       } finally {
         if (frameHandle !== null) cancelAnimationFrame(frameHandle);
@@ -219,7 +221,7 @@ export function useAskStream(conversationId: string) {
         void queryClient.invalidateQueries({ queryKey: keys.conversations.all });
       }
     },
-    [conversationId, queryClient],
+    [conversationId, queryClient, t],
   );
 
   const reset = useCallback(() => {

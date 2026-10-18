@@ -2,13 +2,12 @@
 
 import { useMutation } from "@tanstack/react-query";
 import { ThumbsDown, ThumbsUp } from "lucide-react";
+import { useTranslations } from "next-intl";
 import { useState } from "react";
 import { toast } from "sonner";
 
 import {
-  NOTE_DISCLOSURE,
   NOTE_MAX_LENGTH,
-  REASON_LABELS,
   reasonsFor,
 } from "@/components/output-feedback/reason-labels";
 import { Button } from "@/components/ui/button";
@@ -56,6 +55,7 @@ export function FeedbackControl({
   initial,
   className,
 }: FeedbackControlProps) {
+  const t = useTranslations("outputFeedback");
   const [vote, setVote] = useState<MyFeedback | null>(initial ?? null);
   const [open, setOpen] = useState(false);
   const [reasons, setReasons] = useState<FeedbackReasonCode[]>(
@@ -77,7 +77,7 @@ export function FeedbackControl({
     },
     onError: (_error, _next, context) => {
       setVote(context?.previous ?? null);
-      toast.error("Your feedback was not saved. Try again.");
+      toast.error(t("saveFailed"));
     },
   });
 
@@ -120,7 +120,7 @@ export function FeedbackControl({
       <Button
         variant="ghost"
         size="icon-sm"
-        aria-label="Helpful"
+        aria-label={t("helpful")}
         aria-pressed={vote?.rating === "up"}
         className={vote?.rating === "up" ? "text-primary" : "text-muted-foreground"}
         disabled={mutation.isPending}
@@ -134,7 +134,7 @@ export function FeedbackControl({
             <Button
               variant="ghost"
               size="icon-sm"
-              aria-label="Not helpful"
+              aria-label={t("notHelpful")}
               aria-pressed={vote?.rating === "down"}
               className={
                 vote?.rating === "down" ? "text-primary" : "text-muted-foreground"
@@ -152,7 +152,7 @@ export function FeedbackControl({
           <ThumbsDown className="size-4" />
         </PopoverTrigger>
         <PopoverContent className="w-80 space-y-3" align="start">
-          <p className="text-sm font-medium">What went wrong?</p>
+          <p className="text-sm font-medium">{t("whatWentWrong")}</p>
           <div className="space-y-2">
             {reasonsFor(targetType).map((code) => (
               <Label key={code} className="flex items-center gap-2 font-normal">
@@ -160,24 +160,24 @@ export function FeedbackControl({
                   checked={reasons.includes(code)}
                   onCheckedChange={(checked) => toggleReason(code, checked === true)}
                 />
-                {REASON_LABELS[code]}
+                {t(`reasons.${code}`)}
               </Label>
             ))}
           </div>
           <Textarea
-            aria-label="Anything else?"
-            placeholder="Anything else? (optional)"
+            aria-label={t("noteLabel")}
+            placeholder={t("notePlaceholder")}
             maxLength={NOTE_MAX_LENGTH}
             value={note}
             onChange={(event) => setNote(event.target.value)}
           />
-          <p className="text-muted-foreground text-xs">{NOTE_DISCLOSURE}</p>
+          <p className="text-muted-foreground text-xs">{t("noteDisclosure")}</p>
           <p className="text-muted-foreground text-xs">
             {note.length}/{NOTE_MAX_LENGTH}
           </p>
           <div className="flex justify-end">
             <Button size="sm" disabled={reasons.length === 0} onClick={sendDown}>
-              Send feedback
+              {t("send")}
             </Button>
           </div>
         </PopoverContent>
