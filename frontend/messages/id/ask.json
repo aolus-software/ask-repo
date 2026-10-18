@@ -1,0 +1,94 @@
+{
+  "newConversation": {
+    "title": "Tanya",
+    "description": "Pertanyaan dijawab dari kode yang sudah diindeks, lengkap dengan kutipan. Hanya Anda yang bisa melihatnya.",
+    "placeholderReady": "Bagaimana cara kerja perhitungan penarikan dana?",
+    "placeholderChooseProject": "Pilih proyek terlebih dahulu"
+  },
+  "conversation": {
+    "untitled": "Percakapan tanpa judul",
+    "newTitle": "Percakapan baru",
+    "notFound": "Percakapan itu tidak ada.",
+    "projectUnavailable": "Proyek itu sudah tidak tersedia.",
+    "answerStopped": "Jawaban terhenti",
+    "tryAgain": "Coba lagi",
+    "answering": "Menjawab…",
+    "askFollowUp": "Ajukan pertanyaan lanjutan"
+  },
+  "phases": {
+    "queued": "Mengantre…",
+    "classifying": "Memahami pertanyaan…",
+    "retrieving": "Mencari di basis kode…",
+    "grading": "Memeriksa hasil temuan…",
+    "generating": "Menulis jawaban…"
+  },
+  "stream": {
+    "noStream": "Server tidak mengirim aliran jawaban.",
+    "failed": "Jawaban gagal dibuat."
+  },
+  "composer": {
+    "questionLabel": "Pertanyaan Anda",
+    "ask": "Tanya"
+  },
+  "answer": {
+    "copyCode": "Salin kode"
+  },
+  "groundingWarnings": {
+    "no_context": "Tidak ada yang relevan ditemukan di proyek ini, sehingga tidak ada jawaban yang dibuat dari kodenya.",
+    "uncited_answer": "Jawaban ini tidak mengutip satu pun cuplikan yang diberikan kepadanya. Perlakukan dengan hati-hati.",
+    "unknown_paths": "Jawaban ini menyebut berkas yang tidak ada di antara cuplikan yang diambil. Rujukan tersebut mungkin tidak ada.",
+    "weak_evidence": "Kode yang diambil mungkin tidak sepenuhnya mencakup pertanyaan ini. Jawaban menyebutkan hal yang tidak dapat ditentukannya.",
+    "unknown": "Peringatan landasan jawaban: {warning}"
+  },
+  "interruptedNote": "Koneksi terputus. Bagian yang sudah diterima di atas tetap disimpan.",
+  "messages": {
+    "showFull": "Tampilkan pesan lengkap",
+    "collapse": "Ciutkan pesan",
+    "interrupted": "Jawaban ini terputus. Bagian yang sudah diterima tetap disimpan.",
+    "endedEarly": "Jawaban ini berakhir lebih awal ({reason})."
+  },
+  "projectPicker": {
+    "loadingProjects": "Memuat proyek…",
+    "searchProjects": "Cari proyek",
+    "label": "Proyek",
+    "loading": "Memuat…",
+    "noMatch": "Tidak ada proyek yang cocok."
+  },
+  "sources": {
+    "title": "Sumber ({count})",
+    "lines": "baris {start}–{end}"
+  },
+  "preflight": {
+    "couldNotAnswer": "Pertanyaan itu tidak dapat dijawab",
+    "genericError": "Terjadi kesalahan.",
+    "needsReindexTitle": "Proyek ini perlu diindeks ulang",
+    "needsReindexBody": "Proyek ini diindeks dengan model embedding yang berbeda, sehingga vektor yang tersimpan tidak dapat dicari dengan model yang dijalankan instans ini sekarang. Indeks ulang proyek ini dan pertanyaan akan dapat dijawab lagi.",
+    "reindexNow": "Indeks ulang sekarang",
+    "reindexStarted": "Pengindeksan ulang dimulai",
+    "reindexAlreadyRunning": "Pengindeksan ulang sedang berjalan",
+    "askToReindex": "Minta orang yang menambahkannya, atau seorang administrator, untuk mengindeks ulang.",
+    "notReadyTitle": "Proyek ini belum siap",
+    "notReadyBody": "Proyek ini masih dikloning atau diindeks. Pertanyaan dapat dijawab setelah statusnya “Siap”."
+  },
+  "rail": {
+    "deleteConversation": "Hapus percakapan",
+    "deleteTitle": "Hapus percakapan ini?",
+    "deleteDescription": "Hanya Anda yang bisa melihatnya, dan percakapan ini tidak dapat dipulihkan.",
+    "delete": "Hapus",
+    "deleted": "Percakapan dihapus",
+    "conversations": "Percakapan",
+    "newConversation": "Percakapan baru",
+    "searchConversations": "Cari percakapan",
+    "loadingProjects": "Memuat proyek…",
+    "allProjects": "Semua proyek",
+    "filterByProject": "Filter berdasarkan proyek",
+    "loading": "Memuat…",
+    "couldNotLoadProjects": "Tidak dapat memuat proyek.",
+    "noProjectMatches": "Tidak ada proyek yang cocok.",
+    "noConversationMatches": "Tidak ada percakapan yang cocok.",
+    "nothingYet": "Belum ada apa pun. Pilih proyek lalu ajukan pertanyaan.",
+    "untitled": "Percakapan tanpa judul",
+    "showConversations": "Tampilkan percakapan",
+    "hideConversations": "Sembunyikan percakapan"
+  }
+}

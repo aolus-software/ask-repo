@@ -1,0 +1,82 @@
+{
+  "title": "Peran",
+  "description": "Definisi peran di seluruh instans dan apa yang dapat dilakukan masing-masing.",
+  "forbidden": "Hanya administrator yang dapat mengelola peran.",
+  "createRole": "Buat peran",
+  "emptyTitle": "Belum ada peran",
+  "emptyDescription": "Buat peran untuk memberikan sesuatu selain viewer, editor, atau owner.",
+  "table": {
+    "columns": {
+      "name": "Nama",
+      "description": "Deskripsi",
+      "permissions": "Izin",
+      "members": "Anggota",
+      "actions": "Aksi"
+    },
+    "permissionCount": "{count} dari {total}",
+    "noDescription": "—"
+  },
+  "badge": {
+    "builtIn": "Peran bawaan, tidak dapat diubah"
+  },
+  "actionsFor": "Aksi untuk {name}",
+  "actions": {
+    "view": "Lihat",
+    "edit": "Ubah",
+    "delete": "Hapus"
+  },
+  "delete": {
+    "title": "Hapus {name}?",
+    "description": "Ini tidak dapat dibatalkan. Siapa pun yang masih memegangnya pada sebuah proyek harus dipindahkan ke peran lain terlebih dahulu.",
+    "confirm": "Hapus",
+    "done": "Peran dihapus"
+  },
+  "create": {
+    "title": "Buat peran",
+    "description": "Beri nama, lalu pilih apa yang dapat dilakukannya di halaman berikutnya.",
+    "submit": "Buat peran",
+    "done": "Peran dibuat",
+    "fields": {
+      "name": "Nama",
+      "description": "Deskripsi"
+    }
+  },
+  "matrix": {
+    "fallbackDescription": "Apa yang dapat dilakukan peran ini pada sebuah proyek.",
+    "notFound": "Peran itu tidak ada, atau sudah dihapus.",
+    "builtInNotice": "viewer, editor, dan owner adalah bawaan dan tidak dapat diubah.",
+    "save": "Simpan izin",
+    "saved": "Izin disimpan",
+    "applyNotice": "Penyimpanan langsung berlaku bagi semua pemegang peran ini — berlaku pada permintaan mereka berikutnya."
+  },
+  "groups": {
+    "project": "Proyek",
+    "questions": "Pertanyaan",
+    "qaChecklist": "Daftar Periksa QA",
+    "mockData": "Data tiruan",
+    "eval": "Evaluasi",
+    "membership": "Keanggotaan"
+  },
+  "permissions": {
+    "project_read": "project.read",
+    "project_update": "project.update",
+    "project_delete": "project.delete",
+    "project_reindex": "project.reindex",
+    "question_ask": "question.ask",
+    "checklist_read": "checklist.read",
+    "module_create": "module.create",
+    "module_edit": "module.edit",
+    "module_delete": "module.delete",
+    "generate_run": "generate.run",
+    "changeset_apply": "changeset.apply",
+    "item_edit": "item.edit",
+    "result_record": "result.record",
+    "mockdata_read": "mockdata.read",
+    "mockdata_edit": "mockdata.edit",
+    "eval_read": "eval.read",
+    "eval_run": "eval.run",
+    "membership_read": "membership.read",
+    "membership_grant": "membership.grant",
+    "membership_revoke": "membership.revoke"
+  }
+}

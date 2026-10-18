@@ -1,0 +1,89 @@
+{
+  "language": {
+    "intro": "Bahasa setiap layar dan email. Jawaban mengikuti bahasa yang Anda gunakan saat bertanya.",
+    "browserDefault": "Bawaan peramban",
+    "save": "Simpan bahasa",
+    "saved": "Bahasa disimpan"
+  },
+  "screen": {
+    "title": "Profil",
+    "description": "Akun, sesi, dan pengaturan Anda.",
+    "sectionsAria": "Bagian profil",
+    "sections": {
+      "account": "Akun",
+      "answerStyle": "Gaya jawaban",
+      "language": "Bahasa",
+      "sessions": "Sesi",
+      "activity": "Aktivitas",
+      "notifications": "Notifikasi",
+      "password": "Kata sandi"
+    }
+  },
+  "account": {
+    "adminNote": "Sebagai administrator, Anda dapat melihat setiap proyek. Daftar di bawah hanya proyek yang Anda ikuti sebagai anggota.",
+    "empty": "Anda belum menjadi anggota proyek mana pun.",
+    "columns": {
+      "project": "Proyek",
+      "role": "Peran"
+    }
+  },
+  "sessions": {
+    "lastSignedIn": "Terakhir masuk <when>{time}</when>",
+    "never": "belum pernah",
+    "columns": {
+      "device": "Perangkat",
+      "ipAddress": "Alamat IP",
+      "started": "Dimulai",
+      "lastActive": "Terakhir aktif",
+      "actions": "Aksi"
+    },
+    "thisDevice": "Perangkat ini",
+    "logOut": "Keluar",
+    "logOutEverywhere": "Keluar dari semua perangkat",
+    "confirmTitle": "Keluarkan sesi ini?",
+    "confirmDescription": "Sesi ini tidak dapat menyegarkan lagi, tetapi mungkin tetap masuk hingga token aksesnya saat ini kedaluwarsa — 15 menit secara bawaan.",
+    "confirmLabel": "Keluarkan",
+    "signedOut": "Sesi dikeluarkan"
+  },
+  "activity": {
+    "empty": "Belum ada yang tercatat.",
+    "project": "Proyek",
+    "columns": {
+      "event": "Peristiwa",
+      "outcome": "Hasil",
+      "target": "Target",
+      "ipAddress": "Alamat IP",
+      "time": "Waktu"
+    }
+  },
+  "answerStyle": {
+    "intro": "Membentuk jawaban yang Anda dapatkan di Tanya. Tidak pernah mengubah Daftar Periksa QA atau Data Tiruan, yang dipakai bersama oleh seluruh tim Anda.",
+    "default": "Bawaan",
+    "save": "Simpan gaya jawaban",
+    "saved": "Gaya jawaban disimpan",
+    "dials": {
+      "detail": "Detail",
+      "familiarity": "Keakraban",
+      "format": "Format"
+    },
+    "options": {
+      "brief": "Ringkas",
+      "thorough": "Menyeluruh",
+      "new": "Baru mengenal repositori ini",
+      "expert": "Ahli",
+      "prose": "Prosa",
+      "bullets": "Poin-poin"
+    }
+  },
+  "password": {
+    "resetSent": "Jika email dapat menjangkau Anda, tautan pengaturan ulang sedang dikirim",
+    "resetFailed": "Tidak dapat mengirim tautan pengaturan ulang. Coba lagi.",
+    "changed": "Kata sandi diubah",
+    "changedDescription": "Sesi Anda yang lain telah dikeluarkan",
+    "formTitle": "Ubah kata sandi",
+    "formDescription": "Sesi Anda yang lain akan dikeluarkan. Sesi ini tetap masuk.",
+    "submit": "Ubah kata sandi",
+    "forgotten": "Lupa kata sandi Anda saat ini? Kami dapat mengirimkan tautan lewat email.",
+    "emailReset": "Kirimi saya tautan pengaturan ulang"
+  }
+}

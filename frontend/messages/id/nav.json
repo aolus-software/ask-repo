@@ -1,0 +1,32 @@
+{
+  "items": {
+    "dashboard": "Dasbor",
+    "projects": "Proyek",
+    "ask": "Tanya",
+    "checklist": "Daftar periksa",
+    "settings": "Pengaturan",
+    "users": "Pengguna",
+    "roles": "Peran",
+    "auditTrail": "Jejak audit",
+    "feedback": "Umpan balik",
+    "notifications": "Notifikasi",
+    "profile": "Profil",
+    "export": "Ekspor",
+    "eval": "Evaluasi"
+  },
+  "navbar": {
+    "toggleNavigation": "Buka/tutup navigasi",
+    "toggleTheme": "Ganti tema"
+  },
+  "account": {
+    "label": "Akun",
+    "profile": "Profil",
+    "logOut": "Keluar",
+    "logOutEverywhere": "Keluar dari semua perangkat"
+  },
+  "pagination": {
+    "summary": "Halaman {page} dari {totalPages} · total {totalCount}",
+    "previous": "Sebelumnya",
+    "next": "Berikutnya"
+  }
+}
