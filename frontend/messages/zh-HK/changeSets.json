@@ -1,0 +1,14 @@
+{
+  "operationRow": {
+    "include": "包含此項變更",
+    "noRationale": "未提供理由。"
+  },
+  "operationCounts": {
+    "summary": "新增 {added} 項、變更 {updated} 項、移除 {removed} 項"
+  },
+  "operationGroups": {
+    "added": "新增",
+    "changed": "變更",
+    "removed": "移除"
+  }
+}

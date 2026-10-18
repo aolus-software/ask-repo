@@ -1,0 +1,82 @@
+{
+  "language": {
+    "intro": "每個畫面與電子郵件所使用的語言。回答會依你提問時使用的語言。",
+    "browserDefault": "瀏覽器預設",
+    "save": "儲存語言",
+    "saved": "已儲存語言"
+  },
+  "screen": {
+    "title": "個人檔案",
+    "description": "你的帳號、工作階段與設定。",
+    "sectionsAria": "個人檔案區段",
+    "sections": {
+      "account": "帳號",
+      "answerStyle": "回答風格",
+      "language": "語言",
+      "sessions": "工作階段",
+      "activity": "活動",
+      "notifications": "通知",
+      "password": "密碼"
+    }
+  },
+  "account": {
+    "adminNote": "身為管理員，你可以看到所有專案。下方清單僅列出你所屬的專案。",
+    "empty": "你目前還不是任何專案的成員。",
+    "columns": { "project": "專案", "role": "角色" }
+  },
+  "sessions": {
+    "lastSignedIn": "上次登入於 <when>{time}</when>",
+    "never": "從未",
+    "columns": {
+      "device": "裝置",
+      "ipAddress": "IP 位址",
+      "started": "開始時間",
+      "lastActive": "最近活動",
+      "actions": "操作"
+    },
+    "thisDevice": "此裝置",
+    "logOut": "登出",
+    "logOutEverywhere": "登出所有裝置",
+    "confirmTitle": "要登出此工作階段嗎？",
+    "confirmDescription": "它將無法再重新整理，但在目前的存取權杖過期之前（預設為 15 分鐘）可能仍保持登入。",
+    "confirmLabel": "登出",
+    "signedOut": "已登出工作階段"
+  },
+  "activity": {
+    "empty": "目前沒有任何記錄。",
+    "project": "專案",
+    "columns": {
+      "event": "事件",
+      "outcome": "結果",
+      "target": "目標",
+      "ipAddress": "IP 位址",
+      "time": "時間"
+    }
+  },
+  "answerStyle": {
+    "intro": "調整你在「提問」中得到的回答。它絕不會改變整個團隊共用的 QA 檢查清單或模擬資料。",
+    "default": "預設",
+    "save": "儲存回答風格",
+    "saved": "已儲存回答風格",
+    "dials": { "detail": "詳細程度", "familiarity": "熟悉程度", "format": "格式" },
+    "options": {
+      "brief": "簡短",
+      "thorough": "詳盡",
+      "new": "初次接觸此儲存庫",
+      "expert": "專家",
+      "prose": "段落",
+      "bullets": "項目符號"
+    }
+  },
+  "password": {
+    "resetSent": "若郵件能寄達你，重設連結已在寄送途中",
+    "resetFailed": "無法寄送重設連結。請再試一次。",
+    "changed": "密碼已變更",
+    "changedDescription": "你的其他工作階段已被登出",
+    "formTitle": "變更密碼",
+    "formDescription": "你的其他工作階段將被登出。目前這個仍保持登入。",
+    "submit": "變更密碼",
+    "forgotten": "忘記目前的密碼了嗎？我們可以改為寄送連結到你的電子郵件。",
+    "emailReset": "寄送重設連結給我"
+  }
+}

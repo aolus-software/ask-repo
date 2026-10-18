@@ -1,0 +1,120 @@
+{
+  "questionTypes": { "explain": "설명", "locate": "위치 찾기" },
+  "mix": { "balanced": "균형", "explain": "설명만", "locate": "위치 찾기만" },
+  "tally": {
+    "summary": "적중 {hits}/{answered} · 정답 {correct} · 부분 정답 {partial} · 오답 {wrong}",
+    "summaryWithErrors": "적중 {hits}/{answered} · 정답 {correct} · 부분 정답 {partial} · 오답 {wrong} · 오류 {errors}"
+  },
+  "wholeProject": "프로젝트 전체",
+  "setTable": {
+    "emptyTitle": "아직 평가 세트가 없습니다",
+    "emptyDescription": "참조 답변이 포함된 질문 세트를 생성한 다음 실행해 이 프로젝트에서 어시스턴트가 어떻게 답하는지 확인하세요.",
+    "columns": {
+      "set": "세트",
+      "path": "경로",
+      "pairs": "쌍",
+      "status": "상태",
+      "latestRun": "최근 실행",
+      "created": "생성일",
+      "actions": "작업"
+    },
+    "noRuns": "아직 실행 없음",
+    "actionsFor": "{name}에 대한 작업",
+    "delete": "삭제"
+  },
+  "deleteDialog": {
+    "titleNamed": "{name}을(를) 삭제하시겠습니까?",
+    "title": "평가 세트를 삭제하시겠습니까?",
+    "description": "질문, 모든 실행과 그 결과가 모든 사용자에 대해 함께 삭제됩니다.",
+    "confirm": "평가 세트 삭제",
+    "deleted": "평가 세트를 삭제했습니다"
+  },
+  "pairTable": {
+    "generatingTitle": "질문을 생성하는 중…",
+    "emptyTitle": "질문 없음",
+    "generatingDescription": "생성이 끝나는 즉시 질문이 여기에 표시됩니다.",
+    "emptyDescription": "이 세트에는 질문이 없습니다.",
+    "columns": {
+      "question": "질문",
+      "type": "유형",
+      "source": "출처",
+      "excluded": "제외"
+    },
+    "excludeLabel": "제외: {question}",
+    "referenceAnswer": "참조 답변",
+    "saveFailed": "저장되지 않았습니다. 다시 시도하세요"
+  },
+  "runTable": {
+    "generatingTitle": "질문을 생성하는 중…",
+    "noRunsTitle": "실행 없음",
+    "generatingDescription": "질문이 준비되면 세트를 실행할 수 있습니다.",
+    "failedDescription": "생성에 실패한 세트는 실행할 수 없습니다.",
+    "emptyTitle": "아직 실행이 없습니다",
+    "emptyDescription": "세트를 실행하면 각 질문을 던지고 참조 답변과 비교해 답변을 평가합니다.",
+    "columns": {
+      "started": "시작",
+      "status": "상태",
+      "results": "결과",
+      "model": "모델"
+    }
+  },
+  "runSheet": {
+    "title": "실행 결과",
+    "loadFailed": "실행을 불러오지 못했습니다",
+    "loading": "실행을 불러오는 중…",
+    "notFound": "해당 실행이 존재하지 않거나 삭제되었습니다.",
+    "failedTitle": "실행 실패",
+    "retrievalHit": "검색 적중",
+    "retrievalMiss": "검색 실패",
+    "judge": "평가자: {reason}",
+    "warnings": "경고: {warnings}"
+  },
+  "compare": {
+    "judgeChanged": "이 실행들은 서로 다른 모델로 평가되었습니다. 판정 변화는 답변이 아니라 평가자 때문일 수 있습니다. 검색 적중에는 영향이 없습니다.",
+    "comparedOn": "두 실행이 모두 답변한 {count, plural, other {#개 쌍}}을 기준으로 비교",
+    "base": "기준",
+    "head": "대상",
+    "tally": "적중 {hits}/{total} · 정답 {correct} · 부분 정답 {partial} · 오답 {wrong} · 오류 {errors}",
+    "noChange": "이 실행들 사이에 변경된 쌍이 없습니다.",
+    "retrievalChange": "검색: {from} → {to}",
+    "hit": "적중",
+    "miss": "실패"
+  },
+  "generateDialog": {
+    "trigger": "평가 세트 생성",
+    "title": "평가 세트 생성",
+    "description": "어시스턴트를 평가할 기준으로, 이 프로젝트의 인덱싱된 코드에서 참조 답변이 포함된 질문을 생성합니다.",
+    "submit": "생성",
+    "started": "생성을 시작했습니다",
+    "nameLabel": "이름",
+    "namePlaceholder": "예: 인증 관련 질문",
+    "pathLabel": "경로",
+    "pathHelp": "프로젝트 전체를 대상으로 하려면 비워 두거나, 포함할 폴더나 파일을 선택하세요.",
+    "questionsLabel": "질문",
+    "countAria": "질문 수",
+    "mixLabel": "구성",
+    "mixAria": "질문 구성"
+  },
+  "screen": {
+    "pairCount": "{count, plural, other {#개 쌍}}",
+    "generatedFrom": "세대 {generation}에서 생성됨",
+    "projectNotFound": "해당 프로젝트가 존재하지 않거나 접근 권한이 없습니다.",
+    "setNotFound": "해당 평가 세트가 존재하지 않거나 삭제되었습니다.",
+    "selectRun": "실행 선택",
+    "runLabel": "실행 {number} · {date}",
+    "deleteAria": "{name} 삭제",
+    "delete": "삭제",
+    "run": "실행",
+    "runStarted": "실행을 시작했습니다",
+    "runStartFailed": "실행을 시작하지 못했습니다",
+    "projectNowAt": "프로젝트가 이제 세대 {generation}입니다.",
+    "generationFailed": "생성 실패",
+    "pairs": "쌍",
+    "runs": "실행",
+    "compare": "비교",
+    "baseRun": "기준 실행",
+    "headRun": "대상 실행",
+    "compareFailed": "비교를 불러오지 못했습니다",
+    "somethingWrong": "문제가 발생했습니다."
+  }
+}

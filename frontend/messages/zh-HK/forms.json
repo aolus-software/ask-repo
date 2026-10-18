@@ -1,0 +1,24 @@
+{
+  "validation": {
+    "missing": "此欄位為必填。",
+    "string_too_short": "內容太短。",
+    "string_too_long": "內容太長。",
+    "enum": "請選擇其中一個列出的選項。",
+    "literal_error": "請選擇其中一個列出的選項。",
+    "url_parsing": "請輸入有效的網址。",
+    "url_scheme": "網址必須以 https:// 開頭。",
+    "int_parsing": "請輸入整數。",
+    "greater_than_equal": "此數字太小。",
+    "less_than_equal": "此數字太大。",
+    "uuid_parsing": "這不是有效的 ID。"
+  },
+  "passwordInput": {
+    "show": "顯示密碼",
+    "hide": "隱藏密碼"
+  },
+  "passwordField": {
+    "notAccepted": "此密碼不被接受。",
+    "looksGood": "目前看來不錯。",
+    "hint": "請選擇一個高強度、且未在其他地方使用過的密碼。"
+  }
+}

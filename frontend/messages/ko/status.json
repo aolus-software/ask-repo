@@ -1,0 +1,36 @@
+{
+  "project": {
+    "pending": "대기 중",
+    "cloning": "클론 중",
+    "indexing": "인덱싱 중",
+    "ready": "준비됨",
+    "failed": "실패"
+  },
+  "module": {
+    "empty": "비어 있음",
+    "generating": "생성 중",
+    "review": "검토",
+    "ready": "준비됨",
+    "failed": "실패"
+  },
+  "result": {
+    "untested": "테스트 안 함",
+    "pass": "통과",
+    "fail": "실패",
+    "blocked": "차단됨"
+  },
+  "auditOutcome": { "failure": "실패", "success": "성공" },
+  "evalStatus": {
+    "generating": "생성 중",
+    "running": "실행 중",
+    "ready": "준비됨",
+    "done": "완료",
+    "failed": "실패"
+  },
+  "evalVerdict": {
+    "correct": "정답",
+    "partial": "부분 정답",
+    "wrong": "오답",
+    "error": "오류"
+  }
+}

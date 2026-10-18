@@ -1,0 +1,31 @@
+{
+  "project": {
+    "pending": "等待中",
+    "cloning": "複製中",
+    "indexing": "建立索引中",
+    "ready": "就緒",
+    "failed": "失敗"
+  },
+  "module": {
+    "empty": "空白",
+    "generating": "產生中",
+    "review": "待審閱",
+    "ready": "就緒",
+    "failed": "失敗"
+  },
+  "result": { "untested": "未測試", "pass": "通過", "fail": "失敗", "blocked": "受阻" },
+  "auditOutcome": { "failure": "失敗", "success": "成功" },
+  "evalStatus": {
+    "generating": "產生中",
+    "running": "執行中",
+    "ready": "就緒",
+    "done": "完成",
+    "failed": "失敗"
+  },
+  "evalVerdict": {
+    "correct": "正確",
+    "partial": "部分正確",
+    "wrong": "錯誤",
+    "error": "發生錯誤"
+  }
+}

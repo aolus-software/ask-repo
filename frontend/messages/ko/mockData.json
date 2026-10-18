@@ -1,0 +1,46 @@
+{
+  "recordsTable": {
+    "deleteAria": "레코드 삭제",
+    "deleteTitle": "이 레코드를 삭제하시겠습니까?",
+    "deleteDescription": "이 작업은 되돌릴 수 없습니다.",
+    "delete": "삭제",
+    "deleted": "레코드를 삭제했습니다",
+    "generatingTitle": "목 데이터를 생성하는 중…",
+    "emptyTitle": "아직 목 데이터가 없습니다",
+    "generatingDescription": "생성이 진행 중입니다. 끝나면 레코드가 여기에 표시됩니다.",
+    "emptyDescription": "한 묶음을 생성하거나 채팅으로 요청하세요."
+  },
+  "generateControl": {
+    "started": "생성을 시작했습니다",
+    "generate": "생성",
+    "countAria": "생성할 레코드 수"
+  },
+  "changeSetPanel": {
+    "noFields": "(필드 없음)",
+    "applied": "변경 사항을 적용했습니다",
+    "discarded": "제안을 폐기했습니다",
+    "ops": { "add": "추가", "update": "수정", "remove": "삭제" },
+    "recordLine": "레코드 <id>{recordId}</id>",
+    "orphaned": "이 레코드가 더 이상 존재하지 않아 이 변경은 건너뜁니다",
+    "title": "제안된 목 데이터 변경 사항",
+    "skipped": "{count, plural, other {제안된 변경 #개}}가 참조하던 레코드가 더 이상 존재하지 않아 건너뛰었습니다.",
+    "discard": "폐기",
+    "applySelected": "선택 항목 적용",
+    "discardTitle": "제안된 변경 사항 폐기",
+    "discardDescription": "이 제안을 폐기하시겠습니까? 목 데이터 세트에는 아무것도 기록되지 않습니다."
+  },
+  "chatPanel": {
+    "replyStopped": "답변이 중단되었습니다.",
+    "placeholderNoPermission": "이 목 데이터를 다듬을 권한이 없습니다.",
+    "placeholderGenerating": "이 데이터 세트의 생성이 진행 중입니다. 끝날 때까지 기다리세요.",
+    "placeholderPending": "먼저 대기 중인 변경 사항을 적용하거나 폐기하세요.",
+    "placeholderAnswering": "답변 중…",
+    "placeholderDefault": "원하는 형태를 요청하거나 바꾸고 싶은 내용을 말해 주세요",
+    "sharedTitle": "이 채팅은 공유됩니다",
+    "sharedDescription": "이 인스턴스의 모든 사용자가 이 대화를 읽을 수 있습니다.",
+    "loadErrorTitle": "이 채팅을 불러오지 못했습니다",
+    "empty": "아직 메시지가 없습니다. 데이터 세트를 다듬어 달라고 요청하거나 무엇을 바꿔야 하는지 설명하세요.",
+    "replyStoppedTitle": "답변이 중단되었습니다",
+    "sendErrorTitle": "메시지를 보내지 못했습니다"
+  }
+}

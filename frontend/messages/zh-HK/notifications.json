@@ -1,0 +1,88 @@
+{
+  "title": "通知",
+  "description": "{appName} 通知你的所有事項，最新的排在最前。",
+  "markAllRead": "全部標示為已讀",
+  "seeAll": "查看全部",
+  "unread": "未讀",
+  "bellLabel": "通知（{count} 則未讀）",
+  "overflow": "99+",
+  "empty": "沒有需要跟進的事項。",
+  "markReadFailed": "無法將通知標示為已讀",
+  "untitled": "未命名",
+  "emptyState": {
+    "noMatchTitle": "沒有符合的通知",
+    "noneTitle": "暫無通知",
+    "noMatchDescription": "請嘗試清除篩選條件。",
+    "noneDescription": "專案和檢查清單的事件發生時會顯示在這裏。"
+  },
+  "filters": {
+    "byProject": "按專案篩選",
+    "byType": "按類型篩選",
+    "allTypes": "所有類型",
+    "allProjects": "所有專案",
+    "unreadOnly": "只顯示未讀"
+  },
+  "types": {
+    "project_ready": "專案已就緒",
+    "project_failed": "專案失敗",
+    "project_reindex_finished": "專案重新索引完成",
+    "project_reindex_failed": "專案重新索引失敗",
+    "checklist_change_set_pending": "檢查清單變更集待處理",
+    "checklist_change_set_applied": "已套用檢查清單變更集",
+    "checklist_change_set_discarded": "已捨棄檢查清單變更集",
+    "mock_data_change_set_pending": "模擬資料變更集待處理",
+    "mock_data_change_set_applied": "已套用模擬資料變更集",
+    "mock_data_change_set_discarded": "已捨棄模擬資料變更集",
+    "membership_granted": "已授予成員資格",
+    "eval_set_ready": "評測集已就緒",
+    "eval_set_failed": "評測集失敗",
+    "eval_run_finished": "評測執行完成",
+    "eval_run_failed": "評測執行失敗"
+  },
+  "categories": {
+    "project_ready": "專案已完成索引",
+    "project_failed": "專案索引失敗",
+    "project_reindex_finished": "專案已完成重新索引",
+    "project_reindex_failed": "專案重新索引失敗",
+    "checklist_change_set_pending": "有檢查清單變更集等待審閱",
+    "checklist_change_set_applied": "檢查清單變更集已被套用",
+    "checklist_change_set_discarded": "檢查清單變更集已被捨棄",
+    "mock_data_change_set_pending": "有模擬資料變更集等待審閱",
+    "mock_data_change_set_applied": "模擬資料變更集已被套用",
+    "mock_data_change_set_discarded": "模擬資料變更集已被捨棄",
+    "membership_granted": "你已被加入專案",
+    "eval_set_ready": "評測集已完成生成",
+    "eval_set_failed": "評測集生成失敗",
+    "eval_run_finished": "評測執行已完成",
+    "eval_run_failed": "評測執行失敗"
+  },
+  "titles": {
+    "project_ready": "{projectName} 已完成索引",
+    "project_failed": "{projectName} 索引失敗",
+    "project_reindex_finished": "{projectName} 已完成重新索引",
+    "project_reindex_failed": "{projectName} 重新索引失敗",
+    "checklist_change_set_pending": "{moduleName} 有檢查清單變更集等待審閱",
+    "checklist_change_set_applied": "已對 {moduleName} 套用檢查清單變更集",
+    "checklist_change_set_discarded": "{moduleName} 的檢查清單變更集已被捨棄",
+    "mock_data_change_set_pending": "{moduleName} 有模擬資料變更集等待審閱",
+    "mock_data_change_set_applied": "已對 {moduleName} 套用模擬資料變更集",
+    "mock_data_change_set_discarded": "{moduleName} 的模擬資料變更集已被捨棄",
+    "membership_granted": "你已以 {roleName} 身分加入 {projectName}",
+    "eval_set_ready": "{projectName} 中的評測集 {setName} 已就緒",
+    "eval_set_failed": "{projectName} 中的評測集 {setName} 生成失敗",
+    "eval_run_finished": "{projectName} 中 {setName} 的評測執行已完成",
+    "eval_run_failed": "{projectName} 中 {setName} 的評測執行失敗"
+  },
+  "preferences": {
+    "emailOff": "本實例已關閉電郵發送。你的選擇會被儲存，並在管理員開啟後生效。",
+    "emptyTitle": "暫無可設定的項目",
+    "emptyDescription": "本實例沒有可供設定偏好的通知類型。",
+    "columns": {
+      "event": "事件",
+      "inApp": "應用程式內",
+      "email": "電郵"
+    },
+    "saved": "已儲存偏好設定",
+    "save": "儲存偏好設定"
+  }
+}

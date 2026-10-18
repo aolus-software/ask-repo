@@ -1,0 +1,64 @@
+{
+  "helpful": "有幫助",
+  "notHelpful": "沒有幫助",
+  "saveFailed": "未能儲存你的意見回饋。請再試一次。",
+  "whatWentWrong": "哪裡出了問題？",
+  "noteLabel": "還有其他想說的嗎？",
+  "notePlaceholder": "還有其他想說的嗎？（選填）",
+  "noteDisclosure": "管理員可以閱讀此備註。它絕不會傳送給 AI 模型。",
+  "send": "送出意見回饋",
+  "reasons": {
+    "wrong_file_cited": "引用了錯誤的檔案",
+    "missed_something": "漏掉了儲存庫中的內容",
+    "invented_something": "捏造了內容",
+    "right_but_unusable": "正確，但無法使用",
+    "wrong_language_or_tone": "語言或語氣不對",
+    "duplicate_or_redundant": "重複或多餘",
+    "wrong_scope": "範圍不對",
+    "other": "其他"
+  },
+  "features": {
+    "answer": "提問回答",
+    "refine_checklist": "檢查清單對話",
+    "refine_mock_data": "模擬資料對話",
+    "generate_checklist": "檢查清單產生",
+    "propose_checklist": "檢查清單對話提議",
+    "generate_mock_data": "模擬資料產生",
+    "propose_mock_data": "模擬資料對話提議"
+  },
+  "summary": {
+    "hint": "評為負評 · {votes} 票",
+    "feature": "功能",
+    "reason": "原因",
+    "count": "數量",
+    "promptVersion": "提示詞版本",
+    "votes": "票數",
+    "downVoted": "負評",
+    "versionNote": "每一票都會標記投票當時該功能所執行的提示詞版本；對於數日後才審閱的變更集，該版本可能比產生它的版本更新。每個功能各有自己的版本，因此請在同一功能內比較版本。"
+  },
+  "table": {
+    "when": "時間",
+    "project": "專案",
+    "feature": "功能",
+    "vote": "投票",
+    "reasons": "原因",
+    "note": "備註",
+    "prompt": "提示詞",
+    "trace": "追蹤",
+    "up": "正評",
+    "down": "負評",
+    "openTrace": "開啟追蹤"
+  },
+  "filters": {
+    "allFeatures": "所有功能",
+    "allVotes": "所有投票",
+    "allReasons": "所有原因",
+    "filterByFeature": "依功能篩選",
+    "filterByVote": "依投票篩選",
+    "filterByReason": "依原因篩選",
+    "up": "正評",
+    "down": "負評",
+    "fromDate": "起始日期",
+    "toDate": "結束日期"
+  }
+}

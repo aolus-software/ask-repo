@@ -1,0 +1,29 @@
+{
+  "items": {
+    "dashboard": "대시보드",
+    "projects": "프로젝트",
+    "ask": "질문하기",
+    "checklist": "체크리스트",
+    "settings": "설정",
+    "users": "사용자",
+    "roles": "역할",
+    "auditTrail": "감사 기록",
+    "feedback": "피드백",
+    "notifications": "알림",
+    "profile": "프로필",
+    "export": "내보내기",
+    "eval": "평가"
+  },
+  "navbar": { "toggleNavigation": "내비게이션 전환", "toggleTheme": "테마 전환" },
+  "account": {
+    "label": "계정",
+    "profile": "프로필",
+    "logOut": "로그아웃",
+    "logOutEverywhere": "모든 기기에서 로그아웃"
+  },
+  "pagination": {
+    "summary": "{page}/{totalPages} 페이지 · 총 {totalCount}개",
+    "previous": "이전",
+    "next": "다음"
+  }
+}

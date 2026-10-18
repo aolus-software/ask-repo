@@ -1,0 +1,20 @@
+{
+  "welcome": "다시 오신 것을 환영합니다, {name}님",
+  "description": "이 인스턴스에 인덱싱된 모든 코드베이스에 대해 질문하세요.",
+  "stats": { "projects": "이 인스턴스의 프로젝트", "conversations": "내 대화" },
+  "recentProjects": {
+    "title": "최근 프로젝트",
+    "viewAll": "모두 보기",
+    "emptyTitle": "아직 프로젝트가 없습니다",
+    "emptyDescription": "저장소를 추가하면 {appName}이(가) 클론하고 인덱싱합니다.",
+    "emptyAction": "추가하기"
+  },
+  "recentQuestions": {
+    "title": "최근 질문",
+    "ask": "질문",
+    "emptyTitle": "아직 질문이 없습니다",
+    "emptyDescription": "인덱싱된 프로젝트에 대해 질문하세요.",
+    "emptyAction": "질문하기",
+    "untitled": "제목 없는 대화"
+  }
+}

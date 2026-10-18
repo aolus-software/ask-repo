@@ -1,0 +1,10 @@
+{
+  "operationRow": {
+    "include": "이 변경 사항 포함",
+    "noRationale": "제시된 근거가 없습니다."
+  },
+  "operationCounts": {
+    "summary": "{added}개 추가, {updated}개 변경, {removed}개 삭제"
+  },
+  "operationGroups": { "added": "추가됨", "changed": "변경됨", "removed": "삭제됨" }
+}

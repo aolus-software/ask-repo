@@ -1,0 +1,20 @@
+{
+  "appName": "AskRepo",
+  "cancel": "취소",
+  "save": "저장",
+  "saving": "저장 중…",
+  "delete": "삭제",
+  "close": "닫기",
+  "edit": "편집",
+  "create": "만들기",
+  "back": "뒤로",
+  "retry": "다시 시도",
+  "loading": "불러오는 중…",
+  "search": "검색",
+  "actions": "작업",
+  "name": "이름",
+  "status": "상태",
+  "yes": "예",
+  "no": "아니요",
+  "none": "없음"
+}

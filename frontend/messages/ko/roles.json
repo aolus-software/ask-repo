@@ -1,0 +1,73 @@
+{
+  "title": "역할",
+  "description": "인스턴스 전체의 역할 정의와 각 역할이 할 수 있는 작업입니다.",
+  "forbidden": "관리자만 역할을 관리할 수 있습니다.",
+  "createRole": "역할 만들기",
+  "emptyTitle": "아직 역할이 없습니다",
+  "emptyDescription": "viewer, editor, owner 외의 권한을 부여하려면 역할을 만드세요.",
+  "table": {
+    "columns": {
+      "name": "이름",
+      "description": "설명",
+      "permissions": "권한",
+      "members": "멤버",
+      "actions": "작업"
+    },
+    "permissionCount": "{total}개 중 {count}개",
+    "noDescription": "—"
+  },
+  "badge": { "builtIn": "기본 제공 역할이며 편집할 수 없습니다" },
+  "actionsFor": "{name}에 대한 작업",
+  "actions": { "view": "보기", "edit": "편집", "delete": "삭제" },
+  "delete": {
+    "title": "{name}을(를) 삭제하시겠습니까?",
+    "description": "이 작업은 되돌릴 수 없습니다. 프로젝트에서 이 역할을 가진 사용자는 먼저 다른 역할로 옮겨야 합니다.",
+    "confirm": "삭제",
+    "done": "역할을 삭제했습니다"
+  },
+  "create": {
+    "title": "역할 만들기",
+    "description": "이름을 지정한 다음 다음 페이지에서 할 수 있는 작업을 선택하세요.",
+    "submit": "역할 만들기",
+    "done": "역할을 만들었습니다",
+    "fields": { "name": "이름", "description": "설명" }
+  },
+  "matrix": {
+    "fallbackDescription": "이 역할이 프로젝트에서 할 수 있는 작업입니다.",
+    "notFound": "해당 역할이 존재하지 않거나 삭제되었습니다.",
+    "builtInNotice": "viewer, editor, owner는 기본 제공 역할이므로 변경할 수 없습니다.",
+    "save": "권한 저장",
+    "saved": "권한을 저장했습니다",
+    "applyNotice": "저장하면 이 역할을 가진 모든 사용자에게 즉시 적용되며, 바로 다음 요청부터 효력이 발생합니다."
+  },
+  "groups": {
+    "project": "프로젝트",
+    "questions": "질문",
+    "qaChecklist": "QA 체크리스트",
+    "mockData": "목 데이터",
+    "eval": "평가",
+    "membership": "멤버십"
+  },
+  "permissions": {
+    "project_read": "project.read",
+    "project_update": "project.update",
+    "project_delete": "project.delete",
+    "project_reindex": "project.reindex",
+    "question_ask": "question.ask",
+    "checklist_read": "checklist.read",
+    "module_create": "module.create",
+    "module_edit": "module.edit",
+    "module_delete": "module.delete",
+    "generate_run": "generate.run",
+    "changeset_apply": "changeset.apply",
+    "item_edit": "item.edit",
+    "result_record": "result.record",
+    "mockdata_read": "mockdata.read",
+    "mockdata_edit": "mockdata.edit",
+    "eval_read": "eval.read",
+    "eval_run": "eval.run",
+    "membership_read": "membership.read",
+    "membership_grant": "membership.grant",
+    "membership_revoke": "membership.revoke"
+  }
+}
