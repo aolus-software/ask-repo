@@ -1,6 +1,8 @@
+import { useTranslations } from "next-intl";
+
 import { StatusBadge } from "@/components/feedback/status-badge";
 import type { ChecklistModuleStatus } from "@/lib/api/types";
-import { checklistModuleStatusLabel, checklistModuleStatusTone } from "@/lib/status";
+import { checklistModuleStatusLabelKey, checklistModuleStatusTone } from "@/lib/status";
 
 /**
  * One mapping, used by the module list and the module screen alike. The mapping
@@ -15,10 +17,11 @@ export function ChecklistModuleStatusBadge({
   status: ChecklistModuleStatus;
   className?: string;
 }) {
+  const t = useTranslations("status");
   return (
     <StatusBadge
       tone={checklistModuleStatusTone(status)}
-      label={checklistModuleStatusLabel(status)}
+      label={t(checklistModuleStatusLabelKey(status))}
       className={className}
     />
   );

@@ -1,6 +1,7 @@
 "use client";
 
 import { ChevronRight } from "lucide-react";
+import { useTranslations } from "next-intl";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
@@ -38,6 +39,7 @@ import { type VisibleNavItem, visibleNavTree } from "@/lib/nav";
  * they are currently inside and have it stay collapsed.
  */
 function NavGroup({ item, pathname }: { item: VisibleNavItem; pathname: string }) {
+  const t = useTranslations("nav.items");
   const isInside = pathname.startsWith(item.href);
   const [open, setOpen] = useState(isInside);
   const [wasInside, setWasInside] = useState(isInside);
@@ -54,7 +56,7 @@ function NavGroup({ item, pathname }: { item: VisibleNavItem; pathname: string }
           already points. */}
       <CollapsibleTrigger render={<SidebarMenuButton />}>
         {item.icon ? <item.icon className="size-4" /> : null}
-        <span>{item.title}</span>
+        <span>{t(item.titleKey)}</span>
         <ChevronRight className="ml-auto size-4 transition-transform group-data-[panel-open]:rotate-90" />
       </CollapsibleTrigger>
       <CollapsibleContent>
@@ -65,7 +67,7 @@ function NavGroup({ item, pathname }: { item: VisibleNavItem; pathname: string }
                 isActive={pathname.startsWith(child.href)}
                 render={<Link href={child.href} />}
               >
-                {child.title}
+                {t(child.titleKey)}
               </SidebarMenuSubButton>
             </SidebarMenuSubItem>
           ))}
@@ -80,6 +82,7 @@ function NavGroup({ item, pathname }: { item: VisibleNavItem; pathname: string }
  * and tested without React (`.claude/rules/navigation.md` §2).
  */
 export function AppSidebar() {
+  const t = useTranslations("nav.items");
   const user = useSession();
   const pathname = usePathname();
   const tree = visibleNavTree(user);
@@ -102,7 +105,7 @@ export function AppSidebar() {
                   render={<Link href={item.href} />}
                 >
                   <item.icon className="size-4" />
-                  <span>{item.title}</span>
+                  <span>{t(item.titleKey)}</span>
                 </SidebarMenuButton>
               </SidebarMenuItem>
             ),

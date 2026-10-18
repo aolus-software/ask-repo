@@ -9,11 +9,11 @@ import {
   UserRound,
 } from "lucide-react";
 
-import type { NavChild } from "@/lib/nav-child";
+import type { NavChild, NavKey } from "@/lib/nav-child";
 import { settingsNav } from "@/lib/settings-nav";
 
 export interface NavItem {
-  title: string;
+  titleKey: NavKey;
   href: string;
   icon: LucideIcon;
   adminOnly?: boolean;
@@ -32,11 +32,11 @@ interface NavUser {
  * this, so they cannot drift. Never hardcode a nav label or href in a component.
  */
 export const navItems: NavItem[] = [
-  { title: "Dashboard", href: "/", icon: LayoutDashboard },
-  { title: "Projects", href: "/projects", icon: FolderGit2 },
-  { title: "Ask", href: "/ask", icon: MessagesSquare },
-  { title: "Checklist", href: "/checklist", icon: ClipboardCheck },
-  { title: "Settings", href: "/settings", icon: Settings, children: settingsNav },
+  { titleKey: "dashboard", href: "/", icon: LayoutDashboard },
+  { titleKey: "projects", href: "/projects", icon: FolderGit2 },
+  { titleKey: "ask", href: "/ask", icon: MessagesSquare },
+  { titleKey: "checklist", href: "/checklist", icon: ClipboardCheck },
+  { titleKey: "settings", href: "/settings", icon: Settings, children: settingsNav },
 ];
 
 function isReachable(item: { adminOnly?: boolean }, user: NavUser): boolean {
@@ -82,15 +82,19 @@ export function visibleNavTree(user: NavUser): VisibleNavItem[] {
  * Kept as its own list so a breadcrumb-only destination never has to earn a sidebar row
  * it does not want.
  */
-const breadcrumbOnlyItems: { title: string; href: string; icon: LucideIcon }[] = [
-  { title: "Notifications", href: "/notifications", icon: Bell },
-  { title: "Profile", href: "/profile", icon: UserRound },
+const breadcrumbOnlyItems: { titleKey: NavKey; href: string; icon: LucideIcon }[] = [
+  { titleKey: "notifications", href: "/notifications", icon: Bell },
+  { titleKey: "profile", href: "/profile", icon: UserRound },
 ];
 
-export interface Crumb {
-  href: string;
-  label: string;
-}
+/**
+ * A crumb names itself one of two ways: `labelKey` for a destination this file knows
+ * (translated where it renders), or `label` for text that is not ours to translate —
+ * a resource id, or the name a page supplied through `useBreadcrumbLabel`.
+ */
+export type Crumb = { href: string } & (
+  { labelKey: NavKey; label?: undefined } | { label: string; labelKey?: undefined }
+);
 
 /**
  * The breadcrumb trail for a path, resolved by longest matching nav item. A trailing
@@ -107,19 +111,25 @@ export function resolveBreadcrumbs(
   return resolveRawBreadcrumbs(pathname, user).map((crumb) =>
     crumb.fromId && labels[crumb.href]
       ? { href: crumb.href, label: labels[crumb.href] }
-      : { href: crumb.href, label: crumb.label },
+      : stripFromId(crumb),
   );
 }
 
 type RawCrumb = Crumb & { fromId?: boolean };
+
+function stripFromId(crumb: RawCrumb): Crumb {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- drops the internal flag from the public shape
+  const { fromId, ...rest } = crumb;
+  return rest;
+}
 
 /**
  * Pages that sit below a nav item at a fixed path. Without an entry the trailing
  * segment would be read as a resource id and shown raw, and a page could then rename
  * it through `useBreadcrumbLabel`, which only id-derived crumbs may allow.
  */
-const FIXED_CRUMBS: Record<string, string> = {
-  "/checklist/export": "Export",
+const FIXED_CRUMBS: Record<string, NavKey> = {
+  "/checklist/export": "export",
 };
 
 function resolveRawBreadcrumbs(pathname: string, user: NavUser): RawCrumb[] {
@@ -130,11 +140,11 @@ function resolveRawBreadcrumbs(pathname: string, user: NavUser): RawCrumb[] {
 
   for (const item of tree) {
     if (item.href === "/" || !pathname.startsWith(item.href)) continue;
-    trail.push({ href: item.href, label: item.title });
+    trail.push({ href: item.href, labelKey: item.titleKey });
 
     for (const child of item.children ?? []) {
       if (pathname.startsWith(child.href))
-        trail.push({ href: child.href, label: child.title });
+        trail.push({ href: child.href, labelKey: child.titleKey });
     }
   }
 
@@ -143,13 +153,13 @@ function resolveRawBreadcrumbs(pathname: string, user: NavUser): RawCrumb[] {
   if (trail.length === 0) {
     for (const item of breadcrumbOnlyItems) {
       if (pathname.startsWith(item.href))
-        trail.push({ href: item.href, label: item.title });
+        trail.push({ href: item.href, labelKey: item.titleKey });
     }
   }
 
   // A fixed page below a list, not a resource id: its crumb is a label, never `fromId`.
   const fixed = FIXED_CRUMBS[pathname];
-  if (fixed) return [...trail, { href: pathname, label: fixed }];
+  if (fixed) return [...trail, { href: pathname, labelKey: fixed }];
 
   // An eval set sits two segments below its project: Projects → project → Eval → set.
   const evalSet = /^\/projects\/([^/]+)\/eval\/([^/]+)$/.exec(pathname);
@@ -158,7 +168,7 @@ function resolveRawBreadcrumbs(pathname: string, user: NavUser): RawCrumb[] {
     return [
       ...trail,
       { href: projectHref, label: evalSet[1], fromId: true },
-      { href: `${projectHref}#eval`, label: "Eval" },
+      { href: `${projectHref}#eval`, labelKey: "eval" },
       { href: pathname, label: evalSet[2], fromId: true },
     ];
   }

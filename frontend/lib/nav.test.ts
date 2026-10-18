@@ -37,12 +37,12 @@ describe("visibleNavTree", () => {
 
   it("hides Roles from a non-admin", () => {
     const settings = visibleNavTree(member).find((i) => i.href === "/settings");
-    expect(settings?.children?.map((c) => c.title) ?? []).not.toContain("Roles");
+    expect(settings?.children?.map((c) => c.titleKey) ?? []).not.toContain("roles");
   });
 
   it("shows Roles to an admin", () => {
     const settings = visibleNavTree(admin).find((i) => i.href === "/settings");
-    expect(settings?.children?.map((c) => c.title)).toContain("Roles");
+    expect(settings?.children?.map((c) => c.titleKey)).toContain("roles");
   });
 
   it("leaves `children` absent on a leaf rather than an empty array", () => {
@@ -60,7 +60,7 @@ describe("visibleNavTree", () => {
 
   it("hides the audit trail from a non-admin", () => {
     const settings = visibleNavTree({ isAdmin: false }).find(
-      (item) => item.title === "Settings",
+      (item) => item.titleKey === "settings",
     );
 
     // Settings is now hidden entirely for non-admins, since all children are admin-only.
@@ -69,7 +69,7 @@ describe("visibleNavTree", () => {
 
   it("shows the audit trail to an admin", () => {
     const settings = visibleNavTree({ isAdmin: true }).find(
-      (item) => item.title === "Settings",
+      (item) => item.titleKey === "settings",
     );
 
     expect(settings?.children?.some((child) => child.href === "/settings/audit")).toBe(
@@ -81,34 +81,34 @@ describe("visibleNavTree", () => {
 describe("resolveBreadcrumbs", () => {
   it("names the profile page, which is reached from the account menu", () => {
     expect(resolveBreadcrumbs("/profile", member)).toEqual([
-      { href: "/profile", label: "Profile" },
+      { href: "/profile", labelKey: "profile" },
     ]);
   });
 
   it("resolves a trail by longest matching nav item", () => {
     expect(resolveBreadcrumbs("/settings/users", admin)).toEqual([
-      { href: "/settings", label: "Settings" },
-      { href: "/settings/users", label: "Users" },
+      { href: "/settings", labelKey: "settings" },
+      { href: "/settings/users", labelKey: "users" },
     ]);
   });
 
   it("returns a single crumb for a top-level destination", () => {
     expect(resolveBreadcrumbs("/projects", member)).toEqual([
-      { href: "/projects", label: "Projects" },
+      { href: "/projects", labelKey: "projects" },
     ]);
   });
 
   it("appends a detail crumb for an id segment", () => {
     const trail = resolveBreadcrumbs("/projects/abc-123", member);
-    expect(trail[0]).toEqual({ href: "/projects", label: "Projects" });
+    expect(trail[0]).toEqual({ href: "/projects", labelKey: "projects" });
     expect(trail).toHaveLength(2);
   });
 
   it("resolves a trail into an eval set", () => {
     expect(resolveBreadcrumbs("/projects/p1/eval/s1", member)).toEqual([
-      { href: "/projects", label: "Projects" },
+      { href: "/projects", labelKey: "projects" },
       { href: "/projects/p1", label: "p1" },
-      { href: "/projects/p1#eval", label: "Eval" },
+      { href: "/projects/p1#eval", labelKey: "eval" },
       { href: "/projects/p1/eval/s1", label: "s1" },
     ]);
   });
@@ -127,14 +127,14 @@ describe("resolveBreadcrumbs", () => {
         },
       ),
     ).toEqual([
-      { href: "/checklist", label: "Checklist" },
-      { href: "/checklist/export", label: "Export" },
+      { href: "/checklist", labelKey: "checklist" },
+      { href: "/checklist/export", labelKey: "export" },
     ]);
   });
 
   it("resolves a breadcrumb trail into a module", () => {
     expect(resolveBreadcrumbs("/checklist/abc-123", { isAdmin: false })).toEqual([
-      { href: "/checklist", label: "Checklist" },
+      { href: "/checklist", labelKey: "checklist" },
       { href: "/checklist/abc-123", label: "abc-123" },
     ]);
   });

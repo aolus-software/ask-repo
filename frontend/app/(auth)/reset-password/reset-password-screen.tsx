@@ -1,6 +1,7 @@
 "use client";
 
 import { useMutation } from "@tanstack/react-query";
+import { useTranslations } from "next-intl";
 import Link from "next/link";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 
@@ -8,7 +9,8 @@ import { FormPage } from "@/components/form/form-page";
 import { PasswordField } from "@/components/form/password-field";
 import { apiFetch } from "@/lib/api/client";
 import { endpoints } from "@/lib/api/endpoints";
-import { fieldError, isApiError } from "@/lib/api/errors";
+import { isApiError } from "@/lib/api/errors";
+import { useFieldErrorText } from "@/lib/i18n/error-text";
 import { readResetToken } from "@/lib/reset-token";
 
 /**
@@ -28,6 +30,8 @@ function getServerTokenSnapshot(): string | null | undefined {
 }
 
 export function ResetPasswordScreen() {
+  const t = useTranslations("auth.reset");
+  const fieldErrorText = useFieldErrorText();
   // `useSyncExternalStore` calls this getter on every render to check for
   // tearing, not only once — so it must not re-read `window.location.hash`
   // each time. The effect below strips the fragment as soon as the token has
@@ -98,17 +102,15 @@ export function ResetPasswordScreen() {
   if (invalid) {
     return (
       <div className="w-full max-w-sm space-y-4 text-center">
-        <h1 className="text-xl font-semibold">This link can&apos;t be used</h1>
+        <h1 className="text-xl font-semibold">{t("invalidTitle")}</h1>
         <p className="text-muted-foreground text-sm">
-          {token === null
-            ? "This link is missing its token. Open the link from your email again."
-            : "This reset link is invalid or has expired."}
+          {token === null ? t("missingToken") : t("invalidToken")}
         </p>
         <Link
           href="/forgot-password"
           className="text-primary text-sm underline-offset-4 hover:underline"
         >
-          Request a new link
+          {t("requestNew")}
         </Link>
       </div>
     );
@@ -123,19 +125,19 @@ export function ResetPasswordScreen() {
     <div className="w-full">
       <FormPage
         width="narrow"
-        title="Choose a new password"
-        description="Every session on this account will be signed out."
-        submitLabel="Set password"
+        title={t("title")}
+        description={t("description")}
+        submitLabel={t("submit")}
         isPending={mutation.isPending}
         error={mutation.error}
         onSubmit={handleSubmit}
       >
         <PasswordField
           id="newPassword"
-          label="New password"
+          label={t("newPassword")}
           value={newPassword}
           onChange={setNewPassword}
-          serverError={fieldError(mutation.error, "newPassword")}
+          serverError={fieldErrorText(mutation.error, "newPassword")}
         />
       </FormPage>
     </div>

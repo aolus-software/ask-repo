@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import Image from "next/image";
 import Link from "next/link";
 
@@ -10,9 +11,13 @@ import { SidebarTrigger } from "@/components/ui/sidebar";
 
 /** Fixed, h-16. That 4rem is load-bearing: the sidebar's top and height derive from it. */
 export function AppNavbar() {
+  const t = useTranslations();
   return (
     <header className="bg-card border-border fixed inset-x-0 top-0 z-50 flex h-16 items-center gap-4 border-b px-4 md:px-8">
-      <SidebarTrigger className="md:hidden" aria-label="Toggle navigation" />
+      <SidebarTrigger
+        className="md:hidden"
+        aria-label={t("nav.navbar.toggleNavigation")}
+      />
       <Link
         href="/"
         className="text-foreground flex items-center gap-2 text-xl font-semibold tracking-tight"
@@ -29,7 +34,7 @@ export function AppNavbar() {
           className="size-8"
           priority
         />
-        AskRepo
+        {t("common.appName")}
       </Link>
       <div className="ml-auto flex items-center gap-2">
         <NotificationBell />

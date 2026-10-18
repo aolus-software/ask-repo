@@ -1,6 +1,7 @@
 "use client";
 
 import { useMutation } from "@tanstack/react-query";
+import { useTranslations } from "next-intl";
 import Link from "next/link";
 import { useState } from "react";
 
@@ -18,6 +19,7 @@ import { isApiError } from "@/lib/api/errors";
  * Only 409 differs — it is the same answer for every caller on the instance.
  */
 export function ForgotPasswordScreen() {
+  const t = useTranslations("auth");
   const [email, setEmail] = useState("");
   const [localError, setLocalError] = useState<string | undefined>();
   const [done, setDone] = useState(false);
@@ -36,9 +38,8 @@ export function ForgotPasswordScreen() {
 
   function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!email.trim()) return setLocalError("Enter your email address.");
-    if (!email.includes("@"))
-      return setLocalError("That does not look like an email address.");
+    if (!email.trim()) return setLocalError(t("validation.emailRequired"));
+    if (!email.includes("@")) return setLocalError(t("validation.emailShape"));
     setLocalError(undefined);
     mutation.mutate(email.trim().toLowerCase());
   }
@@ -46,16 +47,13 @@ export function ForgotPasswordScreen() {
   if (done) {
     return (
       <div className="w-full max-w-sm space-y-4 text-center">
-        <h1 className="text-xl font-semibold">Check your email</h1>
-        <p className="text-muted-foreground text-sm">
-          If that account exists, a reset link is on its way. If it does not arrive
-          within a few minutes, request another.
-        </p>
+        <h1 className="text-xl font-semibold">{t("forgot.doneTitle")}</h1>
+        <p className="text-muted-foreground text-sm">{t("forgot.doneBody")}</p>
         <Link
           href="/login"
           className="text-primary text-sm underline-offset-4 hover:underline"
         >
-          Back to sign in
+          {t("forgot.backToSignIn")}
         </Link>
       </div>
     );
@@ -70,16 +68,16 @@ export function ForgotPasswordScreen() {
     <div className="w-full">
       <FormPage
         width="narrow"
-        title="Reset your password"
-        description="Enter your account's email address and we'll send you a link."
-        submitLabel="Send reset link"
+        title={t("forgot.title")}
+        description={t("forgot.description")}
+        submitLabel={t("forgot.submit")}
         isPending={mutation.isPending}
         error={shownError}
         onSubmit={handleSubmit}
       >
         <Field>
           <FieldLabel htmlFor="email">
-            Email <span className="text-danger">*</span>
+            {t("fields.email")} <span className="text-danger">*</span>
           </FieldLabel>
           <Input
             id="email"
@@ -95,7 +93,7 @@ export function ForgotPasswordScreen() {
       </FormPage>
       <div className="mt-4 text-center">
         <Link href="/login" className="text-muted-foreground text-sm hover:underline">
-          Back to sign in
+          {t("forgot.backToSignIn")}
         </Link>
       </div>
     </div>

@@ -13,6 +13,10 @@ import type {
  * a table row and a detail header showing the same state must agree, so no component
  * picks a colour of its own.
  *
+ * Labels are message keys under the `status` namespace, not English: a caller
+ * translates with `useTranslations("status")`, so the key lives here beside its tone
+ * and the words live in `messages/en/status.json`.
+ *
  * `info` has one job in this app: a role or a neutral advisory that is not a status at
  * all (`docs/audit-finding-solved-logs.md` §U1.2, §U4.1) — never a project or module state.
  */
@@ -26,20 +30,12 @@ const PROJECT_TONES: Record<ProjectStatus, StatusTone> = {
   failed: "danger",
 };
 
-const PROJECT_LABELS: Record<ProjectStatus, string> = {
-  pending: "Pending",
-  cloning: "Cloning",
-  indexing: "Indexing",
-  ready: "Ready",
-  failed: "Failed",
-};
-
 export function statusTone(status: ProjectStatus): StatusTone {
   return PROJECT_TONES[status];
 }
 
-export function statusLabel(status: ProjectStatus): string {
-  return PROJECT_LABELS[status];
+export function statusLabelKey(status: ProjectStatus): `project.${ProjectStatus}` {
+  return `project.${status}`;
 }
 
 /** Settled states. Anything else is still moving, so the list keeps polling. */
@@ -63,20 +59,14 @@ const MODULE_TONES: Record<ChecklistModuleStatus, StatusTone> = {
   failed: "danger",
 };
 
-const MODULE_LABELS: Record<ChecklistModuleStatus, string> = {
-  empty: "Empty",
-  generating: "Generating",
-  review: "Review",
-  ready: "Ready",
-  failed: "Failed",
-};
-
 export function checklistModuleStatusTone(status: ChecklistModuleStatus): StatusTone {
   return MODULE_TONES[status];
 }
 
-export function checklistModuleStatusLabel(status: ChecklistModuleStatus): string {
-  return MODULE_LABELS[status];
+export function checklistModuleStatusLabelKey(
+  status: ChecklistModuleStatus,
+): `module.${ChecklistModuleStatus}` {
+  return `module.${status}`;
 }
 
 /**
@@ -96,19 +86,14 @@ const RESULT_TONES: Record<ChecklistItemStatus, StatusTone> = {
   blocked: "warning",
 };
 
-const RESULT_LABELS: Record<ChecklistItemStatus, string> = {
-  untested: "Untested",
-  pass: "Pass",
-  fail: "Fail",
-  blocked: "Blocked",
-};
-
 export function checklistItemResultTone(status: ChecklistItemStatus): StatusTone {
   return RESULT_TONES[status];
 }
 
-export function checklistItemResultLabel(status: ChecklistItemStatus): string {
-  return RESULT_LABELS[status];
+export function checklistItemResultLabelKey(
+  status: ChecklistItemStatus,
+): `result.${ChecklistItemStatus}` {
+  return `result.${status}`;
 }
 
 /**
@@ -121,8 +106,10 @@ export function auditOutcomeTone(outcome: AuditOutcome): StatusTone {
   return outcome === "failure" ? "danger" : "success";
 }
 
-export function auditOutcomeLabel(outcome: AuditOutcome): string {
-  return outcome === "failure" ? "Failure" : "Success";
+export function auditOutcomeLabelKey(
+  outcome: AuditOutcome,
+): "auditOutcome.failure" | "auditOutcome.success" {
+  return outcome === "failure" ? "auditOutcome.failure" : "auditOutcome.success";
 }
 
 /**
@@ -138,20 +125,14 @@ const EVAL_STATUS_TONES: Record<EvalSetStatus | EvalRunStatus, StatusTone> = {
   failed: "danger",
 };
 
-const EVAL_STATUS_LABELS: Record<EvalSetStatus | EvalRunStatus, string> = {
-  generating: "Generating",
-  running: "Running",
-  ready: "Ready",
-  done: "Done",
-  failed: "Failed",
-};
-
 export function evalStatusTone(status: EvalSetStatus | EvalRunStatus): StatusTone {
   return EVAL_STATUS_TONES[status];
 }
 
-export function evalStatusLabel(status: EvalSetStatus | EvalRunStatus): string {
-  return EVAL_STATUS_LABELS[status];
+export function evalStatusLabelKey(
+  status: EvalSetStatus | EvalRunStatus,
+): `evalStatus.${EvalSetStatus | EvalRunStatus}` {
+  return `evalStatus.${status}`;
 }
 
 const EVAL_VERDICT_TONES: Record<EvalVerdict, StatusTone> = {
@@ -165,6 +146,8 @@ export function evalVerdictTone(verdict: EvalVerdict): StatusTone {
   return EVAL_VERDICT_TONES[verdict];
 }
 
-export function evalVerdictLabel(verdict: EvalVerdict): string {
-  return verdict.charAt(0).toUpperCase() + verdict.slice(1);
+export function evalVerdictLabelKey(
+  verdict: EvalVerdict,
+): `evalVerdict.${EvalVerdict}` {
+  return `evalVerdict.${verdict}`;
 }

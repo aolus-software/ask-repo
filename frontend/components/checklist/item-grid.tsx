@@ -1,6 +1,7 @@
 "use client";
 
 import { ClipboardCheck, Pencil, Trash2 } from "lucide-react";
+import { useTranslations } from "next-intl";
 import { useState } from "react";
 import { toast } from "sonner";
 
@@ -48,7 +49,7 @@ import { fieldError, isApiError } from "@/lib/api/errors";
 import type { ChecklistItemKind, ChecklistItemResponse } from "@/lib/api/types";
 import { PERMISSION, can } from "@/lib/can";
 import { groupByFeature } from "@/lib/checklist/operations";
-import { checklistItemResultLabel, checklistItemResultTone } from "@/lib/status";
+import { checklistItemResultLabelKey, checklistItemResultTone } from "@/lib/status";
 
 const COLUMN_COUNT = 6;
 
@@ -95,6 +96,7 @@ export function ItemGrid({
   /** While a generation runs the empty state must not invite starting another. */
   isGenerating: boolean;
 }) {
+  const tStatus = useTranslations("status");
   const [recording, setRecording] = useState<ChecklistItemResponse | null>(null);
   const [editing, setEditing] = useState<ChecklistItemResponse | null>(null);
   const [draft, setDraft] = useState<Draft | null>(null);
@@ -233,7 +235,7 @@ export function ItemGrid({
                       <div className="flex flex-col gap-1">
                         <StatusBadge
                           tone={checklistItemResultTone(item.status)}
-                          label={checklistItemResultLabel(item.status)}
+                          label={tStatus(checklistItemResultLabelKey(item.status))}
                           className="w-fit"
                         />
                         {item.currentResult ? (

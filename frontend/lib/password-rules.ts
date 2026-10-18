@@ -1,10 +1,12 @@
 import type { PasswordPolicyResponse } from "@/lib/api/types";
 
-export interface PasswordCheck {
-  id: "minLength" | "maxBytes";
-  label: string;
-  passed: boolean;
-}
+/**
+ * A check is its rule id plus the numbers its sentence interpolates. The sentence
+ * itself is `auth.passwordRules.<id>` in the message catalogue.
+ */
+export type PasswordCheck = (
+  { id: "minLength"; min: number } | { id: "maxBytes"; max: number; actual: number }
+) & { passed: boolean };
 
 /**
  * The checks a client can honestly make, derived from the policy the API published.
@@ -22,7 +24,7 @@ export function checkPassword(
   const checks: PasswordCheck[] = [
     {
       id: "minLength",
-      label: `At least ${policy.minLength} characters`,
+      min: policy.minLength,
       passed: value.length >= policy.minLength,
     },
   ];
@@ -34,7 +36,8 @@ export function checkPassword(
   if (bytes > policy.maxBytes) {
     checks.push({
       id: "maxBytes",
-      label: `At most ${policy.maxBytes} bytes (this is ${bytes})`,
+      max: policy.maxBytes,
+      actual: bytes,
       passed: false,
     });
   }

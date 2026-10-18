@@ -7,7 +7,11 @@ import { useState } from "react";
 import { PasswordInput } from "@/components/form/password-input";
 import { Field, FieldDescription, FieldError, FieldLabel } from "@/components/ui/field";
 import { usePasswordPolicy } from "@/hooks/use-password-policy";
-import { checkPassword, passwordChecksPass } from "@/lib/password-rules";
+import {
+  type PasswordCheck,
+  checkPassword,
+  passwordChecksPass,
+} from "@/lib/password-rules";
 import { cn } from "@/lib/utils";
 
 /**
@@ -39,11 +43,18 @@ export function PasswordField({
   autoComplete?: string;
 }) {
   const t = useTranslations("forms.passwordField");
+  const tRules = useTranslations("auth.passwordRules");
+  function ruleText(check: PasswordCheck): string {
+    return check.id === "minLength"
+      ? tRules("minLength", { min: check.min })
+      : tRules("maxBytes", { max: check.max, actual: check.actual });
+  }
   const { data: policy } = usePasswordPolicy();
   const [focused, setFocused] = useState(false);
   const [touched, setTouched] = useState(false);
 
   const checks = policy ? checkPassword(value, policy) : [];
+  const firstFailed = checks.find((check) => !check.passed);
   const localValid = policy ? passwordChecksPass(value, policy) : false;
 
   // The server is authoritative; local state only speaks when it has nothing to say.
@@ -95,7 +106,7 @@ export function PasswordField({
               ) : (
                 <X className="size-4 shrink-0" />
               )}
-              {check.label}
+              {ruleText(check)}
             </li>
           ))}
         </ul>
@@ -105,7 +116,7 @@ export function PasswordField({
         <FieldError>{serverError}</FieldError>
       ) : showInvalid ? (
         <FieldError>
-          {checks.find((check) => !check.passed)?.label ?? t("notAccepted")}
+          {firstFailed ? ruleText(firstFailed) : t("notAccepted")}
         </FieldError>
       ) : showValid ? (
         // Not "valid" — the wordlist check still happens server-side.
