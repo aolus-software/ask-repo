@@ -1,3 +1,5 @@
+import { useTranslations } from "next-intl";
+
 import { Badge } from "@/components/ui/badge";
 
 /**
@@ -7,9 +9,10 @@ import { Badge } from "@/components/ui/badge";
  * this: a badge that is not a project or module status.
  */
 export function UserRoleBadge({ isAdmin }: { isAdmin: boolean }) {
+  const t = useTranslations("settings.users.roleBadge");
   return isAdmin ? (
-    <Badge className="bg-info text-info-foreground">Admin</Badge>
+    <Badge className="bg-info text-info-foreground">{t("admin")}</Badge>
   ) : (
-    <Badge variant="outline">Member</Badge>
+    <Badge variant="outline">{t("member")}</Badge>
   );
 }

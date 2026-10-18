@@ -1,6 +1,7 @@
 "use client";
 
 import { FlaskConical } from "lucide-react";
+import { useTranslations } from "next-intl";
 import { useState } from "react";
 import { toast } from "sonner";
 
@@ -17,17 +18,14 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useGenerateEvalSet } from "@/hooks/use-eval";
-import { fieldError, isApiError } from "@/lib/api/errors";
+import { isApiError } from "@/lib/api/errors";
+import { useErrorText, useFieldErrorText } from "@/lib/i18n/error-text";
 import type { EvalCount, EvalMix } from "@/lib/api/types";
 import { PERMISSION, can } from "@/lib/can";
 
 const COUNT_OPTIONS: EvalCount[] = [10, 25, 50];
 
-const MIX_LABELS: Record<EvalMix, string> = {
-  balanced: "Balanced",
-  explain: "Explain only",
-  locate: "Locate only",
-};
+const MIXES: EvalMix[] = ["balanced", "explain", "locate"];
 
 const EMPTY = {
   name: "",
@@ -50,6 +48,10 @@ export function GenerateEvalSetDialog({
   projectId: string;
   permissions: string[];
 }) {
+  const t = useTranslations("eval.generateDialog");
+  const tMix = useTranslations("eval.mix");
+  const errorText = useErrorText();
+  const fieldErrorText = useFieldErrorText();
   const [open, setOpen] = useState(false);
   const [values, setValues] = useState(EMPTY);
   const mutation = useGenerateEvalSet(projectId);
@@ -58,9 +60,10 @@ export function GenerateEvalSetDialog({
 
   const pathNotIndexed =
     isApiError(mutation.error) && mutation.error.code === "MODULE_PATH_NOT_INDEXED"
-      ? mutation.error.message
+      ? errorText(mutation.error)
       : undefined;
-  const pathError = pathNotIndexed ?? fieldError(mutation.error, "sourcePath");
+  const nameError = fieldErrorText(mutation.error, "name");
+  const pathError = pathNotIndexed ?? fieldErrorText(mutation.error, "sourcePath");
 
   function handleOpenChange(next: boolean) {
     setOpen(next);
@@ -80,7 +83,7 @@ export function GenerateEvalSetDialog({
       },
       {
         onSuccess: () => {
-          toast.success("Generation started");
+          toast.success(t("started"));
           setValues(EMPTY);
           setOpen(false);
         },
@@ -92,36 +95,34 @@ export function GenerateEvalSetDialog({
     <>
       <Button onClick={() => setOpen(true)}>
         <FlaskConical className="size-4" />
-        Generate eval set
+        {t("trigger")}
       </Button>
       <FormDialog
         open={open}
         onOpenChange={handleOpenChange}
-        title="Generate an eval set"
-        description="Generate questions with reference answers from this project's indexed code, to measure the assistant against."
-        submitLabel="Generate"
+        title={t("title")}
+        description={t("description")}
+        submitLabel={t("submit")}
         isPending={mutation.isPending}
         error={pathNotIndexed ? null : mutation.error}
         onSubmit={handleSubmit}
       >
         <Field>
           <FieldLabel htmlFor="eval-name">
-            Name <span className="text-danger">*</span>
+            {t("nameLabel")} <span className="text-danger">*</span>
           </FieldLabel>
           <Input
             id="eval-name"
-            placeholder="e.g., Auth questions"
+            placeholder={t("namePlaceholder")}
             value={values.name}
             onChange={(event) => setValues({ ...values, name: event.target.value })}
-            aria-invalid={Boolean(fieldError(mutation.error, "name"))}
+            aria-invalid={Boolean(nameError)}
           />
-          {fieldError(mutation.error, "name") ? (
-            <FieldError>{fieldError(mutation.error, "name")}</FieldError>
-          ) : null}
+          {nameError ? <FieldError>{nameError}</FieldError> : null}
         </Field>
 
         <Field>
-          <FieldLabel htmlFor="eval-path">Path</FieldLabel>
+          <FieldLabel htmlFor="eval-path">{t("pathLabel")}</FieldLabel>
           <PathPicker
             projectId={projectId}
             value={values.sourcePath}
@@ -129,21 +130,19 @@ export function GenerateEvalSetDialog({
             inputId="eval-path"
             invalid={Boolean(pathError)}
           />
-          <FieldDescription>
-            Leave empty for the whole project, or pick a folder or file to cover.
-          </FieldDescription>
+          <FieldDescription>{t("pathHelp")}</FieldDescription>
           {pathError ? <FieldError>{pathError}</FieldError> : null}
         </Field>
 
         <Field>
-          <FieldLabel>Questions</FieldLabel>
+          <FieldLabel>{t("questionsLabel")}</FieldLabel>
           <Select
             value={String(values.count)}
             onValueChange={(value) =>
               setValues({ ...values, count: Number(value) as EvalCount })
             }
           >
-            <SelectTrigger className="w-full" aria-label="Number of questions">
+            <SelectTrigger className="w-full" aria-label={t("countAria")}>
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -157,20 +156,18 @@ export function GenerateEvalSetDialog({
         </Field>
 
         <Field>
-          <FieldLabel>Mix</FieldLabel>
+          <FieldLabel>{t("mixLabel")}</FieldLabel>
           <Select
             value={values.mix}
             onValueChange={(value) => setValues({ ...values, mix: value as EvalMix })}
           >
-            <SelectTrigger className="w-full" aria-label="Question mix">
-              <SelectValue>
-                {(value: string) => MIX_LABELS[value as EvalMix]}
-              </SelectValue>
+            <SelectTrigger className="w-full" aria-label={t("mixAria")}>
+              <SelectValue>{(value: string) => tMix(value as EvalMix)}</SelectValue>
             </SelectTrigger>
             <SelectContent>
-              {(Object.keys(MIX_LABELS) as EvalMix[]).map((mix) => (
+              {MIXES.map((mix) => (
                 <SelectItem key={mix} value={mix}>
-                  {MIX_LABELS[mix]}
+                  {tMix(mix)}
                 </SelectItem>
               ))}
             </SelectContent>

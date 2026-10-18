@@ -52,7 +52,7 @@ describe("EvalCompare", () => {
       />,
     );
     expect(
-      screen.getByText("Compared on 1 pairs both runs answered"),
+      screen.getByText("Compared on 1 pair both runs answered"),
     ).toBeInTheDocument();
     expect(screen.getByText("How is the token refreshed?")).toBeInTheDocument();
     expect(screen.queryByText(/judged by different models/)).not.toBeInTheDocument();

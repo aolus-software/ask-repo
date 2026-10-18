@@ -1,9 +1,11 @@
 "use client";
 
+import { useTranslations } from "next-intl";
+
 import { Field, FieldError, FieldLabel } from "@/components/ui/field";
 import { PasswordField } from "@/components/form/password-field";
 import { PasswordInput } from "@/components/form/password-input";
-import { fieldError } from "@/lib/api/errors";
+import { useFieldErrorText } from "@/lib/i18n/error-text";
 
 export interface ChangePasswordValues {
   currentPassword: string;
@@ -24,11 +26,16 @@ export function ChangePasswordFields({
   onChange: (values: ChangePasswordValues) => void;
   error: unknown;
 }) {
+  const t = useTranslations("settings.users.changePassword");
+  const fieldErrorText = useFieldErrorText();
+  const currentPasswordError = fieldErrorText(error, "currentPassword");
+  const newPasswordError = fieldErrorText(error, "newPassword");
+
   return (
     <>
       <Field>
         <FieldLabel htmlFor="currentPassword">
-          Current password <span className="text-danger">*</span>
+          {t("current")} <span className="text-danger">*</span>
         </FieldLabel>
         <PasswordInput
           id="currentPassword"
@@ -37,19 +44,17 @@ export function ChangePasswordFields({
           onChange={(event) =>
             onChange({ ...values, currentPassword: event.target.value })
           }
-          aria-invalid={Boolean(fieldError(error, "currentPassword"))}
+          aria-invalid={Boolean(currentPasswordError)}
         />
-        {fieldError(error, "currentPassword") ? (
-          <FieldError>{fieldError(error, "currentPassword")}</FieldError>
-        ) : null}
+        {currentPasswordError ? <FieldError>{currentPasswordError}</FieldError> : null}
       </Field>
 
       <PasswordField
         id="newPassword"
-        label="New password"
+        label={t("new")}
         value={values.newPassword}
         onChange={(newPassword) => onChange({ ...values, newPassword })}
-        serverError={fieldError(error, "newPassword")}
+        serverError={newPasswordError}
       />
     </>
   );

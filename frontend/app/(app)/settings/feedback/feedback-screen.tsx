@@ -1,6 +1,7 @@
 "use client";
 
 import { MessageSquareWarning } from "lucide-react";
+import { useTranslations } from "next-intl";
 
 import { EmptyState } from "@/components/feedback/empty-state";
 import { Forbidden } from "@/components/feedback/forbidden";
@@ -38,6 +39,7 @@ function changedKey(
 }
 
 export function FeedbackScreen() {
+  const t = useTranslations("settings.feedback");
   const user = useSession();
   const { params, setPage, setParam } = useListParams(
     { limit: 25 },
@@ -48,17 +50,11 @@ export function FeedbackScreen() {
   const summary = useFeedbackSummary(listParams);
   const rows = list.data?.items ?? [];
 
-  if (!user.isAdmin)
-    return (
-      <Forbidden message="Only administrators can read feedback on model output." />
-    );
+  if (!user.isAdmin) return <Forbidden message={t("forbidden")} />;
 
   return (
     <div className="mx-auto w-full max-w-7xl space-y-6">
-      <PageHeader
-        title="Feedback"
-        description="How people rated answers, chat replies and proposals. Who voted, and the question behind a vote, are never shown."
-      />
+      <PageHeader title={t("title")} description={t("description")} />
 
       <ListToolbar
         columns={5}
@@ -89,8 +85,8 @@ export function FeedbackScreen() {
         ) : !list.isLoading && rows.length === 0 ? (
           <EmptyState
             icon={MessageSquareWarning}
-            title="No feedback yet"
-            description="Votes on answers, chat replies and change sets will appear here."
+            title={t("emptyTitle")}
+            description={t("emptyDescription")}
           />
         ) : (
           <>

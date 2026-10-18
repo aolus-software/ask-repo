@@ -12,6 +12,8 @@
  * fields precisely so a renamed module reads correctly in a month-old notification.
  */
 
+import type { useTranslations } from "next-intl";
+
 import type { NotificationSummary } from "@/lib/api/types";
 
 export const NOTIFICATION_TYPES = [
@@ -51,39 +53,37 @@ export function notificationHref(n: NotificationSummary): string {
   return `/projects/${n.projectId}`;
 }
 
-const TITLES: Record<string, (d: Record<string, unknown>) => string> = {
-  "project.ready": (d) => `${name(d, "projectName")} finished indexing`,
-  "project.failed": (d) => `${name(d, "projectName")} failed to index`,
-  "project.reindex.finished": (d) => `${name(d, "projectName")} finished reindexing`,
-  "project.reindex.failed": (d) => `${name(d, "projectName")} failed to reindex`,
-  "checklist_change_set.pending": (d) =>
-    `${name(d, "moduleName")} has a checklist change set waiting for review`,
-  "checklist_change_set.applied": (d) =>
-    `A checklist change set was applied to ${name(d, "moduleName")}`,
-  "checklist_change_set.discarded": (d) =>
-    `A checklist change set for ${name(d, "moduleName")} was discarded`,
-  "mock_data_change_set.pending": (d) =>
-    `${name(d, "moduleName")} has a mock data change set waiting for review`,
-  "mock_data_change_set.applied": (d) =>
-    `A mock data change set was applied to ${name(d, "moduleName")}`,
-  "mock_data_change_set.discarded": (d) =>
-    `A mock data change set for ${name(d, "moduleName")} was discarded`,
-  "membership.granted": (d) =>
-    `You were added to ${name(d, "projectName")} as ${name(d, "roleName")}`,
-  "eval_set.ready": (d) =>
-    `Eval set ${name(d, "setName")} in ${name(d, "projectName")} is ready`,
-  "eval_set.failed": (d) =>
-    `Eval set ${name(d, "setName")} in ${name(d, "projectName")} failed to generate`,
-  "eval_run.finished": (d) =>
-    `An eval run of ${name(d, "setName")} in ${name(d, "projectName")} finished`,
-  "eval_run.failed": (d) =>
-    `An eval run of ${name(d, "setName")} in ${name(d, "projectName")} failed`,
-};
+/** A translator scoped to the `notifications` namespace. */
+type NotificationsT = ReturnType<typeof useTranslations<"notifications">>;
 
-/** A human sentence for one notification, falling back to the raw type. */
-export function notificationTitle(n: NotificationSummary): string {
-  const render = TITLES[n.eventType];
-  return render ? render(n.details) : n.eventType;
+/** The catalogue key for an event type: the name with `.` replaced by `_`. */
+function typeKey(eventType: string): string {
+  return eventType.replaceAll(".", "_");
+}
+
+/**
+ * A human sentence for one notification, falling back to the raw type.
+ *
+ * The template is translated; `details` supplies names the admin typed (a project, a
+ * module, a role), which are interpolated as written and never translated.
+ */
+export function notificationTitle(n: NotificationSummary, t: NotificationsT): string {
+  const key = `titles.${typeKey(n.eventType)}`;
+  if (!t.has(key as never)) return n.eventType;
+  const untitled = t("untitled");
+  const name = (field: string): string => {
+    const value = n.details[field];
+    return typeof value === "string" && value ? value : untitled;
+  };
+  return t(
+    key as never,
+    {
+      projectName: name("projectName"),
+      moduleName: name("moduleName"),
+      roleName: name("roleName"),
+      setName: name("setName"),
+    } as never,
+  );
 }
 
 /**
@@ -94,30 +94,13 @@ export function notificationTitle(n: NotificationSummary): string {
  * enumerates. Falls back to the raw type for the same reason `notificationTitle`
  * does: a backend that ships a new event type must not blank this screen.
  */
-const CATEGORY_TITLES: Record<string, string> = {
-  "project.ready": "A project finished indexing",
-  "project.failed": "A project failed to index",
-  "project.reindex.finished": "A project finished reindexing",
-  "project.reindex.failed": "A project failed to reindex",
-  "checklist_change_set.pending": "A checklist change set is waiting for review",
-  "checklist_change_set.applied": "A checklist change set was applied",
-  "checklist_change_set.discarded": "A checklist change set was discarded",
-  "mock_data_change_set.pending": "A mock data change set is waiting for review",
-  "mock_data_change_set.applied": "A mock data change set was applied",
-  "mock_data_change_set.discarded": "A mock data change set was discarded",
-  "membership.granted": "You were added to a project",
-  "eval_set.ready": "An eval set finished generating",
-  "eval_set.failed": "An eval set failed to generate",
-  "eval_run.finished": "An eval run finished",
-  "eval_run.failed": "An eval run failed",
-};
-
-/** A human label for an event *type*, for the preferences screen's row headings. */
-export function notificationTitleForType(eventType: string): string {
-  return CATEGORY_TITLES[eventType] ?? eventType;
+export function notificationTitleForType(eventType: string, t: NotificationsT): string {
+  const key = `categories.${typeKey(eventType)}`;
+  return t.has(key as never) ? t(key as never) : eventType;
 }
 
-function name(details: Record<string, unknown>, key: string): string {
-  const value = details[key];
-  return typeof value === "string" && value ? value : "Untitled";
+/** A short label for an event type, for the filter's options. */
+export function notificationTypeLabel(eventType: string, t: NotificationsT): string {
+  const key = `types.${typeKey(eventType)}`;
+  return t.has(key as never) ? t(key as never) : eventType;
 }

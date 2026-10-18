@@ -1,6 +1,7 @@
 "use client";
 
 import { UserPlus, Users } from "lucide-react";
+import { useTranslations } from "next-intl";
 import { useState } from "react";
 
 import { EmptyState } from "@/components/feedback/empty-state";
@@ -20,6 +21,7 @@ import { useUsers } from "@/hooks/use-users";
 import { SORT } from "@/lib/api/endpoints";
 
 export function UsersScreen() {
+  const t = useTranslations("settings.users");
   const user = useSession();
   const [creating, setCreating] = useState(false);
   const { params, searchInput, setSearch, setPage } = useListParams({
@@ -34,25 +36,24 @@ export function UsersScreen() {
   // The route body is wrapped in its gate. Hiding the nav item is not gating the
   // route — an operator can type the URL (navigation.md §6). This mirrors the
   // backend's ADMIN_REQUIRED; it does not replace it.
-  if (!user.isAdmin)
-    return <Forbidden message="Only administrators can manage accounts." />;
+  if (!user.isAdmin) return <Forbidden message={t("forbidden")} />;
 
   return (
     <div className="mx-auto w-full max-w-7xl">
       <PageHeader
-        title="Users"
-        description="Accounts on this instance."
+        title={t("title")}
+        description={t("description")}
         action={
           <Button onClick={() => setCreating(true)}>
             <UserPlus className="size-4" />
-            Add user
+            {t("add")}
           </Button>
         }
       />
 
       <ListToolbar
         initialSearch={searchInput}
-        placeholder="Search by name or email"
+        placeholder={t("searchPlaceholder")}
         onSearchChange={setSearch}
       />
 
@@ -64,13 +65,11 @@ export function UsersScreen() {
         ) : !query.isLoading && users.length === 0 ? (
           <EmptyState
             icon={Users}
-            title={params.search ? "No accounts match" : "No accounts yet"}
+            title={params.search ? t("empty.noMatchTitle") : t("empty.noneTitle")}
             description={
-              params.search
-                ? "Try a different name or email."
-                : "Provision an account for a colleague to get them started."
+              params.search ? t("empty.noMatchDescription") : t("empty.noneDescription")
             }
-            action={<Button onClick={() => setCreating(true)}>Add user</Button>}
+            action={<Button onClick={() => setCreating(true)}>{t("add")}</Button>}
           />
         ) : (
           <>

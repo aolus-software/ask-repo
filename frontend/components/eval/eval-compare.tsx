@@ -1,14 +1,23 @@
+import { useTranslations } from "next-intl";
+
 import { EvalVerdictBadge } from "@/components/eval/eval-verdict-badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import type { EvalPair, EvalRunDetail } from "@/lib/api/types";
 import { compareRuns, type Tally } from "@/lib/eval-compare";
 
 function TallyLine({ label, tally }: { label: string; tally: Tally }) {
+  const t = useTranslations("eval.compare");
   return (
     <p className="text-sm">
-      <span className="text-muted-foreground">{label}:</span> hits {tally.hits}/
-      {tally.total} · correct {tally.correct} · partial {tally.partial} · wrong{" "}
-      {tally.wrong} · errors {tally.errors}
+      <span className="text-muted-foreground">{label}:</span>{" "}
+      {t("tally", {
+        hits: tally.hits,
+        total: tally.total,
+        correct: tally.correct,
+        partial: tally.partial,
+        wrong: tally.wrong,
+        errors: tally.errors,
+      })}
     </p>
   );
 }
@@ -23,6 +32,7 @@ export function EvalCompare({
   head: EvalRunDetail;
   pairs: EvalPair[];
 }) {
+  const t = useTranslations("eval.compare");
   const comparison = compareRuns(base, head);
   const questions = new Map(pairs.map((pair) => [pair.id, pair.question]));
 
@@ -30,21 +40,16 @@ export function EvalCompare({
     <div className="space-y-3">
       {comparison.judgeChanged ? (
         <Alert variant="warning">
-          <AlertDescription>
-            These runs were judged by different models. Verdict changes may reflect the
-            judge, not the answers. Retrieval hits are unaffected.
-          </AlertDescription>
+          <AlertDescription>{t("judgeChanged")}</AlertDescription>
         </Alert>
       ) : null}
       <p className="text-muted-foreground text-sm">
-        Compared on {comparison.commonPairIds.length} pairs both runs answered
+        {t("comparedOn", { count: comparison.commonPairIds.length })}
       </p>
-      <TallyLine label="Base" tally={comparison.base} />
-      <TallyLine label="Head" tally={comparison.head} />
+      <TallyLine label={t("base")} tally={comparison.base} />
+      <TallyLine label={t("head")} tally={comparison.head} />
       {comparison.flips.length === 0 ? (
-        <p className="text-muted-foreground text-sm">
-          No pair changed between these runs.
-        </p>
+        <p className="text-muted-foreground text-sm">{t("noChange")}</p>
       ) : (
         <ul className="divide-border divide-y rounded-md border">
           {comparison.flips.map((flip) => (
@@ -54,8 +59,10 @@ export function EvalCompare({
               </span>
               {flip.hit ? (
                 <span className="text-sm">
-                  Retrieval: {flip.hit[0] ? "hit" : "miss"} →{" "}
-                  {flip.hit[1] ? "hit" : "miss"}
+                  {t("retrievalChange", {
+                    from: flip.hit[0] ? t("hit") : t("miss"),
+                    to: flip.hit[1] ? t("hit") : t("miss"),
+                  })}
                 </span>
               ) : null}
               {flip.verdict ? (

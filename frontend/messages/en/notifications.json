@@ -1,1 +1,88 @@
-{}
+{
+  "title": "Notifications",
+  "description": "Everything AskRepo has told you about, newest first.",
+  "markAllRead": "Mark all read",
+  "seeAll": "See all",
+  "unread": "Unread",
+  "bellLabel": "Notifications ({count} unread)",
+  "overflow": "99+",
+  "empty": "Nothing to catch up on.",
+  "markReadFailed": "Couldn't mark notifications read",
+  "untitled": "Untitled",
+  "emptyState": {
+    "noMatchTitle": "No notifications match",
+    "noneTitle": "Nothing yet",
+    "noMatchDescription": "Try clearing your filters.",
+    "noneDescription": "Project and checklist events will appear here as they happen."
+  },
+  "filters": {
+    "byProject": "Filter by project",
+    "byType": "Filter by type",
+    "allTypes": "All types",
+    "allProjects": "All projects",
+    "unreadOnly": "Unread only"
+  },
+  "types": {
+    "project_ready": "Project ready",
+    "project_failed": "Project failed",
+    "project_reindex_finished": "Project reindex finished",
+    "project_reindex_failed": "Project reindex failed",
+    "checklist_change_set_pending": "Checklist change set pending",
+    "checklist_change_set_applied": "Checklist change set applied",
+    "checklist_change_set_discarded": "Checklist change set discarded",
+    "mock_data_change_set_pending": "Mock data change set pending",
+    "mock_data_change_set_applied": "Mock data change set applied",
+    "mock_data_change_set_discarded": "Mock data change set discarded",
+    "membership_granted": "Membership granted",
+    "eval_set_ready": "Eval set ready",
+    "eval_set_failed": "Eval set failed",
+    "eval_run_finished": "Eval run finished",
+    "eval_run_failed": "Eval run failed"
+  },
+  "categories": {
+    "project_ready": "A project finished indexing",
+    "project_failed": "A project failed to index",
+    "project_reindex_finished": "A project finished reindexing",
+    "project_reindex_failed": "A project failed to reindex",
+    "checklist_change_set_pending": "A checklist change set is waiting for review",
+    "checklist_change_set_applied": "A checklist change set was applied",
+    "checklist_change_set_discarded": "A checklist change set was discarded",
+    "mock_data_change_set_pending": "A mock data change set is waiting for review",
+    "mock_data_change_set_applied": "A mock data change set was applied",
+    "mock_data_change_set_discarded": "A mock data change set was discarded",
+    "membership_granted": "You were added to a project",
+    "eval_set_ready": "An eval set finished generating",
+    "eval_set_failed": "An eval set failed to generate",
+    "eval_run_finished": "An eval run finished",
+    "eval_run_failed": "An eval run failed"
+  },
+  "titles": {
+    "project_ready": "{projectName} finished indexing",
+    "project_failed": "{projectName} failed to index",
+    "project_reindex_finished": "{projectName} finished reindexing",
+    "project_reindex_failed": "{projectName} failed to reindex",
+    "checklist_change_set_pending": "{moduleName} has a checklist change set waiting for review",
+    "checklist_change_set_applied": "A checklist change set was applied to {moduleName}",
+    "checklist_change_set_discarded": "A checklist change set for {moduleName} was discarded",
+    "mock_data_change_set_pending": "{moduleName} has a mock data change set waiting for review",
+    "mock_data_change_set_applied": "A mock data change set was applied to {moduleName}",
+    "mock_data_change_set_discarded": "A mock data change set for {moduleName} was discarded",
+    "membership_granted": "You were added to {projectName} as {roleName}",
+    "eval_set_ready": "Eval set {setName} in {projectName} is ready",
+    "eval_set_failed": "Eval set {setName} in {projectName} failed to generate",
+    "eval_run_finished": "An eval run of {setName} in {projectName} finished",
+    "eval_run_failed": "An eval run of {setName} in {projectName} failed"
+  },
+  "preferences": {
+    "emailOff": "Email delivery is turned off on this instance. Your choices are saved and will apply if an administrator turns it on.",
+    "emptyTitle": "Nothing to configure yet",
+    "emptyDescription": "This instance has no notification types to set preferences for.",
+    "columns": {
+      "event": "Event",
+      "inApp": "In app",
+      "email": "Email"
+    },
+    "saved": "Preferences saved",
+    "save": "Save preferences"
+  }
+}
