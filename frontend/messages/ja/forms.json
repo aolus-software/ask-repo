@@ -1,0 +1,24 @@
+{
+  "validation": {
+    "missing": "この項目は必須です。",
+    "string_too_short": "短すぎます。",
+    "string_too_long": "長すぎます。",
+    "enum": "一覧から選択してください。",
+    "literal_error": "一覧から選択してください。",
+    "url_parsing": "有効な URL を入力してください。",
+    "url_scheme": "URL は https:// で始まる必要があります。",
+    "int_parsing": "整数を入力してください。",
+    "greater_than_equal": "数値が小さすぎます。",
+    "less_than_equal": "数値が大きすぎます。",
+    "uuid_parsing": "有効な ID ではありません。"
+  },
+  "passwordInput": {
+    "show": "パスワードを表示",
+    "hide": "パスワードを隠す"
+  },
+  "passwordField": {
+    "notAccepted": "このパスワードは使用できません。",
+    "looksGood": "今のところ問題ありません。",
+    "hint": "他で使っていない強力なパスワードを選んでください。"
+  }
+}

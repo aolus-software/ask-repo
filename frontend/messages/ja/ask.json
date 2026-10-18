@@ -1,0 +1,94 @@
+{
+  "newConversation": {
+    "title": "質問",
+    "description": "インデックス済みのコードをもとに、引用付きで回答します。質問はあなただけが閲覧できます。",
+    "placeholderReady": "出金額の計算はどのように行われていますか？",
+    "placeholderChooseProject": "先にプロジェクトを選択してください"
+  },
+  "conversation": {
+    "untitled": "無題の会話",
+    "newTitle": "新しい会話",
+    "notFound": "その会話は存在しません。",
+    "projectUnavailable": "そのプロジェクトは利用できなくなりました。",
+    "answerStopped": "回答が停止しました",
+    "tryAgain": "もう一度試す",
+    "answering": "回答中…",
+    "askFollowUp": "追加で質問する"
+  },
+  "phases": {
+    "queued": "待機中…",
+    "classifying": "質問を理解しています…",
+    "retrieving": "コードベースを検索しています…",
+    "grading": "見つかった内容を確認しています…",
+    "generating": "回答を作成しています…"
+  },
+  "stream": {
+    "noStream": "サーバーから回答ストリームが送られてきませんでした。",
+    "failed": "回答に失敗しました。"
+  },
+  "composer": {
+    "questionLabel": "質問",
+    "ask": "質問する"
+  },
+  "answer": {
+    "copyCode": "コードをコピー"
+  },
+  "groundingWarnings": {
+    "no_context": "このプロジェクトに関連する内容が見つからなかったため、コードに基づく回答は生成されませんでした。",
+    "uncited_answer": "この回答は、提示された抜粋をどれも引用していません。注意して扱ってください。",
+    "unknown_paths": "この回答は、取得した抜粋に含まれていないファイルに言及しています。それらの参照は存在しない可能性があります。",
+    "weak_evidence": "取得したコードでは、この質問を十分にカバーできていない可能性があります。回答には判断できなかった点が示されています。",
+    "unknown": "根拠に関する警告: {warning}"
+  },
+  "interruptedNote": "接続が切断されました。上に届いた内容は保持されています。",
+  "messages": {
+    "showFull": "メッセージ全体を表示",
+    "collapse": "メッセージを折りたたむ",
+    "interrupted": "この回答は中断されました。届いた内容は保持されています。",
+    "endedEarly": "この回答は途中で終了しました（{reason}）。"
+  },
+  "projectPicker": {
+    "loadingProjects": "プロジェクトを読み込み中…",
+    "searchProjects": "プロジェクトを検索",
+    "label": "プロジェクト",
+    "loading": "読み込み中…",
+    "noMatch": "一致するプロジェクトはありません。"
+  },
+  "sources": {
+    "title": "出典（{count}）",
+    "lines": "{start}–{end} 行目"
+  },
+  "preflight": {
+    "couldNotAnswer": "その質問には回答できませんでした",
+    "genericError": "問題が発生しました。",
+    "needsReindexTitle": "このプロジェクトは再インデックスが必要です",
+    "needsReindexBody": "このプロジェクトは別の埋め込みモデルでインデックスされたため、保存済みのベクトルを現在このインスタンスで動作しているモデルで検索できません。再インデックスすると、再び質問できるようになります。",
+    "reindexNow": "今すぐ再インデックス",
+    "reindexStarted": "再インデックスを開始しました",
+    "reindexAlreadyRunning": "再インデックスはすでに実行中です",
+    "askToReindex": "追加した人または管理者に再インデックスを依頼してください。",
+    "notReadyTitle": "このプロジェクトはまだ準備ができていません",
+    "notReadyBody": "現在クローンまたはインデックス作成中です。「準備完了」になると質問できるようになります。"
+  },
+  "rail": {
+    "deleteConversation": "会話を削除",
+    "deleteTitle": "この会話を削除しますか？",
+    "deleteDescription": "この会話はあなただけが閲覧でき、削除すると復元できません。",
+    "delete": "削除",
+    "deleted": "会話を削除しました",
+    "conversations": "会話",
+    "newConversation": "新しい会話",
+    "searchConversations": "会話を検索",
+    "loadingProjects": "プロジェクトを読み込み中…",
+    "allProjects": "すべてのプロジェクト",
+    "filterByProject": "プロジェクトで絞り込む",
+    "loading": "読み込み中…",
+    "couldNotLoadProjects": "プロジェクトを読み込めませんでした。",
+    "noProjectMatches": "一致するプロジェクトはありません。",
+    "noConversationMatches": "一致する会話はありません。",
+    "nothingYet": "まだ何もありません。プロジェクトを選んで質問してください。",
+    "untitled": "無題の会話",
+    "showConversations": "会話を表示",
+    "hideConversations": "会話を隠す"
+  }
+}

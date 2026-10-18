@@ -1,0 +1,84 @@
+{
+  "users": {
+    "title": "ユーザー",
+    "description": "このインスタンスのアカウント。",
+    "add": "ユーザーを追加",
+    "searchPlaceholder": "名前またはメールアドレスで検索",
+    "forbidden": "アカウントを管理できるのは管理者のみです。",
+    "empty": {
+      "noMatchTitle": "一致するアカウントはありません",
+      "noneTitle": "アカウントはまだありません",
+      "noMatchDescription": "別の名前またはメールアドレスをお試しください。",
+      "noneDescription": "同僚のアカウントを作成して利用を始めてもらいましょう。"
+    },
+    "table": {
+      "columns": {
+        "name": "名前",
+        "email": "メールアドレス",
+        "role": "ロール",
+        "lastLogin": "最終ログイン",
+        "created": "作成日",
+        "actions": "操作"
+      },
+      "never": "なし"
+    },
+    "roleBadge": {
+      "admin": "管理者",
+      "member": "メンバー"
+    },
+    "actionsFor": "{name} の操作",
+    "actions": {
+      "edit": "編集",
+      "resetPassword": "パスワードをリセット",
+      "deactivate": "無効化"
+    },
+    "create": {
+      "title": "ユーザーを追加",
+      "description": "初回サインイン時に、本人が自分のパスワードを設定するよう求められます。",
+      "submit": "アカウントを作成",
+      "done": "アカウントを作成しました",
+      "fields": {
+        "name": "名前",
+        "email": "メールアドレス",
+        "password": "仮パスワード",
+        "administrator": "管理者"
+      }
+    },
+    "edit": {
+      "title": "{name} を編集",
+      "submit": "変更を保存",
+      "done": "アカウントを更新しました",
+      "fields": {
+        "name": "名前",
+        "administrator": "管理者"
+      }
+    },
+    "reset": {
+      "title": "{name} のパスワードをリセット",
+      "description": "このアカウントのすべてのセッションがサインアウトされます。",
+      "submit": "パスワードをリセット",
+      "done": "パスワードをリセットしました",
+      "fields": {
+        "password": "仮パスワード"
+      }
+    },
+    "deactivate": {
+      "title": "{name} を無効化しますか？",
+      "description": "このユーザーのセッションは直ちに終了します。作成したプロジェクトは残ります。",
+      "confirm": "無効化",
+      "done": "アカウントを無効化しました"
+    },
+    "lastOwner": "次のプロジェクトのオーナーがいなくなります: <projects></projects>。先に別のユーザーにオーナーのロールを付与してください。",
+    "changePassword": {
+      "current": "現在のパスワード",
+      "new": "新しいパスワード"
+    }
+  },
+  "feedback": {
+    "title": "フィードバック",
+    "description": "回答、チャットの返信、提案に対する評価です。誰が投票したか、投票の元になった質問は表示されません。",
+    "forbidden": "モデル出力へのフィードバックを閲覧できるのは管理者のみです。",
+    "emptyTitle": "フィードバックはまだありません",
+    "emptyDescription": "回答、チャットの返信、変更セットへの投票がここに表示されます。"
+  }
+}

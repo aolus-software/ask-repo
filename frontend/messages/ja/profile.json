@@ -1,0 +1,89 @@
+{
+  "language": {
+    "intro": "すべての画面とメールの言語です。回答は質問した言語に合わせます。",
+    "browserDefault": "ブラウザの既定",
+    "save": "言語を保存",
+    "saved": "言語を保存しました"
+  },
+  "screen": {
+    "title": "プロフィール",
+    "description": "アカウント、セッション、設定。",
+    "sectionsAria": "プロフィールのセクション",
+    "sections": {
+      "account": "アカウント",
+      "answerStyle": "回答スタイル",
+      "language": "言語",
+      "sessions": "セッション",
+      "activity": "アクティビティ",
+      "notifications": "通知",
+      "password": "パスワード"
+    }
+  },
+  "account": {
+    "adminNote": "管理者はすべてのプロジェクトを閲覧できます。以下の一覧は、あなたがメンバーになっているプロジェクトのみです。",
+    "empty": "まだどのプロジェクトのメンバーでもありません。",
+    "columns": {
+      "project": "プロジェクト",
+      "role": "ロール"
+    }
+  },
+  "sessions": {
+    "lastSignedIn": "最終サインイン: <when>{time}</when>",
+    "never": "なし",
+    "columns": {
+      "device": "デバイス",
+      "ipAddress": "IP アドレス",
+      "started": "開始",
+      "lastActive": "最終アクティブ",
+      "actions": "操作"
+    },
+    "thisDevice": "このデバイス",
+    "logOut": "ログアウト",
+    "logOutEverywhere": "すべての端末からログアウト",
+    "confirmTitle": "このセッションをサインアウトしますか？",
+    "confirmDescription": "このセッションは今後更新できなくなりますが、現在のアクセストークンの有効期限（既定では 15 分）まではサインインしたままになる場合があります。",
+    "confirmLabel": "サインアウトする",
+    "signedOut": "セッションをサインアウトしました"
+  },
+  "activity": {
+    "empty": "まだ記録はありません。",
+    "project": "プロジェクト",
+    "columns": {
+      "event": "イベント",
+      "outcome": "結果",
+      "target": "対象",
+      "ipAddress": "IP アドレス",
+      "time": "日時"
+    }
+  },
+  "answerStyle": {
+    "intro": "質問画面で得られる回答の形を調整します。チーム全体で共有する QA チェックリストやモックデータには影響しません。",
+    "default": "既定",
+    "save": "回答スタイルを保存",
+    "saved": "回答スタイルを保存しました",
+    "dials": {
+      "detail": "詳しさ",
+      "familiarity": "習熟度",
+      "format": "形式"
+    },
+    "options": {
+      "brief": "簡潔",
+      "thorough": "詳細",
+      "new": "このリポジトリは初めて",
+      "expert": "熟練者",
+      "prose": "文章",
+      "bullets": "箇条書き"
+    }
+  },
+  "password": {
+    "resetSent": "メールが届く場合は、リセット用リンクを送信しました",
+    "resetFailed": "リセット用リンクを送信できませんでした。もう一度お試しください。",
+    "changed": "パスワードを変更しました",
+    "changedDescription": "他のセッションはサインアウトされました",
+    "formTitle": "パスワードを変更",
+    "formDescription": "他のセッションはサインアウトされます。このセッションはサインインしたままです。",
+    "submit": "パスワードを変更",
+    "forgotten": "現在のパスワードをお忘れですか？代わりにリンクをメールでお送りできます。",
+    "emailReset": "リセット用リンクをメールで受け取る"
+  }
+}

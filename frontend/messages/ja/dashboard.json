@@ -1,0 +1,23 @@
+{
+  "welcome": "おかえりなさい、{name} さん",
+  "description": "このインスタンスでインデックスされたコードベースについて質問できます。",
+  "stats": {
+    "projects": "このインスタンスのプロジェクト",
+    "conversations": "あなたの会話"
+  },
+  "recentProjects": {
+    "title": "最近のプロジェクト",
+    "viewAll": "すべて表示",
+    "emptyTitle": "プロジェクトはまだありません",
+    "emptyDescription": "リポジトリを追加すると、{appName} がクローンしてインデックスを作成します。",
+    "emptyAction": "追加する"
+  },
+  "recentQuestions": {
+    "title": "最近の質問",
+    "ask": "質問する",
+    "emptyTitle": "まだ質問していません",
+    "emptyDescription": "インデックス済みのプロジェクトについて質問してみましょう。",
+    "emptyAction": "質問する",
+    "untitled": "無題の会話"
+  }
+}

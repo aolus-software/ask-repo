@@ -1,0 +1,32 @@
+{
+  "items": {
+    "dashboard": "ダッシュボード",
+    "projects": "プロジェクト",
+    "ask": "質問",
+    "checklist": "チェックリスト",
+    "settings": "設定",
+    "users": "ユーザー",
+    "roles": "ロール",
+    "auditTrail": "監査ログ",
+    "feedback": "フィードバック",
+    "notifications": "通知",
+    "profile": "プロフィール",
+    "export": "エクスポート",
+    "eval": "評価"
+  },
+  "navbar": {
+    "toggleNavigation": "ナビゲーションを切り替え",
+    "toggleTheme": "テーマを切り替え"
+  },
+  "account": {
+    "label": "アカウント",
+    "profile": "プロフィール",
+    "logOut": "ログアウト",
+    "logOutEverywhere": "すべての端末からログアウト"
+  },
+  "pagination": {
+    "summary": "{page} / {totalPages} ページ · 全 {totalCount} 件",
+    "previous": "前へ",
+    "next": "次へ"
+  }
+}
