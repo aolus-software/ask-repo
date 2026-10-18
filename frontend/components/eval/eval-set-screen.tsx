@@ -1,6 +1,7 @@
 "use client";
 
 import { Play, Trash2 } from "lucide-react";
+import { useTranslations } from "next-intl";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
@@ -30,6 +31,7 @@ import { useEvalRun, useEvalRuns, useEvalSet, useStartEvalRun } from "@/hooks/us
 import { useProject } from "@/hooks/use-projects";
 import { can, PERMISSION } from "@/lib/can";
 import { isApiError } from "@/lib/api/errors";
+import { useErrorText } from "@/lib/i18n/error-text";
 import { formatAbsolute } from "@/lib/dates";
 import { toast } from "sonner";
 
@@ -40,6 +42,9 @@ export function EvalSetScreen({
   projectId: string;
   setId: string;
 }) {
+  const t = useTranslations("eval.screen");
+  const tTally = useTranslations("eval");
+  const errorText = useErrorText();
   const projectQuery = useProject(projectId);
   // Nothing under eval-sets is fetched until the project says the caller may read it.
   const mayRead = projectQuery.data
@@ -70,7 +75,7 @@ export function EvalSetScreen({
     return (
       <DetailError
         error={projectQuery.error}
-        notFoundMessage="That project does not exist, or you do not have access to it."
+        notFoundMessage={t("projectNotFound")}
         onRetry={() => projectQuery.refetch()}
       />
     );
@@ -80,7 +85,7 @@ export function EvalSetScreen({
     return (
       <DetailError
         error={setQuery.error}
-        notFoundMessage="That eval set does not exist, or it has been deleted."
+        notFoundMessage={t("setNotFound")}
         onRetry={() => setQuery.refetch()}
       />
     );
@@ -95,10 +100,10 @@ export function EvalSetScreen({
   const doneRuns = runs.filter((run) => run.status === "done");
   const running = runs.some((run) => run.status === "running");
   const description = [
-    set.sourcePath ?? "Whole project",
-    `${set.pairCount} pairs`,
+    set.sourcePath ?? tTally("wholeProject"),
+    t("pairCount", { count: set.pairCount }),
     set.indexedGeneration !== null
-      ? `generated from generation ${set.indexedGeneration}`
+      ? t("generatedFrom", { generation: set.indexedGeneration })
       : null,
   ]
     .filter(Boolean)
@@ -108,9 +113,17 @@ export function EvalSetScreen({
   // runs started in the same second.
   const runLabel = (id: string) => {
     const index = runs.findIndex((candidate) => candidate.id === id);
-    if (index < 0) return "Select a run";
-    return `Run ${runs.length - index} · ${formatAbsolute(runs[index].createdAt)}`;
+    if (index < 0) return t("selectRun");
+    return t("runLabel", {
+      number: runs.length - index,
+      date: formatAbsolute(runs[index].createdAt) ?? "",
+    });
   };
+
+  const compareSelects = [
+    ["base", t("baseRun"), baseId, setBaseId],
+    ["head", t("headRun"), headId, setHeadId],
+  ] as const;
 
   return (
     <div className="mx-auto w-full max-w-7xl space-y-6">
@@ -124,27 +137,25 @@ export function EvalSetScreen({
               <Button
                 variant="outline"
                 onClick={() => setConfirmingDelete(true)}
-                aria-label={`Delete ${set.name}`}
+                aria-label={t("deleteAria", { name: set.name })}
               >
                 <Trash2 className="size-4" />
-                Delete
+                {t("delete")}
               </Button>
               <Button
                 disabled={running || set.status !== "ready" || startRun.isPending}
                 onClick={() =>
                   startRun.mutate(undefined, {
-                    onSuccess: () => toast.success("Run started"),
+                    onSuccess: () => toast.success(t("runStarted")),
                     onError: (error) =>
                       toast.error(
-                        isApiError(error)
-                          ? error.message
-                          : "The run could not be started",
+                        isApiError(error) ? errorText(error) : t("runStartFailed"),
                       ),
                   })
                 }
               >
                 <Play className="size-4" />
-                Run
+                {t("run")}
               </Button>
             </div>
           ) : null
@@ -154,16 +165,16 @@ export function EvalSetScreen({
       {set.indexedGeneration !== null &&
       set.indexedGeneration !== set.projectGeneration ? (
         <p className="text-muted-foreground text-sm">
-          Project is now at generation {set.projectGeneration}.
+          {t("projectNowAt", { generation: set.projectGeneration })}
         </p>
       ) : null}
 
       {set.status === "failed" && set.error ? (
-        <JobFailureAlert title="Generation failed" message={set.error} />
+        <JobFailureAlert title={t("generationFailed")} message={set.error} />
       ) : null}
 
       <section className="space-y-3">
-        <h2 className="text-xl font-semibold tracking-tight">Pairs</h2>
+        <h2 className="text-xl font-semibold tracking-tight">{t("pairs")}</h2>
         <Card className="p-0">
           <EvalPairTable
             setId={setId}
@@ -175,7 +186,7 @@ export function EvalSetScreen({
       </section>
 
       <section className="space-y-3">
-        <h2 className="text-xl font-semibold tracking-tight">Runs</h2>
+        <h2 className="text-xl font-semibold tracking-tight">{t("runs")}</h2>
         <Card className="p-0">
           <EvalRunTable
             runs={runs}
@@ -190,18 +201,13 @@ export function EvalSetScreen({
 
       {doneRuns.length >= 2 ? (
         <section className="space-y-3">
-          <h2 className="text-xl font-semibold tracking-tight">Compare</h2>
+          <h2 className="text-xl font-semibold tracking-tight">{t("compare")}</h2>
           <div className="flex flex-wrap gap-3">
-            {(
-              [
-                ["Base run", baseId, setBaseId],
-                ["Head run", headId, setHeadId],
-              ] as const
-            ).map(([label, value, setValue], position, all) => {
-              const otherId = all[1 - position][1];
+            {compareSelects.map(([key, label, value, setValue], position, all) => {
+              const otherId = all[1 - position][2];
               return (
                 <Select
-                  key={label}
+                  key={key}
                   value={value ?? ""}
                   onValueChange={(next: string | null) => setValue(next || null)}
                 >
@@ -227,11 +233,11 @@ export function EvalSetScreen({
           </div>
           {baseId && headId && (baseRun.error || headRun.error) ? (
             <Alert variant="destructive">
-              <AlertTitle>Could not load the comparison</AlertTitle>
+              <AlertTitle>{t("compareFailed")}</AlertTitle>
               <AlertDescription>
                 {isApiError(baseRun.error ?? headRun.error)
-                  ? (baseRun.error ?? headRun.error)?.message
-                  : "Something went wrong."}
+                  ? errorText(baseRun.error ?? headRun.error)
+                  : t("somethingWrong")}
               </AlertDescription>
             </Alert>
           ) : baseId && headId && !(baseRun.data && headRun.data) ? (

@@ -1,1 +1,127 @@
-{}
+{
+  "questionTypes": {
+    "explain": "explain",
+    "locate": "locate"
+  },
+  "mix": {
+    "balanced": "Balanced",
+    "explain": "Explain only",
+    "locate": "Locate only"
+  },
+  "tally": {
+    "summary": "hits {hits}/{answered} · correct {correct} · partial {partial} · wrong {wrong}",
+    "summaryWithErrors": "hits {hits}/{answered} · correct {correct} · partial {partial} · wrong {wrong} · errors {errors}"
+  },
+  "wholeProject": "Whole project",
+  "setTable": {
+    "emptyTitle": "No eval sets yet",
+    "emptyDescription": "Generate a set of questions with reference answers, then run it to see how the assistant does on this project.",
+    "columns": {
+      "set": "Set",
+      "path": "Path",
+      "pairs": "Pairs",
+      "status": "Status",
+      "latestRun": "Latest run",
+      "created": "Created",
+      "actions": "Actions"
+    },
+    "noRuns": "No runs yet",
+    "actionsFor": "Actions for {name}",
+    "delete": "Delete"
+  },
+  "deleteDialog": {
+    "titleNamed": "Delete {name}?",
+    "title": "Delete eval set?",
+    "description": "Its questions, every run and all of their results are deleted with it, for everyone.",
+    "confirm": "Delete eval set",
+    "deleted": "Eval set deleted"
+  },
+  "pairTable": {
+    "generatingTitle": "Generating questions…",
+    "emptyTitle": "No questions",
+    "generatingDescription": "The questions appear here as soon as generation finishes.",
+    "emptyDescription": "This set has no questions.",
+    "columns": {
+      "question": "Question",
+      "type": "Type",
+      "source": "Source",
+      "excluded": "Excluded"
+    },
+    "excludeLabel": "Exclude: {question}",
+    "referenceAnswer": "Reference answer",
+    "saveFailed": "That did not save. Try again"
+  },
+  "runTable": {
+    "generatingTitle": "Generating questions…",
+    "noRunsTitle": "No runs",
+    "generatingDescription": "The set can be run once its questions are ready.",
+    "failedDescription": "A set whose generation failed cannot be run.",
+    "emptyTitle": "No runs yet",
+    "emptyDescription": "Run the set to ask each question and judge the answers against the reference.",
+    "columns": {
+      "started": "Started",
+      "status": "Status",
+      "results": "Results",
+      "model": "Model"
+    }
+  },
+  "runSheet": {
+    "title": "Run results",
+    "loadFailed": "The run could not be loaded",
+    "loading": "Loading the run…",
+    "notFound": "That run does not exist, or it has been deleted.",
+    "failedTitle": "Run failed",
+    "retrievalHit": "Retrieval hit",
+    "retrievalMiss": "Retrieval miss",
+    "judge": "Judge: {reason}",
+    "warnings": "Warnings: {warnings}"
+  },
+  "compare": {
+    "judgeChanged": "These runs were judged by different models. Verdict changes may reflect the judge, not the answers. Retrieval hits are unaffected.",
+    "comparedOn": "Compared on {count, plural, one {# pair} other {# pairs}} both runs answered",
+    "base": "Base",
+    "head": "Head",
+    "tally": "hits {hits}/{total} · correct {correct} · partial {partial} · wrong {wrong} · errors {errors}",
+    "noChange": "No pair changed between these runs.",
+    "retrievalChange": "Retrieval: {from} → {to}",
+    "hit": "hit",
+    "miss": "miss"
+  },
+  "generateDialog": {
+    "trigger": "Generate eval set",
+    "title": "Generate an eval set",
+    "description": "Generate questions with reference answers from this project's indexed code, to measure the assistant against.",
+    "submit": "Generate",
+    "started": "Generation started",
+    "nameLabel": "Name",
+    "namePlaceholder": "e.g., Auth questions",
+    "pathLabel": "Path",
+    "pathHelp": "Leave empty for the whole project, or pick a folder or file to cover.",
+    "questionsLabel": "Questions",
+    "countAria": "Number of questions",
+    "mixLabel": "Mix",
+    "mixAria": "Question mix"
+  },
+  "screen": {
+    "pairCount": "{count, plural, one {# pair} other {# pairs}}",
+    "generatedFrom": "generated from generation {generation}",
+    "projectNotFound": "That project does not exist, or you do not have access to it.",
+    "setNotFound": "That eval set does not exist, or it has been deleted.",
+    "selectRun": "Select a run",
+    "runLabel": "Run {number} · {date}",
+    "deleteAria": "Delete {name}",
+    "delete": "Delete",
+    "run": "Run",
+    "runStarted": "Run started",
+    "runStartFailed": "The run could not be started",
+    "projectNowAt": "Project is now at generation {generation}.",
+    "generationFailed": "Generation failed",
+    "pairs": "Pairs",
+    "runs": "Runs",
+    "compare": "Compare",
+    "baseRun": "Base run",
+    "headRun": "Head run",
+    "compareFailed": "Could not load the comparison",
+    "somethingWrong": "Something went wrong."
+  }
+}

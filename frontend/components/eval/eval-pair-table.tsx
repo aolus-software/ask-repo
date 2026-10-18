@@ -1,6 +1,7 @@
 "use client";
 
 import { ChevronDown, ChevronRight, FlaskConical } from "lucide-react";
+import { useTranslations } from "next-intl";
 import { Fragment, useState } from "react";
 import { toast } from "sonner";
 
@@ -17,6 +18,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { useSetPairExcluded } from "@/hooks/use-eval";
+import { useErrorText } from "@/lib/i18n/error-text";
 import { isApiError } from "@/lib/api/errors";
 import type { EvalPair } from "@/lib/api/types";
 import { cn } from "@/lib/utils";
@@ -34,6 +36,9 @@ export function EvalPairTable({
   /** The set is still being generated, so no pairs yet is expected rather than empty. */
   generating?: boolean;
 }) {
+  const t = useTranslations("eval.pairTable");
+  const tType = useTranslations("eval.questionTypes");
+  const errorText = useErrorText();
   const [open, setOpen] = useState<string | null>(null);
   const setExcluded = useSetPairExcluded(setId);
 
@@ -41,12 +46,8 @@ export function EvalPairTable({
     return (
       <EmptyState
         icon={FlaskConical}
-        title={generating ? "Generating questions…" : "No questions"}
-        description={
-          generating
-            ? "The questions appear here as soon as generation finishes."
-            : "This set has no questions."
-        }
+        title={generating ? t("generatingTitle") : t("emptyTitle")}
+        description={generating ? t("generatingDescription") : t("emptyDescription")}
       />
     );
   }
@@ -56,10 +57,10 @@ export function EvalPairTable({
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead>Question</TableHead>
-            <TableHead>Type</TableHead>
-            <TableHead>Source</TableHead>
-            {canRun ? <TableHead>Excluded</TableHead> : null}
+            <TableHead>{t("columns.question")}</TableHead>
+            <TableHead>{t("columns.type")}</TableHead>
+            <TableHead>{t("columns.source")}</TableHead>
+            {canRun ? <TableHead>{t("columns.excluded")}</TableHead> : null}
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -89,7 +90,7 @@ export function EvalPairTable({
                     </button>
                   </TableCell>
                   <TableCell>
-                    <Badge variant="outline">{pair.questionType}</Badge>
+                    <Badge variant="outline">{tType(pair.questionType)}</Badge>
                   </TableCell>
                   <TableCell className="text-muted-foreground font-mono text-sm">
                     {pair.sourceFile}:{pair.startLine}-{pair.endLine}
@@ -97,7 +98,7 @@ export function EvalPairTable({
                   {canRun ? (
                     <TableCell>
                       <Switch
-                        aria-label={`Exclude: ${pair.question}`}
+                        aria-label={t("excludeLabel", { question: pair.question })}
                         checked={pair.excluded}
                         onCheckedChange={(checked) =>
                           setExcluded.mutate(
@@ -106,8 +107,8 @@ export function EvalPairTable({
                               onError: (error) =>
                                 toast.error(
                                   isApiError(error)
-                                    ? error.message
-                                    : "That did not save. Try again",
+                                    ? errorText(error)
+                                    : t("saveFailed"),
                                 ),
                             },
                           )
@@ -126,7 +127,7 @@ export function EvalPairTable({
                           readable line length; a full-width paragraph is hard to follow. */}
                       <div className="border-primary bg-card ml-6 max-w-prose rounded-md border-l-2 px-4 py-3">
                         <p className="text-muted-foreground mb-1.5 text-xs font-medium tracking-wide uppercase">
-                          Reference answer
+                          {t("referenceAnswer")}
                         </p>
                         <Answer content={pair.referenceAnswer} />
                       </div>
