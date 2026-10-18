@@ -17,11 +17,19 @@ readable by a script running on the page. Every invariant below fails **silently
 the app still renders, requests still mostly succeed, and the only symptom is a token leaking
 somewhere it shouldn't, or a session that drops without an error anyone sees.
 
-## Two cookies, both set by Next, both `httpOnly` and `Path=/`
+## Three cookies, all set by Next, all `httpOnly` and `Path=/`
 
 `askrepo_access` (the JWT) and `askrepo_session` (the backend's own refresh cookie, stored as a
 verbatim `name=value` pair because `REFRESH_COOKIE_NAME` is operator-configurable). Neither is
 readable from client-side JavaScript.
+
+The third, `askrepo_locale`, is a **display preference, not a credential**: the interface
+language, which `i18n/request.ts` reads first, before `Accept-Language`. It mirrors
+`users.language` and is never the source of truth. Login and both refresh paths set it from the
+response's `language`, and leave it alone when that is `null`; the API proxy sets it after a
+successful `PUT /me/language`, and clears it when the user chose `null`; `/api/auth/locale` sets
+it for a signed-out browser, with no backend call because there is no account yet. **Logout and
+`unauthenticated()` leave it in place** — losing a session is no reason to lose the language.
 
 The `Path=/` is deliberate and differs from the backend's own `/auth` cookie scope: `proxy.ts`
 runs at `/projects` and every other app route, and is only sent cookies whose path matches. Scoping
@@ -31,9 +39,15 @@ not an error, just a silent, permanent "not authenticated."
 ## `app/api/[...path]/route.ts` is almost the only route the browser talks to
 
 It attaches the bearer token, strips `set-cookie` from every backend response before relaying it,
-and passes the body through untouched. **The cookie writers are the three `/api/auth/*` handlers
-(login, refresh, logout); this catch-all itself, on its refresh-and-retry path and in
-`unauthenticated()`; and `proxy.ts`, on a navigation refresh and a redirect to `/login`.**
+and passes the body through untouched. **The cookie writers are the four `/api/auth/*` handlers
+(login, refresh, logout, locale); this catch-all itself, on its refresh-and-retry path, in
+`unauthenticated()`, and after `PUT /me/language`; and `proxy.ts`, on a navigation refresh and a
+redirect to `/login`.**
+
+`PUT /me/language` is the one response the catch-all reads rather than only relays: it reads a
+`clone()` of exactly that one body, to set the locale cookie, and relays the original untouched.
+Reading any other body here — or reading the original rather than a clone — is how a streamed
+answer gets buffered or a relayed body arrives empty.
 
 **Four public forwarding routes are a deliberate, narrow exception** to "one route the browser
 talks to", not a second design: `/api/auth/password-policy`, `/api/auth/password-reset/availability`,
@@ -70,7 +84,8 @@ records the Next server for everyone (issue #40). Nothing errors — the failure
 signing in and the sixth being told to try again later.
 
 `forwardedHeaders` in `lib/auth/forwarded.ts` is the one place this is read. Every handler that
-calls the API passes it: the three cookie-writing `/api/auth/*` handlers, the four public
+calls the API passes it: the three cookie-writing `/api/auth/*` handlers that call it (login,
+refresh, logout — `locale` calls nothing), the four public
 forwarding routes (via `forwardPublic`), `refreshSession`, and the API proxy, which relays it by
 **not** listing it in `STRIPPED_REQUEST_HEADERS`.
 

@@ -38,6 +38,37 @@ client can have received it, so it is recorded under Changed and allowed in a `M
   Each links to the set's screen (`/projects/{projectId}/eval/{setId}`, `targetType:
   "eval_set"`), has its own in-app and email switches under `/profile#notifications`, and has a
   fixed email subject and sentence.
+- **The interface in seven languages** (`docs/PRD.md` §2.1, phase 2.7 PR A, issue #24): English,
+  Indonesian (`id`), Japanese (`ja`), Malay (`ms`), Traditional Chinese for Hong Kong (`zh-HK`)
+  and Taiwan (`zh-TW`), and Korean (`ko`). Every screen's strings come from a catalogue under
+  `frontend/messages/`; URLs do not change. The language is chosen on the profile page or, signed
+  out, on the login, forgot-password and reset-password pages, and otherwise follows the
+  browser's `Accept-Language`. The six non-English catalogues are machine-assisted drafts, each
+  marked unreviewed until a native speaker signs it off. Repository content, model output and
+  admin-entered names stay as written. Chinese, Japanese and Korean text falls back to system
+  fonts; nothing is downloaded.
+- **`GET /me/language` and `PUT /me/language`**: the caller's stored interface language, a
+  BCP-47 tag or `null` for no preference. `PUT` with an unshipped tag is `422`. A change is
+  audited as `user.language.updated`, allowlisting `language`.
+- **`language` on `POST /auth/login` and `POST /auth/refresh`** responses: the caller's stored
+  language, or `null`, so a new device picks the choice up at its first login.
+- **`fieldTypes` on every `422`**: a map beside `fields`, keyed the same way, carrying
+  Pydantic's error `type` (`missing`, `string_too_short`, `enum`, …) so a client can translate a
+  field error. `fields` is unchanged.
+
+### Changed
+
+- **Errors render the catalogue's text for their `ErrorCode`**, not the backend's English
+  `message`, which is now the fallback for a code with no entry. A few codes whose message names
+  the specific thing to fix — `WEAK_PASSWORD`, `INVALID_REPO_URL`, `EXPORT_TOO_LARGE` and others —
+  still show the backend's text. Field errors are translated by their `fieldTypes` entry.
+- **Relative times read "now" rather than "just now"** in English, the wording `Intl`'s relative
+  time formatter produces in every language.
+
+### Fixed
+
+- **A count of one reads "1 file", "1 pair"**, not "1 files": counts that built their noun by
+  hand now go through an ICU plural.
 
 ## [2.3.0] — 2026-10-17
 

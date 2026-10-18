@@ -39,7 +39,7 @@ that departs from the PRD's "keep it thin".
 
 ## Stack
 
-Next.js 16 (App Router) · React 19 · TypeScript · Tailwind CSS 4 · Bun
+Next.js 16 (App Router) · React 19 · TypeScript · Tailwind CSS 4 · next-intl · Bun
 
 ## Running locally
 
@@ -99,6 +99,8 @@ silently. `components/ui/` is CLI-managed and never hand-edited; see the compone
 ```
 frontend/
 ├── proxy.ts               # session gate + the refresh point for navigations
+├── i18n/request.ts        # resolves the locale once per request, loads its catalogue
+├── messages/              # the catalogues: en/ is the source, one dir per language
 ├── app/
 │   ├── layout.tsx         # fonts, theme, query provider, toaster
 │   ├── globals.css        # Tailwind entry + theme tokens (only file with raw hex)
@@ -115,22 +117,26 @@ frontend/
 │   │                      #     /settings/notifications — redirects to /profile#notifications)
 │   └── api/
 │       ├── [...path]/     # the API forwarding route the browser talks to
-│       └── auth/          # login, refresh, logout — the only cookie writers
+│       └── auth/          # login, refresh, logout, locale — the cookie writers,
+│                          #   plus the four public password routes
 ├── components/
 │   ├── ui/                # shadcn, CLI-managed
 │   ├── layout/ form/ feedback/
-│   └── projects/ ask/ checklist/ mock-data/ eval/ roles/ users/ notifications/ profile/
+│   └── auth/ projects/ ask/ checklist/ mock-data/ eval/ roles/ users/ notifications/ profile/
+│       #   auth/ holds the signed-out language selector
 │       #   projects/ also holds the Members tab: member-table, add-member-dialog
 │       #   eval/ holds the set table, generate dialog, set screen, pair and run tables,
 │       #     the run sheet and the two-run comparison
 │       #   roles/ holds the role table, create dialog, permission matrix, role badge
 │       #   notifications/ holds the bell, the popover list, and the deep-link mapper's UI
-│       #   profile/ holds the six sections: account, answer style, sessions,
-│       #     activity, notifications (reuses notifications/preferences-screen), password
+│       #   profile/ holds the seven sections: account, answer style, language,
+│       #     sessions, activity, notifications (reuses notifications/preferences-screen),
+│       #     password
 ├── hooks/                 # one file per resource
 ├── lib/
 │   ├── api/               # types, endpoints, errors, both fetch clients
-│   ├── auth/              # cookie names + single-flight refresh
+│   ├── auth/              # cookie names, single-flight refresh, the locale cookie
+│   ├── i18n/              # the language list, error text by code, catalogue parity test
 │   ├── ask/               # SSE parser, pending-question carrier
 │   ├── eval-compare.ts    # two runs compared on the pairs both answered
 │   └── query/ nav.ts status.ts dates.ts can.ts
@@ -142,6 +148,49 @@ frontend/
 them, because Next resolves `favicon.ico` / `icon.png` / `apple-icon.png` by file convention
 inside `app/` and the manifest needs stable public URLs — neither can point outside the app.
 Re-export from `../assets/` when the mark changes.
+
+## Translations
+
+The interface ships in seven languages — `en`, `id`, `ja`, `ms`, `zh-HK`, `zh-TW`, `ko` — through
+`next-intl`, without locale-prefixed routes: the language belongs to the user, not the URL.
+`i18n/request.ts` resolves it once per request from the `askrepo_locale` cookie, then
+`Accept-Language`, then English. The cookie mirrors the user's stored language
+(`GET`/`PUT /me/language`); the profile page and the signed-out selector both change it.
+
+```
+messages/
+├── en/                    # the source of every key
+│   ├── <namespace>.json   # one file per area: ask, auth, checklist, errors, forms, …
+│   └── index.ts           # assembles the namespaces into one catalogue
+└── id/ ja/ ms/ zh-HK/ zh-TW/ ko/
+    ├── <namespace>.json   # exactly en/'s keys
+    ├── index.ts
+    └── _meta.json         # { "reviewed": false } until a native speaker signs it off
+```
+
+- **`messages/en/` is the source.** `next-intl`'s `AppConfig` typing makes a missing or misspelled
+  key a type error in `bun run build`. Write English first, then the same key in every other
+  language.
+- **Parity is a test.** `lib/i18n/messages.test.ts` fails when a language has a key English does
+  not, lacks one English has, or drops or renames an ICU placeholder or tag (`{count}`,
+  `<path>`). Plurals use ICU `plural`; languages with no plural forms use `other` alone.
+- **Lint forbids literals.** `i18next/no-literal-string` (`eslint.config.mjs`) fails on JSX text
+  and on `aria-label`, `placeholder`, `title` and `alt` under `app/` and `components/`; tests and
+  `components/ui/` are exempt.
+- **Errors are translated by code.** `useErrorText()` (`lib/i18n/error-text.ts`) looks up
+  `errors.<ErrorCode>` and falls back to the backend's English message; `useFieldErrorText()`
+  translates a `422` field error by its `fieldTypes` entry. A backend test,
+  `tests/test_frontend_error_catalogue.py`, requires an entry in `messages/en/errors.json` for
+  every `ErrorCode`.
+- **What stays as written:** repository content (paths, identifiers, code), stored model output,
+  admin-entered names, and each language's own name in the switchers (its endonym).
+- **`_meta.json` is a fact about the file.** The six non-English catalogues are machine-assisted
+  drafts, and each says `reviewed: false` until a native speaker signs it off.
+
+**Adding a language:** a member in `backend/app/core/language.py` and in `lib/i18n/languages.ts`
+(`tests/test_language_catalogue.py` fails when the two differ); a `messages/<tag>/` directory with
+every namespace, an `index.ts` and a `_meta.json`; and a font fallback in `app/globals.css` if its
+script needs one. The parity test picks the new directory up from the language list.
 
 ## Configuration
 

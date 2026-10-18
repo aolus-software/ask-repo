@@ -50,11 +50,17 @@ wrap and the footer crowds. Pick a size; do not pass a `max-w-*` class.
 ## 4. The backend owns validation
 
 The API returns `422` with a field map for schema violations (`response-api.md`). Parse it once
-in the API client into `ApiError.fieldErrors`, read it with `fieldError(error, name)`, and render
-it in a `FieldError`.
+in the API client into `ApiError.fieldErrors` and `ApiError.fieldTypes`, read one field with the
+function `useFieldErrorText()` returns (`lib/i18n/error-text.ts`), and render it in a
+`FieldError`. It translates by Pydantic's error type through `forms.validation.<type>`, and falls
+back to the backend's text for a type the catalogue does not know — which is how a service-level
+rule such as the password policy still reaches the user verbatim. A form-level error renders
+through `useErrorText()`, which translates by `ErrorCode`. **A form never renders `error.message`
+or a `fieldErrors` entry directly**: that is English on a translated screen.
 
 Client-side checks are limited to **required** and **shape** (an `@` in an email), purely so the
-form answers instantly. **Never restate a backend rule** — a copy cannot be kept honest, and the
+form answers instantly. Their messages come from the catalogue, in the namespace of the screen
+that owns the form (`auth.login.emailRequired`), like every other string on it. **Never restate a backend rule** — a copy cannot be kept honest, and the
 password policy in particular (12 chars, common-password list) lives in one place. **No `zod`,
 no `react-hook-form`.**
 

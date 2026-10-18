@@ -92,6 +92,17 @@ header cannot disagree.
 Never set a font family in a component. Never use `font-bold` — `font-semibold` is the heaviest
 weight in the system.
 
+**CJK falls back to system fonts.** Lexend has no Chinese, Japanese or Korean glyphs, so
+`--font-sans` in `app/globals.css` continues after it with `"PingFang TC"`, `"Hiragino Sans"`,
+`"Noto Sans CJK TC"`, `"Noto Sans CJK JP"`, `"Noto Sans CJK KR"`, `"Malgun Gothic"` and
+`"Microsoft JhengHei"`. Nothing is downloaded for them, which keeps the "nothing leaves the
+network" posture; a machine with none of them installed renders its own default sans-serif.
+
+**Language.** The interface is translated (`frontend/README.md` → Translations), and nothing in
+this document changes with it: tokens, spacing and the type scale are the same in every language,
+because a colour has no language. Each language is named in its own language in a switcher
+(日本語, not "Japanese") — its endonym, which is never translated.
+
 **Answer typography.** Answers are Markdown and Tailwind's reset strips list markers, heading
 sizes and table borders, with no typography plugin to put them back, so `components/ask/answer.tsx`
 overrides each element from this scale: `h1`/`h2` are `text-xl font-semibold`, `h3`/`h4`

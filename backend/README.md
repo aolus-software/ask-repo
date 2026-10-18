@@ -112,8 +112,8 @@ wired in yet**, even though all four datastores are now read elsewhere in the ap
 | Method | Path | Auth | Description |
 | --- | --- | --- | --- |
 | `GET` | `/auth/password-policy` | none | The length bounds a new password must satisfy |
-| `POST` | `/auth/login` | none | Log in; sets the refresh cookie |
-| `POST` | `/auth/refresh` | refresh cookie | Rotate the session |
+| `POST` | `/auth/login` | none | Log in; sets the refresh cookie. The body carries the caller's stored `language` (`null` if they never chose) so the frontend can set its locale |
+| `POST` | `/auth/refresh` | refresh cookie | Rotate the session; carries `language` like login |
 | `POST` | `/auth/change-password` | access token | Change your own password |
 | `POST` | `/auth/logout` | refresh cookie | Log out of this device |
 | `POST` | `/auth/logout-all` | access token | Log out everywhere |
@@ -131,6 +131,8 @@ wired in yet**, even though all four datastores are now read elsewhere in the ap
 | `DELETE` | `/me/sessions/{sessionId}` | access token | Sign one of your sessions out; `404 SESSION_NOT_FOUND` for another user's |
 | `GET` | `/me/answer-style` | access token | Your answer style: `detail`, `familiarity`, `format`, each `null` for no preference |
 | `PUT` | `/me/answer-style` | access token | Replace all three dials (every key required, `null` clears one); shapes your own Ask answers only. Audited as `user.answer_style.updated` |
+| `GET` | `/me/language` | access token | Your interface language: a BCP-47 tag (`en`, `id`, `ja`, `ms`, `zh-HK`, `zh-TW`, `ko`), or `null` for no preference |
+| `PUT` | `/me/language` | access token | Set it; `null` clears the choice and the interface follows the browser. `422` for a code not shipped. Audited as `user.language.updated` when it changes |
 | `GET` | `/me/activity` | access token | Your own audit events, newest first, paginated |
 
 ### Users
@@ -151,6 +153,11 @@ tells an admin nothing about what to fix — the widening is declared with its o
 generated client describe the body the route actually returns. The guard prevents *new*
 strandings; it cannot repair one the RBAC migration's backfill inherited (see
 `?ownerless=true` below).
+
+Every `422` carries two maps beside `code` and `message`, both keyed by the `camelCase` field
+name: `fields`, Pydantic's English text, and `fieldTypes`, Pydantic's error `type` (`missing`,
+`string_too_short`, `enum`, …). The frontend translates a field error by its type and falls
+back to the text for a type it does not know.
 
 ### Projects
 
@@ -419,7 +426,7 @@ scope would not describe this read.
 | `GET` | `/audit-events` | admin | A page of events, newest first. Filters: `eventType`, `actorUserId`, `projectId`, `outcome` (`success`/`failure`), `occurredFrom`, `occurredTo`, `search`, plus `page`/`limit`. A bare `occurredTo` date (no time component) is inclusive of that whole day. `search` matches `actorEmail`/`targetLabel` by substring and `ipAddress` by prefix. `sort` accepts the literal `created_at` only — the one ordering the `created_at` index supports — with `sortDirection` defaulting to `desc` |
 | `GET` | `/audit-events/{id}` | admin | One event with its full `details` payload, `ipAddress`, and a `current` block saying whether the actor is still active and the target still exists. `404 AUDIT_EVENT_NOT_FOUND` |
 
-Every write and every export in the app records one of **45 event types** catalogued in
+Every write and every export in the app records one of **46 event types** catalogued in
 `app/core/audit.py`; which operations must is a rule (`.claude/rules/audit-trail.md`), enforced in
 both directions by `tests/test_audit_coverage.py`. The payload is an allowlist per event type,
 never a diff of dirty attributes, and it never carries a secret or any content — no message text,
