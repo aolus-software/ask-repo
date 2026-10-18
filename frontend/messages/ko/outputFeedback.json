@@ -1,0 +1,64 @@
+{
+  "helpful": "도움이 됨",
+  "notHelpful": "도움이 안 됨",
+  "saveFailed": "피드백이 저장되지 않았습니다. 다시 시도하세요.",
+  "whatWentWrong": "무엇이 잘못되었나요?",
+  "noteLabel": "더 하실 말씀이 있나요?",
+  "notePlaceholder": "더 하실 말씀이 있나요? (선택 사항)",
+  "noteDisclosure": "관리자가 이 메모를 읽을 수 있습니다. AI 모델에는 절대 전송되지 않습니다.",
+  "send": "피드백 보내기",
+  "reasons": {
+    "wrong_file_cited": "잘못된 파일을 인용함",
+    "missed_something": "저장소의 내용을 놓침",
+    "invented_something": "없는 내용을 지어냄",
+    "right_but_unusable": "맞지만 사용할 수 없음",
+    "wrong_language_or_tone": "언어 또는 어조가 맞지 않음",
+    "duplicate_or_redundant": "중복되거나 불필요함",
+    "wrong_scope": "범위가 잘못됨",
+    "other": "기타"
+  },
+  "features": {
+    "answer": "질문 답변",
+    "refine_checklist": "체크리스트 채팅",
+    "refine_mock_data": "목 데이터 채팅",
+    "generate_checklist": "체크리스트 생성",
+    "propose_checklist": "체크리스트 채팅 제안",
+    "generate_mock_data": "목 데이터 생성",
+    "propose_mock_data": "목 데이터 채팅 제안"
+  },
+  "summary": {
+    "hint": "비추천 · 투표 {votes}개",
+    "feature": "기능",
+    "reason": "이유",
+    "count": "횟수",
+    "promptVersion": "프롬프트 버전",
+    "votes": "투표",
+    "downVoted": "비추천",
+    "versionNote": "투표에는 투표 시점에 실행 중이던 해당 기능의 프롬프트 버전이 기록되며, 며칠 후 검토된 변경 세트의 경우 이를 생성한 버전보다 최신일 수 있습니다. 기능마다 고유한 버전이 있으므로 버전은 같은 기능 안에서 비교하세요."
+  },
+  "table": {
+    "when": "시점",
+    "project": "프로젝트",
+    "feature": "기능",
+    "vote": "투표",
+    "reasons": "이유",
+    "note": "메모",
+    "prompt": "프롬프트",
+    "trace": "트레이스",
+    "up": "추천",
+    "down": "비추천",
+    "openTrace": "트레이스 열기"
+  },
+  "filters": {
+    "allFeatures": "모든 기능",
+    "allVotes": "모든 투표",
+    "allReasons": "모든 이유",
+    "filterByFeature": "기능별 필터",
+    "filterByVote": "투표별 필터",
+    "filterByReason": "이유별 필터",
+    "up": "추천",
+    "down": "비추천",
+    "fromDate": "시작 날짜",
+    "toDate": "종료 날짜"
+  }
+}
