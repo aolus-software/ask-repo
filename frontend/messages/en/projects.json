@@ -1,1 +1,122 @@
-{}
+{
+  "roles": {
+    "viewer": "Viewer",
+    "editor": "Editor",
+    "owner": "Owner"
+  },
+  "list": {
+    "title": "Projects",
+    "description": "Every repository indexed on this instance. Anyone here can query any of them.",
+    "addProject": "Add project",
+    "searchPlaceholder": "Search projects",
+    "emptyNoMatch": "No projects match",
+    "emptyNone": "No projects yet",
+    "emptyDescription": "Add a repository and {appName} will clone and index it. That takes a few minutes."
+  },
+  "table": {
+    "columns": {
+      "name": "Name",
+      "repository": "Repository",
+      "status": "Status",
+      "indexed": "Indexed",
+      "commit": "Commit",
+      "updated": "Updated",
+      "actions": "Actions"
+    },
+    "indexedCounts": "{files, plural, one {# file} other {# files}} · {chunks, plural, one {# chunk} other {# chunks}}"
+  },
+  "rowActions": {
+    "menuLabel": "Actions for {name}",
+    "openRepository": "Open repository",
+    "viewDetail": "View detail",
+    "askAboutThis": "Ask about this",
+    "members": "Members",
+    "eval": "Eval",
+    "reindex": "Re-index",
+    "delete": "Delete",
+    "reindexDialog": {
+      "title": "Re-index {name}?",
+      "description": "The project stays queryable throughout. New vectors are written alongside the current index and swapped in only when the run succeeds.",
+      "confirm": "Re-index",
+      "started": "Re-index started",
+      "alreadyRunning": "A re-index is already running"
+    },
+    "deleteDialog": {
+      "title": "Delete {name}?",
+      "description": "Its index is destroyed and every conversation against it is removed, for everyone. Re-creating it means a full re-clone and re-embed.",
+      "confirm": "Delete project",
+      "deleted": "Project deleted",
+      "vectorStoreDown": "The vector store is unreachable, so nothing was deleted.",
+      "vectorStoreDownDetail": "The project is unchanged. Try again once it is back."
+    }
+  },
+  "createDialog": {
+    "title": "Add a project",
+    "description": "{appName} clones the repository, indexes it, and deletes the working copy.",
+    "submit": "Add project",
+    "repoUrl": "Repository URL",
+    "repoUrlPlaceholder": "https://github.com/your-org/your-repo",
+    "repoUrlRequired": "Enter a repository URL.",
+    "repoUrlHint": "An https URL on an allowed host.",
+    "branch": "Branch",
+    "pat": "Access token",
+    "patHint": "Only for a private repository. Leave blank to keep any stored token unchanged. Scope it read-only — everyone on this instance can query what it indexes.",
+    "queued": "Project queued for indexing"
+  },
+  "stats": {
+    "filesIndexed": "Files indexed",
+    "chunks": "Chunks",
+    "lastIndexedCommit": "Last indexed commit",
+    "embeddingModel": "Embedding model"
+  },
+  "detail": {
+    "notFound": "That project does not exist, or it has been deleted.",
+    "askAboutProject": "Ask about this project",
+    "tabs": {
+      "overview": "Overview",
+      "members": "Members",
+      "eval": "Eval"
+    },
+    "working": "{status}…",
+    "reindexRunning": "Re-index running",
+    "reindexRunningDescription": "The current index stays queryable until the new one is ready.",
+    "indexingFailed": "Indexing failed",
+    "membersHeading": "Members",
+    "membersDescription": "Who can reach this project, and as what.",
+    "addMember": "Add member",
+    "evalHeading": "Eval",
+    "evalDescription": "Generated questions with reference answers, run against this project."
+  },
+  "addMemberDialog": {
+    "title": "Add a member",
+    "description": "Grant a user access to this project.",
+    "submit": "Add member",
+    "user": "User",
+    "role": "Role",
+    "loadingPeople": "Loading people…",
+    "searchPeople": "Search people",
+    "loading": "Loading…",
+    "noMatch": "No user matches.",
+    "added": "Member added"
+  },
+  "memberTable": {
+    "columns": {
+      "user": "User",
+      "role": "Role",
+      "grantedBy": "Granted by",
+      "grantedAt": "Granted at",
+      "actions": "Actions"
+    },
+    "emptyTitle": "No members",
+    "emptyDescription": "Nobody holds a membership on this project yet.",
+    "roleFor": "Role for {name}",
+    "roleChanged": "Role changed",
+    "revokeLabel": "Revoke {name}'s access",
+    "revokeDialog": {
+      "title": "Revoke {name}'s access?",
+      "description": "They lose access to this project immediately.",
+      "confirm": "Revoke access",
+      "revoked": "Access revoked"
+    }
+  }
+}

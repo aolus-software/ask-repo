@@ -1,6 +1,7 @@
 "use client";
 
 import { UserMinus, Users } from "lucide-react";
+import { useTranslations } from "next-intl";
 import { useState } from "react";
 import { toast } from "sonner";
 
@@ -24,10 +25,12 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { useRoleLabel } from "@/components/projects/use-role-label";
 import { useChangeMemberRole, useRevokeMember } from "@/hooks/use-member-mutations";
 import { useMembers } from "@/hooks/use-members";
 import { useRoleOptions } from "@/hooks/use-role-options";
 import { isApiError } from "@/lib/api/errors";
+import { useErrorText } from "@/lib/i18n/error-text";
 import type { MemberResponse } from "@/lib/api/types";
 import { can, PERMISSION } from "@/lib/can";
 import { formatAbsolute } from "@/lib/dates";
@@ -51,9 +54,12 @@ function RoleCell({
   editable: boolean;
   roleOptions: { name: string; label: string }[];
 }) {
+  const t = useTranslations("projects.memberTable");
+  const errorText = useErrorText();
+  const roleLabel = useRoleLabel();
   const mutation = useChangeMemberRole(projectId, member.userId);
 
-  if (!editable) return <span>{member.role}</span>;
+  if (!editable) return <span>{roleLabel(member.role)}</span>;
 
   // 409 LAST_OWNER is about this row specifically — demoting the project's last
   // owner — so it renders here, under the control that caused it, not as a toast
@@ -70,31 +76,32 @@ function RoleCell({
           mutation.mutate(
             { role: value },
             {
-              onSuccess: () => toast.success("Role changed"),
+              onSuccess: () => toast.success(t("roleChanged")),
               onError: (error) => {
                 if (isApiError(error) && error.code === "LAST_OWNER") return;
-                toast.error(
-                  isApiError(error) ? error.message : "That did not update. Try again.",
-                );
+                toast.error(errorText(error));
               },
             },
           );
         }}
         disabled={mutation.isPending}
       >
-        <SelectTrigger className="w-36" aria-label={`Role for ${member.name}`}>
+        <SelectTrigger
+          className="w-36"
+          aria-label={t("roleFor", { name: member.name })}
+        >
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
           {roleOptions.map((role) => (
             <SelectItem key={role.name} value={role.name}>
-              {role.label}
+              {roleLabel(role.name)}
             </SelectItem>
           ))}
         </SelectContent>
       </Select>
       {isLastOwner ? (
-        <p className="text-danger text-xs">{mutation.error?.message}</p>
+        <p className="text-danger text-xs">{errorText(mutation.error)}</p>
       ) : null}
     </div>
   );
@@ -107,6 +114,7 @@ function RevokeAction({
   projectId: string;
   member: MemberResponse;
 }) {
+  const t = useTranslations("projects.memberTable");
   const [confirming, setConfirming] = useState(false);
   const mutation = useRevokeMember(projectId, member.userId);
 
@@ -115,7 +123,7 @@ function RevokeAction({
       <Button
         variant="ghost"
         size="icon"
-        aria-label={`Revoke ${member.name}'s access`}
+        aria-label={t("revokeLabel", { name: member.name })}
         onClick={() => setConfirming(true)}
       >
         <UserMinus className="size-4" />
@@ -124,9 +132,9 @@ function RevokeAction({
       <ConfirmDialog
         open={confirming}
         onOpenChange={setConfirming}
-        title={`Revoke ${member.name}'s access?`}
-        description="They lose access to this project immediately."
-        confirmLabel="Revoke access"
+        title={t("revokeDialog.title", { name: member.name })}
+        description={t("revokeDialog.description")}
+        confirmLabel={t("revokeDialog.confirm")}
         isPending={mutation.isPending}
         // 409 LAST_OWNER names no field, so it renders as this dialog's banner — the
         // dialog is already scoped to this one row's revoke action.
@@ -134,7 +142,7 @@ function RevokeAction({
         onConfirm={() =>
           mutation.mutate(undefined, {
             onSuccess: () => {
-              toast.success("Access revoked");
+              toast.success(t("revokeDialog.revoked"));
               setConfirming(false);
             },
           })
@@ -151,6 +159,7 @@ export function MemberTable({
   projectId: string;
   permissions: string[];
 }) {
+  const t = useTranslations("projects.memberTable");
   const formatRelative = useFormatRelative();
   const query = useMembers(projectId);
   const roleOptions = useRoleOptions();
@@ -172,8 +181,8 @@ export function MemberTable({
     return (
       <EmptyState
         icon={Users}
-        title="No members"
-        description="Nobody holds a membership on this project yet."
+        title={t("emptyTitle")}
+        description={t("emptyDescription")}
       />
     );
   }
@@ -182,11 +191,13 @@ export function MemberTable({
     <Table>
       <TableHeader>
         <TableRow>
-          <TableHead>User</TableHead>
-          <TableHead>Role</TableHead>
-          <TableHead>Granted by</TableHead>
-          <TableHead>Granted at</TableHead>
-          {canRevoke ? <TableHead className="text-right">Actions</TableHead> : null}
+          <TableHead>{t("columns.user")}</TableHead>
+          <TableHead>{t("columns.role")}</TableHead>
+          <TableHead>{t("columns.grantedBy")}</TableHead>
+          <TableHead>{t("columns.grantedAt")}</TableHead>
+          {canRevoke ? (
+            <TableHead className="text-right">{t("columns.actions")}</TableHead>
+          ) : null}
         </TableRow>
       </TableHeader>
       <TableBody>

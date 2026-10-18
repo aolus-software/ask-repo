@@ -11,6 +11,7 @@ import {
   Users,
 } from "lucide-react";
 import Link from "next/link";
+import { useTranslations } from "next-intl";
 import { useState } from "react";
 import { toast } from "sonner";
 
@@ -42,6 +43,7 @@ export function ProjectRowActions({
   project: ProjectResponse;
   context?: "list" | "detail";
 }) {
+  const t = useTranslations("projects.rowActions");
   const [confirmingReindex, setConfirmingReindex] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const reindex = useReindexProject(project.id);
@@ -59,7 +61,7 @@ export function ProjectRowActions({
             <Button
               variant="ghost"
               size="icon"
-              aria-label={`Actions for ${project.name}`}
+              aria-label={t("menuLabel", { name: project.name })}
             />
           }
         >
@@ -75,18 +77,18 @@ export function ProjectRowActions({
               }
             >
               <ExternalLink className="size-4" />
-              Open repository
+              {t("openRepository")}
             </DropdownMenuItem>
           ) : (
             <DropdownMenuItem render={<Link href={`/projects/${project.id}`} />}>
               <Eye className="size-4" />
-              View detail
+              {t("viewDetail")}
             </DropdownMenuItem>
           )}
           {project.status === "ready" ? (
             <DropdownMenuItem render={<Link href={`/ask?projectId=${project.id}`} />}>
               <MessagesSquare className="size-4" />
-              Ask about this
+              {t("askAboutThis")}
             </DropdownMenuItem>
           ) : null}
           {/* Shortcuts into the detail page's tabs, which open from the hash. Not on the
@@ -96,13 +98,13 @@ export function ProjectRowActions({
               render={<Link href={`/projects/${project.id}#members`} />}
             >
               <Users className="size-4" />
-              Members
+              {t("members")}
             </DropdownMenuItem>
           ) : null}
           {context === "list" && canReadEval ? (
             <DropdownMenuItem render={<Link href={`/projects/${project.id}#eval`} />}>
               <FlaskConical className="size-4" />
-              Eval
+              {t("eval")}
             </DropdownMenuItem>
           ) : null}
 
@@ -111,13 +113,13 @@ export function ProjectRowActions({
           {canReindex ? (
             <DropdownMenuItem onClick={() => setConfirmingReindex(true)}>
               <RefreshCw className="size-4" />
-              Re-index
+              {t("reindex")}
             </DropdownMenuItem>
           ) : null}
           {canDelete ? (
             <DropdownMenuItem onClick={() => setConfirmingDelete(true)}>
               <Trash2 className="size-4" />
-              Delete
+              {t("delete")}
             </DropdownMenuItem>
           ) : null}
         </DropdownMenuContent>
@@ -126,9 +128,9 @@ export function ProjectRowActions({
       <ConfirmDialog
         open={confirmingReindex}
         onOpenChange={setConfirmingReindex}
-        title={`Re-index ${project.name}?`}
-        description="The project stays queryable throughout. New vectors are written alongside the current index and swapped in only when the run succeeds."
-        confirmLabel="Re-index"
+        title={t("reindexDialog.title", { name: project.name })}
+        description={t("reindexDialog.description")}
+        confirmLabel={t("reindexDialog.confirm")}
         isPending={reindex.isPending}
         error={reindex.error}
         onConfirm={() =>
@@ -138,7 +140,9 @@ export function ProjectRowActions({
               // as an action (docs/PRD.md §5.1). Toasting success for both would
               // waste the flag at the last step.
               toast.success(
-                result.enqueued ? "Re-index started" : "A re-index is already running",
+                result.enqueued
+                  ? t("reindexDialog.started")
+                  : t("reindexDialog.alreadyRunning"),
               );
               setConfirmingReindex(false);
             },
@@ -149,15 +153,15 @@ export function ProjectRowActions({
       <ConfirmDialog
         open={confirmingDelete}
         onOpenChange={setConfirmingDelete}
-        title={`Delete ${project.name}?`}
-        description="Its index is destroyed and every conversation against it is removed, for everyone. Re-creating it means a full re-clone and re-embed."
-        confirmLabel="Delete project"
+        title={t("deleteDialog.title", { name: project.name })}
+        description={t("deleteDialog.description")}
+        confirmLabel={t("deleteDialog.confirm")}
         isPending={remove.isPending}
         error={remove.error}
         onConfirm={() =>
           remove.mutate(undefined, {
             onSuccess: () => {
-              toast.success("Project deleted");
+              toast.success(t("deleteDialog.deleted"));
               setConfirmingDelete(false);
             },
             onError: (error) => {
@@ -165,12 +169,9 @@ export function ProjectRowActions({
               // same-operation hard delete (docs/PRD.md §5.1), and commits nothing if
               // it cannot. Without this message it looks like a silent no-op.
               if (isApiError(error) && error.code === "VECTOR_STORE_UNAVAILABLE") {
-                toast.error(
-                  "The vector store is unreachable, so nothing was deleted.",
-                  {
-                    description: "The project is unchanged. Try again once it is back.",
-                  },
-                );
+                toast.error(t("deleteDialog.vectorStoreDown"), {
+                  description: t("deleteDialog.vectorStoreDownDetail"),
+                });
                 setConfirmingDelete(false);
               }
             },
