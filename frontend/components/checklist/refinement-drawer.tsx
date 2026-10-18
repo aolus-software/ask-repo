@@ -1,6 +1,7 @@
 "use client";
 
 import type { LucideIcon } from "lucide-react";
+import { useTranslations } from "next-intl";
 import {
   type CSSProperties,
   type KeyboardEvent as ReactKeyboardEvent,
@@ -119,6 +120,7 @@ export function RefinementDrawer({
   storageKey,
   children,
 }: RefinementDrawerProps) {
+  const t = useTranslations("checklist.refinementDrawer");
   const [open, setOpen] = useState(false);
   // Read during initialisation rather than from an effect: the popup is not
   // mounted while closed, so the server's default and the client's stored value
@@ -217,7 +219,7 @@ export function RefinementDrawer({
               value, so the drawer is resizable without a pointer. */}
           <div
             role="separator"
-            aria-label="Resize drawer"
+            aria-label={t("resize")}
             aria-orientation="vertical"
             aria-valuenow={width}
             aria-valuemin={MIN_WIDTH}

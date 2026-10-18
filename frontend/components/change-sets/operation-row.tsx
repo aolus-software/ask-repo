@@ -1,5 +1,7 @@
 "use client";
 
+import { useTranslations } from "next-intl";
+
 import { Checkbox } from "@/components/ui/checkbox";
 
 /**
@@ -21,13 +23,14 @@ export function OperationRow({
   orphaned: boolean;
   children: React.ReactNode;
 }) {
+  const t = useTranslations("changeSets.operationRow");
   return (
     <div className="flex items-start gap-3 py-3">
       <Checkbox
         checked={checked}
         onCheckedChange={onToggle}
         className="mt-1"
-        aria-label="Include this change"
+        aria-label={t("include")}
       />
       <div className={orphaned ? "text-muted-foreground flex-1" : "flex-1"}>
         {children}
@@ -38,9 +41,10 @@ export function OperationRow({
 
 /** The rationale line under every operation, with the same "none given" fallback. */
 export function OperationRationale({ rationale }: { rationale: string }) {
+  const t = useTranslations("changeSets.operationRow");
   return (
     <p className="text-muted-foreground text-sm">
-      {rationale.trim() ? rationale : "No rationale given."}
+      {rationale.trim() ? rationale : t("noRationale")}
     </p>
   );
 }

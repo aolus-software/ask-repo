@@ -1,6 +1,7 @@
 "use client";
 
 import { Info } from "lucide-react";
+import { useTranslations } from "next-intl";
 import { useCallback, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 
@@ -15,7 +16,7 @@ import { EmptyState } from "@/components/feedback/empty-state";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Skeleton } from "@/components/ui/skeleton";
 import { apiFetch, apiFetchRaw } from "@/lib/api/client";
-import { isApiError } from "@/lib/api/errors";
+import { useErrorText } from "@/lib/i18n/error-text";
 import { endpoints } from "@/lib/api/endpoints";
 import { PHASE_LABELS } from "@/lib/ask/phase-labels";
 import type { ChecklistMessageResponse, CitationPayload } from "@/lib/api/types";
@@ -88,6 +89,8 @@ export function ChatPanel({
    */
   canSend: boolean;
 }) {
+  const t = useTranslations("checklist.chatPanel");
+  const errorText = useErrorText();
   const queryClient = useQueryClient();
 
   const messages = useQuery({
@@ -219,7 +222,7 @@ export function ChatPanel({
           ...current,
           isStreaming: false,
           terminal: "error",
-          errorMessage: error instanceof Error ? error.message : "The reply stopped.",
+          errorMessage: error instanceof Error ? error.message : t("replyStopped"),
         };
       } finally {
         if (frameHandle !== null) cancelAnimationFrame(frameHandle);
@@ -239,30 +242,28 @@ export function ChatPanel({
         }
       }
     },
-    [moduleId, queryClient],
+    [moduleId, queryClient, t],
   );
 
   const isStreaming = turn?.isStreaming ?? false;
   const composerDisabled =
     isStreaming || hasPendingChangeSet || isGenerating || !canSend;
   const composerPlaceholder = !canSend
-    ? "You do not have permission to refine this checklist."
+    ? t("placeholderNoPermission")
     : isGenerating
-      ? "A generation is running for this module. Wait for it to finish."
+      ? t("placeholderGenerating")
       : hasPendingChangeSet
-        ? "Apply or discard the pending changes first."
+        ? t("placeholderPending")
         : isStreaming
-          ? "Answering…"
-          : "Ask a follow-up, or say what you'd like changed";
+          ? t("placeholderAnswering")
+          : t("placeholderDefault");
 
   return (
     <div className="space-y-6">
       <Alert>
         <Info />
-        <AlertTitle>This chat is shared</AlertTitle>
-        <AlertDescription>
-          Everyone on this instance can read this conversation.
-        </AlertDescription>
+        <AlertTitle>{t("sharedTitle")}</AlertTitle>
+        <AlertDescription>{t("sharedDescription")}</AlertDescription>
       </Alert>
 
       {messages.isLoading ? (
@@ -272,18 +273,13 @@ export function ChatPanel({
         </div>
       ) : messages.isError ? (
         <Alert variant="destructive">
-          <AlertTitle>Could not load this chat</AlertTitle>
-          <AlertDescription>
-            {isApiError(messages.error) ? messages.error.message : "Try again."}
-          </AlertDescription>
+          <AlertTitle>{t("loadErrorTitle")}</AlertTitle>
+          <AlertDescription>{errorText(messages.error)}</AlertDescription>
         </Alert>
       ) : messages.data && messages.data.length > 0 ? (
         <MessageList messages={messages.data} feedbackTarget="checklist_message" />
       ) : (
-        <EmptyState
-          size="compact"
-          description="No messages yet. Ask for the checklist to be refined, or explain what should change."
-        />
+        <EmptyState size="compact" description={t("empty")} />
       )}
 
       {turn ? (
@@ -312,7 +308,7 @@ export function ChatPanel({
 
           {turn.terminal === "error" ? (
             <Alert variant="destructive" className="mt-4">
-              <AlertTitle>The reply stopped</AlertTitle>
+              <AlertTitle>{t("replyStoppedTitle")}</AlertTitle>
               <AlertDescription>{turn.errorMessage}</AlertDescription>
             </Alert>
           ) : null}
@@ -321,12 +317,8 @@ export function ChatPanel({
 
       {preflightError ? (
         <Alert variant="destructive">
-          <AlertTitle>Could not send that</AlertTitle>
-          <AlertDescription>
-            {isApiError(preflightError)
-              ? preflightError.message
-              : "Something went wrong."}
-          </AlertDescription>
+          <AlertTitle>{t("sendErrorTitle")}</AlertTitle>
+          <AlertDescription>{errorText(preflightError)}</AlertDescription>
         </Alert>
       ) : null}
 

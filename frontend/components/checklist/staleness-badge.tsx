@@ -1,3 +1,5 @@
+import { useTranslations } from "next-intl";
+
 import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
@@ -16,18 +18,17 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
  * Semantic tokens only. No `dark:` utility: the token already knows what dark means.
  */
 export function StalenessBadge() {
+  const t = useTranslations("checklist.stalenessBadge");
   return (
     <Tooltip>
       <TooltipTrigger
         render={
           <Badge variant="outline" className="border-border text-muted-foreground">
-            Stale
+            {t("label")}
           </Badge>
         }
       />
-      <TooltipContent>
-        Reindexed since this was built — consider regenerating.
-      </TooltipContent>
+      <TooltipContent>{t("tooltip")}</TooltipContent>
     </Tooltip>
   );
 }

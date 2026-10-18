@@ -8,6 +8,7 @@ import {
   Plus,
   Sparkles,
 } from "lucide-react";
+import { useTranslations } from "next-intl";
 import { useMemo, useState } from "react";
 import { toast } from "sonner";
 
@@ -40,11 +41,13 @@ import { useClearChecklistResults } from "@/hooks/use-checklist-mutations";
 import { useMockDataChangeSets, useMockDataDataset } from "@/hooks/use-mock-data";
 import { useProject } from "@/hooks/use-projects";
 import { checklistItemListQueryString, endpoints } from "@/lib/api/endpoints";
-import { isApiError } from "@/lib/api/errors";
+import { useErrorText } from "@/lib/i18n/error-text";
 import type { ChecklistItemListParams } from "@/lib/api/types";
 import { PERMISSION, can } from "@/lib/can";
 
 export function ModuleScreen({ moduleId }: { moduleId: string }) {
+  const t = useTranslations("checklist.moduleScreen");
+  const errorText = useErrorText();
   const query = useChecklistModule(moduleId);
   const generate = useGenerateChecklistModule(moduleId);
   const [filters, setFilters] = useState<Partial<ChecklistItemListParams>>({});
@@ -108,11 +111,11 @@ export function ModuleScreen({ moduleId }: { moduleId: string }) {
   );
   const mockDataGenerateBlockedBecause =
     mockData.data?.status === "generating"
-      ? "A generation is already running for this dataset."
+      ? t("mockDataGenerationRunning")
       : mockDataPendingChangeSetId
-        ? "Apply or discard the pending changes before generating again."
+        ? t("applyOrDiscardFirst")
         : !canEditMockData
-          ? "You do not have permission to generate mock data for this project."
+          ? t("noMockDataPermission")
           : null;
 
   if (query.isLoading) {
@@ -128,7 +131,7 @@ export function ModuleScreen({ moduleId }: { moduleId: string }) {
     return (
       <DetailError
         error={query.error}
-        notFoundMessage="That checklist module does not exist, or it was deleted."
+        notFoundMessage={t("notFound")}
         onRetry={() => query.refetch()}
       />
     );
@@ -138,19 +141,19 @@ export function ModuleScreen({ moduleId }: { moduleId: string }) {
 
   const isGenerating = checklistModule.status === "generating";
   const generateBlockedBecause = isGenerating
-    ? "A generation is already running for this module."
+    ? t("generationRunning")
     : pendingChangeSetId
-      ? "Apply or discard the pending changes before generating again."
+      ? t("applyOrDiscardFirst")
       : !canGenerate
-        ? "You do not have permission to generate this checklist."
+        ? t("noGeneratePermission")
         : null;
 
   return (
     <div className="mx-auto w-full max-w-7xl space-y-6">
       <Tabs defaultValue="checklist">
         <TabsList>
-          <TabsTrigger value="checklist">Test Plan</TabsTrigger>
-          <TabsTrigger value="mock-data">Mock Data</TabsTrigger>
+          <TabsTrigger value="checklist">{t("tabs.testPlan")}</TabsTrigger>
+          <TabsTrigger value="mock-data">{t("tabs.mockData")}</TabsTrigger>
         </TabsList>
 
         <TabsContent value="checklist" className="space-y-6">
@@ -168,13 +171,10 @@ export function ModuleScreen({ moduleId }: { moduleId: string }) {
             // was never in scope (spec 4.6). This is also why nothing on this
             // screen shows a percentage or a "complete" badge -- there is no such
             // claim to make.
-            description={
-              <>
-                Enumerated from{" "}
-                <span className="font-mono">{checklistModule.sourcePath}</span>. Only
-                files AskRepo indexed are covered.
-              </>
-            }
+            description={t.rich("description", {
+              sourcePath: checklistModule.sourcePath,
+              path: (chunks) => <span className="font-mono">{chunks}</span>,
+            })}
             action={
               <div className="flex items-center gap-2">
                 {generateBlockedBecause ? (
@@ -184,7 +184,7 @@ export function ModuleScreen({ moduleId }: { moduleId: string }) {
                         <span>
                           <Button disabled>
                             <Sparkles className="size-4" />
-                            Generate
+                            {t("generate")}
                           </Button>
                         </span>
                       }
@@ -196,30 +196,25 @@ export function ModuleScreen({ moduleId }: { moduleId: string }) {
                     disabled={generate.isPending}
                     onClick={() =>
                       generate.mutate(undefined, {
-                        onSuccess: () => toast.success("Generation started"),
-                        onError: (error) =>
-                          toast.error(
-                            isApiError(error)
-                              ? error.message
-                              : "That did not start. Try again.",
-                          ),
+                        onSuccess: () => toast.success(t("generationStarted")),
+                        onError: (error) => toast.error(errorText(error)),
                       })
                     }
                   >
                     <Sparkles className="size-4" />
-                    Generate
+                    {t("generate")}
                   </Button>
                 )}
 
                 {pendingChangeSet ? (
                   <RefinementDrawer
-                    label={`Review ${pendingChangeSet.operations.length} ${
-                      pendingChangeSet.operations.length === 1 ? "change" : "changes"
-                    }`}
+                    label={t("reviewChanges", {
+                      count: pendingChangeSet.operations.length,
+                    })}
                     icon={ClipboardCheck}
                     variant="default"
-                    title="Pending changes"
-                    description="Tick the operations to keep. Nothing is written to the test plan until you apply."
+                    title={t("pendingChanges")}
+                    description={t("pendingChecklistDescription")}
                     storageKey="checklist-review"
                   >
                     <ChangeSetPanel
@@ -237,10 +232,10 @@ export function ModuleScreen({ moduleId }: { moduleId: string }) {
                 ) : null}
 
                 <RefinementDrawer
-                  label="Refine"
+                  label={t("refine")}
                   icon={MessagesSquare}
-                  title="Refine this test plan"
-                  description="Ask for changes, or explain what should be different. Proposals arrive as a change set to review."
+                  title={t("refineChecklistTitle")}
+                  description={t("refineChecklistDescription")}
                   storageKey="checklist-refine"
                 >
                   <ChatPanel
@@ -253,7 +248,7 @@ export function ModuleScreen({ moduleId }: { moduleId: string }) {
 
                 <Button variant="outline" onClick={() => setAddingItem(true)}>
                   <Plus className="size-4" />
-                  Add test case
+                  {t("addTestCase")}
                 </Button>
 
                 <Button
@@ -269,7 +264,7 @@ export function ModuleScreen({ moduleId }: { moduleId: string }) {
                   }
                 >
                   <Download className="size-4" />
-                  Export
+                  {t("export")}
                 </Button>
               </div>
             }
@@ -281,7 +276,7 @@ export function ModuleScreen({ moduleId }: { moduleId: string }) {
 
           {checklistModule.status === "failed" && checklistModule.error ? (
             <JobFailureAlert
-              title="The last generation failed"
+              title={t("lastGenerationFailed")}
               message={checklistModule.error}
             />
           ) : null}
@@ -297,8 +292,7 @@ export function ModuleScreen({ moduleId }: { moduleId: string }) {
                 disabled={clearResults.isPending}
               >
                 <Eraser className="size-4" />
-                Clear {recordedCount} recorded{" "}
-                {recordedCount === 1 ? "result" : "results"}
+                {t("clearResults", { count: recordedCount })}
               </Button>
             </div>
           ) : null}
@@ -308,25 +302,18 @@ export function ModuleScreen({ moduleId }: { moduleId: string }) {
           <ConfirmDialog
             open={confirmingClear}
             onOpenChange={setConfirmingClear}
-            title="Clear these recorded results?"
-            description={`This resets ${recordedCount} ${recordedCount === 1 ? "result" : "results"} to untested and discards what was observed. Only the rows the current filter selects are affected. The test cases stay.`}
-            confirmLabel="Clear results"
+            title={t("clearTitle")}
+            description={t("clearDescription", { count: recordedCount })}
+            confirmLabel={t("clearConfirm")}
             isPending={clearResults.isPending}
             error={clearResults.error}
             onConfirm={() =>
               clearResults.mutate(filters, {
                 onSuccess: (data) => {
-                  toast.success(
-                    `Cleared ${data.clearedCount} recorded ${data.clearedCount === 1 ? "result" : "results"}`,
-                  );
+                  toast.success(t("cleared", { count: data.clearedCount }));
                   setConfirmingClear(false);
                 },
-                onError: (error) =>
-                  toast.error(
-                    isApiError(error)
-                      ? error.message
-                      : "That did not clear. Try again.",
-                  ),
+                onError: (error) => toast.error(errorText(error)),
               })
             }
           />
@@ -341,10 +328,11 @@ export function ModuleScreen({ moduleId }: { moduleId: string }) {
         <TabsContent value="mock-data" className="space-y-6">
           <div className="flex flex-wrap items-center justify-between gap-4">
             <div>
-              <h2 className="text-xl font-semibold tracking-tight">Mock data</h2>
+              <h2 className="text-xl font-semibold tracking-tight">
+                {t("mockDataTitle")}
+              </h2>
               <p className="text-muted-foreground text-sm">
-                Sample records for {checklistModule.sourcePath}, grounded in its actual
-                schema.
+                {t("mockDataDescription", { path: checklistModule.sourcePath })}
               </p>
             </div>
             <div className="flex items-center gap-2">
@@ -355,15 +343,13 @@ export function ModuleScreen({ moduleId }: { moduleId: string }) {
 
               {pendingMockDataChangeSet ? (
                 <RefinementDrawer
-                  label={`Review ${pendingMockDataChangeSet.operations.length} ${
-                    pendingMockDataChangeSet.operations.length === 1
-                      ? "change"
-                      : "changes"
-                  }`}
+                  label={t("reviewChanges", {
+                    count: pendingMockDataChangeSet.operations.length,
+                  })}
                   icon={ClipboardCheck}
                   variant="default"
-                  title="Pending changes"
-                  description="Tick the operations to keep. Nothing is written to the dataset until you apply."
+                  title={t("pendingChanges")}
+                  description={t("pendingMockDataDescription")}
                   storageKey="mock-data-review"
                 >
                   <MockDataChangeSetPanel
@@ -379,10 +365,10 @@ export function ModuleScreen({ moduleId }: { moduleId: string }) {
               ) : null}
 
               <RefinementDrawer
-                label="Refine"
+                label={t("refine")}
                 icon={MessagesSquare}
-                title="Refine this mock data"
-                description="Ask for changes to these records. Proposals arrive as a change set to review."
+                title={t("refineMockDataTitle")}
+                description={t("refineMockDataDescription")}
                 storageKey="mock-data-refine"
               >
                 <MockDataChatPanel
@@ -398,7 +384,7 @@ export function ModuleScreen({ moduleId }: { moduleId: string }) {
                 render={<a href={`/api${endpoints.mockData.exportJson(moduleId)}`} />}
               >
                 <Download className="size-4" />
-                JSON
+                {t("exportJson")}
               </Button>
               <Button
                 variant="outline"
@@ -406,7 +392,7 @@ export function ModuleScreen({ moduleId }: { moduleId: string }) {
                 render={<a href={`/api${endpoints.mockData.exportXlsx(moduleId)}`} />}
               >
                 <Download className="size-4" />
-                xlsx
+                {t("exportXlsx")}
               </Button>
             </div>
           </div>
@@ -420,7 +406,7 @@ export function ModuleScreen({ moduleId }: { moduleId: string }) {
 
           {mockData.data?.status === "failed" && mockData.data.error ? (
             <JobFailureAlert
-              title="The last generation failed"
+              title={t("lastGenerationFailed")}
               message={mockData.data.error}
             />
           ) : null}

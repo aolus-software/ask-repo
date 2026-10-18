@@ -1,6 +1,7 @@
 "use client";
 
 import { Loader2 } from "lucide-react";
+import { useTranslations } from "next-intl";
 import { useState } from "react";
 import { toast } from "sonner";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
@@ -38,9 +39,9 @@ import type {
 } from "@/lib/api/types";
 import { keys } from "@/lib/query/keys";
 
-function fieldMapText(fields: Record<string, string>): string {
+function fieldMapText(fields: Record<string, string>, noFields: string): string {
   const entries = Object.entries(fields);
-  if (entries.length === 0) return "(no fields)";
+  if (entries.length === 0) return noFields;
   return entries.map(([key, value]) => `${key}: ${value}`).join(", ");
 }
 
@@ -72,6 +73,7 @@ export function MockDataChangeSetPanel({
   /** Mirrors the backend's `mockdata.edit` gate; it does not replace it. */
   canApply: boolean;
 }) {
+  const t = useTranslations("mockData.changeSetPanel");
   const queryClient = useQueryClient();
   const [checked, setChecked] = useState<Record<string, boolean>>(() => {
     const initial: Record<string, boolean> = {};
@@ -101,7 +103,7 @@ export function MockDataChangeSetPanel({
       if (data.skippedOperationIds.length > 0) {
         setSkippedCount(data.skippedOperationIds.length);
       } else {
-        toast.success("Changes applied");
+        toast.success(t("applied"));
       }
     },
   });
@@ -116,7 +118,7 @@ export function MockDataChangeSetPanel({
       ),
     onSuccess: () => {
       invalidate();
-      toast.success("Proposals discarded");
+      toast.success(t("discarded"));
       setConfirmingDiscard(false);
     },
   });
@@ -150,6 +152,10 @@ export function MockDataChangeSetPanel({
       operation.op === "add"
         ? undefined
         : records.find((record) => record.id === operation.recordId);
+    const recordLabel = t.rich("recordLine", {
+      recordId: operation.recordId ?? "",
+      id: (chunks) => <span className="font-mono">{chunks}</span>,
+    });
     return (
       <OperationRow
         key={operation.id}
@@ -157,21 +163,23 @@ export function MockDataChangeSetPanel({
         onToggle={() => toggle(operation.id)}
         orphaned={orphaned}
       >
-        <p className="font-medium capitalize">{operation.op}</p>
+        <p className="font-medium">{t(`ops.${operation.op}`)}</p>
         {operation.op !== "add" && operation.recordId ? (
           <p className="text-muted-foreground text-xs">
-            Record <span className="font-mono">{operation.recordId}</span>
+            {recordLabel}
             {target ? ` · ${identifyingFields(target)}` : null}
           </p>
         ) : null}
         {orphaned ? (
-          <p className="text-sm">
-            This record no longer exists — this change will be skipped
-          </p>
+          <p className="text-sm">{t("orphaned")}</p>
         ) : operation.op === "update" ? (
-          <p className="text-sm">{fieldMapText(operation.changes ?? {})}</p>
+          <p className="text-sm">
+            {fieldMapText(operation.changes ?? {}, t("noFields"))}
+          </p>
         ) : operation.op === "add" ? (
-          <p className="text-sm">{fieldMapText(operation.fields ?? {})}</p>
+          <p className="text-sm">
+            {fieldMapText(operation.fields ?? {}, t("noFields"))}
+          </p>
         ) : null}
         <div className="mt-2">
           <OperationRationale rationale={operation.rationale} />
@@ -183,17 +191,14 @@ export function MockDataChangeSetPanel({
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Proposed mock data changes</CardTitle>
+        <CardTitle>{t("title")}</CardTitle>
         <CardDescription>{changeSet.summary}</CardDescription>
         <OperationCountsLine counts={counts} />
       </CardHeader>
       <CardContent className="space-y-4">
         {skippedCount !== null ? (
           <Alert>
-            <AlertDescription>
-              {skippedCount} proposed change{skippedCount === 1 ? "" : "s"} were skipped
-              because the record they referred to no longer exists.
-            </AlertDescription>
+            <AlertDescription>{t("skipped", { count: skippedCount })}</AlertDescription>
           </Alert>
         ) : null}
 
@@ -215,7 +220,7 @@ export function MockDataChangeSetPanel({
             onClick={() => setConfirmingDiscard(true)}
             disabled={!canApply || applyMutation.isPending || discardMutation.isPending}
           >
-            Discard
+            {t("discard")}
           </Button>
           <Button
             onClick={handleApply}
@@ -229,7 +234,7 @@ export function MockDataChangeSetPanel({
             {applyMutation.isPending ? (
               <Loader2 className="size-4 animate-spin" />
             ) : null}
-            Apply selected
+            {t("applySelected")}
           </Button>
         </div>
       </CardFooter>
@@ -237,9 +242,9 @@ export function MockDataChangeSetPanel({
       <ConfirmDialog
         open={confirmingDiscard}
         onOpenChange={setConfirmingDiscard}
-        title="Discard proposed changes"
-        description="Discard these proposals? Nothing will be written to the mock dataset."
-        confirmLabel="Discard"
+        title={t("discardTitle")}
+        description={t("discardDescription")}
+        confirmLabel={t("discard")}
         isPending={discardMutation.isPending}
         error={discardMutation.error}
         onConfirm={() => discardMutation.mutate()}

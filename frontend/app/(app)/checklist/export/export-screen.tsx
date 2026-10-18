@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -49,6 +50,7 @@ type ModuleMode = "all" | "choose";
  * Export button on `/checklist` passes from its own project filter.
  */
 export function ExportScreen() {
+  const t = useTranslations("checklist.exportScreen");
   const router = useRouter();
   const searchParams = useSearchParams();
   const [projectId, setProjectId] = useState(searchParams.get("projectId") ?? "");
@@ -131,7 +133,7 @@ export function ExportScreen() {
       },
       {
         onSuccess: () => {
-          toast.success("Export downloaded");
+          toast.success(t("downloaded"));
           router.push(backHref);
         },
       },
@@ -141,16 +143,16 @@ export function ExportScreen() {
   return (
     <FormPage
       backHref={backHref}
-      title="Export checklist and mock data"
-      description="Download a project's test checklist, its mock data, or both, for every module or the ones you choose."
-      submitLabel="Export"
+      title={t("title")}
+      description={t("description")}
+      submitLabel={t("submit")}
       isPending={exporter.isPending}
       error={exporter.error}
       onSubmit={handleSubmit}
     >
       <Field>
         <FieldLabel>
-          Project <span className="text-danger">*</span>
+          {t("project")} <span className="text-danger">*</span>
         </FieldLabel>
         <Combobox
           items={exportable}
@@ -160,12 +162,14 @@ export function ExportScreen() {
         >
           <ComboboxInput
             className="w-full"
-            placeholder={projects.isLoading ? "Loading projects…" : "Search projects"}
-            aria-label="Project"
+            placeholder={
+              projects.isLoading ? t("loadingProjects") : t("searchProjects")
+            }
+            aria-label={t("projectAria")}
           />
           <ComboboxContent>
             <ComboboxEmpty>
-              {projects.isLoading ? "Loading…" : "No project matches."}
+              {projects.isLoading ? t("loading") : t("noProjectMatches")}
             </ComboboxEmpty>
             <ComboboxList>
               {(p: ProjectResponse) => (
@@ -176,13 +180,13 @@ export function ExportScreen() {
             </ComboboxList>
           </ComboboxContent>
         </Combobox>
-        {attempted && !project ? <FieldError>Choose a project.</FieldError> : null}
+        {attempted && !project ? <FieldError>{t("chooseProject")}</FieldError> : null}
       </Field>
 
       {project ? (
         <>
           <FieldSet>
-            <FieldLegend variant="label">Include</FieldLegend>
+            <FieldLegend variant="label">{t("include")}</FieldLegend>
             <Field orientation="horizontal">
               <Checkbox
                 id="include-checklist"
@@ -190,7 +194,7 @@ export function ExportScreen() {
                 disabled={!allowed.checklist}
                 onCheckedChange={(checked) => togglePart("checklist", checked === true)}
               />
-              <FieldLabel htmlFor="include-checklist">Test checklist</FieldLabel>
+              <FieldLabel htmlFor="include-checklist">{t("testChecklist")}</FieldLabel>
             </Field>
             <Field orientation="horizontal">
               <Checkbox
@@ -199,39 +203,36 @@ export function ExportScreen() {
                 disabled={!allowed.mockData}
                 onCheckedChange={(checked) => togglePart("mockData", checked === true)}
               />
-              <FieldLabel htmlFor="include-mock-data">Mock data</FieldLabel>
+              <FieldLabel htmlFor="include-mock-data">{t("mockData")}</FieldLabel>
             </Field>
-            <FieldDescription>
-              One part downloads as a spreadsheet; both download together as a .zip.
-              Mock data has a sheet per module, after a cover sheet listing every module
-              exported.
-            </FieldDescription>
-            {missingPart ? <FieldError>Choose what to export.</FieldError> : null}
+            <FieldDescription>{t("includeHint")}</FieldDescription>
+            {missingPart ? <FieldError>{t("chooseWhat")}</FieldError> : null}
           </FieldSet>
 
           <FieldSet>
-            <FieldLegend variant="label">Modules</FieldLegend>
+            <FieldLegend variant="label">{t("modules")}</FieldLegend>
             <RadioGroup
-              aria-label="Modules"
+              aria-label={t("modulesAria")}
               value={mode}
               onValueChange={(value) => setMode(value as ModuleMode)}
               className="flex flex-wrap gap-4"
             >
               <Label className="text-foreground flex items-center gap-2 text-sm font-normal">
                 <RadioGroupItem value="all" />
-                All modules
-                {modules.data ? ` (${modules.data.totalCount})` : ""}
+                {modules.data
+                  ? t("allModulesCount", { count: modules.data.totalCount })
+                  : t("allModules")}
               </Label>
               <Label className="text-foreground flex items-center gap-2 text-sm font-normal">
                 <RadioGroupItem value="choose" />
-                Choose modules
+                {t("chooseModules")}
               </Label>
             </RadioGroup>
             {mode === "choose" ? (
               modules.isLoading ? (
-                <FieldDescription>Loading modules…</FieldDescription>
+                <FieldDescription>{t("loadingModules")}</FieldDescription>
               ) : moduleItems.length === 0 ? (
-                <FieldDescription>This project has no modules yet.</FieldDescription>
+                <FieldDescription>{t("noModules")}</FieldDescription>
               ) : (
                 <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                   {moduleItems.map((module) => (
@@ -253,21 +254,16 @@ export function ExportScreen() {
             ) : null}
             {mode === "choose" && moreModules ? (
               <FieldDescription>
-                Showing the first {MODULE_LIMIT} modules by name. Choose All modules to
-                export every one.
+                {t("moduleCap", { count: MODULE_LIMIT })}
               </FieldDescription>
             ) : null}
-            {missingModules ? (
-              <FieldError>Choose at least one module.</FieldError>
-            ) : null}
+            {missingModules ? <FieldError>{t("chooseAtLeastOne")}</FieldError> : null}
           </FieldSet>
 
           {parts.includes("checklist") ? (
             <FieldSet>
-              <FieldLegend variant="label">Checklist filters</FieldLegend>
-              <FieldDescription>
-                Narrow the test checklist. Mock data is exported whole.
-              </FieldDescription>
+              <FieldLegend variant="label">{t("filters")}</FieldLegend>
+              <FieldDescription>{t("filtersHint")}</FieldDescription>
               <ItemFilters currentFilters={filters} onFiltersChange={setFilters} />
             </FieldSet>
           ) : null}
