@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { useState } from "react";
 import { toast } from "sonner";
 
@@ -8,7 +9,7 @@ import { PasswordInput } from "@/components/form/password-input";
 import { Field, FieldDescription, FieldError, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { useCreateProject } from "@/hooks/use-project-mutations";
-import { fieldError } from "@/lib/api/errors";
+import { useFieldErrorText } from "@/lib/i18n/error-text";
 
 const EMPTY = { repoUrl: "", branch: "main", pat: "" };
 
@@ -19,6 +20,8 @@ export function CreateProjectDialog({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
+  const t = useTranslations();
+  const fieldErrorText = useFieldErrorText();
   const [values, setValues] = useState(EMPTY);
   const [urlError, setUrlError] = useState<string | undefined>();
   const mutation = useCreateProject();
@@ -30,7 +33,7 @@ export function CreateProjectDialog({
     // address rejection at connect time — is a security control on the backend
     // (docs/PRD.md §9) and is not mirrored here.
     if (!values.repoUrl.trim()) {
-      setUrlError("Enter a repository URL.");
+      setUrlError(t("projects.createDialog.repoUrlRequired"));
       return;
     }
     setUrlError(undefined);
@@ -45,7 +48,7 @@ export function CreateProjectDialog({
         onSuccess: () => {
           // Closes on 201. The clone and index then run for minutes and progress
           // shows on the row — never hold a dialog open on a job (forms.md §10).
-          toast.success("Project queued for indexing");
+          toast.success(t("projects.createDialog.queued"));
           setValues(EMPTY);
           onOpenChange(false);
         },
@@ -53,27 +56,31 @@ export function CreateProjectDialog({
     );
   }
 
-  const repoUrlError = urlError ?? fieldError(mutation.error, "repoUrl");
+  const branchError = fieldErrorText(mutation.error, "branch");
+  const patError = fieldErrorText(mutation.error, "pat");
+  const repoUrlError = urlError ?? fieldErrorText(mutation.error, "repoUrl");
 
   return (
     <FormDialog
       open={open}
       onOpenChange={onOpenChange}
-      title="Add a project"
-      description="AskRepo clones the repository, indexes it, and deletes the working copy."
-      submitLabel="Add project"
+      title={t("projects.createDialog.title")}
+      description={t("projects.createDialog.description", {
+        appName: t("common.appName"),
+      })}
+      submitLabel={t("projects.createDialog.submit")}
       isPending={mutation.isPending}
       error={mutation.error}
       onSubmit={handleSubmit}
     >
       <Field>
         <FieldLabel htmlFor="repoUrl">
-          Repository URL <span className="text-danger">*</span>
+          {t("projects.createDialog.repoUrl")} <span className="text-danger">*</span>
         </FieldLabel>
         <Input
           id="repoUrl"
           className="font-mono"
-          placeholder="https://github.com/your-org/your-repo"
+          placeholder={t("projects.createDialog.repoUrlPlaceholder")}
           value={values.repoUrl}
           onChange={(event) => setValues({ ...values, repoUrl: event.target.value })}
           aria-invalid={Boolean(repoUrlError)}
@@ -81,44 +88,38 @@ export function CreateProjectDialog({
         {repoUrlError ? (
           <FieldError>{repoUrlError}</FieldError>
         ) : (
-          <FieldDescription>An https URL on an allowed host.</FieldDescription>
+          <FieldDescription>{t("projects.createDialog.repoUrlHint")}</FieldDescription>
         )}
       </Field>
 
       <Field>
-        <FieldLabel htmlFor="branch">Branch</FieldLabel>
+        <FieldLabel htmlFor="branch">{t("projects.createDialog.branch")}</FieldLabel>
         <Input
           id="branch"
           className="font-mono"
           value={values.branch}
           onChange={(event) => setValues({ ...values, branch: event.target.value })}
-          aria-invalid={Boolean(fieldError(mutation.error, "branch"))}
+          aria-invalid={Boolean(branchError)}
         />
-        {fieldError(mutation.error, "branch") ? (
-          <FieldError>{fieldError(mutation.error, "branch")}</FieldError>
-        ) : null}
+        {branchError ? <FieldError>{branchError}</FieldError> : null}
       </Field>
 
       <Field>
-        <FieldLabel htmlFor="pat">Access token</FieldLabel>
+        <FieldLabel htmlFor="pat">{t("projects.createDialog.pat")}</FieldLabel>
         <PasswordInput
           id="pat"
           autoComplete="off"
           value={values.pat}
           onChange={(event) => setValues({ ...values, pat: event.target.value })}
-          aria-invalid={Boolean(fieldError(mutation.error, "pat"))}
+          aria-invalid={Boolean(patError)}
         />
-        {fieldError(mutation.error, "pat") ? (
-          <FieldError>{fieldError(mutation.error, "pat")}</FieldError>
+        {patError ? (
+          <FieldError>{patError}</FieldError>
         ) : (
           // Write-only, and never a masked placeholder that looks like a value: the
           // API never returns a PAT, so a placeholder would be a lie an operator
           // submits thinking it is the real one (forms.md §9).
-          <FieldDescription>
-            Only for a private repository. Leave blank to keep any stored token
-            unchanged. Scope it read-only — everyone on this instance can query what it
-            indexes.
-          </FieldDescription>
+          <FieldDescription>{t("projects.createDialog.patHint")}</FieldDescription>
         )}
       </Field>
     </FormDialog>

@@ -1,6 +1,7 @@
 "use client";
 
 import { FolderGit2, Plus } from "lucide-react";
+import { useTranslations } from "next-intl";
 import { useState } from "react";
 
 import { EmptyState } from "@/components/feedback/empty-state";
@@ -18,6 +19,7 @@ import { useProjects } from "@/hooks/use-projects";
 import { SORT } from "@/lib/api/endpoints";
 
 export function ProjectsScreen() {
+  const t = useTranslations();
   const [creating, setCreating] = useState(false);
   const { params, searchInput, setSearch, setPage } = useListParams({
     limit: 25,
@@ -30,19 +32,19 @@ export function ProjectsScreen() {
   return (
     <div className="mx-auto w-full max-w-7xl">
       <PageHeader
-        title="Projects"
-        description="Every repository indexed on this instance. Anyone here can query any of them."
+        title={t("projects.list.title")}
+        description={t("projects.list.description")}
         action={
           <Button onClick={() => setCreating(true)}>
             <Plus className="size-4" />
-            Add project
+            {t("projects.list.addProject")}
           </Button>
         }
       />
 
       <ListToolbar
         initialSearch={searchInput}
-        placeholder="Search projects"
+        placeholder={t("projects.list.searchPlaceholder")}
         onSearchChange={setSearch}
       />
 
@@ -54,9 +56,19 @@ export function ProjectsScreen() {
         ) : !query.isLoading && projects.length === 0 ? (
           <EmptyState
             icon={FolderGit2}
-            title={params.search ? "No projects match" : "No projects yet"}
-            description="Add a repository and AskRepo will clone and index it. That takes a few minutes."
-            action={<Button onClick={() => setCreating(true)}>Add project</Button>}
+            title={
+              params.search
+                ? t("projects.list.emptyNoMatch")
+                : t("projects.list.emptyNone")
+            }
+            description={t("projects.list.emptyDescription", {
+              appName: t("common.appName"),
+            })}
+            action={
+              <Button onClick={() => setCreating(true)}>
+                {t("projects.list.addProject")}
+              </Button>
+            }
           />
         ) : (
           <>

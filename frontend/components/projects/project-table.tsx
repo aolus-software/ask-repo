@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import Link from "next/link";
 
 import { ProjectStatusBadge } from "@/components/feedback/status-badge";
@@ -26,18 +27,19 @@ export function ProjectTable({
   isLoading: boolean;
   rowActions: (project: ProjectResponse) => React.ReactNode;
 }) {
+  const t = useTranslations("projects.table");
   const formatRelative = useFormatRelative();
   return (
     <Table>
       <TableHeader>
         <TableRow>
-          <TableHead>Name</TableHead>
-          <TableHead>Repository</TableHead>
-          <TableHead>Status</TableHead>
-          <TableHead>Indexed</TableHead>
-          <TableHead>Commit</TableHead>
-          <TableHead>Updated</TableHead>
-          <TableHead className="text-right">Actions</TableHead>
+          <TableHead>{t("columns.name")}</TableHead>
+          <TableHead>{t("columns.repository")}</TableHead>
+          <TableHead>{t("columns.status")}</TableHead>
+          <TableHead>{t("columns.indexed")}</TableHead>
+          <TableHead>{t("columns.commit")}</TableHead>
+          <TableHead>{t("columns.updated")}</TableHead>
+          <TableHead className="text-right">{t("columns.actions")}</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
@@ -61,7 +63,10 @@ export function ProjectTable({
               <TableCell className="text-muted-foreground text-sm">
                 {project.fileCount === null
                   ? "—"
-                  : `${project.fileCount} files · ${project.chunkCount ?? 0} chunks`}
+                  : t("indexedCounts", {
+                      files: project.fileCount,
+                      chunks: project.chunkCount ?? 0,
+                    })}
               </TableCell>
               <TableCell className="font-mono text-sm">
                 {project.lastIndexedCommit
