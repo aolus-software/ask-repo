@@ -1,0 +1,24 @@
+{
+  "validation": {
+    "missing": "Medan ini diperlukan.",
+    "string_too_short": "Ini terlalu pendek.",
+    "string_too_long": "Ini terlalu panjang.",
+    "enum": "Pilih salah satu pilihan yang disenaraikan.",
+    "literal_error": "Pilih salah satu pilihan yang disenaraikan.",
+    "url_parsing": "Masukkan URL yang sah.",
+    "url_scheme": "URL mesti bermula dengan https://.",
+    "int_parsing": "Masukkan nombor bulat.",
+    "greater_than_equal": "Nombor ini terlalu kecil.",
+    "less_than_equal": "Nombor ini terlalu besar.",
+    "uuid_parsing": "Ini bukan id yang sah."
+  },
+  "passwordInput": {
+    "show": "Tunjukkan kata laluan",
+    "hide": "Sembunyikan kata laluan"
+  },
+  "passwordField": {
+    "notAccepted": "Kata laluan itu tidak diterima.",
+    "looksGood": "Nampak baik setakat ini.",
+    "hint": "Pilih kata laluan yang kukuh yang tidak anda gunakan di tempat lain."
+  }
+}

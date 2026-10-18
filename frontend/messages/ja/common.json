@@ -1,0 +1,20 @@
+{
+  "appName": "AskRepo",
+  "cancel": "キャンセル",
+  "save": "保存",
+  "saving": "保存中…",
+  "delete": "削除",
+  "close": "閉じる",
+  "edit": "編集",
+  "create": "作成",
+  "back": "戻る",
+  "retry": "再試行",
+  "loading": "読み込み中…",
+  "search": "検索",
+  "actions": "操作",
+  "name": "名前",
+  "status": "ステータス",
+  "yes": "はい",
+  "no": "いいえ",
+  "none": "なし"
+}

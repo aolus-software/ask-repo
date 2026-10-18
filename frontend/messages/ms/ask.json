@@ -1,0 +1,94 @@
+{
+  "newConversation": {
+    "title": "Tanya",
+    "description": "Soalan dijawab daripada kod yang diindeks, dengan petikan. Hanya anda yang boleh melihatnya.",
+    "placeholderReady": "Bagaimanakah pengiraan pengeluaran berfungsi?",
+    "placeholderChooseProject": "Pilih projek dahulu"
+  },
+  "conversation": {
+    "untitled": "Perbualan tanpa tajuk",
+    "newTitle": "Perbualan baharu",
+    "notFound": "Perbualan itu tidak wujud.",
+    "projectUnavailable": "Projek itu tidak lagi tersedia.",
+    "answerStopped": "Jawapan terhenti",
+    "tryAgain": "Cuba lagi",
+    "answering": "Sedang menjawab…",
+    "askFollowUp": "Tanya soalan susulan"
+  },
+  "phases": {
+    "queued": "Dalam baris gilir…",
+    "classifying": "Memahami soalan…",
+    "retrieving": "Mencari dalam pangkalan kod…",
+    "grading": "Menyemak apa yang ditemui…",
+    "generating": "Menulis jawapan…"
+  },
+  "stream": {
+    "noStream": "Pelayan tidak menghantar strim jawapan.",
+    "failed": "Jawapan gagal."
+  },
+  "composer": {
+    "questionLabel": "Soalan anda",
+    "ask": "Tanya"
+  },
+  "answer": {
+    "copyCode": "Salin kod"
+  },
+  "groundingWarnings": {
+    "no_context": "Tiada apa-apa yang berkaitan ditemui dalam projek ini, jadi tiada jawapan dijana daripada kodnya.",
+    "uncited_answer": "Jawapan ini tidak memetik mana-mana petikan yang diberikan kepadanya. Berhati-hati dengannya.",
+    "unknown_paths": "Jawapan ini menyebut fail yang tiada dalam petikan yang diperoleh. Rujukan tersebut mungkin tidak wujud.",
+    "weak_evidence": "Kod yang diperoleh mungkin tidak meliputi soalan ini sepenuhnya. Jawapan menyatakan apa yang tidak dapat ditentukan.",
+    "unknown": "Amaran asas bukti: {warning}"
+  },
+  "interruptedNote": "Sambungan terputus. Apa yang telah diterima di atas dikekalkan.",
+  "messages": {
+    "showFull": "Tunjukkan mesej penuh",
+    "collapse": "Kecilkan mesej",
+    "interrupted": "Jawapan ini terganggu. Apa yang telah diterima dikekalkan.",
+    "endedEarly": "Jawapan ini tamat awal ({reason})."
+  },
+  "projectPicker": {
+    "loadingProjects": "Memuatkan projek…",
+    "searchProjects": "Cari projek",
+    "label": "Projek",
+    "loading": "Memuatkan…",
+    "noMatch": "Tiada projek yang sepadan."
+  },
+  "sources": {
+    "title": "Sumber ({count})",
+    "lines": "baris {start}–{end}"
+  },
+  "preflight": {
+    "couldNotAnswer": "Soalan itu tidak dapat dijawab",
+    "genericError": "Sesuatu telah berlaku.",
+    "needsReindexTitle": "Projek ini perlu diindeks semula",
+    "needsReindexBody": "Ia diindeks dengan model benam yang berbeza, jadi vektor yang disimpan tidak dapat dicari dengan model yang dijalankan oleh instans ini sekarang. Indeks semula dan soalan akan berfungsi kembali.",
+    "reindexNow": "Indeks semula sekarang",
+    "reindexStarted": "Pengindeksan semula dimulakan",
+    "reindexAlreadyRunning": "Pengindeksan semula sedang berjalan",
+    "askToReindex": "Minta orang yang menambahnya, atau pentadbir, untuk mengindeks semula.",
+    "notReadyTitle": "Projek ini belum sedia",
+    "notReadyBody": "Ia masih sedang diklon atau diindeks. Soalan boleh dijawab setelah ia mencapai “Sedia”."
+  },
+  "rail": {
+    "deleteConversation": "Padam perbualan",
+    "deleteTitle": "Padam perbualan ini?",
+    "deleteDescription": "Hanya anda yang boleh melihatnya, dan ia tidak boleh dipulihkan.",
+    "delete": "Padam",
+    "deleted": "Perbualan dipadam",
+    "conversations": "Perbualan",
+    "newConversation": "Perbualan baharu",
+    "searchConversations": "Cari perbualan",
+    "loadingProjects": "Memuatkan projek…",
+    "allProjects": "Semua projek",
+    "filterByProject": "Tapis mengikut projek",
+    "loading": "Memuatkan…",
+    "couldNotLoadProjects": "Tidak dapat memuatkan projek.",
+    "noProjectMatches": "Tiada projek yang sepadan.",
+    "noConversationMatches": "Tiada perbualan yang sepadan.",
+    "nothingYet": "Belum ada apa-apa. Pilih projek dan tanya soalan.",
+    "untitled": "Perbualan tanpa tajuk",
+    "showConversations": "Tunjukkan perbualan",
+    "hideConversations": "Sembunyikan perbualan"
+  }
+}

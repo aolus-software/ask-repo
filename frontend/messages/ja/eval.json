@@ -1,0 +1,127 @@
+{
+  "questionTypes": {
+    "explain": "説明",
+    "locate": "場所の特定"
+  },
+  "mix": {
+    "balanced": "バランス",
+    "explain": "説明のみ",
+    "locate": "場所の特定のみ"
+  },
+  "tally": {
+    "summary": "ヒット {hits}/{answered} · 正解 {correct} · 部分的 {partial} · 不正解 {wrong}",
+    "summaryWithErrors": "ヒット {hits}/{answered} · 正解 {correct} · 部分的 {partial} · 不正解 {wrong} · エラー {errors}"
+  },
+  "wholeProject": "プロジェクト全体",
+  "setTable": {
+    "emptyTitle": "評価セットはまだありません",
+    "emptyDescription": "参照回答付きの質問セットを生成し、実行すると、このプロジェクトでアシスタントがどの程度正しく答えられるかを確認できます。",
+    "columns": {
+      "set": "セット",
+      "path": "パス",
+      "pairs": "ペア",
+      "status": "ステータス",
+      "latestRun": "最新の実行",
+      "created": "作成日",
+      "actions": "操作"
+    },
+    "noRuns": "まだ実行されていません",
+    "actionsFor": "{name} の操作",
+    "delete": "削除"
+  },
+  "deleteDialog": {
+    "titleNamed": "{name} を削除しますか？",
+    "title": "評価セットを削除しますか？",
+    "description": "質問、すべての実行とその結果が、全員分まとめて削除されます。",
+    "confirm": "評価セットを削除",
+    "deleted": "評価セットを削除しました"
+  },
+  "pairTable": {
+    "generatingTitle": "質問を生成中…",
+    "emptyTitle": "質問はありません",
+    "generatingDescription": "生成が完了するとすぐに、ここに質問が表示されます。",
+    "emptyDescription": "このセットには質問がありません。",
+    "columns": {
+      "question": "質問",
+      "type": "種類",
+      "source": "出典",
+      "excluded": "除外"
+    },
+    "excludeLabel": "除外: {question}",
+    "referenceAnswer": "参照回答",
+    "saveFailed": "保存できませんでした。もう一度お試しください"
+  },
+  "runTable": {
+    "generatingTitle": "質問を生成中…",
+    "noRunsTitle": "実行はありません",
+    "generatingDescription": "質問の準備ができると、このセットを実行できます。",
+    "failedDescription": "生成に失敗したセットは実行できません。",
+    "emptyTitle": "まだ実行されていません",
+    "emptyDescription": "セットを実行すると、各質問を投げかけ、回答を参照回答と照らして判定します。",
+    "columns": {
+      "started": "開始",
+      "status": "ステータス",
+      "results": "結果",
+      "model": "モデル"
+    }
+  },
+  "runSheet": {
+    "title": "実行結果",
+    "loadFailed": "実行を読み込めませんでした",
+    "loading": "実行を読み込み中…",
+    "notFound": "その実行は存在しないか、削除されています。",
+    "failedTitle": "実行に失敗しました",
+    "retrievalHit": "検索ヒット",
+    "retrievalMiss": "検索ミス",
+    "judge": "判定: {reason}",
+    "warnings": "警告: {warnings}"
+  },
+  "compare": {
+    "judgeChanged": "これらの実行は別々のモデルで判定されています。判定の変化は回答ではなく判定モデルによるものかもしれません。検索ヒットには影響しません。",
+    "comparedOn": "両方の実行が回答した {count, plural, other {# ペア}} で比較",
+    "base": "基準",
+    "head": "比較対象",
+    "tally": "ヒット {hits}/{total} · 正解 {correct} · 部分的 {partial} · 不正解 {wrong} · エラー {errors}",
+    "noChange": "これらの実行間で変化したペアはありません。",
+    "retrievalChange": "検索: {from} → {to}",
+    "hit": "ヒット",
+    "miss": "ミス"
+  },
+  "generateDialog": {
+    "trigger": "評価セットを生成",
+    "title": "評価セットを生成",
+    "description": "このプロジェクトのインデックス済みコードから参照回答付きの質問を生成し、アシスタントを評価します。",
+    "submit": "生成",
+    "started": "生成を開始しました",
+    "nameLabel": "名前",
+    "namePlaceholder": "例: 認証に関する質問",
+    "pathLabel": "パス",
+    "pathHelp": "プロジェクト全体を対象にする場合は空欄のまま、対象にするフォルダーやファイルを選ぶ場合は指定してください。",
+    "questionsLabel": "質問数",
+    "countAria": "質問の数",
+    "mixLabel": "構成",
+    "mixAria": "質問の構成"
+  },
+  "screen": {
+    "pairCount": "{count, plural, other {# ペア}}",
+    "generatedFrom": "世代 {generation} から生成",
+    "projectNotFound": "そのプロジェクトは存在しないか、アクセス権がありません。",
+    "setNotFound": "その評価セットは存在しないか、削除されています。",
+    "selectRun": "実行を選択",
+    "runLabel": "実行 {number} · {date}",
+    "deleteAria": "{name} を削除",
+    "delete": "削除",
+    "run": "実行",
+    "runStarted": "実行を開始しました",
+    "runStartFailed": "実行を開始できませんでした",
+    "projectNowAt": "プロジェクトは現在、世代 {generation} です。",
+    "generationFailed": "生成に失敗しました",
+    "pairs": "ペア",
+    "runs": "実行",
+    "compare": "比較",
+    "baseRun": "基準の実行",
+    "headRun": "比較対象の実行",
+    "compareFailed": "比較を読み込めませんでした",
+    "somethingWrong": "問題が発生しました。"
+  }
+}

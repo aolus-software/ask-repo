@@ -1,0 +1,122 @@
+{
+  "roles": {
+    "viewer": "閲覧者",
+    "editor": "編集者",
+    "owner": "オーナー"
+  },
+  "list": {
+    "title": "プロジェクト",
+    "description": "このインスタンスでインデックスされたすべてのリポジトリです。ここにいる誰もが、どのリポジトリにも質問できます。",
+    "addProject": "プロジェクトを追加",
+    "searchPlaceholder": "プロジェクトを検索",
+    "emptyNoMatch": "一致するプロジェクトはありません",
+    "emptyNone": "プロジェクトはまだありません",
+    "emptyDescription": "リポジトリを追加すると、{appName} がクローンしてインデックスを作成します。数分かかります。"
+  },
+  "table": {
+    "columns": {
+      "name": "名前",
+      "repository": "リポジトリ",
+      "status": "ステータス",
+      "indexed": "インデックス",
+      "commit": "コミット",
+      "updated": "更新日",
+      "actions": "操作"
+    },
+    "indexedCounts": "{files, plural, other {# ファイル}} · {chunks, plural, other {# チャンク}}"
+  },
+  "rowActions": {
+    "menuLabel": "{name} の操作",
+    "openRepository": "リポジトリを開く",
+    "viewDetail": "詳細を表示",
+    "askAboutThis": "これについて質問",
+    "members": "メンバー",
+    "eval": "評価",
+    "reindex": "再インデックス",
+    "delete": "削除",
+    "reindexDialog": {
+      "title": "{name} を再インデックスしますか？",
+      "description": "処理中もプロジェクトには質問できます。新しいベクトルは現在のインデックスと並行して書き込まれ、処理が成功した時点で切り替わります。",
+      "confirm": "再インデックス",
+      "started": "再インデックスを開始しました",
+      "alreadyRunning": "再インデックスはすでに実行中です"
+    },
+    "deleteDialog": {
+      "title": "{name} を削除しますか？",
+      "description": "インデックスは破棄され、このプロジェクトに対するすべての会話が全員分削除されます。再作成するには、クローンと埋め込みを最初からやり直す必要があります。",
+      "confirm": "プロジェクトを削除",
+      "deleted": "プロジェクトを削除しました",
+      "vectorStoreDown": "ベクトルストアに接続できないため、何も削除されませんでした。",
+      "vectorStoreDownDetail": "プロジェクトは変更されていません。復旧後にもう一度お試しください。"
+    }
+  },
+  "createDialog": {
+    "title": "プロジェクトを追加",
+    "description": "{appName} はリポジトリをクローンしてインデックスを作成し、作業コピーを削除します。",
+    "submit": "プロジェクトを追加",
+    "repoUrl": "リポジトリ URL",
+    "repoUrlPlaceholder": "https://github.com/your-org/your-repo",
+    "repoUrlRequired": "リポジトリ URL を入力してください。",
+    "repoUrlHint": "許可されたホストの https URL。",
+    "branch": "ブランチ",
+    "pat": "アクセストークン",
+    "patHint": "プライベートリポジトリの場合のみ。空欄のままにすると、保存済みのトークンは変更されません。読み取り専用の権限にしてください。このインスタンスの全員が、インデックスされた内容に質問できます。",
+    "queued": "プロジェクトをインデックス作成待ちに追加しました"
+  },
+  "stats": {
+    "filesIndexed": "インデックス済みファイル",
+    "chunks": "チャンク",
+    "lastIndexedCommit": "最後にインデックスしたコミット",
+    "embeddingModel": "埋め込みモデル"
+  },
+  "detail": {
+    "notFound": "そのプロジェクトは存在しないか、削除されています。",
+    "askAboutProject": "このプロジェクトについて質問",
+    "tabs": {
+      "overview": "概要",
+      "members": "メンバー",
+      "eval": "評価"
+    },
+    "working": "{status}…",
+    "reindexRunning": "再インデックス実行中",
+    "reindexRunningDescription": "新しいインデックスの準備ができるまで、現在のインデックスに質問できます。",
+    "indexingFailed": "インデックス作成に失敗しました",
+    "membersHeading": "メンバー",
+    "membersDescription": "このプロジェクトにアクセスできるユーザーとそのロール。",
+    "addMember": "メンバーを追加",
+    "evalHeading": "評価",
+    "evalDescription": "参照回答付きで生成された質問を、このプロジェクトに対して実行します。"
+  },
+  "addMemberDialog": {
+    "title": "メンバーを追加",
+    "description": "ユーザーにこのプロジェクトへのアクセス権を付与します。",
+    "submit": "メンバーを追加",
+    "user": "ユーザー",
+    "role": "ロール",
+    "loadingPeople": "ユーザーを読み込み中…",
+    "searchPeople": "ユーザーを検索",
+    "loading": "読み込み中…",
+    "noMatch": "一致するユーザーはいません。",
+    "added": "メンバーを追加しました"
+  },
+  "memberTable": {
+    "columns": {
+      "user": "ユーザー",
+      "role": "ロール",
+      "grantedBy": "付与者",
+      "grantedAt": "付与日時",
+      "actions": "操作"
+    },
+    "emptyTitle": "メンバーはいません",
+    "emptyDescription": "このプロジェクトのメンバーシップを持つユーザーはまだいません。",
+    "roleFor": "{name} のロール",
+    "roleChanged": "ロールを変更しました",
+    "revokeLabel": "{name} のアクセス権を取り消す",
+    "revokeDialog": {
+      "title": "{name} のアクセス権を取り消しますか？",
+      "description": "このユーザーは直ちにこのプロジェクトにアクセスできなくなります。",
+      "confirm": "アクセス権を取り消す",
+      "revoked": "アクセス権を取り消しました"
+    }
+  }
+}

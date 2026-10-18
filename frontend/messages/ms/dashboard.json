@@ -1,0 +1,23 @@
+{
+  "welcome": "Selamat kembali, {name}",
+  "description": "Tanya soalan tentang mana-mana pangkalan kod yang diindeks pada instans ini.",
+  "stats": {
+    "projects": "Projek pada instans ini",
+    "conversations": "Perbualan anda"
+  },
+  "recentProjects": {
+    "title": "Projek terkini",
+    "viewAll": "Lihat semua",
+    "emptyTitle": "Belum ada projek",
+    "emptyDescription": "Tambah repositori dan {appName} akan mengklon dan mengindeksnya.",
+    "emptyAction": "Tambah satu"
+  },
+  "recentQuestions": {
+    "title": "Soalan terkini anda",
+    "ask": "Tanya",
+    "emptyTitle": "Belum ada soalan",
+    "emptyDescription": "Tanya soalan tentang mana-mana projek yang diindeks.",
+    "emptyAction": "Tanya soalan",
+    "untitled": "Perbualan tanpa tajuk"
+  }
+}

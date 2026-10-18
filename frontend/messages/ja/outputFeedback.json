@@ -1,0 +1,64 @@
+{
+  "helpful": "役に立った",
+  "notHelpful": "役に立たなかった",
+  "saveFailed": "フィードバックを保存できませんでした。もう一度お試しください。",
+  "whatWentWrong": "何が問題でしたか？",
+  "noteLabel": "その他にありますか？",
+  "notePlaceholder": "その他にありますか？（任意）",
+  "noteDisclosure": "このメモは管理者が閲覧できます。AI モデルに送信されることはありません。",
+  "send": "フィードバックを送信",
+  "reasons": {
+    "wrong_file_cited": "誤ったファイルを引用した",
+    "missed_something": "リポジトリ内の情報を見落とした",
+    "invented_something": "存在しないことを作り上げた",
+    "right_but_unusable": "正しいが使えない",
+    "wrong_language_or_tone": "言語や口調が不適切",
+    "duplicate_or_redundant": "重複・冗長",
+    "wrong_scope": "範囲が不適切",
+    "other": "その他"
+  },
+  "features": {
+    "answer": "質問への回答",
+    "refine_checklist": "チェックリストのチャット",
+    "refine_mock_data": "モックデータのチャット",
+    "generate_checklist": "チェックリストの生成",
+    "propose_checklist": "チェックリストのチャット提案",
+    "generate_mock_data": "モックデータの生成",
+    "propose_mock_data": "モックデータのチャット提案"
+  },
+  "summary": {
+    "hint": "低評価 · {votes} 票",
+    "feature": "機能",
+    "reason": "理由",
+    "count": "件数",
+    "promptVersion": "プロンプトのバージョン",
+    "votes": "票数",
+    "downVoted": "低評価",
+    "versionNote": "投票には、投票時に動作していたその機能のプロンプトのバージョンが記録されます。そのため、数日後にレビューされた変更セットでは、生成時より新しいバージョンになる場合があります。バージョンは機能ごとに異なるため、同じ機能の中で比較してください。"
+  },
+  "table": {
+    "when": "日時",
+    "project": "プロジェクト",
+    "feature": "機能",
+    "vote": "評価",
+    "reasons": "理由",
+    "note": "メモ",
+    "prompt": "プロンプト",
+    "trace": "トレース",
+    "up": "高評価",
+    "down": "低評価",
+    "openTrace": "トレースを開く"
+  },
+  "filters": {
+    "allFeatures": "すべての機能",
+    "allVotes": "すべての評価",
+    "allReasons": "すべての理由",
+    "filterByFeature": "機能で絞り込む",
+    "filterByVote": "評価で絞り込む",
+    "filterByReason": "理由で絞り込む",
+    "up": "高評価",
+    "down": "低評価",
+    "fromDate": "開始日",
+    "toDate": "終了日"
+  }
+}

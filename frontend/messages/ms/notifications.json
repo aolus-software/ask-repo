@@ -1,0 +1,88 @@
+{
+  "title": "Pemberitahuan",
+  "description": "Segala yang {appName} telah beritahu anda, yang terbaharu dahulu.",
+  "markAllRead": "Tandakan semua sudah dibaca",
+  "seeAll": "Lihat semua",
+  "unread": "Belum dibaca",
+  "bellLabel": "Pemberitahuan ({count} belum dibaca)",
+  "overflow": "99+",
+  "empty": "Tiada apa-apa untuk disusuli.",
+  "markReadFailed": "Tidak dapat menandakan pemberitahuan sebagai sudah dibaca",
+  "untitled": "Tanpa tajuk",
+  "emptyState": {
+    "noMatchTitle": "Tiada pemberitahuan yang sepadan",
+    "noneTitle": "Belum ada apa-apa",
+    "noMatchDescription": "Cuba kosongkan penapis anda.",
+    "noneDescription": "Peristiwa projek dan senarai semak akan dipaparkan di sini sebaik sahaja ia berlaku."
+  },
+  "filters": {
+    "byProject": "Tapis mengikut projek",
+    "byType": "Tapis mengikut jenis",
+    "allTypes": "Semua jenis",
+    "allProjects": "Semua projek",
+    "unreadOnly": "Belum dibaca sahaja"
+  },
+  "types": {
+    "project_ready": "Projek sedia",
+    "project_failed": "Projek gagal",
+    "project_reindex_finished": "Pengindeksan semula projek selesai",
+    "project_reindex_failed": "Pengindeksan semula projek gagal",
+    "checklist_change_set_pending": "Set perubahan senarai semak menunggu",
+    "checklist_change_set_applied": "Set perubahan senarai semak dilaksanakan",
+    "checklist_change_set_discarded": "Set perubahan senarai semak dibuang",
+    "mock_data_change_set_pending": "Set perubahan data olok-olok menunggu",
+    "mock_data_change_set_applied": "Set perubahan data olok-olok dilaksanakan",
+    "mock_data_change_set_discarded": "Set perubahan data olok-olok dibuang",
+    "membership_granted": "Keahlian diberikan",
+    "eval_set_ready": "Set penilaian sedia",
+    "eval_set_failed": "Set penilaian gagal",
+    "eval_run_finished": "Larian penilaian selesai",
+    "eval_run_failed": "Larian penilaian gagal"
+  },
+  "categories": {
+    "project_ready": "Sesebuah projek selesai diindeks",
+    "project_failed": "Sesebuah projek gagal diindeks",
+    "project_reindex_finished": "Sesebuah projek selesai diindeks semula",
+    "project_reindex_failed": "Sesebuah projek gagal diindeks semula",
+    "checklist_change_set_pending": "Set perubahan senarai semak menunggu semakan",
+    "checklist_change_set_applied": "Set perubahan senarai semak telah dilaksanakan",
+    "checklist_change_set_discarded": "Set perubahan senarai semak telah dibuang",
+    "mock_data_change_set_pending": "Set perubahan data olok-olok menunggu semakan",
+    "mock_data_change_set_applied": "Set perubahan data olok-olok telah dilaksanakan",
+    "mock_data_change_set_discarded": "Set perubahan data olok-olok telah dibuang",
+    "membership_granted": "Anda telah ditambah ke dalam sebuah projek",
+    "eval_set_ready": "Set penilaian selesai dijana",
+    "eval_set_failed": "Set penilaian gagal dijana",
+    "eval_run_finished": "Larian penilaian selesai",
+    "eval_run_failed": "Larian penilaian gagal"
+  },
+  "titles": {
+    "project_ready": "{projectName} selesai diindeks",
+    "project_failed": "{projectName} gagal diindeks",
+    "project_reindex_finished": "{projectName} selesai diindeks semula",
+    "project_reindex_failed": "{projectName} gagal diindeks semula",
+    "checklist_change_set_pending": "{moduleName} mempunyai set perubahan senarai semak yang menunggu semakan",
+    "checklist_change_set_applied": "Set perubahan senarai semak telah dilaksanakan pada {moduleName}",
+    "checklist_change_set_discarded": "Set perubahan senarai semak untuk {moduleName} telah dibuang",
+    "mock_data_change_set_pending": "{moduleName} mempunyai set perubahan data olok-olok yang menunggu semakan",
+    "mock_data_change_set_applied": "Set perubahan data olok-olok telah dilaksanakan pada {moduleName}",
+    "mock_data_change_set_discarded": "Set perubahan data olok-olok untuk {moduleName} telah dibuang",
+    "membership_granted": "Anda telah ditambah ke dalam {projectName} sebagai {roleName}",
+    "eval_set_ready": "Set penilaian {setName} dalam {projectName} sudah sedia",
+    "eval_set_failed": "Set penilaian {setName} dalam {projectName} gagal dijana",
+    "eval_run_finished": "Larian penilaian bagi {setName} dalam {projectName} telah selesai",
+    "eval_run_failed": "Larian penilaian bagi {setName} dalam {projectName} gagal"
+  },
+  "preferences": {
+    "emailOff": "Penghantaran e-mel dimatikan pada instans ini. Pilihan anda disimpan dan akan berkuat kuasa jika pentadbir menghidupkannya.",
+    "emptyTitle": "Belum ada apa-apa untuk dikonfigurasikan",
+    "emptyDescription": "Instans ini tiada jenis pemberitahuan untuk ditetapkan keutamaannya.",
+    "columns": {
+      "event": "Peristiwa",
+      "inApp": "Dalam aplikasi",
+      "email": "E-mel"
+    },
+    "saved": "Keutamaan disimpan",
+    "save": "Simpan keutamaan"
+  }
+}

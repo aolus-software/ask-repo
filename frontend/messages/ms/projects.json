@@ -1,0 +1,122 @@
+{
+  "roles": {
+    "viewer": "Penonton",
+    "editor": "Penyunting",
+    "owner": "Pemilik"
+  },
+  "list": {
+    "title": "Projek",
+    "description": "Setiap repositori yang diindeks pada instans ini. Sesiapa di sini boleh membuat pertanyaan pada mana-mana daripadanya.",
+    "addProject": "Tambah projek",
+    "searchPlaceholder": "Cari projek",
+    "emptyNoMatch": "Tiada projek yang sepadan",
+    "emptyNone": "Belum ada projek",
+    "emptyDescription": "Tambah repositori dan {appName} akan mengklon dan mengindeksnya. Ini mengambil masa beberapa minit."
+  },
+  "table": {
+    "columns": {
+      "name": "Nama",
+      "repository": "Repositori",
+      "status": "Status",
+      "indexed": "Diindeks",
+      "commit": "Commit",
+      "updated": "Dikemas kini",
+      "actions": "Tindakan"
+    },
+    "indexedCounts": "{files, plural, other {# fail}} · {chunks, plural, other {# cebisan}}"
+  },
+  "rowActions": {
+    "menuLabel": "Tindakan untuk {name}",
+    "openRepository": "Buka repositori",
+    "viewDetail": "Lihat butiran",
+    "askAboutThis": "Tanya tentang ini",
+    "members": "Ahli",
+    "eval": "Penilaian",
+    "reindex": "Indeks semula",
+    "delete": "Padam",
+    "reindexDialog": {
+      "title": "Indeks semula {name}?",
+      "description": "Projek kekal boleh ditanya sepanjang proses. Vektor baharu ditulis bersebelahan indeks semasa dan ditukar ganti hanya apabila larian berjaya.",
+      "confirm": "Indeks semula",
+      "started": "Pengindeksan semula dimulakan",
+      "alreadyRunning": "Pengindeksan semula sedang berjalan"
+    },
+    "deleteDialog": {
+      "title": "Padam {name}?",
+      "description": "Indeksnya dimusnahkan dan setiap perbualan terhadapnya dibuang, untuk semua orang. Mencipta semulanya bermakna klon semula dan benam semula sepenuhnya.",
+      "confirm": "Padam projek",
+      "deleted": "Projek dipadam",
+      "vectorStoreDown": "Stor vektor tidak dapat dicapai, jadi tiada apa-apa dipadam.",
+      "vectorStoreDownDetail": "Projek tidak berubah. Cuba lagi setelah ia kembali."
+    }
+  },
+  "createDialog": {
+    "title": "Tambah projek",
+    "description": "{appName} mengklon repositori, mengindeksnya, dan memadam salinan kerja.",
+    "submit": "Tambah projek",
+    "repoUrl": "URL repositori",
+    "repoUrlPlaceholder": "https://github.com/org-anda/repo-anda",
+    "repoUrlRequired": "Masukkan URL repositori.",
+    "repoUrlHint": "URL https pada hos yang dibenarkan.",
+    "branch": "Cabang",
+    "pat": "Token akses",
+    "patHint": "Hanya untuk repositori persendirian. Biarkan kosong untuk mengekalkan sebarang token yang disimpan tanpa perubahan. Hadkan skopnya kepada baca sahaja — semua orang pada instans ini boleh membuat pertanyaan tentang apa yang diindeksnya.",
+    "queued": "Projek dimasukkan ke dalam baris gilir pengindeksan"
+  },
+  "stats": {
+    "filesIndexed": "Fail diindeks",
+    "chunks": "Cebisan",
+    "lastIndexedCommit": "Commit terakhir diindeks",
+    "embeddingModel": "Model benam"
+  },
+  "detail": {
+    "notFound": "Projek itu tidak wujud, atau telah dipadam.",
+    "askAboutProject": "Tanya tentang projek ini",
+    "tabs": {
+      "overview": "Ikhtisar",
+      "members": "Ahli",
+      "eval": "Penilaian"
+    },
+    "working": "{status}…",
+    "reindexRunning": "Pengindeksan semula sedang berjalan",
+    "reindexRunningDescription": "Indeks semasa kekal boleh ditanya sehingga yang baharu sedia.",
+    "indexingFailed": "Pengindeksan gagal",
+    "membersHeading": "Ahli",
+    "membersDescription": "Siapa yang boleh mengakses projek ini, dan sebagai apa.",
+    "addMember": "Tambah ahli",
+    "evalHeading": "Penilaian",
+    "evalDescription": "Soalan yang dijana dengan jawapan rujukan, dijalankan terhadap projek ini."
+  },
+  "addMemberDialog": {
+    "title": "Tambah ahli",
+    "description": "Berikan akses kepada pengguna untuk projek ini.",
+    "submit": "Tambah ahli",
+    "user": "Pengguna",
+    "role": "Peranan",
+    "loadingPeople": "Memuatkan orang…",
+    "searchPeople": "Cari orang",
+    "loading": "Memuatkan…",
+    "noMatch": "Tiada pengguna yang sepadan.",
+    "added": "Ahli ditambah"
+  },
+  "memberTable": {
+    "columns": {
+      "user": "Pengguna",
+      "role": "Peranan",
+      "grantedBy": "Diberikan oleh",
+      "grantedAt": "Diberikan pada",
+      "actions": "Tindakan"
+    },
+    "emptyTitle": "Tiada ahli",
+    "emptyDescription": "Belum ada sesiapa yang memegang keahlian pada projek ini.",
+    "roleFor": "Peranan untuk {name}",
+    "roleChanged": "Peranan diubah",
+    "revokeLabel": "Batalkan akses {name}",
+    "revokeDialog": {
+      "title": "Batalkan akses {name}?",
+      "description": "Mereka kehilangan akses kepada projek ini serta-merta.",
+      "confirm": "Batalkan akses",
+      "revoked": "Akses dibatalkan"
+    }
+  }
+}

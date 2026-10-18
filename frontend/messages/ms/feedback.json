@@ -1,0 +1,13 @@
+{
+  "listTitle": "Tidak dapat memuatkan senarai ini",
+  "detailTitle": "Tidak dapat memuatkan halaman ini",
+  "retry": "Cuba lagi",
+  "forbidden": {
+    "title": "Anda tiada akses kepada ini",
+    "description": "Tanya pentadbir jika anda rasa anda sepatutnya mempunyainya."
+  },
+  "notFound": {
+    "title": "Tidak ditemui",
+    "description": "Ia mungkin telah dipadam, atau mungkin tidak pernah wujud."
+  }
+}
