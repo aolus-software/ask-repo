@@ -105,16 +105,13 @@ export function PasswordField({
         <FieldError>{serverError}</FieldError>
       ) : showInvalid ? (
         <FieldError>
-          {checks.find((check) => !check.passed)?.label ??
-            t("notAccepted")}
+          {checks.find((check) => !check.passed)?.label ?? t("notAccepted")}
         </FieldError>
       ) : showValid ? (
         // Not "valid" — the wordlist check still happens server-side.
         <FieldDescription className="text-success">{t("looksGood")}</FieldDescription>
       ) : (
-        <FieldDescription>
-          {t("hint")}
-        </FieldDescription>
+        <FieldDescription>{t("hint")}</FieldDescription>
       )}
     </Field>
   );

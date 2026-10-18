@@ -1,6 +1,10 @@
 import type { NextResponse } from "next/server";
 
-import { LOCALE_COOKIE, SESSION_MAX_AGE_SECONDS, cookieOptions } from "@/lib/auth/cookies";
+import {
+  LOCALE_COOKIE,
+  SESSION_MAX_AGE_SECONDS,
+  cookieOptions,
+} from "@/lib/auth/cookies";
 import { isLanguage } from "@/lib/i18n/languages";
 
 /**
@@ -10,7 +14,11 @@ import { isLanguage } from "@/lib/i18n/languages";
  */
 export function applyLocale(response: NextResponse, language: unknown): void {
   if (isLanguage(language)) {
-    response.cookies.set(LOCALE_COOKIE, language, cookieOptions(SESSION_MAX_AGE_SECONDS));
+    response.cookies.set(
+      LOCALE_COOKIE,
+      language,
+      cookieOptions(SESSION_MAX_AGE_SECONDS),
+    );
   }
 }
 

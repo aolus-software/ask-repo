@@ -7,21 +7,23 @@ import { useErrorText, useFieldErrorText } from "@/lib/i18n/error-text";
 describe("useErrorText", () => {
   it("translates a known code", () => {
     const { result } = renderHook(() => useErrorText());
-    expect(result.current(new ApiError(404, "PROJECT_NOT_FOUND", "Project not found."))).toBe(
-      "Project not found.",
-    );
+    expect(
+      result.current(new ApiError(404, "PROJECT_NOT_FOUND", "Project not found.")),
+    ).toBe("Project not found.");
   });
 
   it("falls back to the backend message for a code with no entry", () => {
     const { result } = renderHook(() => useErrorText());
-    expect(result.current(new ApiError(400, "NOT_A_REAL_CODE" as never, "Raw text."))).toBe(
-      "Raw text.",
-    );
+    expect(
+      result.current(new ApiError(400, "NOT_A_REAL_CODE" as never, "Raw text.")),
+    ).toBe("Raw text.");
   });
 
   it("keeps the backend reason for a code whose message names what to fix", () => {
     const { result } = renderHook(() => useErrorText());
-    expect(result.current(new ApiError(400, "WEAK_PASSWORD", "Too common"))).toBe("Too common");
+    expect(result.current(new ApiError(400, "WEAK_PASSWORD", "Too common"))).toBe(
+      "Too common",
+    );
   });
 
   it("uses the generic text for something that is not an ApiError", () => {

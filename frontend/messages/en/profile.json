@@ -1,1 +1,8 @@
-{"language":{"intro":"The language of every screen and email. Answers follow the language you ask in.","browserDefault":"Browser default","save":"Save language","saved":"Language saved"}}
+{
+  "language": {
+    "intro": "The language of every screen and email. Answers follow the language you ask in.",
+    "browserDefault": "Browser default",
+    "save": "Save language",
+    "saved": "Language saved"
+  }
+}

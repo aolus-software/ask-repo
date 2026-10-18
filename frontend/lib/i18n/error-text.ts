@@ -41,7 +41,10 @@ export function useErrorText(): (error: unknown) => string {
  * otherwise the backend's own text, which is how a service-level rule such as the
  * password policy still reaches the user (spec §2.5).
  */
-export function useFieldErrorText(): (error: unknown, name: string) => string | undefined {
+export function useFieldErrorText(): (
+  error: unknown,
+  name: string,
+) => string | undefined {
   const t = useTranslations("forms.validation");
   return (error, name) => {
     if (!isApiError(error)) return undefined;
