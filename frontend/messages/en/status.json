@@ -1,1 +1,39 @@
-{}
+{
+  "project": {
+    "pending": "Pending",
+    "cloning": "Cloning",
+    "indexing": "Indexing",
+    "ready": "Ready",
+    "failed": "Failed"
+  },
+  "module": {
+    "empty": "Empty",
+    "generating": "Generating",
+    "review": "Review",
+    "ready": "Ready",
+    "failed": "Failed"
+  },
+  "result": {
+    "untested": "Untested",
+    "pass": "Pass",
+    "fail": "Fail",
+    "blocked": "Blocked"
+  },
+  "auditOutcome": {
+    "failure": "Failure",
+    "success": "Success"
+  },
+  "evalStatus": {
+    "generating": "Generating",
+    "running": "Running",
+    "ready": "Ready",
+    "done": "Done",
+    "failed": "Failed"
+  },
+  "evalVerdict": {
+    "correct": "Correct",
+    "partial": "Partial",
+    "wrong": "Wrong",
+    "error": "Error"
+  }
+}

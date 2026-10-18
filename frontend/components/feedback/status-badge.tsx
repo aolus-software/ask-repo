@@ -1,6 +1,8 @@
+import { useTranslations } from "next-intl";
+
 import { Badge } from "@/components/ui/badge";
 import type { ProjectStatus } from "@/lib/api/types";
-import { type StatusTone, statusLabel, statusTone } from "@/lib/status";
+import { type StatusTone, statusLabelKey, statusTone } from "@/lib/status";
 import { cn } from "@/lib/utils";
 
 /**
@@ -35,10 +37,11 @@ export function ProjectStatusBadge({
   status: ProjectStatus;
   className?: string;
 }) {
+  const t = useTranslations("status");
   return (
     <StatusBadge
       tone={statusTone(status)}
-      label={statusLabel(status)}
+      label={t(statusLabelKey(status))}
       className={className}
     />
   );

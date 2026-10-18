@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import Link from "next/link";
 import { useState } from "react";
 
@@ -21,7 +22,7 @@ import { useActivity, useMemberships } from "@/hooks/use-profile";
 import type { ActivityEntry, MembershipSummary } from "@/lib/api/types";
 import { auditEventLabel } from "@/lib/audit";
 import { formatAbsolute } from "@/lib/dates";
-import { auditOutcomeLabel, auditOutcomeTone } from "@/lib/status";
+import { auditOutcomeLabelKey, auditOutcomeTone } from "@/lib/status";
 import { useFormatRelative } from "@/hooks/use-format-date";
 
 const PAGE_SIZE = 20;
@@ -56,6 +57,7 @@ function targetCell(
  * here with the address it came from — it is recorded with you as the actor.
  */
 export function ActivitySection() {
+  const tStatus = useTranslations("status");
   const formatRelative = useFormatRelative();
   const [page, setPage] = useState(1);
   const activity = useActivity({ page, limit: PAGE_SIZE });
@@ -95,7 +97,7 @@ export function ActivitySection() {
                     <TableCell>
                       <StatusBadge
                         tone={auditOutcomeTone(item.outcome)}
-                        label={auditOutcomeLabel(item.outcome)}
+                        label={tStatus(auditOutcomeLabelKey(item.outcome))}
                       />
                     </TableCell>
                     <TableCell className="text-sm">

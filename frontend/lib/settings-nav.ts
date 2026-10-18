@@ -10,11 +10,16 @@ import type { NavChild } from "@/lib/nav-child";
  * reachable child, `visibleNavTree` hides the whole group from a non-admin.
  */
 export const settingsNav: NavChild[] = [
-  { title: "Users", href: "/settings/users", icon: Users, adminOnly: true },
-  { title: "Roles", href: "/settings/roles", icon: ShieldCheck, adminOnly: true },
-  { title: "Audit trail", href: "/settings/audit", icon: ScrollText, adminOnly: true },
+  { titleKey: "users", href: "/settings/users", icon: Users, adminOnly: true },
+  { titleKey: "roles", href: "/settings/roles", icon: ShieldCheck, adminOnly: true },
   {
-    title: "Feedback",
+    titleKey: "auditTrail",
+    href: "/settings/audit",
+    icon: ScrollText,
+    adminOnly: true,
+  },
+  {
+    titleKey: "feedback",
     href: "/settings/feedback",
     icon: MessageSquareWarning,
     adminOnly: true,

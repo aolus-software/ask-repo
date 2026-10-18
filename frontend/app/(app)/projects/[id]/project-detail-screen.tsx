@@ -1,6 +1,7 @@
 "use client";
 
 import { MessagesSquare, UserPlus } from "lucide-react";
+import { useTranslations } from "next-intl";
 import Link from "next/link";
 import { useState, useSyncExternalStore } from "react";
 
@@ -24,7 +25,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useBreadcrumbLabel } from "@/components/layout/breadcrumb-labels";
 import { useProject } from "@/hooks/use-projects";
 import { can, PERMISSION } from "@/lib/can";
-import { statusLabel } from "@/lib/status";
+import { statusLabelKey } from "@/lib/status";
 
 function subscribeToHash(onChange: () => void) {
   window.addEventListener("hashchange", onChange);
@@ -32,6 +33,7 @@ function subscribeToHash(onChange: () => void) {
 }
 
 export function ProjectDetailScreen({ id }: { id: string }) {
+  const tStatus = useTranslations("status");
   const query = useProject(id);
   useBreadcrumbLabel(`/projects/${id}`, query.data?.name);
   const [addingMember, setAddingMember] = useState(false);
@@ -117,7 +119,7 @@ export function ProjectDetailScreen({ id }: { id: string }) {
           {isWorking ? (
             <div className="space-y-2">
               <p className="text-muted-foreground text-sm font-medium">
-                {statusLabel(project.status)}…
+                {tStatus(statusLabelKey(project.status))}…
               </p>
               {/*
                 Indeterminate on purpose: the API reports a phase, never a percentage.

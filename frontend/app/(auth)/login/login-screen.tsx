@@ -1,6 +1,7 @@
 "use client";
 
 import { Loader2 } from "lucide-react";
+import { useTranslations } from "next-intl";
 import Image from "next/image";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
@@ -19,10 +20,11 @@ import {
 } from "@/components/ui/card";
 import { Field, FieldError, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { parseApiError } from "@/lib/api/errors";
+import { ApiError, parseApiError } from "@/lib/api/errors";
 import { safeNext } from "@/lib/safe-next";
 
 export function LoginScreen({ resetEnabled }: { resetEnabled: boolean }) {
+  const t = useTranslations("auth");
   const searchParams = useSearchParams();
 
   const [email, setEmail] = useState("");
@@ -40,10 +42,9 @@ export function LoginScreen({ resetEnabled }: { resetEnabled: boolean }) {
     // Client checks stop at required and shape — never a restatement of a backend
     // rule (forms.md §4). The password policy lives in the backend alone.
     const next: { email?: string; password?: string } = {};
-    if (!email.trim()) next.email = "Enter your email address.";
-    else if (!email.includes("@"))
-      next.email = "That does not look like an email address.";
-    if (!password) next.password = "Enter your password.";
+    if (!email.trim()) next.email = t("validation.emailRequired");
+    else if (!email.includes("@")) next.email = t("validation.emailShape");
+    if (!password) next.password = t("validation.passwordRequired");
     setLocalErrors(next);
     if (Object.keys(next).length > 0) return;
 
@@ -69,9 +70,8 @@ export function LoginScreen({ resetEnabled }: { resetEnabled: boolean }) {
         ? "/change-password"
         : safeNext(searchParams.get("next"));
     } catch {
-      setError(
-        new Error("Could not reach the server. Check your connection and try again."),
-      );
+      // Status 0 is what `useErrorText` reads as "the server was never reached".
+      setError(new ApiError(0, "INTERNAL_ERROR", ""));
     } finally {
       setIsPending(false);
     }
@@ -99,10 +99,8 @@ export function LoginScreen({ resetEnabled }: { resetEnabled: boolean }) {
         />
       </div>
       <CardHeader>
-        <CardTitle className="text-xl font-semibold">Sign in to AskRepo</CardTitle>
-        <CardDescription>
-          Ask questions about your team&apos;s codebases.
-        </CardDescription>
+        <CardTitle className="text-xl font-semibold">{t("login.title")}</CardTitle>
+        <CardDescription>{t("login.description")}</CardDescription>
       </CardHeader>
       <CardContent>
         <form onSubmit={handleSubmit} noValidate>
@@ -114,9 +112,7 @@ export function LoginScreen({ resetEnabled }: { resetEnabled: boolean }) {
           */}
           {searchParams.get("reset") === "1" ? (
             <Alert variant="info" className="mb-4">
-              <AlertDescription>
-                Password changed. Sign in with your new password.
-              </AlertDescription>
+              <AlertDescription>{t("login.resetDone")}</AlertDescription>
             </Alert>
           ) : null}
           {/*
@@ -130,14 +126,14 @@ export function LoginScreen({ resetEnabled }: { resetEnabled: boolean }) {
           <div className="space-y-4">
             <Field>
               <FieldLabel htmlFor="email">
-                Email <span className="text-danger">*</span>
+                {t("fields.email")} <span className="text-danger">*</span>
               </FieldLabel>
               <Input
                 id="email"
                 name="email"
                 type="email"
                 autoComplete="username"
-                placeholder="you@example.com"
+                placeholder={t("fields.emailPlaceholder")}
                 value={email}
                 onChange={(event) => setEmail(event.target.value)}
                 aria-invalid={Boolean(localErrors.email)}
@@ -147,13 +143,13 @@ export function LoginScreen({ resetEnabled }: { resetEnabled: boolean }) {
 
             <Field>
               <FieldLabel htmlFor="password">
-                Password <span className="text-danger">*</span>
+                {t("fields.password")} <span className="text-danger">*</span>
               </FieldLabel>
               <PasswordInput
                 id="password"
                 name="password"
                 autoComplete="current-password"
-                placeholder="Enter your password"
+                placeholder={t("fields.passwordPlaceholder")}
                 value={password}
                 onChange={(event) => setPassword(event.target.value)}
                 aria-invalid={Boolean(localErrors.password)}
@@ -166,7 +162,7 @@ export function LoginScreen({ resetEnabled }: { resetEnabled: boolean }) {
 
           <Button type="submit" className="mt-6 w-full" disabled={isPending}>
             {isPending ? <Loader2 className="size-4 animate-spin" /> : null}
-            Sign in
+            {t("login.submit")}
           </Button>
 
           {resetEnabled ? (
@@ -175,7 +171,7 @@ export function LoginScreen({ resetEnabled }: { resetEnabled: boolean }) {
                 href="/forgot-password"
                 className="text-muted-foreground text-sm hover:underline"
               >
-                Forgot password?
+                {t("login.forgot")}
               </Link>
             </div>
           ) : null}

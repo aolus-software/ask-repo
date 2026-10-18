@@ -1,7 +1,8 @@
 "use client";
 
-import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
+import { useTranslations } from "next-intl";
+import Link from "next/link";
 
 import {
   AuditEventCurrent,
@@ -18,10 +19,11 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useAuditEvent } from "@/hooks/use-audit-events";
 import { useSession } from "@/hooks/use-session";
 import { auditEventLabel } from "@/lib/audit";
-import { auditOutcomeLabel, auditOutcomeTone } from "@/lib/status";
+import { auditOutcomeLabelKey, auditOutcomeTone } from "@/lib/status";
 import { useFormatRelative } from "@/hooks/use-format-date";
 
 export function AuditEventScreen({ id }: { id: string }) {
+  const tStatus = useTranslations("status");
   const formatRelative = useFormatRelative();
   const user = useSession();
   const query = useAuditEvent(id);
@@ -63,7 +65,7 @@ export function AuditEventScreen({ id }: { id: string }) {
         titleAddon={
           <StatusBadge
             tone={auditOutcomeTone(event.outcome)}
-            label={auditOutcomeLabel(event.outcome)}
+            label={tStatus(auditOutcomeLabelKey(event.outcome))}
           />
         }
         description={`Recorded ${formatRelative(event.createdAt)}`}

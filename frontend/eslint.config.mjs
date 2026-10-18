@@ -10,6 +10,11 @@ const MIGRATED = [
   "components/auth/**/*.tsx",
   "components/form/**/*.tsx",
   "components/feedback/**/*.tsx",
+  "components/layout/**/*.tsx",
+  "app/(auth)/**/*.tsx",
+  "app/(app)/layout.tsx",
+  "app/(app)/page.tsx",
+  "app/(app)/dashboard-screen.tsx",
 ];
 
 const eslintConfig = defineConfig([

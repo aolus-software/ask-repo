@@ -1,5 +1,7 @@
 "use client";
 
+import { useTranslations } from "next-intl";
+
 import { Button } from "@/components/ui/button";
 
 /** Sits inside the same card as the table (`docs/design.md` → Lists). */
@@ -14,12 +16,14 @@ export function PaginationFooter({
   totalCount: number;
   onPageChange: (page: number) => void;
 }) {
+  const t = useTranslations("nav.pagination");
+
   if (totalPages <= 1) return null;
 
   return (
     <div className="border-border flex items-center justify-between border-t p-4">
       <p className="text-muted-foreground text-xs">
-        Page {page} of {totalPages} · {totalCount} total
+        {t("summary", { page, totalPages, totalCount })}
       </p>
       <div className="flex gap-2">
         <Button
@@ -28,7 +32,7 @@ export function PaginationFooter({
           disabled={page <= 1}
           onClick={() => onPageChange(page - 1)}
         >
-          Previous
+          {t("previous")}
         </Button>
         <Button
           variant="outline"
@@ -36,7 +40,7 @@ export function PaginationFooter({
           disabled={page >= totalPages}
           onClick={() => onPageChange(page + 1)}
         >
-          Next
+          {t("next")}
         </Button>
       </div>
     </div>
