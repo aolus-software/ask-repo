@@ -181,7 +181,13 @@ messages/
   `errors.<ErrorCode>` and falls back to the backend's English message; `useFieldErrorText()`
   translates a `422` field error by its `fieldTypes` entry. A backend test,
   `tests/test_frontend_error_catalogue.py`, requires an entry in `messages/en/errors.json` for
-  every `ErrorCode`.
+  every `ErrorCode`. A few codes whose backend message names the specific fix
+  (`ACTIONABLE_MESSAGE_CODES` in `lib/i18n/error-text.ts`) still show the backend's English text.
+  A stream's `error` event is turned into an `ApiError` (`apiErrorFromEvent`) so it takes the
+  same path.
+- **English that lint cannot see remains:** the page metadata descriptions in `app/layout.tsx`
+  and `app/manifest.ts`, and the shadcn components' own screen-reader and title strings under
+  `components/ui/` ("Close", "Toggle Sidebar", "Sidebar").
 - **What stays as written:** repository content (paths, identifiers, code), stored model output,
   admin-entered names, and each language's own name in the switchers (its endonym).
 - **`_meta.json` is a fact about the file.** The six non-English catalogues are machine-assisted

@@ -93,8 +93,8 @@ Never set a font family in a component. Never use `font-bold` — `font-semibold
 weight in the system.
 
 **CJK falls back to system fonts.** Lexend has no Chinese, Japanese or Korean glyphs, so
-`--font-sans` in `app/globals.css` continues after it with `"PingFang TC"`, `"Hiragino Sans"`,
-`"Noto Sans CJK TC"`, `"Noto Sans CJK JP"`, `"Noto Sans CJK KR"`, `"Malgun Gothic"` and
+`--font-sans` in `app/globals.css` continues after it with the system UI fonts
+(`ui-sans-serif, system-ui`) and then `"PingFang TC"`, `"Hiragino Sans"`, `"Noto Sans CJK TC"`, `"Noto Sans CJK JP"`, `"Noto Sans CJK KR"`, `"Malgun Gothic"` and
 `"Microsoft JhengHei"`. Nothing is downloaded for them, which keeps the "nothing leaves the
 network" posture; a machine with none of them installed renders its own default sans-serif.
 

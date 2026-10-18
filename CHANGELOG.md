@@ -46,7 +46,10 @@ client can have received it, so it is recorded under Changed and allowed in a `M
   browser's `Accept-Language`. The six non-English catalogues are machine-assisted drafts, each
   marked unreviewed until a native speaker signs it off. Repository content, model output and
   admin-entered names stay as written. Chinese, Japanese and Korean text falls back to system
-  fonts; nothing is downloaded.
+  fonts; nothing is downloaded. Backend and stream errors (including a failed Ask, checklist or
+  mock-data answer) show in the reader's language by error code, a session's device reads
+  "{browser} on {system}" in the reader's language, and the feedback vote count uses the
+  language's plural form.
 - **`GET /me/language` and `PUT /me/language`**: the caller's stored interface language, a
   BCP-47 tag or `null` for no preference. `PUT` with an unshipped tag is `422`. A change is
   audited as `user.language.updated`, allowlisting `language`.

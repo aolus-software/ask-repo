@@ -247,7 +247,7 @@ reduced to its host by `urlsplit().hostname`, which excludes the userinfo a PAT 
 content (no prompt, no message, no source excerpt, and **`target_label` is `NULL` for a
 conversation**, because its title derives from the user's first question).
 
-**`details` is one envelope** for all 45 events:
+**`details` is one envelope** for all 46 events:
 
 ```json
 {
