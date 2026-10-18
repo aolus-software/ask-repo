@@ -12,7 +12,6 @@ export default getRequestConfig(async () => {
   );
   return {
     locale,
-    // Until the six translated catalogues land (plan Task 19).
-    messages: (await import("../messages/en/index")).default,
+    messages: (await import(`../messages/${locale}/index`)).default,
   };
 });

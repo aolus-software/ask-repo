@@ -45,8 +45,7 @@ function placeholders(message: string): string[] {
 
 const english = leaves(load("en"));
 
-// Enabled in Task 19c once the six locales exist.
-describe.skip.each(LANGUAGES.filter((l) => l !== "en"))("messages/%s", (locale) => {
+describe.each(LANGUAGES.filter((l) => l !== "en"))("messages/%s", (locale) => {
   const translated = () => leaves(load(locale));
 
   it("has exactly the English keys", () => {
