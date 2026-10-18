@@ -1,5 +1,6 @@
 "use client";
 
+import { useKindLabel } from "@/components/checklist/use-kind-label";
 import { useTranslations } from "next-intl";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -55,6 +56,7 @@ export function CreateItemDialog({
   onOpenChange: (open: boolean) => void;
 }) {
   const t = useTranslations("checklist.createItemDialog");
+  const kindLabel = useKindLabel();
   const fieldErrorText = useFieldErrorText();
   const [values, setValues] = useState(EMPTY);
   const mutation = useCreateChecklistItem(moduleId);
@@ -155,13 +157,13 @@ export function CreateItemDialog({
         >
           <SelectTrigger id="new-item-kind" className="w-full">
             <SelectValue>
-              {(value: string) => t(`kinds.${value as ChecklistItemKind}`)}
+              {(value: string) => kindLabel(value as ChecklistItemKind)}
             </SelectValue>
           </SelectTrigger>
           <SelectContent>
             {KINDS.map((value) => (
               <SelectItem key={value} value={value}>
-                {t(`kinds.${value}`)}
+                {kindLabel(value)}
               </SelectItem>
             ))}
           </SelectContent>

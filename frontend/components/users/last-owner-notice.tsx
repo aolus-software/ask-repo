@@ -31,6 +31,8 @@ export function LastOwnerNotice({ error }: { error: unknown }) {
     projects.map((project) => project.name),
   );
 
+  // The positional `next` counter below assumes the `<projects>` rich callback runs
+  // exactly once per render; a second call would restart from the wrong project.
   // `element` parts arrive in input order, so a running index maps each one back to
   // its project even when two projects share a name.
   let next = 0;

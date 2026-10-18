@@ -146,7 +146,7 @@ export function AddMemberDialog({
           }}
         >
           <SelectTrigger id="add-member-role" className="w-full">
-            <SelectValue />
+            <SelectValue>{(value: string) => roleLabel(value)}</SelectValue>
           </SelectTrigger>
           <SelectContent>
             {roleOptions.map((option) => (

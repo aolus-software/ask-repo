@@ -47,6 +47,7 @@ import { PERMISSION, can } from "@/lib/can";
 
 export function ModuleScreen({ moduleId }: { moduleId: string }) {
   const t = useTranslations("checklist.moduleScreen");
+  const tCommon = useTranslations("common");
   const errorText = useErrorText();
   const query = useChecklistModule(moduleId);
   const generate = useGenerateChecklistModule(moduleId);
@@ -173,6 +174,7 @@ export function ModuleScreen({ moduleId }: { moduleId: string }) {
             // claim to make.
             description={t.rich("description", {
               sourcePath: checklistModule.sourcePath,
+              appName: tCommon("appName"),
               path: (chunks) => <span className="font-mono">{chunks}</span>,
             })}
             action={

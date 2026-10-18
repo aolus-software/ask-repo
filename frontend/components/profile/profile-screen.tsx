@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { useState, useSyncExternalStore } from "react";
 
 import { AccountSection } from "@/components/profile/account-section";
@@ -13,13 +14,13 @@ import { PreferencesScreen } from "@/components/notifications/preferences-screen
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 const SECTIONS = [
-  { id: "account", title: "Account" },
-  { id: "answer-style", title: "Answer style" },
-  { id: "language", title: "Language" },
-  { id: "sessions", title: "Sessions" },
-  { id: "activity", title: "Activity" },
-  { id: "notifications", title: "Notifications" },
-  { id: "password", title: "Password" },
+  { id: "account", titleKey: "account" },
+  { id: "answer-style", titleKey: "answerStyle" },
+  { id: "language", titleKey: "language" },
+  { id: "sessions", titleKey: "sessions" },
+  { id: "activity", titleKey: "activity" },
+  { id: "notifications", titleKey: "notifications" },
+  { id: "password", titleKey: "password" },
 ] as const;
 
 type SectionId = (typeof SECTIONS)[number]["id"];
@@ -53,6 +54,7 @@ function useHashSection(): SectionId | null {
  * so a reload or a shared link lands on the same section.
  */
 export function ProfileScreen({ resetEnabled }: { resetEnabled: boolean }) {
+  const t = useTranslations("profile.screen");
   const fromHash = useHashSection();
   const [selected, setSelected] = useState<SectionId | null>(null);
   const active = selected ?? fromHash ?? "account";
@@ -77,7 +79,7 @@ export function ProfileScreen({ resetEnabled }: { resetEnabled: boolean }) {
 
   return (
     <div className="mx-auto w-full max-w-3xl">
-      <PageHeader title="Profile" description="Your account, sessions and settings." />
+      <PageHeader title={t("title")} description={t("description")} />
       <Tabs
         orientation="vertical"
         value={active}
@@ -85,7 +87,7 @@ export function ProfileScreen({ resetEnabled }: { resetEnabled: boolean }) {
         className="flex-col gap-6 lg:flex-row"
       >
         <TabsList
-          aria-label="Profile sections"
+          aria-label={t("sectionsAria")}
           className="bg-card border-border w-full shrink-0 items-stretch gap-1 self-start border p-2 lg:sticky lg:top-24 lg:w-48"
         >
           {/* The `!` overrides beat the generated trigger's own `dark:data-active:*`
@@ -97,7 +99,7 @@ export function ProfileScreen({ resetEnabled }: { resetEnabled: boolean }) {
               value={section.id}
               className="hover:bg-sidebar-accent/60 data-active:bg-sidebar-accent! data-active:text-sidebar-accent-foreground! h-auto justify-start px-3 py-2 data-active:border-transparent! data-active:shadow-none!"
             >
-              {section.title}
+              {t(`sections.${section.titleKey}`)}
             </TabsTrigger>
           ))}
         </TabsList>

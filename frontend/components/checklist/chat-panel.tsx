@@ -18,7 +18,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { apiFetch, apiFetchRaw } from "@/lib/api/client";
 import { useErrorText } from "@/lib/i18n/error-text";
 import { endpoints } from "@/lib/api/endpoints";
-import { PHASE_LABELS } from "@/lib/ask/phase-labels";
+import { usePhaseLabel } from "@/hooks/use-phase-label";
 import type { ChecklistMessageResponse, CitationPayload } from "@/lib/api/types";
 import { consumeChecklistStream } from "@/lib/checklist/stream";
 import { keys } from "@/lib/query/keys";
@@ -90,6 +90,7 @@ export function ChatPanel({
   canSend: boolean;
 }) {
   const t = useTranslations("checklist.chatPanel");
+  const phaseLabel = usePhaseLabel();
   const errorText = useErrorText();
   const queryClient = useQueryClient();
 
@@ -286,7 +287,7 @@ export function ChatPanel({
         <AssistantTurn>
           {turn.phase && turn.isStreaming ? (
             <p className="text-muted-foreground mb-2 text-sm">
-              {PHASE_LABELS[turn.phase]}
+              {phaseLabel(turn.phase)}
             </p>
           ) : null}
 

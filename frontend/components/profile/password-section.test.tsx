@@ -99,7 +99,7 @@ describe("PasswordSection", () => {
     expect(toastError).not.toHaveBeenCalled();
   });
 
-  it("shows the server's own message on a 409 PASSWORD_RESET_UNAVAILABLE", async () => {
+  it("shows the translated reason on a 409 PASSWORD_RESET_UNAVAILABLE", async () => {
     stubFetch(
       () =>
         new Response(
@@ -116,7 +116,9 @@ describe("PasswordSection", () => {
     fireEvent.click(screen.getByRole("button", { name: /email me a reset link/i }));
 
     await waitFor(() =>
-      expect(toastError).toHaveBeenCalledWith("Ask an administrator."),
+      expect(toastError).toHaveBeenCalledWith(
+        "Password reset by email is not available on this instance. Ask an administrator.",
+      ),
     );
     expect(toastSuccess).not.toHaveBeenCalled();
   });

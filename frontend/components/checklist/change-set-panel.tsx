@@ -1,5 +1,6 @@
 "use client";
 
+import { useKindLabel } from "@/components/checklist/use-kind-label";
 import { Loader2 } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useState } from "react";
@@ -91,6 +92,7 @@ export function ChangeSetPanel({
   canApply: boolean;
 }) {
   const t = useTranslations("checklist.changeSetPanel");
+  const negativeLabel = useKindLabel()("negative");
   const queryClient = useQueryClient();
   const [checked, setChecked] = useState<Record<string, boolean>>(() => {
     const initial: Record<string, boolean> = {};
@@ -187,7 +189,7 @@ export function ChangeSetPanel({
                   variant="outline"
                   className="text-warning border-warning/60 text-xs font-normal"
                 >
-                  {t("negative")}
+                  {negativeLabel}
                 </Badge>
               ) : null}
             </div>

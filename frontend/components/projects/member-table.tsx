@@ -52,7 +52,7 @@ function RoleCell({
   projectId: string;
   member: MemberResponse;
   editable: boolean;
-  roleOptions: { name: string; label: string }[];
+  roleOptions: { name: string }[];
 }) {
   const t = useTranslations("projects.memberTable");
   const errorText = useErrorText();
@@ -90,7 +90,7 @@ function RoleCell({
           className="w-36"
           aria-label={t("roleFor", { name: member.name })}
         >
-          <SelectValue />
+          <SelectValue>{(value: string) => roleLabel(value)}</SelectValue>
         </SelectTrigger>
         <SelectContent>
           {roleOptions.map((role) => (

@@ -49,11 +49,6 @@
     "saved": "Permissions saved",
     "applyNotice": "Saving applies to everyone holding this role immediately — it takes effect on their very next request."
   },
-  "systemRoles": {
-    "viewer": "Viewer",
-    "editor": "Editor",
-    "owner": "Owner"
-  },
   "groups": {
     "project": "Project",
     "questions": "Questions",

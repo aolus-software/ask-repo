@@ -123,11 +123,7 @@
     "expectedResultPlaceholder": "e.g., 410 with code TOKEN_EXPIRED",
     "expectedResultHint": "What a correct implementation should do, specifically. Not what it currently does — that is the result a tester records.",
     "kind": "Kind",
-    "kindHint": "Negative means the feature should refuse something — bad input, a missing permission, an expired token.",
-    "kinds": {
-      "positive": "Positive",
-      "negative": "Negative"
-    }
+    "kindHint": "Negative means the feature should refuse something — bad input, a missing permission, an expired token."
   },
   "itemGrid": {
     "updated": "Test case updated",
@@ -175,7 +171,6 @@
     },
     "applied": "Changes applied",
     "discarded": "Proposals discarded",
-    "negative": "Negative",
     "orphaned": "This test case no longer exists — this change will be skipped",
     "title": "Proposed changes",
     "skipped": "{count, plural, one {# proposed change was} other {# proposed changes were}} skipped because the test case they referred to no longer exists.",
@@ -223,7 +218,7 @@
       "testPlan": "Test Plan",
       "mockData": "Mock Data"
     },
-    "description": "Enumerated from <path>{sourcePath}</path>. Only files AskRepo indexed are covered.",
+    "description": "Enumerated from <path>{sourcePath}</path>. Only files {appName} indexed are covered.",
     "generate": "Generate",
     "generationStarted": "Generation started",
     "reviewChanges": "{count, plural, one {Review # change} other {Review # changes}}",

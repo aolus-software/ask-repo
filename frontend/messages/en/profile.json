@@ -4,5 +4,86 @@
     "browserDefault": "Browser default",
     "save": "Save language",
     "saved": "Language saved"
+  },
+  "screen": {
+    "title": "Profile",
+    "description": "Your account, sessions and settings.",
+    "sectionsAria": "Profile sections",
+    "sections": {
+      "account": "Account",
+      "answerStyle": "Answer style",
+      "language": "Language",
+      "sessions": "Sessions",
+      "activity": "Activity",
+      "notifications": "Notifications",
+      "password": "Password"
+    }
+  },
+  "account": {
+    "adminNote": "As an administrator you can see every project. The list below is only the ones you are a member of.",
+    "empty": "You aren't a member of any project yet.",
+    "columns": {
+      "project": "Project",
+      "role": "Role"
+    }
+  },
+  "sessions": {
+    "lastSignedIn": "Last signed in <when>{time}</when>",
+    "never": "never",
+    "columns": {
+      "device": "Device",
+      "ipAddress": "IP address",
+      "started": "Started",
+      "lastActive": "Last active",
+      "actions": "Actions"
+    },
+    "thisDevice": "This device",
+    "logOut": "Log out",
+    "logOutEverywhere": "Log out everywhere",
+    "confirmTitle": "Sign this session out?",
+    "confirmDescription": "It can't refresh again, but it may stay signed in until its current access token expires — 15 minutes by default.",
+    "confirmLabel": "Sign it out",
+    "signedOut": "Session signed out"
+  },
+  "activity": {
+    "empty": "Nothing recorded yet.",
+    "project": "Project",
+    "columns": {
+      "event": "Event",
+      "outcome": "Outcome",
+      "target": "Target",
+      "ipAddress": "IP address",
+      "time": "Time"
+    }
+  },
+  "answerStyle": {
+    "intro": "Shapes the answers you get on Ask. It never changes the QA Checklist or Mock Data, which your whole team shares.",
+    "default": "Default",
+    "save": "Save answer style",
+    "saved": "Answer style saved",
+    "dials": {
+      "detail": "Detail",
+      "familiarity": "Familiarity",
+      "format": "Format"
+    },
+    "options": {
+      "brief": "Brief",
+      "thorough": "Thorough",
+      "new": "New to this repository",
+      "expert": "Expert",
+      "prose": "Prose",
+      "bullets": "Bullets"
+    }
+  },
+  "password": {
+    "resetSent": "If mail can reach you, a reset link is on its way",
+    "resetFailed": "Couldn't send a reset link. Try again.",
+    "changed": "Password changed",
+    "changedDescription": "Your other sessions were signed out",
+    "formTitle": "Change password",
+    "formDescription": "Your other sessions will be signed out. This one stays signed in.",
+    "submit": "Change password",
+    "forgotten": "Forgotten your current password? We can email you a link instead.",
+    "emailReset": "Email me a reset link"
   }
 }

@@ -49,17 +49,6 @@ export const AUDIT_EVENT_TYPES = [
 ] as const;
 
 /**
- * A readable label for an event type, derived rather than looked up: `.` and `_`
- * become spaces and the first letter is capitalised — "checklist_module.deleted"
- * reads as "Checklist module deleted". Derived, not a lookup table, so a new event
- * name added to the catalogue never needs a matching entry here.
- */
-export function auditEventLabel(eventType: string): string {
-  const words = eventType.replace(/[._]/g, " ");
-  return words.charAt(0).toUpperCase() + words.slice(1);
-}
-
-/**
  * The translated label for an event type, read from `audit.events` in the catalogue.
  * The catalogue key is the event name with `.` replaced by `_`; an event type this
  * client has never heard of renders as the raw name rather than a missing-key error,
