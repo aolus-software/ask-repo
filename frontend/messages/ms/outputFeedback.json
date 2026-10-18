@@ -1,0 +1,64 @@
+{
+  "helpful": "Membantu",
+  "notHelpful": "Tidak membantu",
+  "saveFailed": "Maklum balas anda tidak disimpan. Cuba lagi.",
+  "whatWentWrong": "Apa yang tidak kena?",
+  "noteLabel": "Ada apa-apa lagi?",
+  "notePlaceholder": "Ada apa-apa lagi? (pilihan)",
+  "noteDisclosure": "Pentadbir boleh membaca nota ini. Ia tidak sekali-kali dihantar kepada model AI.",
+  "send": "Hantar maklum balas",
+  "reasons": {
+    "wrong_file_cited": "Memetik fail yang salah",
+    "missed_something": "Terlepas sesuatu dalam repo",
+    "invented_something": "Mereka-reka sesuatu",
+    "right_but_unusable": "Betul, tetapi tidak boleh digunakan",
+    "wrong_language_or_tone": "Bahasa atau nada salah",
+    "duplicate_or_redundant": "Pendua atau berlebihan",
+    "wrong_scope": "Skop salah",
+    "other": "Sebab lain"
+  },
+  "features": {
+    "answer": "Jawapan Tanya",
+    "refine_checklist": "Sembang senarai semak",
+    "refine_mock_data": "Sembang data olok-olok",
+    "generate_checklist": "Penjanaan senarai semak",
+    "propose_checklist": "Cadangan sembang senarai semak",
+    "generate_mock_data": "Penjanaan data olok-olok",
+    "propose_mock_data": "Cadangan sembang data olok-olok"
+  },
+  "summary": {
+    "hint": "undi turun · {votes} undi",
+    "feature": "Ciri",
+    "reason": "Sebab",
+    "count": "Bilangan",
+    "promptVersion": "Versi prompt",
+    "votes": "Undi",
+    "downVoted": "Undi turun",
+    "versionNote": "Undi dicap dengan versi prompt bagi cirinya yang sedang berjalan semasa undi itu dibuat, yang bagi set perubahan yang disemak beberapa hari kemudian boleh lebih baharu daripada yang menjananya. Setiap ciri mempunyai versinya sendiri, jadi bandingkan versi dalam sesuatu ciri."
+  },
+  "table": {
+    "when": "Bila",
+    "project": "Projek",
+    "feature": "Ciri",
+    "vote": "Undi",
+    "reasons": "Sebab",
+    "note": "Nota",
+    "prompt": "Prompt",
+    "trace": "Surih",
+    "up": "Naik",
+    "down": "Turun",
+    "openTrace": "Buka surih"
+  },
+  "filters": {
+    "allFeatures": "Semua ciri",
+    "allVotes": "Semua undi",
+    "allReasons": "Semua sebab",
+    "filterByFeature": "Tapis mengikut ciri",
+    "filterByVote": "Tapis mengikut undi",
+    "filterByReason": "Tapis mengikut sebab",
+    "up": "Naik",
+    "down": "Turun",
+    "fromDate": "Dari tarikh",
+    "toDate": "Hingga tarikh"
+  }
+}

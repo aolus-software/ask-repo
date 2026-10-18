@@ -1,0 +1,127 @@
+{
+  "questionTypes": {
+    "explain": "terangkan",
+    "locate": "kesan"
+  },
+  "mix": {
+    "balanced": "Seimbang",
+    "explain": "Terangkan sahaja",
+    "locate": "Kesan sahaja"
+  },
+  "tally": {
+    "summary": "tepat {hits}/{answered} · betul {correct} · separa {partial} · salah {wrong}",
+    "summaryWithErrors": "tepat {hits}/{answered} · betul {correct} · separa {partial} · salah {wrong} · ralat {errors}"
+  },
+  "wholeProject": "Keseluruhan projek",
+  "setTable": {
+    "emptyTitle": "Belum ada set penilaian",
+    "emptyDescription": "Jana set soalan dengan jawapan rujukan, kemudian jalankannya untuk melihat prestasi pembantu pada projek ini.",
+    "columns": {
+      "set": "Set",
+      "path": "Laluan",
+      "pairs": "Pasangan",
+      "status": "Status",
+      "latestRun": "Larian terkini",
+      "created": "Dicipta",
+      "actions": "Tindakan"
+    },
+    "noRuns": "Belum ada larian",
+    "actionsFor": "Tindakan untuk {name}",
+    "delete": "Padam"
+  },
+  "deleteDialog": {
+    "titleNamed": "Padam {name}?",
+    "title": "Padam set penilaian?",
+    "description": "Soalannya, setiap larian dan semua keputusannya dipadam bersamanya, untuk semua orang.",
+    "confirm": "Padam set penilaian",
+    "deleted": "Set penilaian dipadam"
+  },
+  "pairTable": {
+    "generatingTitle": "Menjana soalan…",
+    "emptyTitle": "Tiada soalan",
+    "generatingDescription": "Soalan akan dipaparkan di sini sebaik sahaja penjanaan selesai.",
+    "emptyDescription": "Set ini tiada soalan.",
+    "columns": {
+      "question": "Soalan",
+      "type": "Jenis",
+      "source": "Sumber",
+      "excluded": "Dikecualikan"
+    },
+    "excludeLabel": "Kecualikan: {question}",
+    "referenceAnswer": "Jawapan rujukan",
+    "saveFailed": "Itu tidak tersimpan. Cuba lagi"
+  },
+  "runTable": {
+    "generatingTitle": "Menjana soalan…",
+    "noRunsTitle": "Tiada larian",
+    "generatingDescription": "Set boleh dijalankan sebaik sahaja soalannya sedia.",
+    "failedDescription": "Set yang penjanaannya gagal tidak boleh dijalankan.",
+    "emptyTitle": "Belum ada larian",
+    "emptyDescription": "Jalankan set untuk bertanya setiap soalan dan menilai jawapan berbanding rujukan.",
+    "columns": {
+      "started": "Bermula",
+      "status": "Status",
+      "results": "Keputusan",
+      "model": "Model"
+    }
+  },
+  "runSheet": {
+    "title": "Keputusan larian",
+    "loadFailed": "Larian tidak dapat dimuatkan",
+    "loading": "Memuatkan larian…",
+    "notFound": "Larian itu tidak wujud, atau telah dipadam.",
+    "failedTitle": "Larian gagal",
+    "retrievalHit": "Capaian tepat",
+    "retrievalMiss": "Capaian tersasar",
+    "judge": "Penilai: {reason}",
+    "warnings": "Amaran: {warnings}"
+  },
+  "compare": {
+    "judgeChanged": "Larian ini dinilai oleh model yang berbeza. Perubahan keputusan mungkin mencerminkan penilai, bukan jawapan. Capaian tepat tidak terjejas.",
+    "comparedOn": "Dibandingkan pada {count, plural, other {# pasangan}} yang dijawab oleh kedua-dua larian",
+    "base": "Asas",
+    "head": "Terkini",
+    "tally": "tepat {hits}/{total} · betul {correct} · separa {partial} · salah {wrong} · ralat {errors}",
+    "noChange": "Tiada pasangan berubah antara larian ini.",
+    "retrievalChange": "Capaian: {from} → {to}",
+    "hit": "tepat",
+    "miss": "tersasar"
+  },
+  "generateDialog": {
+    "trigger": "Jana set penilaian",
+    "title": "Jana set penilaian",
+    "description": "Jana soalan dengan jawapan rujukan daripada kod terindeks projek ini, untuk mengukur prestasi pembantu.",
+    "submit": "Jana",
+    "started": "Penjanaan dimulakan",
+    "nameLabel": "Nama",
+    "namePlaceholder": "cth., Soalan pengesahan",
+    "pathLabel": "Laluan",
+    "pathHelp": "Biarkan kosong untuk keseluruhan projek, atau pilih folder atau fail untuk diliputi.",
+    "questionsLabel": "Soalan",
+    "countAria": "Bilangan soalan",
+    "mixLabel": "Campuran",
+    "mixAria": "Campuran soalan"
+  },
+  "screen": {
+    "pairCount": "{count, plural, other {# pasangan}}",
+    "generatedFrom": "dijana daripada generasi {generation}",
+    "projectNotFound": "Projek itu tidak wujud, atau anda tiada akses kepadanya.",
+    "setNotFound": "Set penilaian itu tidak wujud, atau telah dipadam.",
+    "selectRun": "Pilih larian",
+    "runLabel": "Larian {number} · {date}",
+    "deleteAria": "Padam {name}",
+    "delete": "Padam",
+    "run": "Jalankan",
+    "runStarted": "Larian dimulakan",
+    "runStartFailed": "Larian tidak dapat dimulakan",
+    "projectNowAt": "Projek kini berada pada generasi {generation}.",
+    "generationFailed": "Penjanaan gagal",
+    "pairs": "Pasangan",
+    "runs": "Larian",
+    "compare": "Bandingkan",
+    "baseRun": "Larian asas",
+    "headRun": "Larian terkini",
+    "compareFailed": "Tidak dapat memuatkan perbandingan",
+    "somethingWrong": "Sesuatu telah berlaku."
+  }
+}

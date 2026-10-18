@@ -1,0 +1,32 @@
+{
+  "items": {
+    "dashboard": "Papan pemuka",
+    "projects": "Projek",
+    "ask": "Tanya",
+    "checklist": "Senarai semak",
+    "settings": "Tetapan",
+    "users": "Pengguna",
+    "roles": "Peranan",
+    "auditTrail": "Jejak audit",
+    "feedback": "Maklum balas",
+    "notifications": "Pemberitahuan",
+    "profile": "Profil",
+    "export": "Eksport",
+    "eval": "Penilaian"
+  },
+  "navbar": {
+    "toggleNavigation": "Togol navigasi",
+    "toggleTheme": "Togol tema"
+  },
+  "account": {
+    "label": "Akaun",
+    "profile": "Profil",
+    "logOut": "Log keluar",
+    "logOutEverywhere": "Log keluar di mana-mana"
+  },
+  "pagination": {
+    "summary": "Halaman {page} daripada {totalPages} · {totalCount} jumlah",
+    "previous": "Sebelumnya",
+    "next": "Seterusnya"
+  }
+}

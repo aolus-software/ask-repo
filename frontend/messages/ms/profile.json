@@ -1,0 +1,89 @@
+{
+  "language": {
+    "intro": "Bahasa bagi setiap skrin dan e-mel. Jawapan mengikut bahasa yang anda gunakan untuk bertanya.",
+    "browserDefault": "Lalai pelayar",
+    "save": "Simpan bahasa",
+    "saved": "Bahasa disimpan"
+  },
+  "screen": {
+    "title": "Profil",
+    "description": "Akaun, sesi dan tetapan anda.",
+    "sectionsAria": "Bahagian profil",
+    "sections": {
+      "account": "Akaun",
+      "answerStyle": "Gaya jawapan",
+      "language": "Bahasa",
+      "sessions": "Sesi",
+      "activity": "Aktiviti",
+      "notifications": "Pemberitahuan",
+      "password": "Kata laluan"
+    }
+  },
+  "account": {
+    "adminNote": "Sebagai pentadbir, anda boleh melihat setiap projek. Senarai di bawah hanyalah projek yang anda menjadi ahlinya.",
+    "empty": "Anda belum menjadi ahli mana-mana projek.",
+    "columns": {
+      "project": "Projek",
+      "role": "Peranan"
+    }
+  },
+  "sessions": {
+    "lastSignedIn": "Log masuk terakhir <when>{time}</when>",
+    "never": "tidak pernah",
+    "columns": {
+      "device": "Peranti",
+      "ipAddress": "Alamat IP",
+      "started": "Bermula",
+      "lastActive": "Aktif terakhir",
+      "actions": "Tindakan"
+    },
+    "thisDevice": "Peranti ini",
+    "logOut": "Log keluar",
+    "logOutEverywhere": "Log keluar di mana-mana",
+    "confirmTitle": "Log keluarkan sesi ini?",
+    "confirmDescription": "Ia tidak boleh menyegar semula lagi, tetapi mungkin kekal log masuk sehingga token aksesnya yang semasa tamat tempoh — 15 minit secara lalai.",
+    "confirmLabel": "Log keluarkannya",
+    "signedOut": "Sesi dilog keluar"
+  },
+  "activity": {
+    "empty": "Belum ada apa-apa direkodkan.",
+    "project": "Projek",
+    "columns": {
+      "event": "Peristiwa",
+      "outcome": "Hasil",
+      "target": "Sasaran",
+      "ipAddress": "Alamat IP",
+      "time": "Masa"
+    }
+  },
+  "answerStyle": {
+    "intro": "Membentuk jawapan yang anda terima di Tanya. Ia tidak sekali-kali mengubah Senarai Semak QA atau Data Olok-olok, yang dikongsi oleh seluruh pasukan anda.",
+    "default": "Lalai",
+    "save": "Simpan gaya jawapan",
+    "saved": "Gaya jawapan disimpan",
+    "dials": {
+      "detail": "Perincian",
+      "familiarity": "Kebiasaan",
+      "format": "Format"
+    },
+    "options": {
+      "brief": "Ringkas",
+      "thorough": "Menyeluruh",
+      "new": "Baharu pada repositori ini",
+      "expert": "Pakar",
+      "prose": "Prosa",
+      "bullets": "Poin peluru"
+    }
+  },
+  "password": {
+    "resetSent": "Jika e-mel boleh sampai kepada anda, pautan tetapan semula sedang dihantar",
+    "resetFailed": "Tidak dapat menghantar pautan tetapan semula. Cuba lagi.",
+    "changed": "Kata laluan ditukar",
+    "changedDescription": "Sesi anda yang lain telah dilog keluar",
+    "formTitle": "Tukar kata laluan",
+    "formDescription": "Sesi anda yang lain akan dilog keluar. Sesi ini kekal log masuk.",
+    "submit": "Tukar kata laluan",
+    "forgotten": "Lupa kata laluan semasa anda? Kami boleh menghantar pautan melalui e-mel sebagai ganti.",
+    "emailReset": "E-melkan saya pautan tetapan semula"
+  }
+}
