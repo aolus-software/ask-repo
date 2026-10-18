@@ -16,6 +16,7 @@ import { EmptyState } from "@/components/feedback/empty-state";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Skeleton } from "@/components/ui/skeleton";
 import { apiFetch, apiFetchRaw } from "@/lib/api/client";
+import { type ApiError, apiErrorFromEvent, isApiError } from "@/lib/api/errors";
 import { useErrorText } from "@/lib/i18n/error-text";
 import { endpoints } from "@/lib/api/endpoints";
 import { usePhaseLabel } from "@/hooks/use-phase-label";
@@ -35,7 +36,8 @@ interface TurnState {
    * quiet note the Ask screen uses, never the destructive `Alert` a real `error`
    * gets (`docs/audit-finding-solved-logs.md` §U8.6). */
   terminal: "done" | "error" | "interrupted" | null;
-  errorMessage: string | null;
+  /** Null for a failure that carried no API error; the panel then says the reply stopped. */
+  error: ApiError | null;
   reconciled: boolean;
 }
 
@@ -48,7 +50,7 @@ function initialTurnState(): TurnState {
     text: "",
     isStreaming: true,
     terminal: null,
-    errorMessage: null,
+    error: null,
     reconciled: false,
   };
 }
@@ -155,7 +157,7 @@ export function MockDataChatPanel({
             ...current,
             isStreaming: false,
             terminal: "error",
-            errorMessage: result.error.message,
+            error: apiErrorFromEvent(result.error),
           };
         } else if (result.done) {
           current = {
@@ -184,7 +186,7 @@ export function MockDataChatPanel({
           ...current,
           isStreaming: false,
           terminal: "error",
-          errorMessage: error instanceof Error ? error.message : t("replyStopped"),
+          error: isApiError(error) ? error : null,
         };
       } finally {
         if (frameHandle !== null) cancelAnimationFrame(frameHandle);
@@ -197,7 +199,7 @@ export function MockDataChatPanel({
         }
       }
     },
-    [moduleId, queryClient, t],
+    [moduleId, queryClient],
   );
 
   const isStreaming = turn?.isStreaming ?? false;
@@ -269,7 +271,9 @@ export function MockDataChatPanel({
           {turn.terminal === "error" ? (
             <Alert variant="destructive" className="mt-4">
               <AlertTitle>{t("replyStoppedTitle")}</AlertTitle>
-              <AlertDescription>{turn.errorMessage}</AlertDescription>
+              <AlertDescription>
+                {turn.error ? errorText(turn.error) : t("replyStopped")}
+              </AlertDescription>
             </Alert>
           ) : null}
         </AssistantTurn>

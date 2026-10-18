@@ -25,9 +25,11 @@ import { useConversation } from "@/hooks/use-conversations";
 import { useBreadcrumbLabel } from "@/components/layout/breadcrumb-labels";
 import { useProject } from "@/hooks/use-projects";
 import { takePendingQuestion } from "@/lib/ask/pending";
+import { useErrorText } from "@/lib/i18n/error-text";
 
 export function ConversationScreen({ conversationId }: { conversationId: string }) {
   const t = useTranslations("ask");
+  const errorText = useErrorText();
   const conversation = useConversation(conversationId);
   // A conversation is bound to one project for its whole life, and every follow-up
   // is answered against it — so which one it is belongs in the header, not only in
@@ -166,7 +168,9 @@ export function ConversationScreen({ conversationId }: { conversationId: string 
           {state.terminal === "error" ? (
             <Alert variant="destructive" className="mt-4">
               <AlertTitle>{t("conversation.answerStopped")}</AlertTitle>
-              <AlertDescription>{state.errorMessage}</AlertDescription>
+              <AlertDescription>
+                {state.error ? errorText(state.error) : t("stream.failed")}
+              </AlertDescription>
             </Alert>
           ) : null}
 

@@ -37,9 +37,7 @@ export function PreflightError({
     return (
       <Alert variant="destructive">
         <AlertTitle>{t("preflight.couldNotAnswer")}</AlertTitle>
-        <AlertDescription>
-          {error instanceof Error ? error.message : t("preflight.genericError")}
-        </AlertDescription>
+        <AlertDescription>{t("preflight.genericError")}</AlertDescription>
       </Alert>
     );
   }

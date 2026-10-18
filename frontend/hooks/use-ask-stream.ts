@@ -5,6 +5,7 @@ import { useTranslations } from "next-intl";
 import { useCallback, useRef, useState } from "react";
 
 import { apiFetchRaw } from "@/lib/api/client";
+import { type ApiError, apiErrorFromEvent, isApiError } from "@/lib/api/errors";
 import { endpoints } from "@/lib/api/endpoints";
 import type {
   CitationPayload,
@@ -28,7 +29,8 @@ export interface AskState {
   finishReason: FinishReason | null;
   citedIndexes: number[];
   groundingWarnings: string[];
-  errorMessage: string | null;
+  /** Null for a failure that carried no API error; the screen then shows its own text. */
+  error: ApiError | null;
   /**
    * The stored message has arrived in the conversation query.
    *
@@ -49,7 +51,7 @@ export function initialAskState(): AskState {
     finishReason: null,
     citedIndexes: [],
     groundingWarnings: [],
-    errorMessage: null,
+    error: null,
     reconciled: false,
   };
 }
@@ -87,7 +89,7 @@ export function reduceAskEvent(state: AskState, event: SseEvent): AskState {
         isStreaming: false,
         terminal: "error",
         finishReason: payload.finishReason,
-        errorMessage: payload.message,
+        error: apiErrorFromEvent(payload),
       };
     }
     default:
@@ -192,7 +194,7 @@ export function useAskStream(conversationId: string) {
           isStreaming: false,
           terminal: "error",
           finishReason: "error",
-          errorMessage: error instanceof Error ? error.message : t("stream.failed"),
+          error: isApiError(error) ? error : null,
         };
       } finally {
         if (frameHandle !== null) cancelAnimationFrame(frameHandle);

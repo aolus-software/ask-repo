@@ -17,6 +17,7 @@ import { useUpdateRolePermissions } from "@/hooks/use-role-mutations";
 import { usePermissionCatalog, useRole } from "@/hooks/use-roles";
 import { useSession } from "@/hooks/use-session";
 import { isApiError } from "@/lib/api/errors";
+import { useErrorText } from "@/lib/i18n/error-text";
 
 /**
  * `FormPage` with `hideSubmit` for a system role: it has no submit row at all
@@ -26,6 +27,7 @@ import { isApiError } from "@/lib/api/errors";
  */
 export function RoleMatrixScreen({ id }: { id: string }) {
   const t = useTranslations("roles");
+  const errorText = useErrorText();
   const router = useRouter();
   const user = useSession();
   const roleQuery = useRole(id);
@@ -62,7 +64,7 @@ export function RoleMatrixScreen({ id }: { id: string }) {
 
   if (roleQuery.isError) {
     if (isApiError(roleQuery.error) && roleQuery.error.status === 403) {
-      return <Forbidden message={roleQuery.error.message} />;
+      return <Forbidden message={errorText(roleQuery.error)} />;
     }
     return (
       <div className="mx-auto w-full max-w-3xl">

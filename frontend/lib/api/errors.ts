@@ -42,6 +42,17 @@ export class ApiError extends Error {
   }
 }
 
+/**
+ * A stream's `error` event as an `ApiError`, so it renders through the same
+ * translation as an HTTP failure. The status is the 200 the stream was opened with.
+ */
+export function apiErrorFromEvent(event: {
+  code: ErrorCode;
+  message: string;
+}): ApiError {
+  return new ApiError(200, event.code, event.message);
+}
+
 export function isApiError(error: unknown): error is ApiError {
   return error instanceof ApiError;
 }
