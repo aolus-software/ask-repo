@@ -1,6 +1,7 @@
 "use client";
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useTranslations } from "next-intl";
 import { toast } from "sonner";
 
 import { apiFetch } from "@/lib/api/client";
@@ -71,12 +72,16 @@ function useNotificationInvalidation() {
 // A read failing is otherwise invisible: the row's tint does not lift and the count
 // does not drop, with nothing telling the user why. Hook-level so every call site
 // (the bell's popover and the /notifications header) gets it for free.
-function reportMarkReadFailure(): void {
-  toast.error("Couldn't mark notifications read");
+function useReportMarkReadFailure(): () => void {
+  const t = useTranslations("notifications");
+  return () => {
+    toast.error(t("markReadFailed"));
+  };
 }
 
 export function useMarkNotificationRead() {
   const invalidate = useNotificationInvalidation();
+  const reportMarkReadFailure = useReportMarkReadFailure();
   return useMutation({
     mutationFn: (id: string) =>
       apiFetch(endpoints.notifications.markRead(id), { method: "POST" }),
@@ -87,6 +92,7 @@ export function useMarkNotificationRead() {
 
 export function useMarkAllNotificationsRead() {
   const invalidate = useNotificationInvalidation();
+  const reportMarkReadFailure = useReportMarkReadFailure();
   return useMutation({
     mutationFn: () => apiFetch(endpoints.notifications.markAllRead, { method: "POST" }),
     onSuccess: invalidate,

@@ -1,7 +1,9 @@
 "use client";
 
-import { FEATURE_LABELS } from "@/components/output-feedback/feedback-summary";
-import { REASON_LABELS } from "@/components/output-feedback/reason-labels";
+import { useTranslations } from "next-intl";
+
+import { FEEDBACK_FEATURES } from "@/components/output-feedback/feedback-summary";
+import { REASON_CODES } from "@/components/output-feedback/reason-labels";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -24,13 +26,6 @@ import type {
  */
 const ANY = "any";
 
-const ALL_FEATURES = "All features";
-const ALL_VOTES = "All votes";
-const ALL_REASONS = "All reasons";
-
-const FEATURE_OPTIONS = Object.keys(FEATURE_LABELS) as FeedbackFeature[];
-const REASON_OPTIONS = Object.keys(REASON_LABELS) as FeedbackReasonCode[];
-
 export function FeedbackFilters({
   currentFilters,
   onFiltersChange,
@@ -38,6 +33,8 @@ export function FeedbackFilters({
   currentFilters: Partial<FeedbackListParams>;
   onFiltersChange: (filters: Partial<FeedbackListParams>) => void;
 }) {
+  const t = useTranslations("outputFeedback");
+
   return (
     <>
       <div>
@@ -50,18 +47,20 @@ export function FeedbackFilters({
             })
           }
         >
-          <SelectTrigger className="w-full" aria-label="Filter by feature">
+          <SelectTrigger className="w-full" aria-label={t("filters.filterByFeature")}>
             <SelectValue>
               {(value: string) =>
-                value === ANY ? ALL_FEATURES : FEATURE_LABELS[value as FeedbackFeature]
+                value === ANY
+                  ? t("filters.allFeatures")
+                  : t(`features.${value as FeedbackFeature}`)
               }
             </SelectValue>
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value={ANY}>{ALL_FEATURES}</SelectItem>
-            {FEATURE_OPTIONS.map((feature) => (
+            <SelectItem value={ANY}>{t("filters.allFeatures")}</SelectItem>
+            {FEEDBACK_FEATURES.map((feature) => (
               <SelectItem key={feature} value={feature}>
-                {FEATURE_LABELS[feature]}
+                {t(`features.${feature}`)}
               </SelectItem>
             ))}
           </SelectContent>
@@ -78,17 +77,21 @@ export function FeedbackFilters({
             })
           }
         >
-          <SelectTrigger className="w-full" aria-label="Filter by vote">
+          <SelectTrigger className="w-full" aria-label={t("filters.filterByVote")}>
             <SelectValue>
               {(value: string) =>
-                value === ANY ? ALL_VOTES : value === "up" ? "Up" : "Down"
+                value === ANY
+                  ? t("filters.allVotes")
+                  : value === "up"
+                    ? t("filters.up")
+                    : t("filters.down")
               }
             </SelectValue>
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value={ANY}>{ALL_VOTES}</SelectItem>
-            <SelectItem value="up">Up</SelectItem>
-            <SelectItem value="down">Down</SelectItem>
+            <SelectItem value={ANY}>{t("filters.allVotes")}</SelectItem>
+            <SelectItem value="up">{t("filters.up")}</SelectItem>
+            <SelectItem value="down">{t("filters.down")}</SelectItem>
           </SelectContent>
         </Select>
       </div>
@@ -104,18 +107,20 @@ export function FeedbackFilters({
             })
           }
         >
-          <SelectTrigger className="w-full" aria-label="Filter by reason">
+          <SelectTrigger className="w-full" aria-label={t("filters.filterByReason")}>
             <SelectValue>
               {(value: string) =>
-                value === ANY ? ALL_REASONS : REASON_LABELS[value as FeedbackReasonCode]
+                value === ANY
+                  ? t("filters.allReasons")
+                  : t(`reasons.${value as FeedbackReasonCode}`)
               }
             </SelectValue>
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value={ANY}>{ALL_REASONS}</SelectItem>
-            {REASON_OPTIONS.map((code) => (
+            <SelectItem value={ANY}>{t("filters.allReasons")}</SelectItem>
+            {REASON_CODES.map((code) => (
               <SelectItem key={code} value={code}>
-                {REASON_LABELS[code]}
+                {t(`reasons.${code}`)}
               </SelectItem>
             ))}
           </SelectContent>
@@ -133,7 +138,7 @@ export function FeedbackFilters({
               createdFrom: event.target.value || undefined,
             })
           }
-          aria-label="From date"
+          aria-label={t("filters.fromDate")}
         />
       </div>
 
@@ -148,7 +153,7 @@ export function FeedbackFilters({
               createdTo: event.target.value || undefined,
             })
           }
-          aria-label="To date"
+          aria-label={t("filters.toDate")}
         />
       </div>
     </>

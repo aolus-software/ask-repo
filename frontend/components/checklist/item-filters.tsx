@@ -1,5 +1,7 @@
 "use client";
 
+import { useTranslations } from "next-intl";
+
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -23,22 +25,10 @@ import type {
  */
 const ANY = "any";
 
-const STATUS_LABELS: Record<ChecklistItemStatus, string> = {
-  untested: "Untested",
-  pass: "Pass",
-  fail: "Fail",
-  blocked: "Blocked",
-};
-
-const SOURCE_LABELS: Record<ChecklistItemSource, string> = {
-  generated: "Generated",
-  manual: "Manual",
-};
-
-const KIND_LABELS: Record<ChecklistItemKind, string> = {
-  positive: "Positive",
-  negative: "Negative",
-};
+// Only the codes live here; the words are `checklist.itemFilters.*`, translated at render.
+const STATUSES: ChecklistItemStatus[] = ["untested", "pass", "fail", "blocked"];
+const SOURCES: ChecklistItemSource[] = ["generated", "manual"];
+const KINDS: ChecklistItemKind[] = ["positive", "negative"];
 
 export function ItemFilters({
   currentFilters,
@@ -47,6 +37,7 @@ export function ItemFilters({
   currentFilters: Partial<ChecklistItemListParams>;
   onFiltersChange: (filters: Partial<ChecklistItemListParams>) => void;
 }) {
+  const t = useTranslations("checklist");
   return (
     // The same grid `ListToolbar` uses for its own filter row
     // (`docs/design.md` → Spacing): one row, not four stacked full-width controls.
@@ -55,7 +46,7 @@ export function ItemFilters({
     <div className="grid grid-cols-1 gap-4 md:grid-cols-3 lg:grid-cols-4">
       <div>
         <Input
-          placeholder="Filter by feature"
+          placeholder={t("itemFilters.featurePlaceholder")}
           value={currentFilters.feature ?? ""}
           onChange={(event) =>
             onFiltersChange({
@@ -63,7 +54,7 @@ export function ItemFilters({
               feature: event.target.value || undefined,
             })
           }
-          aria-label="Filter by feature"
+          aria-label={t("itemFilters.featureAria")}
         />
       </div>
 
@@ -84,16 +75,16 @@ export function ItemFilters({
             <SelectValue>
               {(value: string) =>
                 value === ANY
-                  ? "All statuses"
-                  : STATUS_LABELS[value as ChecklistItemStatus]
+                  ? t("itemFilters.allStatuses")
+                  : t(`itemFilters.statuses.${value as ChecklistItemStatus}`)
               }
             </SelectValue>
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value={ANY}>All statuses</SelectItem>
-            {Object.entries(STATUS_LABELS).map(([key, label]) => (
+            <SelectItem value={ANY}>{t("itemFilters.allStatuses")}</SelectItem>
+            {STATUSES.map((key) => (
               <SelectItem key={key} value={key}>
-                {label}
+                {t(`itemFilters.statuses.${key}`)}
               </SelectItem>
             ))}
           </SelectContent>
@@ -114,15 +105,17 @@ export function ItemFilters({
           <SelectTrigger className="w-full">
             <SelectValue>
               {(value: string) =>
-                value === ANY ? "All kinds" : KIND_LABELS[value as ChecklistItemKind]
+                value === ANY
+                  ? t("itemFilters.allKinds")
+                  : t(`kinds.${value as ChecklistItemKind}`)
               }
             </SelectValue>
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value={ANY}>All kinds</SelectItem>
-            {Object.entries(KIND_LABELS).map(([key, label]) => (
+            <SelectItem value={ANY}>{t("itemFilters.allKinds")}</SelectItem>
+            {KINDS.map((key) => (
               <SelectItem key={key} value={key}>
-                {label}
+                {t(`kinds.${key}`)}
               </SelectItem>
             ))}
           </SelectContent>
@@ -146,16 +139,16 @@ export function ItemFilters({
             <SelectValue>
               {(value: string) =>
                 value === ANY
-                  ? "All sources"
-                  : SOURCE_LABELS[value as ChecklistItemSource]
+                  ? t("itemFilters.allSources")
+                  : t(`itemFilters.sources.${value as ChecklistItemSource}`)
               }
             </SelectValue>
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value={ANY}>All sources</SelectItem>
-            {Object.entries(SOURCE_LABELS).map(([key, label]) => (
+            <SelectItem value={ANY}>{t("itemFilters.allSources")}</SelectItem>
+            {SOURCES.map((key) => (
               <SelectItem key={key} value={key}>
-                {label}
+                {t(`itemFilters.sources.${key}`)}
               </SelectItem>
             ))}
           </SelectContent>

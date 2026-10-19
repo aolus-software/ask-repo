@@ -1,6 +1,7 @@
 "use client";
 
 import { ClipboardCheck, Download, Plus } from "lucide-react";
+import { useTranslations } from "next-intl";
 import Link from "next/link";
 import { useState } from "react";
 
@@ -21,6 +22,7 @@ import type { ChecklistModuleListParams } from "@/lib/api/types";
 const EXTRA_PARAMS = ["projectId"] as const;
 
 export function ChecklistScreen() {
+  const t = useTranslations("checklist.screen");
   const [creating, setCreating] = useState(false);
   const { params, searchInput, setSearch, setPage, setParam } = useListParams(
     { limit: 25 },
@@ -33,8 +35,8 @@ export function ChecklistScreen() {
   return (
     <div className="mx-auto w-full max-w-7xl">
       <PageHeader
-        title="QA Checklist"
-        description="Generated test plans for the modules of an indexed repository."
+        title={t("title")}
+        description={t("description")}
         action={
           <div className="flex gap-2">
             {/* Starts the export on whichever project the list is filtered to. */}
@@ -52,11 +54,11 @@ export function ChecklistScreen() {
               }
             >
               <Download className="size-4" />
-              Export
+              {t("export")}
             </Button>
             <Button onClick={() => setCreating(true)}>
               <Plus className="size-4" />
-              Create module
+              {t("createModule")}
             </Button>
           </div>
         }
@@ -64,7 +66,7 @@ export function ChecklistScreen() {
 
       <ListToolbar
         initialSearch={searchInput}
-        placeholder="Search modules and paths"
+        placeholder={t("searchPlaceholder")}
         onSearchChange={setSearch}
         filters={
           <ModuleFilters
@@ -82,13 +84,13 @@ export function ChecklistScreen() {
         ) : !query.isLoading && modules.length === 0 ? (
           <EmptyState
             icon={ClipboardCheck}
-            title={listParams.search ? "No modules match" : "No modules yet"}
+            title={listParams.search ? t("noMatchTitle") : t("emptyTitle")}
             description={
-              listParams.search
-                ? "Try a different name or path."
-                : "Point a module at a path in an indexed repository, then generate its checklist."
+              listParams.search ? t("noMatchDescription") : t("emptyDescription")
             }
-            action={<Button onClick={() => setCreating(true)}>Create module</Button>}
+            action={
+              <Button onClick={() => setCreating(true)}>{t("createModule")}</Button>
+            }
           />
         ) : (
           <>

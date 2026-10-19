@@ -8,6 +8,7 @@ import {
   Loader2,
   Search,
 } from "lucide-react";
+import { useTranslations } from "next-intl";
 import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -21,8 +22,6 @@ import {
   normalisePath,
   parentOf,
 } from "@/lib/checklist/paths";
-
-const ROOT_LABEL = "Repository";
 
 /**
  * Browse or search a project's indexed file tree, and pick a path from it.
@@ -49,6 +48,7 @@ export function PathPicker({
   inputId: string;
   invalid?: boolean;
 }) {
+  const t = useTranslations("checklist.pathPicker");
   const [directory, setDirectory] = useState("");
   const [search, setSearch] = useState("");
   const term = search.trim();
@@ -72,7 +72,7 @@ export function PathPicker({
       <Input
         id={inputId}
         className="font-mono"
-        placeholder="backend/app/auth"
+        placeholder={t("pathPlaceholder")}
         value={value}
         onChange={(event) => onValueChange(normalisePath(event.target.value))}
         aria-invalid={invalid}
@@ -83,10 +83,10 @@ export function PathPicker({
           <Search className="text-muted-foreground size-4 shrink-0" aria-hidden />
           <input
             className="placeholder:text-muted-foreground w-full bg-transparent text-sm outline-none"
-            placeholder="Search files and folders"
+            placeholder={t("searchPlaceholder")}
             value={search}
             onChange={(event) => setSearch(event.target.value)}
-            aria-label="Search the repository tree"
+            aria-label={t("searchAria")}
           />
           {query.isFetching ? (
             <Loader2
@@ -105,7 +105,7 @@ export function PathPicker({
               className="h-6 px-2"
               disabled={!directory}
               onClick={() => setDirectory(parentOf(directory))}
-              aria-label="Go up one folder"
+              aria-label={t("upOneFolder")}
             >
               <CornerLeftUp className="size-4" aria-hidden />
             </Button>
@@ -115,7 +115,7 @@ export function PathPicker({
                 className="text-muted-foreground hover:text-foreground shrink-0"
                 onClick={() => setDirectory("")}
               >
-                {ROOT_LABEL}
+                {t("root")}
               </button>
               {trail.map((crumb) => (
                 <span key={crumb.path} className="flex shrink-0 items-center gap-1">
@@ -138,7 +138,7 @@ export function PathPicker({
               disabled={!directory}
               onClick={() => onValueChange(directory)}
             >
-              Use this folder
+              {t("useThisFolder")}
             </Button>
           </div>
         )}
@@ -156,8 +156,7 @@ export function PathPicker({
 
         {query.data?.truncated ? (
           <p className="border-border text-muted-foreground border-t px-3 py-2 text-xs">
-            Showing the first {query.data.entries.length} matches. Narrow the search to
-            see the rest.
+            {t("truncated", { count: query.data.entries.length })}
           </p>
         ) : null}
       </div>
@@ -180,19 +179,18 @@ function PickerRows({
   hasProject: boolean;
   onChoose: (entry: IndexedPathEntry) => void;
 }) {
+  const t = useTranslations("checklist.pathPicker");
   if (!hasProject) {
-    return <Message>Pick a project first.</Message>;
+    return <Message>{t("pickProjectFirst")}</Message>;
   }
   if (isError) {
-    return (
-      <Message>The repository tree could not be read. Try again in a moment.</Message>
-    );
+    return <Message>{t("treeUnreadable")}</Message>;
   }
   if (isLoading) {
-    return <Message>Reading the indexed tree…</Message>;
+    return <Message>{t("reading")}</Message>;
   }
   if (entries.length === 0) {
-    return <Message>Nothing indexed here.</Message>;
+    return <Message>{t("nothingIndexed")}</Message>;
   }
   return (
     <ul className="p-1">
@@ -218,7 +216,7 @@ function PickerRows({
             )}
             {entry.fileCount === null ? null : (
               <span className="text-muted-foreground ml-auto shrink-0 text-xs">
-                {entry.fileCount} {entry.fileCount === 1 ? "file" : "files"}
+                {t("fileCount", { count: entry.fileCount })}
               </span>
             )}
           </button>

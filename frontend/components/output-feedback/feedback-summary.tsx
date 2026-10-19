@@ -1,5 +1,6 @@
+import { useTranslations } from "next-intl";
+
 import { StatTile, StatTileSkeleton } from "@/components/feedback/stat-tile";
-import { REASON_LABELS } from "@/components/output-feedback/reason-labels";
 import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
@@ -12,15 +13,16 @@ import {
 } from "@/components/ui/table";
 import type { FeedbackFeature, FeedbackSummary as Summary } from "@/lib/api/types";
 
-export const FEATURE_LABELS: Record<FeedbackFeature, string> = {
-  answer: "Ask answers",
-  refine_checklist: "Checklist chat",
-  refine_mock_data: "Mock-data chat",
-  generate_checklist: "Checklist generation",
-  propose_checklist: "Checklist chat proposals",
-  generate_mock_data: "Mock-data generation",
-  propose_mock_data: "Mock-data chat proposals",
-};
+/** Every feature, in display order. The words live in `outputFeedback.features`. */
+export const FEEDBACK_FEATURES: FeedbackFeature[] = [
+  "answer",
+  "refine_checklist",
+  "refine_mock_data",
+  "generate_checklist",
+  "propose_checklist",
+  "generate_mock_data",
+  "propose_mock_data",
+];
 
 function downRate(up: number, down: number): string {
   const total = up + down;
@@ -53,15 +55,17 @@ export function FeedbackSummarySkeleton() {
 }
 
 export function FeedbackSummary({ summary }: { summary: Summary }) {
+  const t = useTranslations("outputFeedback");
+
   return (
     <div className="space-y-6">
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {summary.byFeature.map((row) => (
           <StatTile
             key={row.feature}
-            label={FEATURE_LABELS[row.feature]}
+            label={t(`features.${row.feature}`)}
             value={downRate(row.up, row.down)}
-            hint={`down-voted · ${row.up + row.down} votes`}
+            hint={t("summary.hint", { votes: row.up + row.down })}
           />
         ))}
       </div>
@@ -71,16 +75,16 @@ export function FeedbackSummary({ summary }: { summary: Summary }) {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Feature</TableHead>
-                <TableHead>Reason</TableHead>
-                <TableHead className="text-right">Count</TableHead>
+                <TableHead>{t("summary.feature")}</TableHead>
+                <TableHead>{t("summary.reason")}</TableHead>
+                <TableHead className="text-right">{t("summary.count")}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {summary.byReason.map((row) => (
                 <TableRow key={`${row.feature}-${row.reasonCode}`}>
-                  <TableCell>{FEATURE_LABELS[row.feature]}</TableCell>
-                  <TableCell>{REASON_LABELS[row.reasonCode]}</TableCell>
+                  <TableCell>{t(`features.${row.feature}`)}</TableCell>
+                  <TableCell>{t(`reasons.${row.reasonCode}`)}</TableCell>
                   <TableCell className="text-right">{row.count}</TableCell>
                 </TableRow>
               ))}
@@ -92,16 +96,16 @@ export function FeedbackSummary({ summary }: { summary: Summary }) {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Feature</TableHead>
-                <TableHead>Prompt version</TableHead>
-                <TableHead className="text-right">Votes</TableHead>
-                <TableHead className="text-right">Down-voted</TableHead>
+                <TableHead>{t("summary.feature")}</TableHead>
+                <TableHead>{t("summary.promptVersion")}</TableHead>
+                <TableHead className="text-right">{t("summary.votes")}</TableHead>
+                <TableHead className="text-right">{t("summary.downVoted")}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {summary.byPromptVersion.map((row) => (
                 <TableRow key={`${row.feature}:${row.promptVersion}`}>
-                  <TableCell>{FEATURE_LABELS[row.feature]}</TableCell>
+                  <TableCell>{t(`features.${row.feature}`)}</TableCell>
                   <TableCell className="font-mono text-xs">
                     {row.promptVersion}
                   </TableCell>
@@ -115,12 +119,7 @@ export function FeedbackSummary({ summary }: { summary: Summary }) {
           </Table>
         </Card>
       </div>
-      <p className="text-muted-foreground text-xs">
-        A vote is stamped with the version of its feature&apos;s prompts running when it
-        was cast, which for a change set reviewed days later can be newer than the one
-        that generated it. Each feature has its own version, so compare versions within
-        a feature.
-      </p>
+      <p className="text-muted-foreground text-xs">{t("summary.versionNote")}</p>
     </div>
   );
 }

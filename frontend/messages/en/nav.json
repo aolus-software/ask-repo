@@ -1,0 +1,32 @@
+{
+  "items": {
+    "dashboard": "Dashboard",
+    "projects": "Projects",
+    "ask": "Ask",
+    "checklist": "Checklist",
+    "settings": "Settings",
+    "users": "Users",
+    "roles": "Roles",
+    "auditTrail": "Audit trail",
+    "feedback": "Feedback",
+    "notifications": "Notifications",
+    "profile": "Profile",
+    "export": "Export",
+    "eval": "Eval"
+  },
+  "navbar": {
+    "toggleNavigation": "Toggle navigation",
+    "toggleTheme": "Toggle theme"
+  },
+  "account": {
+    "label": "Account",
+    "profile": "Profile",
+    "logOut": "Log out",
+    "logOutEverywhere": "Log out everywhere"
+  },
+  "pagination": {
+    "summary": "Page {page} of {totalPages} · {totalCount} total",
+    "previous": "Previous",
+    "next": "Next"
+  }
+}

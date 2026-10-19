@@ -1,5 +1,7 @@
 "use client";
 
+import { useTranslations } from "next-intl";
+
 import {
   AuditEventCurrent,
   AuditEventFacts,
@@ -17,8 +19,9 @@ import {
 } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useAuditEvent } from "@/hooks/use-audit-events";
-import { auditEventLabel } from "@/lib/audit";
-import { formatRelative } from "@/lib/dates";
+import { useAuditEventLabel } from "@/lib/audit";
+import { auditOutcomeLabelKey, auditOutcomeTone } from "@/lib/status";
+import { useFormatRelative } from "@/hooks/use-format-date";
 
 /**
  * One event, read without leaving the list.
@@ -37,6 +40,10 @@ export function AuditDetailDialog({
   eventId: string | null;
   onOpenChange: (open: boolean) => void;
 }) {
+  const t = useTranslations("audit.detail");
+  const tStatus = useTranslations("status");
+  const auditEventLabel = useAuditEventLabel();
+  const formatRelative = useFormatRelative();
   const query = useAuditEvent(eventId ?? "");
   const event = query.data;
 
@@ -45,18 +52,18 @@ export function AuditDetailDialog({
       <DialogContent className={SIZES.lg}>
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            {event ? auditEventLabel(event.eventType) : "Audit event"}
+            {event ? auditEventLabel(event.eventType) : t("dialogTitle")}
             {event ? (
               <StatusBadge
-                tone={event.outcome === "failure" ? "danger" : "success"}
-                label={event.outcome === "failure" ? "Failure" : "Success"}
+                tone={auditOutcomeTone(event.outcome)}
+                label={tStatus(auditOutcomeLabelKey(event.outcome))}
               />
             ) : null}
           </DialogTitle>
           <DialogDescription>
             {event
-              ? `Recorded ${formatRelative(event.createdAt)}`
-              : "Reading the recorded event."}
+              ? t("recorded", { time: formatRelative(event.createdAt) })
+              : t("dialogLoading")}
           </DialogDescription>
         </DialogHeader>
 
@@ -71,7 +78,7 @@ export function AuditDetailDialog({
           ) : query.error ? (
             <DetailError
               error={query.error}
-              notFoundMessage="That event does not exist, or has aged out of the retention window."
+              notFoundMessage={t("notFound")}
               onRetry={() => query.refetch()}
             />
           ) : event ? (

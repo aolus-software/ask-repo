@@ -1,6 +1,7 @@
 "use client";
 
 import { Plus, ShieldCheck } from "lucide-react";
+import { useTranslations } from "next-intl";
 import { useState } from "react";
 
 import { EmptyState } from "@/components/feedback/empty-state";
@@ -16,6 +17,7 @@ import { useSession } from "@/hooks/use-session";
 import { usePermissionCatalog, useRoles } from "@/hooks/use-roles";
 
 export function RolesScreen() {
+  const t = useTranslations("roles");
   const user = useSession();
   const [creating, setCreating] = useState(false);
   const rolesQuery = useRoles();
@@ -32,18 +34,17 @@ export function RolesScreen() {
   // The route body is wrapped in its gate. Hiding the nav item is not gating the
   // route — an operator can type the URL (navigation.md §6). This mirrors the
   // backend's `require_admin`; it does not replace it.
-  if (!user.isAdmin)
-    return <Forbidden message="Only administrators can manage roles." />;
+  if (!user.isAdmin) return <Forbidden message={t("forbidden")} />;
 
   return (
     <div className="mx-auto w-full max-w-7xl">
       <PageHeader
-        title="Roles"
-        description="Instance-wide role definitions and what each one can do."
+        title={t("title")}
+        description={t("description")}
         action={
           <Button onClick={() => setCreating(true)}>
             <Plus className="size-4" />
-            Create role
+            {t("createRole")}
           </Button>
         }
       />
@@ -56,9 +57,11 @@ export function RolesScreen() {
         ) : !isLoading && roles.length === 0 ? (
           <EmptyState
             icon={ShieldCheck}
-            title="No roles yet"
-            description="Create a role to grant something other than viewer, editor or owner."
-            action={<Button onClick={() => setCreating(true)}>Create role</Button>}
+            title={t("emptyTitle")}
+            description={t("emptyDescription")}
+            action={
+              <Button onClick={() => setCreating(true)}>{t("createRole")}</Button>
+            }
           />
         ) : (
           <RoleTable

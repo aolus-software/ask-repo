@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { toast } from "sonner";
 
 import { ConfirmDialog } from "@/components/form/confirm-dialog";
@@ -18,6 +19,7 @@ export function DeleteEvalSetDialog({
   onOpenChange: (open: boolean) => void;
   onDeleted?: () => void;
 }) {
+  const t = useTranslations("eval.deleteDialog");
   const remove = useDeleteEvalSet(projectId);
 
   return (
@@ -27,16 +29,16 @@ export function DeleteEvalSetDialog({
         if (!open) remove.reset();
         onOpenChange(open);
       }}
-      title={set ? `Delete ${set.name}?` : "Delete eval set?"}
-      description="Its questions, every run and all of their results are deleted with it, for everyone."
-      confirmLabel="Delete eval set"
+      title={set ? t("titleNamed", { name: set.name }) : t("title")}
+      description={t("description")}
+      confirmLabel={t("confirm")}
       isPending={remove.isPending}
       error={remove.error}
       onConfirm={() => {
         if (!set) return;
         remove.mutate(set.id, {
           onSuccess: () => {
-            toast.success("Eval set deleted");
+            toast.success(t("deleted"));
             onOpenChange(false);
             onDeleted?.();
           },

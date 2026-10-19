@@ -1,0 +1,86 @@
+{
+  "newConversation": {
+    "title": "질문하기",
+    "description": "인덱싱된 코드를 바탕으로 출처와 함께 답변합니다. 질문은 본인만 볼 수 있습니다.",
+    "placeholderReady": "출금 계산은 어떻게 동작하나요?",
+    "placeholderChooseProject": "먼저 프로젝트를 선택하세요"
+  },
+  "conversation": {
+    "untitled": "제목 없는 대화",
+    "newTitle": "새 대화",
+    "notFound": "해당 대화가 존재하지 않습니다.",
+    "projectUnavailable": "해당 프로젝트를 더 이상 사용할 수 없습니다.",
+    "answerStopped": "답변이 중단되었습니다",
+    "tryAgain": "다시 시도",
+    "answering": "답변 중…",
+    "askFollowUp": "추가 질문하기"
+  },
+  "phases": {
+    "queued": "대기 중…",
+    "classifying": "질문을 이해하는 중…",
+    "retrieving": "코드베이스를 검색하는 중…",
+    "grading": "찾은 내용을 확인하는 중…",
+    "generating": "답변을 작성하는 중…"
+  },
+  "stream": {
+    "noStream": "서버가 답변 스트림을 보내지 않았습니다.",
+    "failed": "답변에 실패했습니다."
+  },
+  "composer": { "questionLabel": "질문", "ask": "질문" },
+  "answer": { "copyCode": "코드 복사" },
+  "groundingWarnings": {
+    "no_context": "이 프로젝트에서 관련된 내용을 찾지 못해 코드를 근거로 한 답변을 생성하지 않았습니다.",
+    "uncited_answer": "이 답변은 제공된 발췌문을 하나도 인용하지 않았습니다. 주의해서 확인하세요.",
+    "unknown_paths": "이 답변에는 검색된 발췌문에 없는 파일이 언급되어 있습니다. 해당 참조는 존재하지 않을 수 있습니다.",
+    "weak_evidence": "검색된 코드가 이 질문을 충분히 다루지 못할 수 있습니다. 답변에는 확인하지 못한 내용이 명시되어 있습니다.",
+    "unknown": "근거 경고: {warning}"
+  },
+  "interruptedNote": "연결이 끊어졌습니다. 위에 도착한 내용은 유지됩니다.",
+  "messages": {
+    "showFull": "전체 메시지 보기",
+    "collapse": "메시지 접기",
+    "interrupted": "이 답변은 중단되었습니다. 도착한 내용은 유지됩니다.",
+    "endedEarly": "이 답변이 일찍 종료되었습니다({reason})."
+  },
+  "projectPicker": {
+    "loadingProjects": "프로젝트를 불러오는 중…",
+    "searchProjects": "프로젝트 검색",
+    "label": "프로젝트",
+    "loading": "불러오는 중…",
+    "noMatch": "일치하는 프로젝트가 없습니다."
+  },
+  "sources": { "title": "출처 ({count})", "lines": "{start}–{end}번째 줄" },
+  "preflight": {
+    "couldNotAnswer": "이 질문에 답변할 수 없었습니다",
+    "genericError": "문제가 발생했습니다.",
+    "needsReindexTitle": "이 프로젝트는 다시 인덱싱해야 합니다",
+    "needsReindexBody": "다른 임베딩 모델로 인덱싱되어, 저장된 벡터를 이 인스턴스가 현재 사용하는 모델로 검색할 수 없습니다. 다시 인덱싱하면 질문을 다시 사용할 수 있습니다.",
+    "reindexNow": "지금 다시 인덱싱",
+    "reindexStarted": "다시 인덱싱을 시작했습니다",
+    "reindexAlreadyRunning": "이미 다시 인덱싱이 진행 중입니다",
+    "askToReindex": "프로젝트를 추가한 사람이나 관리자에게 다시 인덱싱을 요청하세요.",
+    "notReadyTitle": "이 프로젝트는 아직 준비되지 않았습니다",
+    "notReadyBody": "아직 클론 또는 인덱싱 중입니다. “준비됨” 상태가 되면 질문할 수 있습니다."
+  },
+  "rail": {
+    "deleteConversation": "대화 삭제",
+    "deleteTitle": "이 대화를 삭제하시겠습니까?",
+    "deleteDescription": "본인만 볼 수 있으며, 삭제하면 복구할 수 없습니다.",
+    "delete": "삭제",
+    "deleted": "대화를 삭제했습니다",
+    "conversations": "대화",
+    "newConversation": "새 대화",
+    "searchConversations": "대화 검색",
+    "loadingProjects": "프로젝트를 불러오는 중…",
+    "allProjects": "모든 프로젝트",
+    "filterByProject": "프로젝트별 필터",
+    "loading": "불러오는 중…",
+    "couldNotLoadProjects": "프로젝트를 불러오지 못했습니다.",
+    "noProjectMatches": "일치하는 프로젝트가 없습니다.",
+    "noConversationMatches": "일치하는 대화가 없습니다.",
+    "nothingYet": "아직 없습니다. 프로젝트를 선택하고 질문해 보세요.",
+    "untitled": "제목 없는 대화",
+    "showConversations": "대화 표시",
+    "hideConversations": "대화 숨기기"
+  }
+}

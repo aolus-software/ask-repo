@@ -1,7 +1,6 @@
 import { ExternalLink, ThumbsDown, ThumbsUp } from "lucide-react";
+import { useTranslations } from "next-intl";
 
-import { FEATURE_LABELS } from "@/components/output-feedback/feedback-summary";
-import { REASON_LABELS } from "@/components/output-feedback/reason-labels";
 import { TableSkeleton } from "@/components/feedback/table-skeleton";
 import {
   Table,
@@ -26,19 +25,21 @@ export function FeedbackTable({
   rows: FeedbackAdminRead[];
   isLoading: boolean;
 }) {
+  const t = useTranslations("outputFeedback");
+
   return (
     <div className="overflow-x-auto">
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead>When</TableHead>
-            <TableHead>Project</TableHead>
-            <TableHead>Feature</TableHead>
-            <TableHead>Vote</TableHead>
-            <TableHead>Reasons</TableHead>
-            <TableHead>Note</TableHead>
-            <TableHead>Prompt</TableHead>
-            <TableHead className="text-right">Trace</TableHead>
+            <TableHead>{t("table.when")}</TableHead>
+            <TableHead>{t("table.project")}</TableHead>
+            <TableHead>{t("table.feature")}</TableHead>
+            <TableHead>{t("table.vote")}</TableHead>
+            <TableHead>{t("table.reasons")}</TableHead>
+            <TableHead>{t("table.note")}</TableHead>
+            <TableHead>{t("table.prompt")}</TableHead>
+            <TableHead className="text-right">{t("table.trace")}</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -51,23 +52,25 @@ export function FeedbackTable({
                   {formatDay(row.createdOn)}
                 </TableCell>
                 <TableCell className="text-sm">{row.projectName}</TableCell>
-                <TableCell className="text-sm">{FEATURE_LABELS[row.feature]}</TableCell>
+                <TableCell className="text-sm">
+                  {t(`features.${row.feature}`)}
+                </TableCell>
                 <TableCell>
                   {row.rating === "up" ? (
                     <ThumbsUp
                       className="text-muted-foreground size-4"
-                      aria-label="Up"
+                      aria-label={t("table.up")}
                     />
                   ) : (
                     <ThumbsDown
                       className="text-muted-foreground size-4"
-                      aria-label="Down"
+                      aria-label={t("table.down")}
                     />
                   )}
                 </TableCell>
                 <TableCell className="text-muted-foreground text-sm">
                   {row.reasonCodes.length > 0
-                    ? row.reasonCodes.map((code) => REASON_LABELS[code]).join(", ")
+                    ? row.reasonCodes.map((code) => t(`reasons.${code}`)).join(", ")
                     : "—"}
                 </TableCell>
                 <TableCell className="max-w-xs text-sm whitespace-pre-wrap">
@@ -81,7 +84,7 @@ export function FeedbackTable({
                       target="_blank"
                       rel="noreferrer"
                       className="text-muted-foreground hover:text-primary inline-flex"
-                      aria-label="Open trace"
+                      aria-label={t("table.openTrace")}
                     >
                       <ExternalLink className="size-4" />
                     </a>

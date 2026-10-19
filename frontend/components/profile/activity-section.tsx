@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import Link from "next/link";
 import { useState } from "react";
 
@@ -19,9 +20,10 @@ import {
 } from "@/components/ui/table";
 import { useActivity, useMemberships } from "@/hooks/use-profile";
 import type { ActivityEntry, MembershipSummary } from "@/lib/api/types";
-import { auditEventLabel } from "@/lib/audit";
-import { formatAbsolute, formatRelative } from "@/lib/dates";
-import { auditOutcomeLabel, auditOutcomeTone } from "@/lib/status";
+import { useAuditEventLabel } from "@/lib/audit";
+import { formatAbsolute } from "@/lib/dates";
+import { auditOutcomeLabelKey, auditOutcomeTone } from "@/lib/status";
+import { useFormatRelative } from "@/hooks/use-format-date";
 
 const PAGE_SIZE = 20;
 
@@ -36,6 +38,7 @@ const PAGE_SIZE = 20;
 function targetCell(
   item: ActivityEntry,
   memberships: MembershipSummary[] | undefined,
+  fallbackName: string,
 ): React.ReactNode {
   if (item.targetLabel) return item.targetLabel;
   if (!item.projectId) return "—";
@@ -45,7 +48,7 @@ function targetCell(
       href={`/projects/${item.projectId}`}
       className="text-primary underline-offset-4 hover:underline"
     >
-      {name ?? "Project"}
+      {name ?? fallbackName}
     </Link>
   );
 }
@@ -55,6 +58,10 @@ function targetCell(
  * here with the address it came from — it is recorded with you as the actor.
  */
 export function ActivitySection() {
+  const t = useTranslations("profile.activity");
+  const tStatus = useTranslations("status");
+  const auditEventLabel = useAuditEventLabel();
+  const formatRelative = useFormatRelative();
   const [page, setPage] = useState(1);
   const activity = useActivity({ page, limit: PAGE_SIZE });
   const memberships = useMemberships();
@@ -65,17 +72,17 @@ export function ActivitySection() {
       {activity.isError ? (
         <ListError error={activity.error} onRetry={() => activity.refetch()} />
       ) : !activity.isLoading && items.length === 0 ? (
-        <EmptyState size="compact" description="Nothing recorded yet." />
+        <EmptyState size="compact" description={t("empty")} />
       ) : (
         <div className="overflow-x-auto">
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Event</TableHead>
-                <TableHead>Outcome</TableHead>
-                <TableHead>Target</TableHead>
-                <TableHead>IP address</TableHead>
-                <TableHead>Time</TableHead>
+                <TableHead>{t("columns.event")}</TableHead>
+                <TableHead>{t("columns.outcome")}</TableHead>
+                <TableHead>{t("columns.target")}</TableHead>
+                <TableHead>{t("columns.ipAddress")}</TableHead>
+                <TableHead>{t("columns.time")}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -93,11 +100,11 @@ export function ActivitySection() {
                     <TableCell>
                       <StatusBadge
                         tone={auditOutcomeTone(item.outcome)}
-                        label={auditOutcomeLabel(item.outcome)}
+                        label={tStatus(auditOutcomeLabelKey(item.outcome))}
                       />
                     </TableCell>
                     <TableCell className="text-sm">
-                      {targetCell(item, memberships.data)}
+                      {targetCell(item, memberships.data, t("project"))}
                     </TableCell>
                     <TableCell className="font-mono text-sm">
                       {item.ipAddress ?? "—"}

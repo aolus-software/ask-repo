@@ -1,0 +1,69 @@
+{
+  "users": {
+    "title": "使用者",
+    "description": "此執行個體上的帳號。",
+    "add": "新增使用者",
+    "searchPlaceholder": "依名稱或電子郵件搜尋",
+    "forbidden": "只有管理員可以管理帳號。",
+    "empty": {
+      "noMatchTitle": "沒有符合的帳號",
+      "noneTitle": "目前沒有帳號",
+      "noMatchDescription": "請嘗試不同的名稱或電子郵件。",
+      "noneDescription": "為同事建立帳號，讓他們開始使用。"
+    },
+    "table": {
+      "columns": {
+        "name": "名稱",
+        "email": "電子郵件",
+        "role": "角色",
+        "lastLogin": "上次登入",
+        "created": "建立時間",
+        "actions": "操作"
+      },
+      "never": "從未"
+    },
+    "roleBadge": { "admin": "管理員", "member": "成員" },
+    "actionsFor": "{name} 的操作",
+    "actions": { "edit": "編輯", "resetPassword": "重設密碼", "deactivate": "停用" },
+    "create": {
+      "title": "新增使用者",
+      "description": "對方首次登入時，會被要求自行設定密碼。",
+      "submit": "建立帳號",
+      "done": "已建立帳號",
+      "fields": {
+        "name": "名稱",
+        "email": "電子郵件",
+        "password": "臨時密碼",
+        "administrator": "管理員"
+      }
+    },
+    "edit": {
+      "title": "編輯 {name}",
+      "submit": "儲存變更",
+      "done": "已更新帳號",
+      "fields": { "name": "名稱", "administrator": "管理員" }
+    },
+    "reset": {
+      "title": "重設 {name} 的密碼",
+      "description": "此帳號的所有工作階段都會被登出。",
+      "submit": "重設密碼",
+      "done": "已重設密碼",
+      "fields": { "password": "臨時密碼" }
+    },
+    "deactivate": {
+      "title": "要停用 {name} 嗎？",
+      "description": "對方的工作階段會立即結束。其所建立的專案會保留。",
+      "confirm": "停用",
+      "done": "已停用帳號"
+    },
+    "lastOwner": "這些專案會沒有擁有者：<projects></projects>。請先將擁有者角色授予其他人。",
+    "changePassword": { "current": "目前密碼", "new": "新密碼" }
+  },
+  "feedback": {
+    "title": "意見回饋",
+    "description": "大家如何評價回答、對話回覆與提議。投票者是誰，以及投票背後的問題，都不會顯示。",
+    "forbidden": "只有管理員可以閱讀對模型輸出的意見回饋。",
+    "emptyTitle": "目前沒有意見回饋",
+    "emptyDescription": "對回答、對話回覆與變更集的投票會顯示在這裡。"
+  }
+}

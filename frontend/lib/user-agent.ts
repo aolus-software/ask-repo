@@ -1,5 +1,5 @@
 /**
- * "Chrome on macOS" from a user-agent string, for the profile's session list.
+ * "Chrome" and "macOS" from a user-agent string, for the profile's session list.
  *
  * Order matters in both tables. Edge and Opera carry "Chrome/", and Chrome carries
  * "Safari/", so the more specific name is tested first. An iPad's agent says
@@ -24,10 +24,21 @@ const SYSTEMS: [RegExp, string][] = [
   [/Linux/, "Linux"],
 ];
 
-export function deviceLabel(userAgent: string | null): string {
-  if (!userAgent?.trim()) return "Unknown device";
-  const browser = BROWSERS.find(([pattern]) => pattern.test(userAgent))?.[1];
-  const system = SYSTEMS.find(([pattern]) => pattern.test(userAgent))?.[1];
-  if (browser && system) return `${browser} on ${system}`;
-  return browser ?? system ?? userAgent;
+export interface Device {
+  browser: string | null;
+  system: string | null;
+}
+
+/**
+ * The browser and system a user-agent names, each `null` when the tables do not
+ * recognise it, or `null` overall for a missing or blank agent. The caller words the
+ * result, so the sentence around the two names can be translated; the names stay as
+ * written.
+ */
+export function parseDevice(userAgent: string | null): Device | null {
+  if (!userAgent?.trim()) return null;
+  return {
+    browser: BROWSERS.find(([pattern]) => pattern.test(userAgent))?.[1] ?? null,
+    system: SYSTEMS.find(([pattern]) => pattern.test(userAgent))?.[1] ?? null,
+  };
 }

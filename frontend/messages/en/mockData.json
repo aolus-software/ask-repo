@@ -1,0 +1,50 @@
+{
+  "recordsTable": {
+    "deleteAria": "Delete record",
+    "deleteTitle": "Delete this record?",
+    "deleteDescription": "This cannot be undone.",
+    "delete": "Delete",
+    "deleted": "Record deleted",
+    "generatingTitle": "Generating mock data…",
+    "emptyTitle": "No mock data yet",
+    "generatingDescription": "A generation is running. The records appear here when it finishes.",
+    "emptyDescription": "Generate a batch, or ask for one by chat."
+  },
+  "generateControl": {
+    "started": "Generation started",
+    "generate": "Generate",
+    "countAria": "Number of records to generate"
+  },
+  "changeSetPanel": {
+    "noFields": "(no fields)",
+    "applied": "Changes applied",
+    "discarded": "Proposals discarded",
+    "ops": {
+      "add": "Add",
+      "update": "Update",
+      "remove": "Remove"
+    },
+    "recordLine": "Record <id>{recordId}</id>",
+    "orphaned": "This record no longer exists — this change will be skipped",
+    "title": "Proposed mock data changes",
+    "skipped": "{count, plural, one {# proposed change was} other {# proposed changes were}} skipped because the record they referred to no longer exists.",
+    "discard": "Discard",
+    "applySelected": "Apply selected",
+    "discardTitle": "Discard proposed changes",
+    "discardDescription": "Discard these proposals? Nothing will be written to the mock dataset."
+  },
+  "chatPanel": {
+    "replyStopped": "The reply stopped.",
+    "placeholderNoPermission": "You do not have permission to refine this mock data.",
+    "placeholderGenerating": "A generation is running for this dataset. Wait for it to finish.",
+    "placeholderPending": "Apply or discard the pending changes first.",
+    "placeholderAnswering": "Answering…",
+    "placeholderDefault": "Ask for a specific shape, or say what you'd like changed",
+    "sharedTitle": "This chat is shared",
+    "sharedDescription": "Everyone on this instance can read this conversation.",
+    "loadErrorTitle": "Could not load this chat",
+    "empty": "No messages yet. Ask for the dataset to be refined, or explain what should change.",
+    "replyStoppedTitle": "The reply stopped",
+    "sendErrorTitle": "Could not send that"
+  }
+}

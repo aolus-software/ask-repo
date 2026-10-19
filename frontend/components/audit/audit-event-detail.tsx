@@ -1,14 +1,17 @@
 "use client";
 
+import { useTranslations } from "next-intl";
+
 import {
   AuditChangeList,
   AuditValue,
   type AuditChange,
 } from "@/components/audit/audit-change-list";
 import { Separator } from "@/components/ui/separator";
-import { auditEventLabel } from "@/lib/audit";
+import { useAuditEventLabel } from "@/lib/audit";
 import type { AuditEventResponse } from "@/lib/api/types";
 import { formatAbsolute } from "@/lib/dates";
+import { auditOutcomeLabelKey } from "@/lib/status";
 
 /**
  * One recorded event's body, with no surface of its own.
@@ -31,13 +34,11 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
   );
 }
 
-function tristate(value: boolean | null, whenTrue: string, whenFalse: string): string {
-  if (value === null) return "Unknown";
-  return value ? whenTrue : whenFalse;
-}
-
 /** The recorded snapshot: who, what, when, and whatever `details` carried. */
 export function AuditEventFacts({ event }: { event: AuditEventResponse }) {
+  const t = useTranslations("audit.detail");
+  const tStatus = useTranslations("status");
+  const auditEventLabel = useAuditEventLabel();
   // `changed` and the rest of `details` come from the same free-form object; the
   // change list owns the former, the context block below owns whatever is left.
   const { changed, ...context } = event.details as {
@@ -48,19 +49,19 @@ export function AuditEventFacts({ event }: { event: AuditEventResponse }) {
   return (
     <>
       <dl className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <Field label="When">{formatAbsolute(event.createdAt)}</Field>
-        <Field label="Who">
+        <Field label={t("when")}>{formatAbsolute(event.createdAt)}</Field>
+        <Field label={t("who")}>
           {event.actorEmail ?? (
-            <span className="text-muted-foreground">no authenticated actor</span>
+            <span className="text-muted-foreground">{t("noActor")}</span>
           )}
         </Field>
-        <Field label="What">{auditEventLabel(event.eventType)}</Field>
-        <Field label="Target">
+        <Field label={t("what")}>{auditEventLabel(event.eventType)}</Field>
+        <Field label={t("target")}>
           {event.targetLabel ?? event.targetType ?? (
             <span className="text-muted-foreground">—</span>
           )}
         </Field>
-        <Field label="Project">
+        <Field label={t("project")}>
           {/* An identifier, so mono: an operator reads this to match it against another
               system, and the body face does not separate 0 from O or 1 from l. */}
           {event.projectId ? (
@@ -69,10 +70,10 @@ export function AuditEventFacts({ event }: { event: AuditEventResponse }) {
             <span className="text-muted-foreground">—</span>
           )}
         </Field>
-        <Field label="Outcome">
-          {event.outcome === "failure" ? "Failure" : "Success"}
+        <Field label={t("outcome")}>
+          {tStatus(auditOutcomeLabelKey(event.outcome))}
         </Field>
-        <Field label="Source IP">
+        <Field label={t("sourceIp")}>
           {event.ipAddress ? (
             <span className="font-mono">{event.ipAddress}</span>
           ) : (
@@ -84,13 +85,11 @@ export function AuditEventFacts({ event }: { event: AuditEventResponse }) {
       <Separator className="my-6" />
 
       <div>
-        <h2 className="mb-3 text-sm font-semibold">Changed fields</h2>
+        <h2 className="mb-3 text-sm font-semibold">{t("changedFields")}</h2>
         {changed && Object.keys(changed).length > 0 ? (
           <AuditChangeList changed={changed} />
         ) : (
-          <p className="text-muted-foreground text-sm">
-            This event has no `changed` block — its name is its whole meaning.
-          </p>
+          <p className="text-muted-foreground text-sm">{t("noChangedBlock")}</p>
         )}
       </div>
 
@@ -98,7 +97,7 @@ export function AuditEventFacts({ event }: { event: AuditEventResponse }) {
         <>
           <Separator className="my-6" />
           <div>
-            <h2 className="mb-3 text-sm font-semibold">Context</h2>
+            <h2 className="mb-3 text-sm font-semibold">{t("context")}</h2>
             <dl className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               {contextEntries.map(([key, value]) => (
                 <Field key={key} label={key}>
@@ -119,17 +118,20 @@ export function AuditEventFacts({ event }: { event: AuditEventResponse }) {
  * part of what was recorded.
  */
 export function AuditEventCurrent({ event }: { event: AuditEventResponse }) {
+  const t = useTranslations("audit.detail");
+  const tristate = (value: boolean | null): string =>
+    value === null ? t("unknown") : value ? t("yes") : t("no");
   return (
     <>
       <h2 className="text-muted-foreground mb-3 text-xs font-medium tracking-wide uppercase">
-        As of now
+        {t("asOfNow")}
       </h2>
       <dl className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        <Field label="Actor still active">
-          {tristate(event.current.actorStillActive, "Yes", "No")}
+        <Field label={t("actorStillActive")}>
+          {tristate(event.current.actorStillActive)}
         </Field>
-        <Field label="Target still exists">
-          {tristate(event.current.targetStillExists, "Yes", "No")}
+        <Field label={t("targetStillExists")}>
+          {tristate(event.current.targetStillExists)}
         </Field>
       </dl>
     </>

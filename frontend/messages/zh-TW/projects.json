@@ -1,0 +1,114 @@
+{
+  "roles": { "viewer": "檢視者", "editor": "編輯者", "owner": "擁有者" },
+  "list": {
+    "title": "專案",
+    "description": "此執行個體上所有已建立索引的儲存庫。這裡的任何人都可以查詢其中任何一個。",
+    "addProject": "新增專案",
+    "searchPlaceholder": "搜尋專案",
+    "emptyNoMatch": "沒有符合的專案",
+    "emptyNone": "目前沒有專案",
+    "emptyDescription": "新增儲存庫後，{appName} 會複製並建立索引。這需要幾分鐘。"
+  },
+  "table": {
+    "columns": {
+      "name": "名稱",
+      "repository": "儲存庫",
+      "status": "狀態",
+      "indexed": "已索引",
+      "commit": "提交",
+      "updated": "更新時間",
+      "actions": "操作"
+    },
+    "indexedCounts": "{files, plural, other {# 個檔案}} · {chunks, plural, other {# 個區塊}}"
+  },
+  "rowActions": {
+    "menuLabel": "{name} 的操作",
+    "openRepository": "開啟儲存庫",
+    "viewDetail": "檢視詳細資料",
+    "askAboutThis": "針對此專案提問",
+    "members": "成員",
+    "eval": "評估",
+    "reindex": "重新建立索引",
+    "delete": "刪除",
+    "reindexDialog": {
+      "title": "要重新建立 {name} 的索引嗎？",
+      "description": "專案在整個過程中仍可查詢。新的向量會寫在目前索引旁，僅在執行成功後才切換過去。",
+      "confirm": "重新建立索引",
+      "started": "已開始重新建立索引",
+      "alreadyRunning": "重新建立索引已在進行中"
+    },
+    "deleteDialog": {
+      "title": "要刪除 {name} 嗎？",
+      "description": "其索引會被銷毀，且針對它的所有對話都會被移除，對所有人生效。重新建立它需要完整地重新複製並重新嵌入。",
+      "confirm": "刪除專案",
+      "deleted": "已刪除專案",
+      "vectorStoreDown": "無法連線到向量儲存庫，因此沒有刪除任何內容。",
+      "vectorStoreDownDetail": "專案維持原狀。待其恢復後再試一次。"
+    }
+  },
+  "createDialog": {
+    "title": "新增專案",
+    "description": "{appName} 會複製儲存庫、建立索引，然後刪除工作副本。",
+    "submit": "新增專案",
+    "repoUrl": "儲存庫網址",
+    "repoUrlPlaceholder": "https://github.com/your-org/your-repo",
+    "repoUrlRequired": "請輸入儲存庫網址。",
+    "repoUrlHint": "位於允許主機上的 https 網址。",
+    "branch": "分支",
+    "pat": "存取權杖",
+    "patHint": "僅適用於私有儲存庫。留空則保留已儲存的權杖不變。請將其範圍設為唯讀——此執行個體上的每個人都能查詢它所索引的內容。",
+    "queued": "專案已排入索引建立佇列"
+  },
+  "stats": {
+    "filesIndexed": "已索引的檔案",
+    "chunks": "區塊",
+    "lastIndexedCommit": "最近索引的提交",
+    "embeddingModel": "嵌入模型"
+  },
+  "detail": {
+    "notFound": "該專案不存在，或已被刪除。",
+    "askAboutProject": "針對此專案提問",
+    "tabs": { "overview": "概覽", "members": "成員", "eval": "評估" },
+    "working": "{status}…",
+    "reindexRunning": "重新建立索引執行中",
+    "reindexRunningDescription": "在新索引就緒之前，目前的索引仍可查詢。",
+    "indexingFailed": "索引建立失敗",
+    "membersHeading": "成員",
+    "membersDescription": "誰可以存取此專案，以及以什麼身分存取。",
+    "addMember": "新增成員",
+    "evalHeading": "評估",
+    "evalDescription": "針對此專案執行附有參考答案的已產生問題。"
+  },
+  "addMemberDialog": {
+    "title": "新增成員",
+    "description": "授予使用者對此專案的存取權。",
+    "submit": "新增成員",
+    "user": "使用者",
+    "role": "角色",
+    "loadingPeople": "正在載入人員…",
+    "searchPeople": "搜尋人員",
+    "loading": "載入中…",
+    "noMatch": "沒有符合的使用者。",
+    "added": "已新增成員"
+  },
+  "memberTable": {
+    "columns": {
+      "user": "使用者",
+      "role": "角色",
+      "grantedBy": "授予者",
+      "grantedAt": "授予時間",
+      "actions": "操作"
+    },
+    "emptyTitle": "沒有成員",
+    "emptyDescription": "目前沒有任何人在此專案中擁有成員資格。",
+    "roleFor": "{name} 的角色",
+    "roleChanged": "已變更角色",
+    "revokeLabel": "撤銷 {name} 的存取權",
+    "revokeDialog": {
+      "title": "要撤銷 {name} 的存取權嗎？",
+      "description": "對方會立即失去此專案的存取權。",
+      "confirm": "撤銷存取權",
+      "revoked": "已撤銷存取權"
+    }
+  }
+}

@@ -1,6 +1,7 @@
 "use client";
 
 import { Loader2 } from "lucide-react";
+import { useTranslations } from "next-intl";
 
 import { FormError } from "@/components/form/form-error";
 import { Button } from "@/components/ui/button";
@@ -50,6 +51,7 @@ export function FormDialog({
   onOpenChange: (open: boolean) => void;
   size?: keyof typeof SIZES;
 }) {
+  const t = useTranslations("common");
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className={cn(SIZES[size])}>
@@ -68,7 +70,7 @@ export function FormDialog({
               onClick={() => onOpenChange(false)}
               disabled={isPending}
             >
-              Cancel
+              {t("cancel")}
             </Button>
             <Button type="submit" disabled={isPending}>
               {isPending ? <Loader2 className="size-4 animate-spin" /> : null}

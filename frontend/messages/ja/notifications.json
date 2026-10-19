@@ -1,0 +1,88 @@
+{
+  "title": "通知",
+  "description": "{appName} からのお知らせです（新しい順）。",
+  "markAllRead": "すべて既読にする",
+  "seeAll": "すべて表示",
+  "unread": "未読",
+  "bellLabel": "通知（未読 {count} 件）",
+  "overflow": "99+",
+  "empty": "確認が必要なものはありません。",
+  "markReadFailed": "通知を既読にできませんでした",
+  "untitled": "無題",
+  "emptyState": {
+    "noMatchTitle": "一致する通知はありません",
+    "noneTitle": "まだ何もありません",
+    "noMatchDescription": "フィルターを解除してみてください。",
+    "noneDescription": "プロジェクトやチェックリストのイベントが発生すると、ここに表示されます。"
+  },
+  "filters": {
+    "byProject": "プロジェクトで絞り込む",
+    "byType": "種類で絞り込む",
+    "allTypes": "すべての種類",
+    "allProjects": "すべてのプロジェクト",
+    "unreadOnly": "未読のみ"
+  },
+  "types": {
+    "project_ready": "プロジェクトの準備完了",
+    "project_failed": "プロジェクトの失敗",
+    "project_reindex_finished": "プロジェクトの再インデックス完了",
+    "project_reindex_failed": "プロジェクトの再インデックス失敗",
+    "checklist_change_set_pending": "チェックリストの変更セットが保留中",
+    "checklist_change_set_applied": "チェックリストの変更セットを適用",
+    "checklist_change_set_discarded": "チェックリストの変更セットを破棄",
+    "mock_data_change_set_pending": "モックデータの変更セットが保留中",
+    "mock_data_change_set_applied": "モックデータの変更セットを適用",
+    "mock_data_change_set_discarded": "モックデータの変更セットを破棄",
+    "membership_granted": "メンバーシップの付与",
+    "eval_set_ready": "評価セットの準備完了",
+    "eval_set_failed": "評価セットの失敗",
+    "eval_run_finished": "評価の実行完了",
+    "eval_run_failed": "評価の実行失敗"
+  },
+  "categories": {
+    "project_ready": "プロジェクトのインデックス作成が完了したとき",
+    "project_failed": "プロジェクトのインデックス作成に失敗したとき",
+    "project_reindex_finished": "プロジェクトの再インデックスが完了したとき",
+    "project_reindex_failed": "プロジェクトの再インデックスに失敗したとき",
+    "checklist_change_set_pending": "チェックリストの変更セットがレビュー待ちになったとき",
+    "checklist_change_set_applied": "チェックリストの変更セットが適用されたとき",
+    "checklist_change_set_discarded": "チェックリストの変更セットが破棄されたとき",
+    "mock_data_change_set_pending": "モックデータの変更セットがレビュー待ちになったとき",
+    "mock_data_change_set_applied": "モックデータの変更セットが適用されたとき",
+    "mock_data_change_set_discarded": "モックデータの変更セットが破棄されたとき",
+    "membership_granted": "プロジェクトに追加されたとき",
+    "eval_set_ready": "評価セットの生成が完了したとき",
+    "eval_set_failed": "評価セットの生成に失敗したとき",
+    "eval_run_finished": "評価の実行が完了したとき",
+    "eval_run_failed": "評価の実行に失敗したとき"
+  },
+  "titles": {
+    "project_ready": "{projectName} のインデックス作成が完了しました",
+    "project_failed": "{projectName} のインデックス作成に失敗しました",
+    "project_reindex_finished": "{projectName} の再インデックスが完了しました",
+    "project_reindex_failed": "{projectName} の再インデックスに失敗しました",
+    "checklist_change_set_pending": "{moduleName} にレビュー待ちのチェックリスト変更セットがあります",
+    "checklist_change_set_applied": "{moduleName} にチェックリストの変更セットが適用されました",
+    "checklist_change_set_discarded": "{moduleName} のチェックリスト変更セットが破棄されました",
+    "mock_data_change_set_pending": "{moduleName} にレビュー待ちのモックデータ変更セットがあります",
+    "mock_data_change_set_applied": "{moduleName} にモックデータの変更セットが適用されました",
+    "mock_data_change_set_discarded": "{moduleName} のモックデータ変更セットが破棄されました",
+    "membership_granted": "{projectName} に {roleName} として追加されました",
+    "eval_set_ready": "{projectName} の評価セット {setName} の準備ができました",
+    "eval_set_failed": "{projectName} の評価セット {setName} の生成に失敗しました",
+    "eval_run_finished": "{projectName} の {setName} の評価実行が完了しました",
+    "eval_run_failed": "{projectName} の {setName} の評価実行に失敗しました"
+  },
+  "preferences": {
+    "emailOff": "このインスタンスではメール配信がオフになっています。選択内容は保存され、管理者がオンにすると適用されます。",
+    "emptyTitle": "まだ設定する項目はありません",
+    "emptyDescription": "このインスタンスには、設定できる通知の種類がありません。",
+    "columns": {
+      "event": "イベント",
+      "inApp": "アプリ内",
+      "email": "メール"
+    },
+    "saved": "設定を保存しました",
+    "save": "設定を保存"
+  }
+}

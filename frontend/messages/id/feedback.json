@@ -1,0 +1,13 @@
+{
+  "listTitle": "Tidak dapat memuat daftar ini",
+  "detailTitle": "Tidak dapat memuat halaman ini",
+  "retry": "Coba lagi",
+  "forbidden": {
+    "title": "Anda tidak memiliki akses ke sini",
+    "description": "Tanyakan kepada administrator jika Anda merasa seharusnya punya akses."
+  },
+  "notFound": {
+    "title": "Tidak ditemukan",
+    "description": "Mungkin sudah dihapus, atau mungkin tidak pernah ada."
+  }
+}

@@ -1,0 +1,39 @@
+{
+  "project": {
+    "pending": "Tertunda",
+    "cloning": "Mengkloning",
+    "indexing": "Mengindeks",
+    "ready": "Siap",
+    "failed": "Gagal"
+  },
+  "module": {
+    "empty": "Kosong",
+    "generating": "Membuat",
+    "review": "Tinjau",
+    "ready": "Siap",
+    "failed": "Gagal"
+  },
+  "result": {
+    "untested": "Belum diuji",
+    "pass": "Lulus",
+    "fail": "Gagal",
+    "blocked": "Terblokir"
+  },
+  "auditOutcome": {
+    "failure": "Gagal",
+    "success": "Berhasil"
+  },
+  "evalStatus": {
+    "generating": "Membuat",
+    "running": "Berjalan",
+    "ready": "Siap",
+    "done": "Selesai",
+    "failed": "Gagal"
+  },
+  "evalVerdict": {
+    "correct": "Benar",
+    "partial": "Sebagian",
+    "wrong": "Salah",
+    "error": "Galat"
+  }
+}

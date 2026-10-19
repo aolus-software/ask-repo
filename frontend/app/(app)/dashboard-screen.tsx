@@ -1,6 +1,7 @@
 "use client";
 
 import { FolderGit2, MessagesSquare, Plus } from "lucide-react";
+import { useTranslations } from "next-intl";
 import Link from "next/link";
 
 import { EmptyState } from "@/components/feedback/empty-state";
@@ -15,9 +16,13 @@ import { useConversations } from "@/hooks/use-conversations";
 import { useProjects } from "@/hooks/use-projects";
 import { useSession } from "@/hooks/use-session";
 import { SORT } from "@/lib/api/endpoints";
-import { formatAbsolute, formatRelative } from "@/lib/dates";
+import { formatAbsolute } from "@/lib/dates";
+import { useFormatRelative } from "@/hooks/use-format-date";
 
 export function DashboardScreen() {
+  const t = useTranslations("dashboard");
+  const tCommon = useTranslations("common");
+  const formatRelative = useFormatRelative();
   const user = useSession();
 
   // Five each. The stat tiles read `totalCount` off THESE queries — it comes back on
@@ -37,8 +42,8 @@ export function DashboardScreen() {
   return (
     <div className="mx-auto w-full max-w-7xl space-y-6">
       <PageHeader
-        title={`Welcome back, ${user.name}`}
-        description="Ask questions about any codebase indexed on this instance."
+        title={t("welcome", { name: user.name })}
+        description={t("description")}
       />
 
       {/*
@@ -48,12 +53,12 @@ export function DashboardScreen() {
       */}
       <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
         <StatTile
-          label="Projects on this instance"
+          label={t("stats.projects")}
           value={projects.data?.totalCount ?? 0}
           loading={projects.isLoading}
         />
         <StatTile
-          label="Your conversations"
+          label={t("stats.conversations")}
           value={conversations.data?.totalCount ?? 0}
           loading={conversations.isLoading}
         />
@@ -62,14 +67,16 @@ export function DashboardScreen() {
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         <Card>
           <CardHeader className="flex-row items-center justify-between">
-            <CardTitle className="text-xl font-semibold">Recent projects</CardTitle>
+            <CardTitle className="text-xl font-semibold">
+              {t("recentProjects.title")}
+            </CardTitle>
             <Button
               variant="ghost"
               size="sm"
               nativeButton={false}
               render={<Link href="/projects" />}
             >
-              View all
+              {t("recentProjects.viewAll")}
             </Button>
           </CardHeader>
           <CardContent className="space-y-2">
@@ -82,12 +89,14 @@ export function DashboardScreen() {
             ) : (projects.data?.items.length ?? 0) === 0 ? (
               <EmptyState
                 icon={FolderGit2}
-                title="No projects yet"
-                description="Add a repository and AskRepo will clone and index it."
+                title={t("recentProjects.emptyTitle")}
+                description={t("recentProjects.emptyDescription", {
+                  appName: tCommon("appName"),
+                })}
                 action={
                   <Button nativeButton={false} render={<Link href="/projects" />}>
                     <Plus className="size-4" />
-                    Add one
+                    {t("recentProjects.emptyAction")}
                   </Button>
                 }
               />
@@ -109,7 +118,7 @@ export function DashboardScreen() {
         <Card>
           <CardHeader className="flex-row items-center justify-between">
             <CardTitle className="text-xl font-semibold">
-              Your recent questions
+              {t("recentQuestions.title")}
             </CardTitle>
             <Button
               variant="ghost"
@@ -117,7 +126,7 @@ export function DashboardScreen() {
               nativeButton={false}
               render={<Link href="/ask" />}
             >
-              Ask
+              {t("recentQuestions.ask")}
             </Button>
           </CardHeader>
           <CardContent className="space-y-2">
@@ -133,11 +142,11 @@ export function DashboardScreen() {
             ) : (conversations.data?.items.length ?? 0) === 0 ? (
               <EmptyState
                 icon={MessagesSquare}
-                title="Nothing asked yet"
-                description="Ask a question about any indexed project."
+                title={t("recentQuestions.emptyTitle")}
+                description={t("recentQuestions.emptyDescription")}
                 action={
                   <Button nativeButton={false} render={<Link href="/ask" />}>
-                    Ask a question
+                    {t("recentQuestions.emptyAction")}
                   </Button>
                 }
               />
@@ -149,7 +158,7 @@ export function DashboardScreen() {
                   className="hover:bg-accent block rounded-lg p-2"
                 >
                   <span className="block truncate font-medium">
-                    {conversation.title ?? "Untitled conversation"}
+                    {conversation.title ?? t("recentQuestions.untitled")}
                   </span>
                   <span
                     className="text-muted-foreground block text-xs"

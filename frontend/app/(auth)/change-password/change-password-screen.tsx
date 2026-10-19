@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -13,6 +14,7 @@ import {
 import { useChangePassword } from "@/hooks/use-change-password";
 
 export function ChangePasswordScreen() {
+  const t = useTranslations("auth.changePassword");
   const router = useRouter();
   const [values, setValues] = useState<ChangePasswordValues>({
     currentPassword: "",
@@ -24,7 +26,7 @@ export function ChangePasswordScreen() {
     event.preventDefault();
     mutation.mutate(values, {
       onSuccess: () => {
-        toast.success("Password changed");
+        toast.success(t("changed"));
         // A client navigation is enough here: no cookie changed, and the shell
         // layout re-runs on the server for the new route, so it re-reads /auth/me
         // and sees the cleared flag. Contrast the logout below, which must drop the
@@ -53,9 +55,9 @@ export function ChangePasswordScreen() {
           able to leave. */}
       <FormPage
         width="narrow"
-        title="Choose a new password"
-        description="Your account was created with a temporary password. Set your own to continue."
-        submitLabel="Set password"
+        title={t("title")}
+        description={t("description")}
+        submitLabel={t("submit")}
         isPending={mutation.isPending}
         error={mutation.error}
         onSubmit={handleSubmit}
@@ -69,7 +71,7 @@ export function ChangePasswordScreen() {
 
       <div className="mt-4 text-center">
         <Button variant="ghost" size="sm" onClick={() => void logout()}>
-          Log out instead
+          {t("logOutInstead")}
         </Button>
       </div>
     </div>

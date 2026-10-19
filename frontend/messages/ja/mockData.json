@@ -1,0 +1,50 @@
+{
+  "recordsTable": {
+    "deleteAria": "レコードを削除",
+    "deleteTitle": "このレコードを削除しますか？",
+    "deleteDescription": "この操作は元に戻せません。",
+    "delete": "削除",
+    "deleted": "レコードを削除しました",
+    "generatingTitle": "モックデータを生成中…",
+    "emptyTitle": "モックデータはまだありません",
+    "generatingDescription": "生成を実行中です。完了するとここにレコードが表示されます。",
+    "emptyDescription": "一括生成するか、チャットで依頼してください。"
+  },
+  "generateControl": {
+    "started": "生成を開始しました",
+    "generate": "生成",
+    "countAria": "生成するレコード数"
+  },
+  "changeSetPanel": {
+    "noFields": "（フィールドなし）",
+    "applied": "変更を適用しました",
+    "discarded": "提案を破棄しました",
+    "ops": {
+      "add": "追加",
+      "update": "更新",
+      "remove": "削除"
+    },
+    "recordLine": "レコード <id>{recordId}</id>",
+    "orphaned": "このレコードはもう存在しません。この変更はスキップされます",
+    "title": "モックデータの変更案",
+    "skipped": "{count, plural, other {参照先のレコードが存在しないため、# 件の変更案をスキップしました。}}",
+    "discard": "破棄",
+    "applySelected": "選択した変更を適用",
+    "discardTitle": "変更案を破棄",
+    "discardDescription": "これらの提案を破棄しますか？モックデータセットには何も書き込まれません。"
+  },
+  "chatPanel": {
+    "replyStopped": "応答が停止しました。",
+    "placeholderNoPermission": "このモックデータを調整する権限がありません。",
+    "placeholderGenerating": "このデータセットの生成を実行中です。完了するまでお待ちください。",
+    "placeholderPending": "先に保留中の変更を適用または破棄してください。",
+    "placeholderAnswering": "回答中…",
+    "placeholderDefault": "必要な形式を指定するか、変更したい点を入力してください",
+    "sharedTitle": "このチャットは共有されています",
+    "sharedDescription": "このインスタンスの全員がこの会話を閲覧できます。",
+    "loadErrorTitle": "このチャットを読み込めませんでした",
+    "empty": "メッセージはまだありません。データセットの調整を依頼するか、変更すべき点を説明してください。",
+    "replyStoppedTitle": "応答が停止しました",
+    "sendErrorTitle": "送信できませんでした"
+  }
+}

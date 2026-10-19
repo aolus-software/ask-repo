@@ -1,3 +1,4 @@
+import { createTranslator } from "next-intl";
 import { describe, expect, it } from "vitest";
 
 import type { NotificationSummary } from "@/lib/api/types";
@@ -7,6 +8,9 @@ import {
   notificationTitle,
   notificationTitleForType,
 } from "@/lib/notifications";
+import en from "@/messages/en/index";
+
+const t = createTranslator({ locale: "en", messages: en, namespace: "notifications" });
 
 const base: NotificationSummary = {
   id: "n1",
@@ -66,48 +70,54 @@ describe("notificationHref", () => {
 
 describe("notificationTitle", () => {
   it("names the project for an index outcome", () => {
-    const title = notificationTitle({
-      ...base,
-      eventType: "project.ready",
-      details: { projectName: "api" },
-    });
+    const title = notificationTitle(
+      {
+        ...base,
+        eventType: "project.ready",
+        details: { projectName: "api" },
+      },
+      t,
+    );
     expect(title).toContain("api");
   });
 
   it("names the set and the project for an eval outcome", () => {
-    const title = notificationTitle({
-      ...base,
-      eventType: "eval_run.finished",
-      details: { projectName: "api", setName: "auth paths" },
-    });
+    const title = notificationTitle(
+      {
+        ...base,
+        eventType: "eval_run.finished",
+        details: { projectName: "api", setName: "auth paths" },
+      },
+      t,
+    );
     expect(title).toContain("auth paths");
     expect(title).toContain("api");
   });
 
   it("has a title and a category label for every known type", () => {
     for (const eventType of NOTIFICATION_TYPES) {
-      expect(notificationTitle({ ...base, eventType })).not.toBe(eventType);
-      expect(notificationTitleForType(eventType)).not.toBe(eventType);
+      expect(notificationTitle({ ...base, eventType }, t)).not.toBe(eventType);
+      expect(notificationTitleForType(eventType, t)).not.toBe(eventType);
     }
   });
 
   it("renders an unknown event type without throwing", () => {
     expect(() =>
-      notificationTitle({ ...base, eventType: "future.event" }),
+      notificationTitle({ ...base, eventType: "future.event" }, t),
     ).not.toThrow();
   });
 });
 
 describe("notificationTitleForType", () => {
   it("labels the category, not one row", () => {
-    expect(notificationTitleForType("project.ready")).toBe(
+    expect(notificationTitleForType("project.ready", t)).toBe(
       "A project finished indexing",
     );
   });
 
   it("renders an unknown event type without throwing", () => {
-    expect(() => notificationTitleForType("future.event")).not.toThrow();
-    expect(notificationTitleForType("future.event")).toBe("future.event");
+    expect(() => notificationTitleForType("future.event", t)).not.toThrow();
+    expect(notificationTitleForType("future.event", t)).toBe("future.event");
   });
 });
 

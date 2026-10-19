@@ -1,0 +1,14 @@
+{
+  "operationRow": {
+    "include": "Include this change",
+    "noRationale": "No rationale given."
+  },
+  "operationCounts": {
+    "summary": "{added} added, {updated} changed, {removed} removed"
+  },
+  "operationGroups": {
+    "added": "Added",
+    "changed": "Changed",
+    "removed": "Removed"
+  }
+}

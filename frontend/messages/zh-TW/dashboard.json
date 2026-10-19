@@ -1,0 +1,20 @@
+{
+  "welcome": "歡迎回來，{name}",
+  "description": "針對此執行個體上已建立索引的任何程式碼庫提出問題。",
+  "stats": { "projects": "此執行個體上的專案", "conversations": "你的對話" },
+  "recentProjects": {
+    "title": "最近的專案",
+    "viewAll": "檢視全部",
+    "emptyTitle": "目前沒有專案",
+    "emptyDescription": "新增儲存庫後，{appName} 會複製並建立索引。",
+    "emptyAction": "新增一個"
+  },
+  "recentQuestions": {
+    "title": "你最近的問題",
+    "ask": "提問",
+    "emptyTitle": "尚未提出任何問題",
+    "emptyDescription": "針對任何已建立索引的專案提出問題。",
+    "emptyAction": "提出問題",
+    "untitled": "未命名對話"
+  }
+}

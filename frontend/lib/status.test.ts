@@ -2,12 +2,12 @@ import { describe, expect, it } from "vitest";
 
 import type { ChecklistItemStatus, ProjectStatus } from "@/lib/api/types";
 import {
-  auditOutcomeLabel,
+  auditOutcomeLabelKey,
   auditOutcomeTone,
-  checklistItemResultLabel,
+  checklistItemResultLabelKey,
   checklistItemResultTone,
   isTerminalStatus,
-  statusLabel,
+  statusLabelKey,
   statusTone,
 } from "@/lib/status";
 
@@ -31,11 +31,11 @@ describe("statusTone", () => {
   });
 });
 
-describe("statusLabel", () => {
-  it("gives every status a human label", () => {
-    expect(statusLabel("ready")).toBe("Ready");
-    expect(statusLabel("failed")).toBe("Failed");
-    expect(ALL.every((s) => statusLabel(s).length > 0)).toBe(true);
+describe("statusLabelKey", () => {
+  it("names a catalogue key for every status", () => {
+    expect(statusLabelKey("ready")).toBe("project.ready");
+    expect(statusLabelKey("failed")).toBe("project.failed");
+    expect(ALL.every((s) => statusLabelKey(s).length > 0)).toBe(true);
   });
 });
 
@@ -65,15 +65,15 @@ describe("checklistItemResultTone", () => {
 
 describe("checklistItemResultLabel", () => {
   it("gives every result a human label", () => {
-    expect(RESULTS.every((s) => checklistItemResultLabel(s).length > 0)).toBe(true);
+    expect(RESULTS.every((s) => checklistItemResultLabelKey(s).length > 0)).toBe(true);
   });
 });
 
-describe("auditOutcomeTone/auditOutcomeLabel", () => {
+describe("auditOutcomeTone/auditOutcomeLabelKey", () => {
   it("maps the two-value outcome domain", () => {
     expect(auditOutcomeTone("failure")).toBe("danger");
     expect(auditOutcomeTone("success")).toBe("success");
-    expect(auditOutcomeLabel("failure")).toBe("Failure");
-    expect(auditOutcomeLabel("success")).toBe("Success");
+    expect(auditOutcomeLabelKey("failure")).toBe("auditOutcome.failure");
+    expect(auditOutcomeLabelKey("success")).toBe("auditOutcome.success");
   });
 });

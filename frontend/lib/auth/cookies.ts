@@ -13,6 +13,13 @@ export const ACCESS_COOKIE = "askrepo_access";
 /** Holds the backend's refresh cookie as a verbatim `name=value` pair (spec §4.2). */
 export const SESSION_COOKIE = "askrepo_session";
 
+/**
+ * The interface language, a mirror of `users.language` so a Server Component can read
+ * it without an extra request. The row is the source of truth; this is never written
+ * from anywhere but the existing cookie writers (`.claude/rules/frontend-bff.md`).
+ */
+export const LOCALE_COOKIE = "askrepo_locale";
+
 /** Subtracted from `expiresIn` so the cookie dies before the token does. */
 export const ACCESS_SKEW_SECONDS = 30;
 

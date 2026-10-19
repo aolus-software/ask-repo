@@ -1,6 +1,10 @@
+"use client";
+
+import { useTranslations } from "next-intl";
+
 import { StatusBadge } from "@/components/feedback/status-badge";
 import type { EvalRunStatus, EvalSetStatus } from "@/lib/api/types";
-import { evalStatusLabel, evalStatusTone } from "@/lib/status";
+import { evalStatusLabelKey, evalStatusTone } from "@/lib/status";
 
 /** One renderer for a set's status and a run's; the mapping lives in `lib/status.ts`. */
 export function EvalStatusBadge({
@@ -10,10 +14,11 @@ export function EvalStatusBadge({
   status: EvalSetStatus | EvalRunStatus;
   className?: string;
 }) {
+  const t = useTranslations("status");
   return (
     <StatusBadge
       tone={evalStatusTone(status)}
-      label={evalStatusLabel(status)}
+      label={t(evalStatusLabelKey(status))}
       className={className}
     />
   );

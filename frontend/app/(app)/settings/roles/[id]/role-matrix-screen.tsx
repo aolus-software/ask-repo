@@ -1,6 +1,7 @@
 "use client";
 
 import { Lock } from "lucide-react";
+import { useTranslations } from "next-intl";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -16,6 +17,7 @@ import { useUpdateRolePermissions } from "@/hooks/use-role-mutations";
 import { usePermissionCatalog, useRole } from "@/hooks/use-roles";
 import { useSession } from "@/hooks/use-session";
 import { isApiError } from "@/lib/api/errors";
+import { useErrorText } from "@/lib/i18n/error-text";
 
 /**
  * `FormPage` with `hideSubmit` for a system role: it has no submit row at all
@@ -24,6 +26,8 @@ import { isApiError } from "@/lib/api/errors";
  * to omit rather than merely disable.
  */
 export function RoleMatrixScreen({ id }: { id: string }) {
+  const t = useTranslations("roles");
+  const errorText = useErrorText();
   const router = useRouter();
   const user = useSession();
   const roleQuery = useRole(id);
@@ -47,8 +51,7 @@ export function RoleMatrixScreen({ id }: { id: string }) {
   // already fired by the time this check runs (rules of hooks), so this is the
   // same "queries fire, gate renders first" shape every sibling admin screen uses,
   // not a conditional hook.
-  if (!user.isAdmin)
-    return <Forbidden message="Only administrators can manage roles." />;
+  if (!user.isAdmin) return <Forbidden message={t("forbidden")} />;
 
   if (roleQuery.isLoading || catalogQuery.isLoading) {
     return (
@@ -61,7 +64,7 @@ export function RoleMatrixScreen({ id }: { id: string }) {
 
   if (roleQuery.isError) {
     if (isApiError(roleQuery.error) && roleQuery.error.status === 403) {
-      return <Forbidden message={roleQuery.error.message} />;
+      return <Forbidden message={errorText(roleQuery.error)} />;
     }
     return (
       <div className="mx-auto w-full max-w-3xl">
@@ -79,7 +82,7 @@ export function RoleMatrixScreen({ id }: { id: string }) {
   }
 
   if (roleQuery.notFound || !roleQuery.data) {
-    return <NotFound message="That role does not exist, or it has been deleted." />;
+    return <NotFound message={t("matrix.notFound")} />;
   }
 
   const role = roleQuery.data;
@@ -98,7 +101,7 @@ export function RoleMatrixScreen({ id }: { id: string }) {
     event.preventDefault();
     mutation.mutate([...selected], {
       onSuccess: () => {
-        toast.success("Permissions saved");
+        toast.success(t("matrix.saved"));
         router.push("/settings/roles");
       },
     });
@@ -109,7 +112,7 @@ export function RoleMatrixScreen({ id }: { id: string }) {
       <FormPage
         backHref="/settings/roles"
         title={role.name}
-        description={role.description ?? "What this role can do on a project."}
+        description={role.description ?? t("matrix.fallbackDescription")}
         submitLabel=""
         isPending={false}
         error={null}
@@ -119,9 +122,7 @@ export function RoleMatrixScreen({ id }: { id: string }) {
         <div className="space-y-6">
           <Alert>
             <Lock className="size-4" />
-            <AlertDescription>
-              viewer, editor and owner are built in and cannot be changed.
-            </AlertDescription>
+            <AlertDescription>{t("matrix.builtInNotice")}</AlertDescription>
           </Alert>
           <PermissionMatrix
             groups={groups}
@@ -138,17 +139,14 @@ export function RoleMatrixScreen({ id }: { id: string }) {
     <FormPage
       backHref="/settings/roles"
       title={role.name}
-      description={role.description ?? "What this role can do on a project."}
-      submitLabel="Save permissions"
+      description={role.description ?? t("matrix.fallbackDescription")}
+      submitLabel={t("matrix.save")}
       isPending={mutation.isPending}
       error={mutation.error}
       onSubmit={handleSubmit}
     >
       <PermissionMatrix groups={groups} selected={selected} onToggle={toggle} />
-      <p className="text-muted-foreground mt-6 text-sm">
-        Saving applies to everyone holding this role immediately — it takes effect on
-        their very next request.
-      </p>
+      <p className="text-muted-foreground mt-6 text-sm">{t("matrix.applyNotice")}</p>
     </FormPage>
   );
 }

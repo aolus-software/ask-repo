@@ -1,6 +1,7 @@
 "use client";
 
 import { Loader2 } from "lucide-react";
+import { useTranslations } from "next-intl";
 import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -15,17 +16,9 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import type { ChecklistItemResponse, ChecklistItemStatus } from "@/lib/api/types";
 
-/**
- * `blocked` is spelled out because a tester who cannot find the value records a
- * blocked test as a failure, and the pass rate stops meaning anything.
- */
-const STATUS_LABELS: Record<ChecklistItemStatus, string> = {
-  untested: "Untested",
-  pass: "Pass",
-  fail: "Fail",
-  blocked: "Blocked — could not run",
-};
-
+// `blocked` is spelled out in its label (`checklist.results.blocked`) because a tester
+// who cannot find the value records a blocked test as a failure, and the pass rate
+// stops meaning anything.
 const STATUS_ORDER: ChecklistItemStatus[] = ["untested", "pass", "fail", "blocked"];
 
 /**
@@ -54,6 +47,7 @@ export function ResultCell({
   canEditDefinition: boolean;
   isSaving?: boolean;
 }) {
+  const t = useTranslations("checklist");
   // Seeded from the row and never prefilled with a suggestion: AskRepo has not run the
   // application, so an untested row shows an empty observation (spec 2.3).
   const [currentResult, setCurrentResult] = useState(item.currentResult ?? "");
@@ -65,10 +59,12 @@ export function ResultCell({
   return (
     <div className="flex min-w-64 flex-col gap-3">
       <Field>
-        <FieldLabel htmlFor={`result-${item.id}`}>Current result</FieldLabel>
+        <FieldLabel htmlFor={`result-${item.id}`}>
+          {t("resultCell.currentResult")}
+        </FieldLabel>
         <Textarea
           id={`result-${item.id}`}
-          placeholder="What happened when you ran this?"
+          placeholder={t("resultCell.placeholder")}
           value={currentResult}
           onChange={(event) => setCurrentResult(event.target.value)}
           className="min-h-20"
@@ -76,7 +72,7 @@ export function ResultCell({
       </Field>
 
       <Field>
-        <FieldLabel htmlFor={`status-${item.id}`}>Status</FieldLabel>
+        <FieldLabel htmlFor={`status-${item.id}`}>{t("resultCell.status")}</FieldLabel>
         <Select
           value={status}
           onValueChange={(value) => setStatus(value as ChecklistItemStatus)}
@@ -87,7 +83,7 @@ export function ResultCell({
           <SelectContent>
             {STATUS_ORDER.map((value) => (
               <SelectItem key={value} value={value}>
-                {STATUS_LABELS[value]}
+                {t(`results.${value}`)}
               </SelectItem>
             ))}
           </SelectContent>
@@ -96,7 +92,7 @@ export function ResultCell({
 
       {canEditDefinition ? null : (
         <p className="text-muted-foreground text-xs">
-          You can record a result on any test case, including ones you did not write.
+          {t("resultCell.anyTestCaseHint")}
         </p>
       )}
 
@@ -108,7 +104,7 @@ export function ResultCell({
         }
       >
         {isSaving ? <Loader2 className="size-4 animate-spin" /> : null}
-        Save result
+        {t("resultCell.save")}
       </Button>
     </div>
   );

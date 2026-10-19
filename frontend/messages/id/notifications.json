@@ -1,0 +1,88 @@
+{
+  "title": "Notifikasi",
+  "description": "Semua yang telah diberitahukan {appName} kepada Anda, yang terbaru di atas.",
+  "markAllRead": "Tandai semua sudah dibaca",
+  "seeAll": "Lihat semua",
+  "unread": "Belum dibaca",
+  "bellLabel": "Notifikasi ({count} belum dibaca)",
+  "overflow": "99+",
+  "empty": "Tidak ada yang perlu dikejar.",
+  "markReadFailed": "Tidak dapat menandai notifikasi sebagai sudah dibaca",
+  "untitled": "Tanpa judul",
+  "emptyState": {
+    "noMatchTitle": "Tidak ada notifikasi yang cocok",
+    "noneTitle": "Belum ada apa pun",
+    "noMatchDescription": "Coba hapus filter Anda.",
+    "noneDescription": "Peristiwa proyek dan daftar periksa akan muncul di sini saat terjadi."
+  },
+  "filters": {
+    "byProject": "Filter berdasarkan proyek",
+    "byType": "Filter berdasarkan jenis",
+    "allTypes": "Semua jenis",
+    "allProjects": "Semua proyek",
+    "unreadOnly": "Hanya yang belum dibaca"
+  },
+  "types": {
+    "project_ready": "Proyek siap",
+    "project_failed": "Proyek gagal",
+    "project_reindex_finished": "Pengindeksan ulang proyek selesai",
+    "project_reindex_failed": "Pengindeksan ulang proyek gagal",
+    "checklist_change_set_pending": "Set perubahan daftar periksa menunggu",
+    "checklist_change_set_applied": "Set perubahan daftar periksa diterapkan",
+    "checklist_change_set_discarded": "Set perubahan daftar periksa dibuang",
+    "mock_data_change_set_pending": "Set perubahan data tiruan menunggu",
+    "mock_data_change_set_applied": "Set perubahan data tiruan diterapkan",
+    "mock_data_change_set_discarded": "Set perubahan data tiruan dibuang",
+    "membership_granted": "Keanggotaan diberikan",
+    "eval_set_ready": "Set evaluasi siap",
+    "eval_set_failed": "Set evaluasi gagal",
+    "eval_run_finished": "Eksekusi evaluasi selesai",
+    "eval_run_failed": "Eksekusi evaluasi gagal"
+  },
+  "categories": {
+    "project_ready": "Sebuah proyek selesai diindeks",
+    "project_failed": "Sebuah proyek gagal diindeks",
+    "project_reindex_finished": "Sebuah proyek selesai diindeks ulang",
+    "project_reindex_failed": "Sebuah proyek gagal diindeks ulang",
+    "checklist_change_set_pending": "Set perubahan daftar periksa menunggu ditinjau",
+    "checklist_change_set_applied": "Set perubahan daftar periksa diterapkan",
+    "checklist_change_set_discarded": "Set perubahan daftar periksa dibuang",
+    "mock_data_change_set_pending": "Set perubahan data tiruan menunggu ditinjau",
+    "mock_data_change_set_applied": "Set perubahan data tiruan diterapkan",
+    "mock_data_change_set_discarded": "Set perubahan data tiruan dibuang",
+    "membership_granted": "Anda ditambahkan ke sebuah proyek",
+    "eval_set_ready": "Sebuah set evaluasi selesai dibuat",
+    "eval_set_failed": "Sebuah set evaluasi gagal dibuat",
+    "eval_run_finished": "Sebuah eksekusi evaluasi selesai",
+    "eval_run_failed": "Sebuah eksekusi evaluasi gagal"
+  },
+  "titles": {
+    "project_ready": "{projectName} selesai diindeks",
+    "project_failed": "{projectName} gagal diindeks",
+    "project_reindex_finished": "{projectName} selesai diindeks ulang",
+    "project_reindex_failed": "{projectName} gagal diindeks ulang",
+    "checklist_change_set_pending": "{moduleName} memiliki set perubahan daftar periksa yang menunggu ditinjau",
+    "checklist_change_set_applied": "Set perubahan daftar periksa diterapkan pada {moduleName}",
+    "checklist_change_set_discarded": "Set perubahan daftar periksa untuk {moduleName} dibuang",
+    "mock_data_change_set_pending": "{moduleName} memiliki set perubahan data tiruan yang menunggu ditinjau",
+    "mock_data_change_set_applied": "Set perubahan data tiruan diterapkan pada {moduleName}",
+    "mock_data_change_set_discarded": "Set perubahan data tiruan untuk {moduleName} dibuang",
+    "membership_granted": "Anda ditambahkan ke {projectName} sebagai {roleName}",
+    "eval_set_ready": "Set evaluasi {setName} di {projectName} siap",
+    "eval_set_failed": "Set evaluasi {setName} di {projectName} gagal dibuat",
+    "eval_run_finished": "Eksekusi evaluasi {setName} di {projectName} selesai",
+    "eval_run_failed": "Eksekusi evaluasi {setName} di {projectName} gagal"
+  },
+  "preferences": {
+    "emailOff": "Pengiriman email dimatikan pada instans ini. Pilihan Anda disimpan dan akan berlaku jika administrator menyalakannya.",
+    "emptyTitle": "Belum ada yang dapat diatur",
+    "emptyDescription": "Instans ini tidak memiliki jenis notifikasi yang dapat diatur preferensinya.",
+    "columns": {
+      "event": "Peristiwa",
+      "inApp": "Dalam aplikasi",
+      "email": "Email"
+    },
+    "saved": "Preferensi disimpan",
+    "save": "Simpan preferensi"
+  }
+}

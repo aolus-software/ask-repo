@@ -1,0 +1,82 @@
+{
+  "title": "ロール",
+  "description": "インスタンス全体のロール定義と、それぞれができること。",
+  "forbidden": "ロールを管理できるのは管理者のみです。",
+  "createRole": "ロールを作成",
+  "emptyTitle": "ロールはまだありません",
+  "emptyDescription": "viewer、editor、owner 以外の権限を付与するにはロールを作成してください。",
+  "table": {
+    "columns": {
+      "name": "名前",
+      "description": "説明",
+      "permissions": "権限",
+      "members": "メンバー",
+      "actions": "操作"
+    },
+    "permissionCount": "{count} / {total}",
+    "noDescription": "—"
+  },
+  "badge": {
+    "builtIn": "組み込みロールのため編集できません"
+  },
+  "actionsFor": "{name} の操作",
+  "actions": {
+    "view": "表示",
+    "edit": "編集",
+    "delete": "削除"
+  },
+  "delete": {
+    "title": "{name} を削除しますか？",
+    "description": "この操作は元に戻せません。プロジェクトでこのロールを持つユーザーは、先に別のロールへ移す必要があります。",
+    "confirm": "削除",
+    "done": "ロールを削除しました"
+  },
+  "create": {
+    "title": "ロールを作成",
+    "description": "名前を付けてから、次のページでできることを選択します。",
+    "submit": "ロールを作成",
+    "done": "ロールを作成しました",
+    "fields": {
+      "name": "名前",
+      "description": "説明"
+    }
+  },
+  "matrix": {
+    "fallbackDescription": "このロールがプロジェクトでできること。",
+    "notFound": "そのロールは存在しないか、削除されています。",
+    "builtInNotice": "viewer、editor、owner は組み込みのため変更できません。",
+    "save": "権限を保存",
+    "saved": "権限を保存しました",
+    "applyNotice": "保存すると、このロールを持つ全員に直ちに適用されます。次のリクエストから有効になります。"
+  },
+  "groups": {
+    "project": "プロジェクト",
+    "questions": "質問",
+    "qaChecklist": "QA チェックリスト",
+    "mockData": "モックデータ",
+    "eval": "評価",
+    "membership": "メンバーシップ"
+  },
+  "permissions": {
+    "project_read": "project.read",
+    "project_update": "project.update",
+    "project_delete": "project.delete",
+    "project_reindex": "project.reindex",
+    "question_ask": "question.ask",
+    "checklist_read": "checklist.read",
+    "module_create": "module.create",
+    "module_edit": "module.edit",
+    "module_delete": "module.delete",
+    "generate_run": "generate.run",
+    "changeset_apply": "changeset.apply",
+    "item_edit": "item.edit",
+    "result_record": "result.record",
+    "mockdata_read": "mockdata.read",
+    "mockdata_edit": "mockdata.edit",
+    "eval_read": "eval.read",
+    "eval_run": "eval.run",
+    "membership_read": "membership.read",
+    "membership_grant": "membership.grant",
+    "membership_revoke": "membership.revoke"
+  }
+}

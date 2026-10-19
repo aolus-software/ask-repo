@@ -1,5 +1,7 @@
 "use client";
 
+import { useTranslations } from "next-intl";
+
 import { TableSkeleton } from "@/components/feedback/table-skeleton";
 import { RoleBadge } from "@/components/roles/role-badge";
 import {
@@ -24,15 +26,16 @@ export function RoleTable({
   isLoading: boolean;
   rowActions: (role: RoleResponse) => React.ReactNode;
 }) {
+  const t = useTranslations("roles.table");
   return (
     <Table>
       <TableHeader>
         <TableRow>
-          <TableHead>Name</TableHead>
-          <TableHead>Description</TableHead>
-          <TableHead>Permissions</TableHead>
-          <TableHead>Members</TableHead>
-          <TableHead className="text-right">Actions</TableHead>
+          <TableHead>{t("columns.name")}</TableHead>
+          <TableHead>{t("columns.description")}</TableHead>
+          <TableHead>{t("columns.permissions")}</TableHead>
+          <TableHead>{t("columns.members")}</TableHead>
+          <TableHead className="text-right">{t("columns.actions")}</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
@@ -45,10 +48,13 @@ export function RoleTable({
                 <RoleBadge name={role.name} isSystem={role.isSystem} />
               </TableCell>
               <TableCell className="text-muted-foreground max-w-xs truncate">
-                {role.description ?? "—"}
+                {role.description ?? t("noDescription")}
               </TableCell>
               <TableCell>
-                {role.permissions.length} of {totalPermissions}
+                {t("permissionCount", {
+                  count: role.permissions.length,
+                  total: totalPermissions,
+                })}
               </TableCell>
               <TableCell>{role.memberCount}</TableCell>
               <TableCell className="text-right">{rowActions(role)}</TableCell>

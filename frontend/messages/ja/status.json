@@ -1,0 +1,39 @@
+{
+  "project": {
+    "pending": "待機中",
+    "cloning": "クローン中",
+    "indexing": "インデックス作成中",
+    "ready": "準備完了",
+    "failed": "失敗"
+  },
+  "module": {
+    "empty": "空",
+    "generating": "生成中",
+    "review": "レビュー待ち",
+    "ready": "準備完了",
+    "failed": "失敗"
+  },
+  "result": {
+    "untested": "未テスト",
+    "pass": "合格",
+    "fail": "不合格",
+    "blocked": "ブロック"
+  },
+  "auditOutcome": {
+    "failure": "失敗",
+    "success": "成功"
+  },
+  "evalStatus": {
+    "generating": "生成中",
+    "running": "実行中",
+    "ready": "準備完了",
+    "done": "完了",
+    "failed": "失敗"
+  },
+  "evalVerdict": {
+    "correct": "正解",
+    "partial": "部分的",
+    "wrong": "不正解",
+    "error": "エラー"
+  }
+}

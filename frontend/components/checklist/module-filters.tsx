@@ -7,6 +7,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { useTranslations } from "next-intl";
+
 import { useProjects } from "@/hooks/use-projects";
 import { SORT } from "@/lib/api/endpoints";
 import type { ProjectResponse } from "@/lib/api/types";
@@ -18,12 +20,14 @@ import type { ProjectResponse } from "@/lib/api/types";
  */
 const ANY = "any";
 
-const ALL_PROJECTS = "All projects";
-
 /** The label for a selected value: the sentinel reads as "no filter", not as "any". */
-function labelFor(value: string, projects: ProjectResponse[]): string {
-  if (value === ANY) return ALL_PROJECTS;
-  return projects.find((project) => project.id === value)?.name ?? ALL_PROJECTS;
+function labelFor(
+  value: string,
+  projects: ProjectResponse[],
+  allProjects: string,
+): string {
+  if (value === ANY) return allProjects;
+  return projects.find((project) => project.id === value)?.name ?? allProjects;
 }
 
 /**
@@ -41,6 +45,7 @@ export function ModuleFilters({
   projectId: string | undefined;
   onProjectChange: (projectId: string | undefined) => void;
 }) {
+  const t = useTranslations("checklist.moduleFilters");
   // Matches the create dialog's cap. Beyond a hundred projects this wants the
   // searchable combobox instead, which is why the value is a plain id either way.
   const query = useProjects({
@@ -61,13 +66,15 @@ export function ModuleFilters({
           onProjectChange(!value || value === ANY ? undefined : value)
         }
       >
-        <SelectTrigger className="w-full" aria-label="Filter by project">
+        <SelectTrigger className="w-full" aria-label={t("filterByProject")}>
           {/* Base UI renders the raw value, not the chosen item's label, so an
               unset filter would read "any". Resolve it to the project's name. */}
-          <SelectValue>{(value: string) => labelFor(value, projects)}</SelectValue>
+          <SelectValue>
+            {(value: string) => labelFor(value, projects, t("allProjects"))}
+          </SelectValue>
         </SelectTrigger>
         <SelectContent>
-          <SelectItem value={ANY}>{ALL_PROJECTS}</SelectItem>
+          <SelectItem value={ANY}>{t("allProjects")}</SelectItem>
           {projects.map((project) => (
             <SelectItem key={project.id} value={project.id}>
               {project.name}

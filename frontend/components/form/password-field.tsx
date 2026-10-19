@@ -1,12 +1,17 @@
 "use client";
 
 import { Check, X } from "lucide-react";
+import { useTranslations } from "next-intl";
 import { useState } from "react";
 
 import { PasswordInput } from "@/components/form/password-input";
 import { Field, FieldDescription, FieldError, FieldLabel } from "@/components/ui/field";
 import { usePasswordPolicy } from "@/hooks/use-password-policy";
-import { checkPassword, passwordChecksPass } from "@/lib/password-rules";
+import {
+  type PasswordCheck,
+  checkPassword,
+  passwordChecksPass,
+} from "@/lib/password-rules";
 import { cn } from "@/lib/utils";
 
 /**
@@ -37,11 +42,19 @@ export function PasswordField({
   serverError?: string;
   autoComplete?: string;
 }) {
+  const t = useTranslations("forms.passwordField");
+  const tRules = useTranslations("auth.passwordRules");
+  function ruleText(check: PasswordCheck): string {
+    return check.id === "minLength"
+      ? tRules("minLength", { min: check.min })
+      : tRules("maxBytes", { max: check.max, actual: check.actual });
+  }
   const { data: policy } = usePasswordPolicy();
   const [focused, setFocused] = useState(false);
   const [touched, setTouched] = useState(false);
 
   const checks = policy ? checkPassword(value, policy) : [];
+  const firstFailed = checks.find((check) => !check.passed);
   const localValid = policy ? passwordChecksPass(value, policy) : false;
 
   // The server is authoritative; local state only speaks when it has nothing to say.
@@ -93,7 +106,7 @@ export function PasswordField({
               ) : (
                 <X className="size-4 shrink-0" />
               )}
-              {check.label}
+              {ruleText(check)}
             </li>
           ))}
         </ul>
@@ -103,16 +116,13 @@ export function PasswordField({
         <FieldError>{serverError}</FieldError>
       ) : showInvalid ? (
         <FieldError>
-          {checks.find((check) => !check.passed)?.label ??
-            "That password is not accepted."}
+          {firstFailed ? ruleText(firstFailed) : t("notAccepted")}
         </FieldError>
       ) : showValid ? (
         // Not "valid" — the wordlist check still happens server-side.
-        <FieldDescription className="text-success">Looks good so far.</FieldDescription>
+        <FieldDescription className="text-success">{t("looksGood")}</FieldDescription>
       ) : (
-        <FieldDescription>
-          Choose a strong password you do not use anywhere else.
-        </FieldDescription>
+        <FieldDescription>{t("hint")}</FieldDescription>
       )}
     </Field>
   );

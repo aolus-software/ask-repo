@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { useState } from "react";
 import { toast } from "sonner";
 
@@ -26,6 +27,7 @@ import { notificationTitleForType } from "@/lib/notifications";
  * Rendered inside the profile's Notifications section, which supplies the heading.
  */
 export function PreferencesScreen() {
+  const t = useTranslations("notifications");
   const [draft, setDraft] = useState<NotificationPreference[] | null>(null);
 
   const query = useNotificationPreferences();
@@ -46,8 +48,7 @@ export function PreferencesScreen() {
     <div>
       {!emailEnabled && (
         <p className="border-border bg-muted text-muted-foreground mb-4 rounded-md border px-4 py-3 text-sm">
-          Email delivery is turned off on this instance. Your choices are saved and will
-          apply if an administrator turns it on.
+          {t("preferences.emailOff")}
         </p>
       )}
 
@@ -58,15 +59,15 @@ export function PreferencesScreen() {
           </div>
         ) : !query.isLoading && items.length === 0 ? (
           <EmptyState
-            title="Nothing to configure yet"
-            description="This instance has no notification types to set preferences for."
+            title={t("preferences.emptyTitle")}
+            description={t("preferences.emptyDescription")}
           />
         ) : (
           <>
             <div className="text-muted-foreground border-border grid grid-cols-[1fr_auto_auto] items-center gap-6 border-b px-4 py-2 text-xs font-medium">
-              <span>Event</span>
-              <span>In app</span>
-              <span>Email</span>
+              <span>{t("preferences.columns.event")}</span>
+              <span>{t("preferences.columns.inApp")}</span>
+              <span>{t("preferences.columns.email")}</span>
             </div>
             {items.map((item) => (
               <div
@@ -77,7 +78,7 @@ export function PreferencesScreen() {
                   htmlFor={`${item.eventType}-in-app`}
                   className="text-foreground text-sm"
                 >
-                  {notificationTitleForType(item.eventType)}
+                  {notificationTitleForType(item.eventType, t)}
                 </Label>
                 <Switch
                   id={`${item.eventType}-in-app`}
@@ -106,13 +107,13 @@ export function PreferencesScreen() {
           onClick={() => {
             save.mutate(items, {
               onSuccess: () => {
-                toast.success("Preferences saved");
+                toast.success(t("preferences.saved"));
                 setDraft(null);
               },
             });
           }}
         >
-          Save preferences
+          {t("preferences.save")}
         </Button>
       </div>
     </div>

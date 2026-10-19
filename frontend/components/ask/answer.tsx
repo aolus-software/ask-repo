@@ -1,6 +1,7 @@
 "use client";
 
 import { Check, Copy } from "lucide-react";
+import { useTranslations } from "next-intl";
 import { useState } from "react";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -8,6 +9,7 @@ import remarkGfm from "remark-gfm";
 import { Button } from "@/components/ui/button";
 
 function CodeBlock({ children }: { children: React.ReactNode }) {
+  const t = useTranslations("ask");
   const [copied, setCopied] = useState(false);
 
   return (
@@ -15,7 +17,7 @@ function CodeBlock({ children }: { children: React.ReactNode }) {
       <Button
         variant="ghost"
         size="icon"
-        aria-label="Copy code"
+        aria-label={t("answer.copyCode")}
         className="absolute top-2 right-2"
         onClick={(event) => {
           const pre = event.currentTarget.parentElement?.querySelector("pre");

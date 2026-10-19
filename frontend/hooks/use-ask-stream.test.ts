@@ -80,7 +80,8 @@ describe("reduceAskEvent", () => {
     ]);
     expect(state.terminal).toBe("error");
     expect(state.finishReason).toBe("error");
-    expect(state.errorMessage).toBe("The model is unavailable.");
+    expect(state.error?.code).toBe("LLM_UNAVAILABLE");
+    expect(state.error?.message).toBe("The model is unavailable.");
   });
 
   it("ignores an unknown event", () => {

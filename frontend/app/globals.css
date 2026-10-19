@@ -185,7 +185,11 @@
   --color-chart-4: var(--chart-4);
   --color-chart-5: var(--chart-5);
 
-  --font-sans: var(--font-lexend);
+  /* CJK falls back to system fonts; nothing is downloaded (docs/design.md). */
+  --font-sans:
+    var(--font-lexend), ui-sans-serif, system-ui, "PingFang TC", "Hiragino Sans",
+    "Noto Sans CJK TC", "Noto Sans CJK JP", "Noto Sans CJK KR", "Malgun Gothic",
+    "Microsoft JhengHei", sans-serif;
   --font-mono: var(--font-geist-mono);
 
   --radius-sm: calc(var(--radius) - 2px);

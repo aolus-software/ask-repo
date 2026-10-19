@@ -1,6 +1,7 @@
 "use client";
 
 import { Sparkles } from "lucide-react";
+import { useTranslations } from "next-intl";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -13,7 +14,7 @@ import {
 } from "@/components/ui/select";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useGenerateMockData } from "@/hooks/use-mock-data-mutations";
-import { isApiError } from "@/lib/api/errors";
+import { useErrorText } from "@/lib/i18n/error-text";
 import { useState } from "react";
 
 const COUNT_OPTIONS = [5, 10, 25, 50] as const;
@@ -25,6 +26,8 @@ export function GenerateMockDataControl({
   moduleId: string;
   blockedBecause: string | null;
 }) {
+  const t = useTranslations("mockData.generateControl");
+  const errorText = useErrorText();
   const [count, setCount] = useState<number>(10);
   const generate = useGenerateMockData(moduleId);
 
@@ -33,23 +36,20 @@ export function GenerateMockDataControl({
       disabled={generate.isPending || blockedBecause !== null}
       onClick={() =>
         generate.mutate(count, {
-          onSuccess: () => toast.success("Generation started"),
-          onError: (error) =>
-            toast.error(
-              isApiError(error) ? error.message : "That did not start. Try again.",
-            ),
+          onSuccess: () => toast.success(t("started")),
+          onError: (error) => toast.error(errorText(error)),
         })
       }
     >
       <Sparkles className="size-4" />
-      Generate
+      {t("generate")}
     </Button>
   );
 
   return (
     <div className="flex items-center gap-2">
       <Select value={String(count)} onValueChange={(value) => setCount(Number(value))}>
-        <SelectTrigger className="w-24" aria-label="Number of records to generate">
+        <SelectTrigger className="w-24" aria-label={t("countAria")}>
           <SelectValue />
         </SelectTrigger>
         <SelectContent>

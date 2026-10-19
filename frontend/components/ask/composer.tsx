@@ -1,6 +1,7 @@
 "use client";
 
 import { SendHorizonal } from "lucide-react";
+import { useTranslations } from "next-intl";
 import { useState } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -15,6 +16,7 @@ export function Composer({
   disabled: boolean;
   placeholder: string;
 }) {
+  const t = useTranslations("ask");
   const [question, setQuestion] = useState("");
 
   function submit() {
@@ -36,7 +38,7 @@ export function Composer({
         className="min-h-20 resize-none border-0 shadow-none focus-visible:ring-0"
         placeholder={placeholder}
         value={question}
-        aria-label="Your question"
+        aria-label={t("composer.questionLabel")}
         onChange={(event) => setQuestion(event.target.value)}
         onKeyDown={(event) => {
           // Enter sends, Shift+Enter breaks the line.
@@ -49,7 +51,7 @@ export function Composer({
       <div className="flex justify-end">
         <Button type="submit" size="sm" disabled={disabled || !question.trim()}>
           <SendHorizonal className="size-4" />
-          Ask
+          {t("composer.ask")}
         </Button>
       </div>
     </form>

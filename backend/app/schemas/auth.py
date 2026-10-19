@@ -6,6 +6,7 @@ is unreadable by any script on the page (D3).
 
 from pydantic import EmailStr, field_validator
 
+from app.core.language import Language
 from app.schemas.base import ApiModel
 from app.schemas.user import MAX_PASSWORD_FIELD_LENGTH, UserResponse
 
@@ -65,3 +66,6 @@ class AccessTokenResponse(ApiModel):
     token_type: str = "bearer"
     expires_in: int
     user: UserResponse
+    # The caller's stored interface language, so the frontend can set its locale
+    # cookie from the same response. `None` when they never chose one.
+    language: Language | None = None

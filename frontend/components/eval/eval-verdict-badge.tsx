@@ -1,9 +1,17 @@
+"use client";
+
+import { useTranslations } from "next-intl";
+
 import { StatusBadge } from "@/components/feedback/status-badge";
 import type { EvalVerdict } from "@/lib/api/types";
-import { evalVerdictLabel, evalVerdictTone } from "@/lib/status";
+import { evalVerdictLabelKey, evalVerdictTone } from "@/lib/status";
 
 export function EvalVerdictBadge({ verdict }: { verdict: EvalVerdict }) {
+  const t = useTranslations("status");
   return (
-    <StatusBadge tone={evalVerdictTone(verdict)} label={evalVerdictLabel(verdict)} />
+    <StatusBadge
+      tone={evalVerdictTone(verdict)}
+      label={t(evalVerdictLabelKey(verdict))}
+    />
   );
 }

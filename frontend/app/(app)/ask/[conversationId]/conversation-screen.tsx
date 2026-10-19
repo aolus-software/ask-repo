@@ -2,6 +2,7 @@
 
 import { FolderGit2 } from "lucide-react";
 import Link from "next/link";
+import { useTranslations } from "next-intl";
 import { useEffect, useRef, useState } from "react";
 
 import { PreflightError } from "@/app/(app)/ask/[conversationId]/preflight-error";
@@ -24,9 +25,11 @@ import { useConversation } from "@/hooks/use-conversations";
 import { useBreadcrumbLabel } from "@/components/layout/breadcrumb-labels";
 import { useProject } from "@/hooks/use-projects";
 import { takePendingQuestion } from "@/lib/ask/pending";
-import { PHASE_LABELS } from "@/lib/ask/phase-labels";
+import { useErrorText } from "@/lib/i18n/error-text";
 
 export function ConversationScreen({ conversationId }: { conversationId: string }) {
+  const t = useTranslations("ask");
+  const errorText = useErrorText();
   const conversation = useConversation(conversationId);
   // A conversation is bound to one project for its whole life, and every follow-up
   // is answered against it — so which one it is belongs in the header, not only in
@@ -38,7 +41,7 @@ export function ConversationScreen({ conversationId }: { conversationId: string 
   useBreadcrumbLabel(
     `/ask/${conversationId}`,
     conversation.data
-      ? (conversation.data.title ?? "Untitled conversation")
+      ? (conversation.data.title ?? t("conversation.untitled"))
       : undefined,
   );
   const { state, ask } = useAskStream(conversationId);
@@ -72,14 +75,14 @@ export function ConversationScreen({ conversationId }: { conversationId: string 
     return (
       <DetailError
         error={conversation.error}
-        notFoundMessage="That conversation does not exist."
+        notFoundMessage={t("conversation.notFound")}
         onRetry={() => conversation.refetch()}
       />
     );
   }
 
   const detail = conversation.data;
-  if (!detail) return <NotFound message="That conversation does not exist." />;
+  if (!detail) return <NotFound message={t("conversation.notFound")} />;
 
   const isStreaming = state?.isStreaming ?? false;
 
@@ -103,7 +106,7 @@ export function ConversationScreen({ conversationId }: { conversationId: string 
           conversation and which project it belongs to. */}
       <PageHeader
         sticky
-        title={detail.title ?? "New conversation"}
+        title={detail.title ?? t("conversation.newTitle")}
         meta={
           <div className="text-muted-foreground mt-2 flex items-center gap-2 text-sm">
             <FolderGit2 className="size-4 shrink-0" aria-hidden />
@@ -120,7 +123,7 @@ export function ConversationScreen({ conversationId }: { conversationId: string 
                 <ProjectStatusBadge status={project.data.status} />
               </>
             ) : project.isError ? (
-              <span>That project is no longer available.</span>
+              <span>{t("conversation.projectUnavailable")}</span>
             ) : (
               <Skeleton className="h-4 w-40" />
             )}
@@ -134,7 +137,9 @@ export function ConversationScreen({ conversationId }: { conversationId: string 
         <AssistantTurn>
           {state.phase && state.isStreaming ? (
             <p className="text-muted-foreground mb-2 text-sm">
-              {PHASE_LABELS[state.phase]}
+              {t.has(`phases.${state.phase}` as never)
+                ? t(`phases.${state.phase}` as never)
+                : null}
             </p>
           ) : null}
 
@@ -162,8 +167,10 @@ export function ConversationScreen({ conversationId }: { conversationId: string 
 
           {state.terminal === "error" ? (
             <Alert variant="destructive" className="mt-4">
-              <AlertTitle>The answer stopped</AlertTitle>
-              <AlertDescription>{state.errorMessage}</AlertDescription>
+              <AlertTitle>{t("conversation.answerStopped")}</AlertTitle>
+              <AlertDescription>
+                {state.error ? errorText(state.error) : t("stream.failed")}
+              </AlertDescription>
             </Alert>
           ) : null}
 
@@ -174,7 +181,7 @@ export function ConversationScreen({ conversationId }: { conversationId: string 
               className="mt-2"
               onClick={() => void handleAsk(lastQuestion)}
             >
-              Try again
+              {t("conversation.tryAgain")}
             </Button>
           ) : null}
         </AssistantTurn>
@@ -189,7 +196,9 @@ export function ConversationScreen({ conversationId }: { conversationId: string 
       <Composer
         onSubmit={(question) => void handleAsk(question)}
         disabled={isStreaming}
-        placeholder={isStreaming ? "Answering…" : "Ask a follow-up"}
+        placeholder={
+          isStreaming ? t("conversation.answering") : t("conversation.askFollowUp")
+        }
       />
     </div>
   );

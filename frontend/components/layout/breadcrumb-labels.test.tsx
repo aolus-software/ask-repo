@@ -1,4 +1,5 @@
 import { act, render, screen } from "@testing-library/react";
+import { useTranslations } from "next-intl";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -11,11 +12,12 @@ import { resolveBreadcrumbs } from "@/lib/nav";
 const admin = { isAdmin: true };
 
 function Trail({ pathname }: { pathname: string }) {
+  const t = useTranslations("nav.items");
   const labels = useBreadcrumbLabels();
   return (
     <p data-testid="trail">
       {resolveBreadcrumbs(pathname, admin, labels)
-        .map((crumb) => crumb.label)
+        .map((crumb) => (crumb.labelKey ? t(crumb.labelKey) : crumb.label))
         .join(" / ")}
     </p>
   );
@@ -31,7 +33,10 @@ describe("resolveBreadcrumbs with labels", () => {
     const trail = resolveBreadcrumbs("/projects/abc", admin, {
       "/projects/abc": "Payments API",
     });
-    expect(trail.map((c) => c.label)).toEqual(["Projects", "Payments API"]);
+    expect(trail.map((c) => c.labelKey ?? c.label)).toEqual([
+      "projects",
+      "Payments API",
+    ]);
   });
 
   it("names the project and the set on an eval set path", () => {
@@ -39,17 +44,17 @@ describe("resolveBreadcrumbs with labels", () => {
       "/projects/p1": "Payments API",
       "/projects/p1/eval/s1": "Baseline",
     });
-    expect(trail.map((c) => c.label)).toEqual([
-      "Projects",
+    expect(trail.map((c) => c.labelKey ?? c.label)).toEqual([
+      "projects",
       "Payments API",
-      "Eval",
+      "eval",
       "Baseline",
     ]);
   });
 
   it("never renames a nav item, only id-derived crumbs", () => {
     const trail = resolveBreadcrumbs("/projects", admin, { "/projects": "Hijacked" });
-    expect(trail.map((c) => c.label)).toEqual(["Projects"]);
+    expect(trail.map((c) => c.labelKey ?? c.label)).toEqual(["projects"]);
   });
 
   it("keeps the raw segment when no name is known", () => {

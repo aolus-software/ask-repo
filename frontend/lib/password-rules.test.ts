@@ -8,7 +8,7 @@ describe("checkPassword", () => {
   it("reports the length rule against the policy it was given, not a hard-coded one", () => {
     const strict = checkPassword("abcdefghijkl", { minLength: 16, maxBytes: 72 });
     expect(strict.find((c) => c.id === "minLength")?.passed).toBe(false);
-    expect(strict.find((c) => c.id === "minLength")?.label).toContain("16");
+    expect(strict.find((c) => c.id === "minLength")).toMatchObject({ min: 16 });
   });
 
   it("passes the length rule at exactly the minimum", () => {
@@ -24,6 +24,15 @@ describe("checkPassword", () => {
     expect(checkPassword(value, policy).find((c) => c.id === "maxBytes")?.passed).toBe(
       false,
     );
+  });
+
+  it("carries the cap and the actual size for the sentence to interpolate", () => {
+    expect(
+      checkPassword("😀".repeat(20), policy).find((c) => c.id === "maxBytes"),
+    ).toMatchObject({
+      max: 72,
+      actual: 80,
+    });
   });
 
   it("hides the byte cap while it is satisfied, since it is noise for a normal password", () => {

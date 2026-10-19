@@ -57,4 +57,41 @@ describe("LastOwnerNotice", () => {
 
     expect(container).toBeEmptyDOMElement();
   });
+
+  const lastOwner = (names: string[]) =>
+    new ApiError(
+      409,
+      "LAST_OWNER",
+      "Would leave projects ownerless.",
+      {},
+      {
+        projects: names.map((name, i) => ({ id: `p${i + 1}`, name })),
+      },
+    );
+
+  it.each([
+    [["alpha"], "alpha"],
+    [["alpha", "beta"], "alpha and beta"],
+    [["alpha", "beta", "gamma"], "alpha, beta, and gamma"],
+  ])("renders %j as a joined list of links", (names, joined) => {
+    const { container } = render(<LastOwnerNotice error={lastOwner(names)} />);
+
+    expect(container.querySelector("p")?.textContent).toContain(`: ${joined}.`);
+    names.forEach((name, i) => {
+      expect(screen.getByRole("link", { name })).toHaveAttribute(
+        "href",
+        `/projects/p${i + 1}`,
+      );
+    });
+  });
+
+  it("links two projects with the same name to their own ids", () => {
+    render(<LastOwnerNotice error={lastOwner(["api", "api"])} />);
+
+    const links = screen.getAllByRole("link", { name: "api" });
+    expect(links.map((link) => link.getAttribute("href"))).toEqual([
+      "/projects/p1",
+      "/projects/p2",
+    ]);
+  });
 });

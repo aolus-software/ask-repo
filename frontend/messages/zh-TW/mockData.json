@@ -1,0 +1,46 @@
+{
+  "recordsTable": {
+    "deleteAria": "刪除記錄",
+    "deleteTitle": "要刪除此記錄嗎？",
+    "deleteDescription": "此操作無法復原。",
+    "delete": "刪除",
+    "deleted": "已刪除記錄",
+    "generatingTitle": "正在產生模擬資料…",
+    "emptyTitle": "目前沒有模擬資料",
+    "generatingDescription": "產生作業正在執行。完成後記錄會顯示在這裡。",
+    "emptyDescription": "產生一批資料，或透過對話請求產生。"
+  },
+  "generateControl": {
+    "started": "已開始產生",
+    "generate": "產生",
+    "countAria": "要產生的記錄數量"
+  },
+  "changeSetPanel": {
+    "noFields": "（無欄位）",
+    "applied": "已套用變更",
+    "discarded": "已捨棄提議",
+    "ops": { "add": "新增", "update": "更新", "remove": "移除" },
+    "recordLine": "記錄 <id>{recordId}</id>",
+    "orphaned": "此記錄已不存在——此變更將被略過",
+    "title": "建議的模擬資料變更",
+    "skipped": "{count, plural, other {# 項建議的變更}}因其參照的記錄已不存在而被略過。",
+    "discard": "捨棄",
+    "applySelected": "套用所選項目",
+    "discardTitle": "捨棄建議的變更",
+    "discardDescription": "要捨棄這些提議嗎？不會有任何內容寫入模擬資料集。"
+  },
+  "chatPanel": {
+    "replyStopped": "回覆已中止。",
+    "placeholderNoPermission": "你沒有權限調整此模擬資料。",
+    "placeholderGenerating": "此資料集正在執行產生作業。請等待其完成。",
+    "placeholderPending": "請先套用或捨棄待處理的變更。",
+    "placeholderAnswering": "回答中…",
+    "placeholderDefault": "要求特定的資料形式，或說明你想要的修改",
+    "sharedTitle": "此對話為共用",
+    "sharedDescription": "此執行個體上的所有人都可以閱讀這段對話。",
+    "loadErrorTitle": "無法載入此對話",
+    "empty": "尚無訊息。請要求調整資料集，或說明哪些地方需要變更。",
+    "replyStoppedTitle": "回覆已中止",
+    "sendErrorTitle": "無法傳送"
+  }
+}

@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import Link from "next/link";
 
 import { ChecklistModuleStatusBadge } from "@/components/checklist/module-status-badge";
@@ -17,7 +18,8 @@ import {
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { ModuleRowActions } from "@/components/checklist/module-row-actions";
 import type { ChecklistModuleResponse } from "@/lib/api/types";
-import { formatAbsolute, formatRelative } from "@/lib/dates";
+import { formatAbsolute } from "@/lib/dates";
+import { useFormatRelative } from "@/hooks/use-format-date";
 
 /** Column order is fixed by `docs/design.md`: identity, status, timestamps, actions. */
 export function ModuleTable({
@@ -27,21 +29,23 @@ export function ModuleTable({
   modules: ChecklistModuleResponse[];
   isLoading: boolean;
 }) {
+  const t = useTranslations("checklist.moduleTable");
+  const formatRelative = useFormatRelative();
   return (
     <div className="overflow-x-auto">
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead>Module</TableHead>
-            <TableHead>Project</TableHead>
-            <TableHead>Status</TableHead>
-            <TableHead>Tests</TableHead>
-            <TableHead>Pass</TableHead>
-            <TableHead>Fail</TableHead>
-            <TableHead>Blocked</TableHead>
-            <TableHead>Untested</TableHead>
-            <TableHead>Last generated</TableHead>
-            <TableHead className="text-right">Actions</TableHead>
+            <TableHead>{t("columns.module")}</TableHead>
+            <TableHead>{t("columns.project")}</TableHead>
+            <TableHead>{t("columns.status")}</TableHead>
+            <TableHead>{t("columns.tests")}</TableHead>
+            <TableHead>{t("columns.pass")}</TableHead>
+            <TableHead>{t("columns.fail")}</TableHead>
+            <TableHead>{t("columns.blocked")}</TableHead>
+            <TableHead>{t("columns.untested")}</TableHead>
+            <TableHead>{t("columns.lastGenerated")}</TableHead>
+            <TableHead className="text-right">{t("columns.actions")}</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -77,7 +81,7 @@ export function ModuleTable({
                         pending without the module's own status having moved to
                         `review`. */}
                     {module.pendingChangeSetId ? (
-                      <StatusBadge tone="warning" label="Review changes" />
+                      <StatusBadge tone="warning" label={t("reviewChanges")} />
                     ) : null}
                   </div>
                 </TableCell>

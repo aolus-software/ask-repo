@@ -1,4 +1,7 @@
+"use client";
+
 import { Lock } from "lucide-react";
+import { useTranslations } from "next-intl";
 
 /**
  * A role's name, with a lock affordance for the three built-in roles. Modelled on
@@ -6,14 +9,12 @@ import { Lock } from "lucide-react";
  * row, that viewer/editor/owner cannot be edited or deleted (`.claude/rules/design-system.md` §5).
  */
 export function RoleBadge({ name, isSystem }: { name: string; isSystem: boolean }) {
+  const t = useTranslations("roles.badge");
   return (
     <span className="inline-flex items-center gap-1.5 font-medium">
       {name}
       {isSystem ? (
-        <Lock
-          className="text-muted-foreground size-4"
-          aria-label="Built-in role, cannot be edited"
-        />
+        <Lock className="text-muted-foreground size-4" aria-label={t("builtIn")} />
       ) : null}
     </span>
   );

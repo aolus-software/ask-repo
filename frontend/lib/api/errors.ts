@@ -21,6 +21,8 @@ export class ApiError extends Error {
    * `error.code` first and only then reads a known key off `extra`.
    */
   readonly extra: Record<string, unknown>;
+  /** Pydantic's error type per field, keyed like `fieldErrors`; empty when the backend sent none. */
+  readonly fieldTypes: Record<string, string>;
 
   constructor(
     status: number,
@@ -28,6 +30,7 @@ export class ApiError extends Error {
     message: string,
     fieldErrors: Record<string, string> = {},
     extra: Record<string, unknown> = {},
+    fieldTypes: Record<string, string> = {},
   ) {
     super(message);
     this.name = "ApiError";
@@ -35,7 +38,19 @@ export class ApiError extends Error {
     this.code = code;
     this.fieldErrors = fieldErrors;
     this.extra = extra;
+    this.fieldTypes = fieldTypes;
   }
+}
+
+/**
+ * A stream's `error` event as an `ApiError`, so it renders through the same
+ * translation as an HTTP failure. The status is the 200 the stream was opened with.
+ */
+export function apiErrorFromEvent(event: {
+  code: ErrorCode;
+  message: string;
+}): ApiError {
+  return new ApiError(200, event.code, event.message);
 }
 
 export function isApiError(error: unknown): error is ApiError {
@@ -58,10 +73,11 @@ export async function parseApiError(response: Response): Promise<ApiError> {
     return new ApiError(response.status, "INTERNAL_ERROR", GENERIC_MESSAGE);
   }
 
-  const { code, message, fields, ...extra } = detail as {
+  const { code, message, fields, fieldTypes, ...extra } = detail as {
     code?: unknown;
     message?: unknown;
     fields?: unknown;
+    fieldTypes?: unknown;
     [key: string]: unknown;
   };
   if (typeof code !== "string") {
@@ -75,12 +91,20 @@ export async function parseApiError(response: Response): Promise<ApiError> {
     }
   }
 
+  const types: Record<string, string> = {};
+  if (fieldTypes && typeof fieldTypes === "object") {
+    for (const [key, value] of Object.entries(fieldTypes as Record<string, unknown>)) {
+      if (typeof value === "string") types[key] = value;
+    }
+  }
+
   return new ApiError(
     response.status,
     code as ErrorCode,
     typeof message === "string" && message ? message : GENERIC_MESSAGE,
     fieldErrors,
     extra,
+    types,
   );
 }
 
@@ -99,9 +123,4 @@ export function networkError(): ApiError {
     "INTERNAL_ERROR",
     "Could not reach the server. Check your connection and try again.",
   );
-}
-
-/** Read one field's error. Returns undefined for anything that is not an ApiError. */
-export function fieldError(error: unknown, name: string): string | undefined {
-  return isApiError(error) ? error.fieldErrors[name] : undefined;
 }

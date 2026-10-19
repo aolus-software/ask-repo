@@ -1,0 +1,82 @@
+{
+  "title": "Roles",
+  "description": "Instance-wide role definitions and what each one can do.",
+  "forbidden": "Only administrators can manage roles.",
+  "createRole": "Create role",
+  "emptyTitle": "No roles yet",
+  "emptyDescription": "Create a role to grant something other than viewer, editor or owner.",
+  "table": {
+    "columns": {
+      "name": "Name",
+      "description": "Description",
+      "permissions": "Permissions",
+      "members": "Members",
+      "actions": "Actions"
+    },
+    "permissionCount": "{count} of {total}",
+    "noDescription": "—"
+  },
+  "badge": {
+    "builtIn": "Built-in role, cannot be edited"
+  },
+  "actionsFor": "Actions for {name}",
+  "actions": {
+    "view": "View",
+    "edit": "Edit",
+    "delete": "Delete"
+  },
+  "delete": {
+    "title": "Delete {name}?",
+    "description": "This cannot be undone. Anyone still holding it on a project must be moved to another role first.",
+    "confirm": "Delete",
+    "done": "Role deleted"
+  },
+  "create": {
+    "title": "Create a role",
+    "description": "Give it a name, then choose what it can do on the next page.",
+    "submit": "Create role",
+    "done": "Role created",
+    "fields": {
+      "name": "Name",
+      "description": "Description"
+    }
+  },
+  "matrix": {
+    "fallbackDescription": "What this role can do on a project.",
+    "notFound": "That role does not exist, or it has been deleted.",
+    "builtInNotice": "viewer, editor and owner are built in and cannot be changed.",
+    "save": "Save permissions",
+    "saved": "Permissions saved",
+    "applyNotice": "Saving applies to everyone holding this role immediately — it takes effect on their very next request."
+  },
+  "groups": {
+    "project": "Project",
+    "questions": "Questions",
+    "qaChecklist": "QA Checklist",
+    "mockData": "Mock data",
+    "eval": "Eval",
+    "membership": "Membership"
+  },
+  "permissions": {
+    "project_read": "project.read",
+    "project_update": "project.update",
+    "project_delete": "project.delete",
+    "project_reindex": "project.reindex",
+    "question_ask": "question.ask",
+    "checklist_read": "checklist.read",
+    "module_create": "module.create",
+    "module_edit": "module.edit",
+    "module_delete": "module.delete",
+    "generate_run": "generate.run",
+    "changeset_apply": "changeset.apply",
+    "item_edit": "item.edit",
+    "result_record": "result.record",
+    "mockdata_read": "mockdata.read",
+    "mockdata_edit": "mockdata.edit",
+    "eval_read": "eval.read",
+    "eval_run": "eval.run",
+    "membership_read": "membership.read",
+    "membership_grant": "membership.grant",
+    "membership_revoke": "membership.revoke"
+  }
+}

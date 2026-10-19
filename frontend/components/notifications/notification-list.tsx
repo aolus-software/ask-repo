@@ -1,11 +1,12 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import Link from "next/link";
 
-import { formatRelative } from "@/lib/dates";
 import { notificationHref, notificationTitle } from "@/lib/notifications";
 import type { NotificationSummary } from "@/lib/api/types";
 import { cn } from "@/lib/utils";
+import { useFormatRelative } from "@/hooks/use-format-date";
 
 type Props = {
   notifications: NotificationSummary[];
@@ -15,10 +16,12 @@ type Props = {
 
 /** The shared row rendering, used by both the popover and `/notifications`. */
 export function NotificationList({ notifications, onRead, emptyMessage }: Props) {
+  const t = useTranslations("notifications");
+  const formatRelative = useFormatRelative();
   if (notifications.length === 0) {
     return (
       <p className="text-muted-foreground px-4 py-6 text-center text-sm">
-        {emptyMessage ?? "Nothing to catch up on."}
+        {emptyMessage ?? t("empty")}
       </p>
     );
   }
@@ -47,9 +50,9 @@ export function NotificationList({ notifications, onRead, emptyMessage }: Props)
                   />
                 ) : null}
                 <span className={cn("text-foreground", unread && "font-medium")}>
-                  {notificationTitle(n)}
+                  {notificationTitle(n, t)}
                 </span>
-                {unread ? <span className="sr-only">Unread</span> : null}
+                {unread ? <span className="sr-only">{t("unread")}</span> : null}
               </span>
               <span className="text-muted-foreground text-xs">
                 {formatRelative(n.createdAt)}

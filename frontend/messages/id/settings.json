@@ -1,0 +1,84 @@
+{
+  "users": {
+    "title": "Pengguna",
+    "description": "Akun pada instans ini.",
+    "add": "Tambah pengguna",
+    "searchPlaceholder": "Cari berdasarkan nama atau email",
+    "forbidden": "Hanya administrator yang dapat mengelola akun.",
+    "empty": {
+      "noMatchTitle": "Tidak ada akun yang cocok",
+      "noneTitle": "Belum ada akun",
+      "noMatchDescription": "Coba nama atau email lain.",
+      "noneDescription": "Sediakan akun untuk rekan kerja agar mereka dapat mulai."
+    },
+    "table": {
+      "columns": {
+        "name": "Nama",
+        "email": "Email",
+        "role": "Peran",
+        "lastLogin": "Login terakhir",
+        "created": "Dibuat",
+        "actions": "Aksi"
+      },
+      "never": "Belum pernah"
+    },
+    "roleBadge": {
+      "admin": "Admin",
+      "member": "Anggota"
+    },
+    "actionsFor": "Aksi untuk {name}",
+    "actions": {
+      "edit": "Ubah",
+      "resetPassword": "Atur ulang kata sandi",
+      "deactivate": "Nonaktifkan"
+    },
+    "create": {
+      "title": "Tambah pengguna",
+      "description": "Mereka akan diminta memilih kata sandi sendiri saat pertama kali masuk.",
+      "submit": "Buat akun",
+      "done": "Akun dibuat",
+      "fields": {
+        "name": "Nama",
+        "email": "Email",
+        "password": "Kata sandi sementara",
+        "administrator": "Administrator"
+      }
+    },
+    "edit": {
+      "title": "Ubah {name}",
+      "submit": "Simpan perubahan",
+      "done": "Akun diperbarui",
+      "fields": {
+        "name": "Nama",
+        "administrator": "Administrator"
+      }
+    },
+    "reset": {
+      "title": "Atur ulang kata sandi untuk {name}",
+      "description": "Semua sesi pada akun ini akan dikeluarkan.",
+      "submit": "Atur ulang kata sandi",
+      "done": "Kata sandi diatur ulang",
+      "fields": {
+        "password": "Kata sandi sementara"
+      }
+    },
+    "deactivate": {
+      "title": "Nonaktifkan {name}?",
+      "description": "Sesi mereka langsung berakhir. Proyek yang mereka buat tetap ada.",
+      "confirm": "Nonaktifkan",
+      "done": "Akun dinonaktifkan"
+    },
+    "lastOwner": "Proyek-proyek ini akan tertinggal tanpa pemilik: <projects></projects>. Berikan peran owner kepada orang lain terlebih dahulu.",
+    "changePassword": {
+      "current": "Kata sandi saat ini",
+      "new": "Kata sandi baru"
+    }
+  },
+  "feedback": {
+    "title": "Umpan balik",
+    "description": "Bagaimana orang menilai jawaban, balasan obrolan, dan usulan. Siapa yang memberi suara, dan pertanyaan di balik suara tersebut, tidak pernah ditampilkan.",
+    "forbidden": "Hanya administrator yang dapat membaca umpan balik atas keluaran model.",
+    "emptyTitle": "Belum ada umpan balik",
+    "emptyDescription": "Suara atas jawaban, balasan obrolan, dan set perubahan akan muncul di sini."
+  }
+}

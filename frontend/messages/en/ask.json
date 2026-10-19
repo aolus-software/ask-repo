@@ -1,0 +1,94 @@
+{
+  "newConversation": {
+    "title": "Ask",
+    "description": "Questions are answered from the indexed code, with citations. Only you can see them.",
+    "placeholderReady": "How does the withdrawal calculation work?",
+    "placeholderChooseProject": "Choose a project first"
+  },
+  "conversation": {
+    "untitled": "Untitled conversation",
+    "newTitle": "New conversation",
+    "notFound": "That conversation does not exist.",
+    "projectUnavailable": "That project is no longer available.",
+    "answerStopped": "The answer stopped",
+    "tryAgain": "Try again",
+    "answering": "Answering…",
+    "askFollowUp": "Ask a follow-up"
+  },
+  "phases": {
+    "queued": "Queued…",
+    "classifying": "Understanding the question…",
+    "retrieving": "Searching the codebase…",
+    "grading": "Checking what it found…",
+    "generating": "Writing the answer…"
+  },
+  "stream": {
+    "noStream": "The server sent no answer stream.",
+    "failed": "The answer failed."
+  },
+  "composer": {
+    "questionLabel": "Your question",
+    "ask": "Ask"
+  },
+  "answer": {
+    "copyCode": "Copy code"
+  },
+  "groundingWarnings": {
+    "no_context": "Nothing relevant was found in this project, so no answer was generated from its code.",
+    "uncited_answer": "This answer does not cite any of the excerpts it was given. Treat it carefully.",
+    "unknown_paths": "This answer names files that were not among the excerpts retrieved. Those references may not exist.",
+    "weak_evidence": "The retrieved code may not fully cover this question. The answer names what it could not determine.",
+    "unknown": "Grounding warning: {warning}"
+  },
+  "interruptedNote": "The connection dropped. What arrived above is kept.",
+  "messages": {
+    "showFull": "Show full message",
+    "collapse": "Collapse message",
+    "interrupted": "This answer was interrupted. What arrived is kept.",
+    "endedEarly": "This answer ended early ({reason})."
+  },
+  "projectPicker": {
+    "loadingProjects": "Loading projects…",
+    "searchProjects": "Search projects",
+    "label": "Project",
+    "loading": "Loading…",
+    "noMatch": "No project matches."
+  },
+  "sources": {
+    "title": "Sources ({count})",
+    "lines": "lines {start}–{end}"
+  },
+  "preflight": {
+    "couldNotAnswer": "That question could not be answered",
+    "genericError": "Something went wrong.",
+    "needsReindexTitle": "This project needs re-indexing",
+    "needsReindexBody": "It was indexed with a different embedding model, so its stored vectors cannot be searched with the one this instance runs now. Re-index it and questions will work again.",
+    "reindexNow": "Re-index now",
+    "reindexStarted": "Re-index started",
+    "reindexAlreadyRunning": "A re-index is already running",
+    "askToReindex": "Ask the person who added it, or an administrator, to re-index.",
+    "notReadyTitle": "This project is not ready yet",
+    "notReadyBody": "It is still cloning or indexing. Questions work once it reaches “Ready”."
+  },
+  "rail": {
+    "deleteConversation": "Delete conversation",
+    "deleteTitle": "Delete this conversation?",
+    "deleteDescription": "Only you can see it, and it cannot be recovered.",
+    "delete": "Delete",
+    "deleted": "Conversation deleted",
+    "conversations": "Conversations",
+    "newConversation": "New conversation",
+    "searchConversations": "Search conversations",
+    "loadingProjects": "Loading projects…",
+    "allProjects": "All projects",
+    "filterByProject": "Filter by project",
+    "loading": "Loading…",
+    "couldNotLoadProjects": "Could not load projects.",
+    "noProjectMatches": "No project matches.",
+    "noConversationMatches": "No conversation matches.",
+    "nothingYet": "Nothing yet. Pick a project and ask a question.",
+    "untitled": "Untitled conversation",
+    "showConversations": "Show conversations",
+    "hideConversations": "Hide conversations"
+  }
+}

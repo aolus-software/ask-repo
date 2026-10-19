@@ -1,0 +1,82 @@
+{
+  "title": "Peranan",
+  "description": "Takrifan peranan seluruh instans dan apa yang boleh dilakukan oleh setiap satu.",
+  "forbidden": "Hanya pentadbir yang boleh mengurus peranan.",
+  "createRole": "Cipta peranan",
+  "emptyTitle": "Belum ada peranan",
+  "emptyDescription": "Cipta peranan untuk memberikan sesuatu selain viewer, editor atau owner.",
+  "table": {
+    "columns": {
+      "name": "Nama",
+      "description": "Penerangan",
+      "permissions": "Kebenaran",
+      "members": "Ahli",
+      "actions": "Tindakan"
+    },
+    "permissionCount": "{count} daripada {total}",
+    "noDescription": "—"
+  },
+  "badge": {
+    "builtIn": "Peranan terbina dalam, tidak boleh disunting"
+  },
+  "actionsFor": "Tindakan untuk {name}",
+  "actions": {
+    "view": "Lihat",
+    "edit": "Sunting",
+    "delete": "Padam"
+  },
+  "delete": {
+    "title": "Padam {name}?",
+    "description": "Ini tidak boleh dibatalkan. Sesiapa yang masih memegangnya pada sesebuah projek mesti dipindahkan ke peranan lain terlebih dahulu.",
+    "confirm": "Padam",
+    "done": "Peranan dipadam"
+  },
+  "create": {
+    "title": "Cipta peranan",
+    "description": "Berikan nama, kemudian pilih apa yang boleh dilakukannya pada halaman seterusnya.",
+    "submit": "Cipta peranan",
+    "done": "Peranan dicipta",
+    "fields": {
+      "name": "Nama",
+      "description": "Penerangan"
+    }
+  },
+  "matrix": {
+    "fallbackDescription": "Apa yang boleh dilakukan oleh peranan ini pada sesebuah projek.",
+    "notFound": "Peranan itu tidak wujud, atau telah dipadam.",
+    "builtInNotice": "viewer, editor dan owner ialah peranan terbina dalam dan tidak boleh diubah.",
+    "save": "Simpan kebenaran",
+    "saved": "Kebenaran disimpan",
+    "applyNotice": "Penyimpanan berkuat kuasa kepada semua pemegang peranan ini serta-merta — ia berkesan pada permintaan mereka yang seterusnya."
+  },
+  "groups": {
+    "project": "Projek",
+    "questions": "Soalan",
+    "qaChecklist": "Senarai Semak QA",
+    "mockData": "Data olok-olok",
+    "eval": "Penilaian",
+    "membership": "Keahlian"
+  },
+  "permissions": {
+    "project_read": "project.read",
+    "project_update": "project.update",
+    "project_delete": "project.delete",
+    "project_reindex": "project.reindex",
+    "question_ask": "question.ask",
+    "checklist_read": "checklist.read",
+    "module_create": "module.create",
+    "module_edit": "module.edit",
+    "module_delete": "module.delete",
+    "generate_run": "generate.run",
+    "changeset_apply": "changeset.apply",
+    "item_edit": "item.edit",
+    "result_record": "result.record",
+    "mockdata_read": "mockdata.read",
+    "mockdata_edit": "mockdata.edit",
+    "eval_read": "eval.read",
+    "eval_run": "eval.run",
+    "membership_read": "membership.read",
+    "membership_grant": "membership.grant",
+    "membership_revoke": "membership.revoke"
+  }
+}

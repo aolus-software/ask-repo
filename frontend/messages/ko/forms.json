@@ -1,0 +1,21 @@
+{
+  "validation": {
+    "missing": "필수 입력 항목입니다.",
+    "string_too_short": "너무 짧습니다.",
+    "string_too_long": "너무 깁니다.",
+    "enum": "나열된 옵션 중 하나를 선택하세요.",
+    "literal_error": "나열된 옵션 중 하나를 선택하세요.",
+    "url_parsing": "올바른 URL을 입력하세요.",
+    "url_scheme": "URL은 https://로 시작해야 합니다.",
+    "int_parsing": "정수를 입력하세요.",
+    "greater_than_equal": "숫자가 너무 작습니다.",
+    "less_than_equal": "숫자가 너무 큽니다.",
+    "uuid_parsing": "올바른 ID가 아닙니다."
+  },
+  "passwordInput": { "show": "비밀번호 표시", "hide": "비밀번호 숨기기" },
+  "passwordField": {
+    "notAccepted": "허용되지 않는 비밀번호입니다.",
+    "looksGood": "지금까지는 좋습니다.",
+    "hint": "다른 곳에서 사용하지 않는 강력한 비밀번호를 선택하세요."
+  }
+}

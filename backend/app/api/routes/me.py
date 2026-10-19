@@ -17,6 +17,7 @@ from app.schemas.me import (
     ActivityEntry,
     AnswerStyleRead,
     AnswerStyleUpdate,
+    LanguageSetting,
     MembershipSummary,
     SessionResponse,
 )
@@ -118,3 +119,31 @@ async def update_answer_style(
     payload: AnswerStyleUpdate, current_user: CurrentUser, service: MeServiceDep
 ) -> AnswerStyleRead:
     return await service.update_answer_style(current_user, payload)
+
+
+@router.get(
+    "/language",
+    response_model=LanguageSetting,
+    status_code=status.HTTP_200_OK,
+    summary="Your interface language",
+    responses={code: ERROR_RESPONSES[code] for code in (401, 403, 404)},
+)
+async def get_language(current_user: CurrentUser, service: MeServiceDep) -> LanguageSetting:
+    return await service.language(current_user)
+
+
+@router.put(
+    "/language",
+    response_model=LanguageSetting,
+    status_code=status.HTTP_200_OK,
+    summary="Set your interface language",
+    description=(
+        "`null` clears the choice, and the interface follows the browser's language "
+        "again. Stored on your account, so it follows you to a new device."
+    ),
+    responses={code: ERROR_RESPONSES[code] for code in (401, 403, 404, 422)},
+)
+async def update_language(
+    payload: LanguageSetting, current_user: CurrentUser, service: MeServiceDep
+) -> LanguageSetting:
+    return await service.update_language(current_user, payload)

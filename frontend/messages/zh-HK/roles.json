@@ -1,0 +1,82 @@
+{
+  "title": "角色",
+  "description": "全實例通用的角色定義，以及各角色可執行的操作。",
+  "forbidden": "只有管理員可以管理角色。",
+  "createRole": "建立角色",
+  "emptyTitle": "暫無角色",
+  "emptyDescription": "建立角色，以授予 viewer、editor 或 owner 以外的權限。",
+  "table": {
+    "columns": {
+      "name": "名稱",
+      "description": "描述",
+      "permissions": "權限",
+      "members": "成員",
+      "actions": "操作"
+    },
+    "permissionCount": "{count} / {total}",
+    "noDescription": "—"
+  },
+  "badge": {
+    "builtIn": "內置角色，無法編輯"
+  },
+  "actionsFor": "{name} 的操作",
+  "actions": {
+    "view": "檢視",
+    "edit": "編輯",
+    "delete": "刪除"
+  },
+  "delete": {
+    "title": "刪除 {name}？",
+    "description": "此操作無法復原。仍在專案中持有此角色的任何人，必須先改為其他角色。",
+    "confirm": "刪除",
+    "done": "已刪除角色"
+  },
+  "create": {
+    "title": "建立角色",
+    "description": "為它命名，然後在下一頁選擇它可執行的操作。",
+    "submit": "建立角色",
+    "done": "已建立角色",
+    "fields": {
+      "name": "名稱",
+      "description": "描述"
+    }
+  },
+  "matrix": {
+    "fallbackDescription": "此角色在專案中可執行的操作。",
+    "notFound": "該角色不存在，或已被刪除。",
+    "builtInNotice": "viewer、editor 和 owner 為內置角色，無法更改。",
+    "save": "儲存權限",
+    "saved": "已儲存權限",
+    "applyNotice": "儲存後會立即套用於所有持有此角色的人，並於他們的下一個請求即時生效。"
+  },
+  "groups": {
+    "project": "專案",
+    "questions": "提問",
+    "qaChecklist": "QA 檢查清單",
+    "mockData": "模擬資料",
+    "eval": "評測",
+    "membership": "成員資格"
+  },
+  "permissions": {
+    "project_read": "project.read",
+    "project_update": "project.update",
+    "project_delete": "project.delete",
+    "project_reindex": "project.reindex",
+    "question_ask": "question.ask",
+    "checklist_read": "checklist.read",
+    "module_create": "module.create",
+    "module_edit": "module.edit",
+    "module_delete": "module.delete",
+    "generate_run": "generate.run",
+    "changeset_apply": "changeset.apply",
+    "item_edit": "item.edit",
+    "result_record": "result.record",
+    "mockdata_read": "mockdata.read",
+    "mockdata_edit": "mockdata.edit",
+    "eval_read": "eval.read",
+    "eval_run": "eval.run",
+    "membership_read": "membership.read",
+    "membership_grant": "membership.grant",
+    "membership_revoke": "membership.revoke"
+  }
+}

@@ -1,6 +1,7 @@
 "use client";
 
 import { LogOut, MonitorSmartphone, UserRound } from "lucide-react";
+import { useTranslations } from "next-intl";
 import Link from "next/link";
 
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -31,12 +32,13 @@ function initials(name: string): string {
  * Everything else about the account lives on `/profile`.
  */
 export function AccountMenu() {
+  const t = useTranslations("nav.account");
   const user = useSession();
 
   return (
     <DropdownMenu>
       <DropdownMenuTrigger
-        render={<Button variant="ghost" size="icon" aria-label="Account" />}
+        render={<Button variant="ghost" size="icon" aria-label={t("label")} />}
       >
         <Avatar className="size-8">
           <AvatarFallback>{initials(user.name)}</AvatarFallback>
@@ -57,16 +59,16 @@ export function AccountMenu() {
         <DropdownMenuSeparator />
         <DropdownMenuItem render={<Link href="/profile" />}>
           <UserRound className="size-4" />
-          Profile
+          {t("profile")}
         </DropdownMenuItem>
         <DropdownMenuSeparator />
         <DropdownMenuItem onClick={() => void signOut(false)}>
           <LogOut className="size-4" />
-          Log out
+          {t("logOut")}
         </DropdownMenuItem>
         <DropdownMenuItem onClick={() => void signOut(true)}>
           <MonitorSmartphone className="size-4" />
-          Log out everywhere
+          {t("logOutEverywhere")}
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>

@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { useState } from "react";
 import { toast } from "sonner";
 
@@ -19,29 +20,19 @@ const DEFAULT = "";
 const DIALS = [
   {
     key: "detail",
-    label: "Detail",
-    options: [
-      { value: "brief", label: "Brief" },
-      { value: "thorough", label: "Thorough" },
-    ],
+    options: ["brief", "thorough"],
   },
   {
     key: "familiarity",
-    label: "Familiarity",
-    options: [
-      { value: "new", label: "New to this repository" },
-      { value: "expert", label: "Expert" },
-    ],
+    options: ["new", "expert"],
   },
   {
     key: "format",
-    label: "Format",
-    options: [
-      { value: "prose", label: "Prose" },
-      { value: "bullets", label: "Bullets" },
-    ],
+    options: ["prose", "bullets"],
   },
 ] as const;
+
+type DialOption = (typeof DIALS)[number]["options"][number];
 
 const UNSET: AnswerStyle = { detail: null, familiarity: null, format: null };
 
@@ -52,6 +43,7 @@ const UNSET: AnswerStyle = { detail: null, familiarity: null, format: null };
  * Answer style tab, which supplies the heading.
  */
 export function AnswerStyleSection() {
+  const t = useTranslations("profile.answerStyle");
   const [draft, setDraft] = useState<AnswerStyle | null>(null);
   const query = useAnswerStyle();
   const save = useUpdateAnswerStyle();
@@ -66,10 +58,7 @@ export function AnswerStyleSection() {
 
   return (
     <div>
-      <p className="text-muted-foreground mb-4 text-sm">
-        Shapes the answers you get on Ask. It never changes the QA Checklist or Mock
-        Data, which your whole team shares.
-      </p>
+      <p className="text-muted-foreground mb-4 text-sm">{t("intro")}</p>
 
       <Card className="gap-6 p-6">
         {DIALS.map((dial) =>
@@ -86,7 +75,7 @@ export function AnswerStyleSection() {
             </div>
           ) : (
             <div key={dial.key} className="grid gap-2">
-              <Label id={`answer-style-${dial.key}`}>{dial.label}</Label>
+              <Label id={`answer-style-${dial.key}`}>{t(`dials.${dial.key}`)}</Label>
               <RadioGroup
                 aria-labelledby={`answer-style-${dial.key}`}
                 value={style[dial.key] ?? DEFAULT}
@@ -95,17 +84,17 @@ export function AnswerStyleSection() {
                 }
                 className="flex flex-wrap gap-4"
               >
-                {[{ value: DEFAULT, label: "Default" }, ...dial.options].map(
-                  (option) => (
-                    <Label
-                      key={option.value}
-                      className="text-foreground flex items-center gap-2 text-sm font-normal"
-                    >
-                      <RadioGroupItem value={option.value} />
-                      {option.label}
-                    </Label>
-                  ),
-                )}
+                {[DEFAULT, ...dial.options].map((value) => (
+                  <Label
+                    key={value}
+                    className="text-foreground flex items-center gap-2 text-sm font-normal"
+                  >
+                    <RadioGroupItem value={value} />
+                    {value === DEFAULT
+                      ? t("default")
+                      : t(`options.${value as DialOption}`)}
+                  </Label>
+                ))}
               </RadioGroup>
             </div>
           ),
@@ -122,13 +111,13 @@ export function AnswerStyleSection() {
           onClick={() =>
             save.mutate(style, {
               onSuccess: () => {
-                toast.success("Answer style saved");
+                toast.success(t("saved"));
                 setDraft(null);
               },
             })
           }
         >
-          Save answer style
+          {t("save")}
         </Button>
       </div>
     </div>

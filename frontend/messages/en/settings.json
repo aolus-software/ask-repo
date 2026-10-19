@@ -1,0 +1,84 @@
+{
+  "users": {
+    "title": "Users",
+    "description": "Accounts on this instance.",
+    "add": "Add user",
+    "searchPlaceholder": "Search by name or email",
+    "forbidden": "Only administrators can manage accounts.",
+    "empty": {
+      "noMatchTitle": "No accounts match",
+      "noneTitle": "No accounts yet",
+      "noMatchDescription": "Try a different name or email.",
+      "noneDescription": "Provision an account for a colleague to get them started."
+    },
+    "table": {
+      "columns": {
+        "name": "Name",
+        "email": "Email",
+        "role": "Role",
+        "lastLogin": "Last login",
+        "created": "Created",
+        "actions": "Actions"
+      },
+      "never": "Never"
+    },
+    "roleBadge": {
+      "admin": "Admin",
+      "member": "Member"
+    },
+    "actionsFor": "Actions for {name}",
+    "actions": {
+      "edit": "Edit",
+      "resetPassword": "Reset password",
+      "deactivate": "Deactivate"
+    },
+    "create": {
+      "title": "Add a user",
+      "description": "They will be asked to choose their own password when they first sign in.",
+      "submit": "Create account",
+      "done": "Account created",
+      "fields": {
+        "name": "Name",
+        "email": "Email",
+        "password": "Temporary password",
+        "administrator": "Administrator"
+      }
+    },
+    "edit": {
+      "title": "Edit {name}",
+      "submit": "Save changes",
+      "done": "Account updated",
+      "fields": {
+        "name": "Name",
+        "administrator": "Administrator"
+      }
+    },
+    "reset": {
+      "title": "Reset password for {name}",
+      "description": "Every session for this account will be signed out.",
+      "submit": "Reset password",
+      "done": "Password reset",
+      "fields": {
+        "password": "Temporary password"
+      }
+    },
+    "deactivate": {
+      "title": "Deactivate {name}?",
+      "description": "Their sessions end immediately. Projects they created stay.",
+      "confirm": "Deactivate",
+      "done": "Account deactivated"
+    },
+    "lastOwner": "These projects would be left with no owner: <projects></projects>. Give someone else the owner role first.",
+    "changePassword": {
+      "current": "Current password",
+      "new": "New password"
+    }
+  },
+  "feedback": {
+    "title": "Feedback",
+    "description": "How people rated answers, chat replies and proposals. Who voted, and the question behind a vote, are never shown.",
+    "forbidden": "Only administrators can read feedback on model output.",
+    "emptyTitle": "No feedback yet",
+    "emptyDescription": "Votes on answers, chat replies and change sets will appear here."
+  }
+}

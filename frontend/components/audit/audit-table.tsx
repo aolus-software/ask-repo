@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import Link from "next/link";
 import { useState } from "react";
 
@@ -15,9 +16,11 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { auditEventLabel } from "@/lib/audit";
+import { useAuditEventLabel } from "@/lib/audit";
+import { auditOutcomeLabelKey, auditOutcomeTone } from "@/lib/status";
 import type { AuditEventSummary } from "@/lib/api/types";
-import { formatAbsolute, formatRelative } from "@/lib/dates";
+import { formatAbsolute } from "@/lib/dates";
+import { useFormatRelative } from "@/hooks/use-format-date";
 
 /** Column order: event, outcome, actor, target, changed fields, time, actions.
  *
@@ -33,6 +36,10 @@ export function AuditTable({
   events: AuditEventSummary[];
   isLoading: boolean;
 }) {
+  const t = useTranslations("audit.table");
+  const tStatus = useTranslations("status");
+  const auditEventLabel = useAuditEventLabel();
+  const formatRelative = useFormatRelative();
   // `null` closes the dialog and is what stops it fetching, so one piece of state
   // carries both which row is open and whether anything is open at all.
   const [openEventId, setOpenEventId] = useState<string | null>(null);
@@ -42,13 +49,13 @@ export function AuditTable({
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead>Event</TableHead>
-            <TableHead>Outcome</TableHead>
-            <TableHead>Actor</TableHead>
-            <TableHead>Target</TableHead>
-            <TableHead>Changed</TableHead>
-            <TableHead>Time</TableHead>
-            <TableHead className="text-right">Actions</TableHead>
+            <TableHead>{t("columns.event")}</TableHead>
+            <TableHead>{t("columns.outcome")}</TableHead>
+            <TableHead>{t("columns.actor")}</TableHead>
+            <TableHead>{t("columns.target")}</TableHead>
+            <TableHead>{t("columns.changed")}</TableHead>
+            <TableHead>{t("columns.time")}</TableHead>
+            <TableHead className="text-right">{t("columns.actions")}</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -67,16 +74,13 @@ export function AuditTable({
                 </TableCell>
                 <TableCell>
                   <StatusBadge
-                    tone={event.outcome === "failure" ? "danger" : "success"}
-                    label={event.outcome === "failure" ? "Failure" : "Success"}
+                    tone={auditOutcomeTone(event.outcome)}
+                    label={tStatus(auditOutcomeLabelKey(event.outcome))}
                   />
                 </TableCell>
                 <TableCell className="text-sm">
                   {event.actorEmail ?? (
-                    <span
-                      className="text-muted-foreground"
-                      title="no authenticated actor"
-                    >
+                    <span className="text-muted-foreground" title={t("noActor")}>
                       —
                     </span>
                   )}
@@ -104,7 +108,7 @@ export function AuditTable({
                     size="sm"
                     onClick={() => setOpenEventId(event.id)}
                   >
-                    View
+                    {t("view")}
                   </Button>
                 </TableCell>
               </TableRow>

@@ -1,6 +1,7 @@
 "use client";
 
 import { FlaskConical } from "lucide-react";
+import { useTranslations } from "next-intl";
 
 import { EvalStatusBadge } from "@/components/eval/eval-status-badge";
 import { EmptyState } from "@/components/feedback/empty-state";
@@ -15,7 +16,8 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import type { EvalRunSummary, EvalSetStatus } from "@/lib/api/types";
-import { formatAbsolute, formatRelative } from "@/lib/dates";
+import { formatAbsolute } from "@/lib/dates";
+import { useFormatRelative } from "@/hooks/use-format-date";
 
 /** Runs of one set, newest first. A row opens the run's results. */
 export function EvalRunTable({
@@ -34,6 +36,8 @@ export function EvalRunTable({
   /** Only a ready set can be run, so only a ready set is invited to be. */
   setStatus?: EvalSetStatus;
 }) {
+  const t = useTranslations("eval");
+  const formatRelative = useFormatRelative();
   if (error) {
     return (
       <div className="p-4">
@@ -54,11 +58,15 @@ export function EvalRunTable({
     return (
       <EmptyState
         icon={FlaskConical}
-        title={setStatus === "generating" ? "Generating questions…" : "No runs"}
+        title={
+          setStatus === "generating"
+            ? t("runTable.generatingTitle")
+            : t("runTable.noRunsTitle")
+        }
         description={
           setStatus === "generating"
-            ? "The set can be run once its questions are ready."
-            : "A set whose generation failed cannot be run."
+            ? t("runTable.generatingDescription")
+            : t("runTable.failedDescription")
         }
       />
     );
@@ -67,8 +75,8 @@ export function EvalRunTable({
     return (
       <EmptyState
         icon={FlaskConical}
-        title="No runs yet"
-        description="Run the set to ask each question and judge the answers against the reference."
+        title={t("runTable.emptyTitle")}
+        description={t("runTable.emptyDescription")}
       />
     );
   }
@@ -77,10 +85,10 @@ export function EvalRunTable({
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead>Started</TableHead>
-            <TableHead>Status</TableHead>
-            <TableHead>Results</TableHead>
-            <TableHead>Model</TableHead>
+            <TableHead>{t("runTable.columns.started")}</TableHead>
+            <TableHead>{t("runTable.columns.status")}</TableHead>
+            <TableHead>{t("runTable.columns.results")}</TableHead>
+            <TableHead>{t("runTable.columns.model")}</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -101,9 +109,14 @@ export function EvalRunTable({
                 <EvalStatusBadge status={run.status} />
               </TableCell>
               <TableCell className="text-muted-foreground text-sm">
-                hits {run.hits}/{run.pairsAnswered} · correct {run.correct} · partial{" "}
-                {run.partial} · wrong {run.wrong}
-                {run.errors > 0 ? ` · errors ${run.errors}` : ""}
+                {t(run.errors > 0 ? "tally.summaryWithErrors" : "tally.summary", {
+                  hits: run.hits,
+                  answered: run.pairsAnswered,
+                  correct: run.correct,
+                  partial: run.partial,
+                  wrong: run.wrong,
+                  errors: run.errors,
+                })}
               </TableCell>
               <TableCell className="text-muted-foreground text-sm">
                 {run.chatModel ?? "—"}

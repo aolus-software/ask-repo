@@ -1,6 +1,7 @@
 "use client";
 
 import { ChevronDown } from "lucide-react";
+import { useTranslations } from "next-intl";
 
 import {
   Collapsible,
@@ -24,6 +25,8 @@ export function Sources({
   citations: CitationPayload[];
   citedIndexes: number[];
 }) {
+  const t = useTranslations("ask");
+
   if (citations.length === 0) return null;
 
   const isCited = (citation: CitationPayload) =>
@@ -33,7 +36,7 @@ export function Sources({
     <Collapsible className="mt-4">
       <CollapsibleTrigger className="text-muted-foreground hover:text-foreground flex items-center gap-1 text-sm font-medium">
         <ChevronDown className="size-4" />
-        Sources ({citations.length})
+        {t("sources.title", { count: citations.length })}
       </CollapsibleTrigger>
       <CollapsibleContent>
         <ul className="mt-2 space-y-1">
@@ -50,7 +53,10 @@ export function Sources({
               {citation.filePath}
               <span className="text-muted-foreground">
                 {" "}
-                lines {citation.startLine}–{citation.endLine}
+                {t("sources.lines", {
+                  start: citation.startLine,
+                  end: citation.endLine,
+                })}
                 {citation.symbol ? ` · ${citation.symbol}` : ""}
               </span>
             </li>

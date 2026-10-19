@@ -1,0 +1,127 @@
+{
+  "questionTypes": {
+    "explain": "jelaskan",
+    "locate": "temukan"
+  },
+  "mix": {
+    "balanced": "Seimbang",
+    "explain": "Hanya jelaskan",
+    "locate": "Hanya temukan"
+  },
+  "tally": {
+    "summary": "tepat sasaran {hits}/{answered} · benar {correct} · sebagian {partial} · salah {wrong}",
+    "summaryWithErrors": "tepat sasaran {hits}/{answered} · benar {correct} · sebagian {partial} · salah {wrong} · galat {errors}"
+  },
+  "wholeProject": "Seluruh proyek",
+  "setTable": {
+    "emptyTitle": "Belum ada set evaluasi",
+    "emptyDescription": "Buat satu set pertanyaan beserta jawaban acuan, lalu jalankan untuk melihat kinerja asisten pada proyek ini.",
+    "columns": {
+      "set": "Set",
+      "path": "Jalur",
+      "pairs": "Pasangan",
+      "status": "Status",
+      "latestRun": "Eksekusi terakhir",
+      "created": "Dibuat",
+      "actions": "Aksi"
+    },
+    "noRuns": "Belum ada eksekusi",
+    "actionsFor": "Aksi untuk {name}",
+    "delete": "Hapus"
+  },
+  "deleteDialog": {
+    "titleNamed": "Hapus {name}?",
+    "title": "Hapus set evaluasi?",
+    "description": "Pertanyaannya, setiap eksekusi, dan semua hasilnya ikut terhapus, untuk semua orang.",
+    "confirm": "Hapus set evaluasi",
+    "deleted": "Set evaluasi dihapus"
+  },
+  "pairTable": {
+    "generatingTitle": "Membuat pertanyaan…",
+    "emptyTitle": "Tidak ada pertanyaan",
+    "generatingDescription": "Pertanyaan akan muncul di sini segera setelah pembuatan selesai.",
+    "emptyDescription": "Set ini tidak memiliki pertanyaan.",
+    "columns": {
+      "question": "Pertanyaan",
+      "type": "Jenis",
+      "source": "Sumber",
+      "excluded": "Dikecualikan"
+    },
+    "excludeLabel": "Kecualikan: {question}",
+    "referenceAnswer": "Jawaban acuan",
+    "saveFailed": "Itu tidak tersimpan. Coba lagi"
+  },
+  "runTable": {
+    "generatingTitle": "Membuat pertanyaan…",
+    "noRunsTitle": "Tidak ada eksekusi",
+    "generatingDescription": "Set dapat dijalankan setelah pertanyaannya siap.",
+    "failedDescription": "Set yang pembuatannya gagal tidak dapat dijalankan.",
+    "emptyTitle": "Belum ada eksekusi",
+    "emptyDescription": "Jalankan set untuk mengajukan setiap pertanyaan dan menilai jawabannya terhadap acuan.",
+    "columns": {
+      "started": "Dimulai",
+      "status": "Status",
+      "results": "Hasil",
+      "model": "Model"
+    }
+  },
+  "runSheet": {
+    "title": "Hasil eksekusi",
+    "loadFailed": "Eksekusi tidak dapat dimuat",
+    "loading": "Memuat eksekusi…",
+    "notFound": "Eksekusi itu tidak ada, atau sudah dihapus.",
+    "failedTitle": "Eksekusi gagal",
+    "retrievalHit": "Pengambilan tepat sasaran",
+    "retrievalMiss": "Pengambilan meleset",
+    "judge": "Penilai: {reason}",
+    "warnings": "Peringatan: {warnings}"
+  },
+  "compare": {
+    "judgeChanged": "Eksekusi-eksekusi ini dinilai oleh model yang berbeda. Perubahan putusan mungkin mencerminkan penilainya, bukan jawabannya. Ketepatan pengambilan tidak terpengaruh.",
+    "comparedOn": "Dibandingkan pada {count, plural, other {# pasangan}} yang dijawab kedua eksekusi",
+    "base": "Dasar",
+    "head": "Pembanding",
+    "tally": "tepat sasaran {hits}/{total} · benar {correct} · sebagian {partial} · salah {wrong} · galat {errors}",
+    "noChange": "Tidak ada pasangan yang berubah antara eksekusi-eksekusi ini.",
+    "retrievalChange": "Pengambilan: {from} → {to}",
+    "hit": "tepat sasaran",
+    "miss": "meleset"
+  },
+  "generateDialog": {
+    "trigger": "Buat set evaluasi",
+    "title": "Buat set evaluasi",
+    "description": "Buat pertanyaan beserta jawaban acuan dari kode terindeks proyek ini, sebagai tolok ukur asisten.",
+    "submit": "Buat",
+    "started": "Pembuatan dimulai",
+    "nameLabel": "Nama",
+    "namePlaceholder": "mis., Pertanyaan autentikasi",
+    "pathLabel": "Jalur",
+    "pathHelp": "Kosongkan untuk seluruh proyek, atau pilih folder atau berkas yang akan dicakup.",
+    "questionsLabel": "Pertanyaan",
+    "countAria": "Jumlah pertanyaan",
+    "mixLabel": "Campuran",
+    "mixAria": "Campuran pertanyaan"
+  },
+  "screen": {
+    "pairCount": "{count, plural, other {# pasangan}}",
+    "generatedFrom": "dibuat dari generasi {generation}",
+    "projectNotFound": "Proyek itu tidak ada, atau Anda tidak memiliki akses ke sana.",
+    "setNotFound": "Set evaluasi itu tidak ada, atau sudah dihapus.",
+    "selectRun": "Pilih eksekusi",
+    "runLabel": "Eksekusi {number} · {date}",
+    "deleteAria": "Hapus {name}",
+    "delete": "Hapus",
+    "run": "Jalankan",
+    "runStarted": "Eksekusi dimulai",
+    "runStartFailed": "Eksekusi tidak dapat dimulai",
+    "projectNowAt": "Proyek sekarang berada pada generasi {generation}.",
+    "generationFailed": "Pembuatan gagal",
+    "pairs": "Pasangan",
+    "runs": "Eksekusi",
+    "compare": "Bandingkan",
+    "baseRun": "Eksekusi dasar",
+    "headRun": "Eksekusi pembanding",
+    "compareFailed": "Tidak dapat memuat perbandingan",
+    "somethingWrong": "Terjadi kesalahan."
+  }
+}

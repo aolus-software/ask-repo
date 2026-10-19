@@ -1,6 +1,8 @@
 "use client";
 
+import { useKindLabel } from "@/components/checklist/use-kind-label";
 import { Loader2 } from "lucide-react";
+import { useTranslations } from "next-intl";
 import { useState } from "react";
 import { toast } from "sonner";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
@@ -38,19 +40,19 @@ import type {
 } from "@/lib/api/types";
 import { keys } from "@/lib/query/keys";
 
-/** camelCase field name -> the label shown on a Changed row. Unknown keys fall back to the key itself. */
-const FIELD_LABELS: Record<string, string> = {
-  feature: "Feature",
-  testName: "Test name",
-  expectedResult: "Expected result",
-  currentResult: "Current result",
-  status: "Status",
-  kind: "Kind",
-  notes: "Notes",
-};
+/** The camelCase field names with a label (`checklist.changeSetPanel.fields.*`); unknown keys fall back to the key itself. */
+const LABELLED_FIELDS = [
+  "feature",
+  "testName",
+  "expectedResult",
+  "currentResult",
+  "status",
+  "kind",
+  "notes",
+] as const;
 
-function fieldLabel(field: string): string {
-  return FIELD_LABELS[field] ?? field;
+function isLabelledField(field: string): field is (typeof LABELLED_FIELDS)[number] {
+  return (LABELLED_FIELDS as readonly string[]).includes(field);
 }
 
 /** The value of `field` on the item currently in the grid, rendered as text for the diff. */
@@ -89,6 +91,8 @@ export function ChangeSetPanel({
   /** Mirrors the backend's `changeset.apply` gate; it does not replace it. */
   canApply: boolean;
 }) {
+  const t = useTranslations("checklist.changeSetPanel");
+  const negativeLabel = useKindLabel()("negative");
   const queryClient = useQueryClient();
   const [checked, setChecked] = useState<Record<string, boolean>>(() => {
     const initial: Record<string, boolean> = {};
@@ -122,7 +126,7 @@ export function ChangeSetPanel({
       if (data.skippedOperationIds.length > 0) {
         setSkippedCount(data.skippedOperationIds.length);
       } else {
-        toast.success("Changes applied");
+        toast.success(t("applied"));
       }
     },
   });
@@ -137,7 +141,7 @@ export function ChangeSetPanel({
       ),
     onSuccess: () => {
       invalidate();
-      toast.success("Proposals discarded");
+      toast.success(t("discarded"));
       setConfirmingDiscard(false);
     },
   });
@@ -185,7 +189,7 @@ export function ChangeSetPanel({
                   variant="outline"
                   className="text-warning border-warning/60 text-xs font-normal"
                 >
-                  Negative
+                  {negativeLabel}
                 </Badge>
               ) : null}
             </div>
@@ -195,16 +199,16 @@ export function ChangeSetPanel({
             ) : null}
           </>
         ) : orphaned || !item ? (
-          <p className="text-sm">
-            This test case no longer exists — this change will be skipped
-          </p>
+          <p className="text-sm">{t("orphaned")}</p>
         ) : operation.op === "update" ? (
           <>
             <p className="font-medium">{item.testName}</p>
             <div className="mt-1 space-y-1">
               {Object.entries(operation.changes ?? {}).map(([field, next]) => (
                 <p key={field} className="text-sm">
-                  <span className="text-muted-foreground">{fieldLabel(field)}: </span>
+                  <span className="text-muted-foreground">
+                    {isLabelledField(field) ? t(`fields.${field}`) : field}:{" "}
+                  </span>
                   {oldFieldValue(item, field)}
                   <span className="text-muted-foreground"> → </span>
                   {next}
@@ -228,17 +232,14 @@ export function ChangeSetPanel({
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Proposed changes</CardTitle>
+        <CardTitle>{t("title")}</CardTitle>
         <CardDescription>{changeSet.summary}</CardDescription>
         <OperationCountsLine counts={counts} />
       </CardHeader>
       <CardContent className="space-y-4">
         {skippedCount !== null ? (
           <Alert>
-            <AlertDescription>
-              {skippedCount} proposed change{skippedCount === 1 ? "" : "s"} were skipped
-              because the test case they referred to no longer exists.
-            </AlertDescription>
+            <AlertDescription>{t("skipped", { count: skippedCount })}</AlertDescription>
           </Alert>
         ) : null}
 
@@ -259,7 +260,7 @@ export function ChangeSetPanel({
             onClick={() => setConfirmingDiscard(true)}
             disabled={!canApply || applyMutation.isPending || discardMutation.isPending}
           >
-            Discard
+            {t("discard")}
           </Button>
           <Button
             onClick={handleApply}
@@ -273,7 +274,7 @@ export function ChangeSetPanel({
             {applyMutation.isPending ? (
               <Loader2 className="size-4 animate-spin" />
             ) : null}
-            Apply selected
+            {t("applySelected")}
           </Button>
         </div>
       </CardFooter>
@@ -281,9 +282,9 @@ export function ChangeSetPanel({
       <ConfirmDialog
         open={confirmingDiscard}
         onOpenChange={setConfirmingDiscard}
-        title="Discard proposed changes"
-        description="Discard these proposals? Nothing will be written to the checklist."
-        confirmLabel="Discard"
+        title={t("discardTitle")}
+        description={t("discardDescription")}
+        confirmLabel={t("discard")}
         isPending={discardMutation.isPending}
         error={discardMutation.error}
         onConfirm={() => discardMutation.mutate()}

@@ -1,6 +1,7 @@
 "use client";
 
 import { useMutation } from "@tanstack/react-query";
+import { useTranslations } from "next-intl";
 import { useState } from "react";
 import { toast } from "sonner";
 
@@ -15,6 +16,7 @@ import { useSession } from "@/hooks/use-session";
 import { apiFetch } from "@/lib/api/client";
 import { endpoints } from "@/lib/api/endpoints";
 import { isApiError } from "@/lib/api/errors";
+import { useErrorText } from "@/lib/i18n/error-text";
 
 const EMPTY: ChangePasswordValues = { currentPassword: "", newPassword: "" };
 
@@ -29,6 +31,8 @@ const EMPTY: ChangePasswordValues = { currentPassword: "", newPassword: "" };
  * own message instead.
  */
 export function PasswordSection({ resetEnabled }: { resetEnabled: boolean }) {
+  const t = useTranslations("profile.password");
+  const errorText = useErrorText();
   const user = useSession();
   const [values, setValues] = useState<ChangePasswordValues>(EMPTY);
   const change = useChangePassword();
@@ -38,15 +42,13 @@ export function PasswordSection({ resetEnabled }: { resetEnabled: boolean }) {
         method: "POST",
         body: JSON.stringify({ email: user.email }),
       }),
-    onSuccess: () => toast.success("If mail can reach you, a reset link is on its way"),
+    onSuccess: () => toast.success(t("resetSent")),
     onError: (error) => {
       if (isApiError(error) && error.code === "RATE_LIMITED") {
-        toast.success("If mail can reach you, a reset link is on its way");
+        toast.success(t("resetSent"));
         return;
       }
-      toast.error(
-        isApiError(error) ? error.message : "Couldn't send a reset link. Try again.",
-      );
+      toast.error(isApiError(error) ? errorText(error) : t("resetFailed"));
     },
   });
 
@@ -54,8 +56,8 @@ export function PasswordSection({ resetEnabled }: { resetEnabled: boolean }) {
     event.preventDefault();
     change.mutate(values, {
       onSuccess: () => {
-        toast.success("Password changed", {
-          description: "Your other sessions were signed out",
+        toast.success(t("changed"), {
+          description: t("changedDescription"),
         });
         setValues(EMPTY);
       },
@@ -65,9 +67,9 @@ export function PasswordSection({ resetEnabled }: { resetEnabled: boolean }) {
   return (
     <div className="space-y-4">
       <FormPage
-        title="Change password"
-        description="Your other sessions will be signed out. This one stays signed in."
-        submitLabel="Change password"
+        title={t("formTitle")}
+        description={t("formDescription")}
+        submitLabel={t("submit")}
         isPending={change.isPending}
         error={change.error}
         onSubmit={handleSubmit}
@@ -80,15 +82,13 @@ export function PasswordSection({ resetEnabled }: { resetEnabled: boolean }) {
       </FormPage>
       {resetEnabled ? (
         <div className="flex items-center justify-between gap-4">
-          <p className="text-muted-foreground text-sm">
-            Forgotten your current password? We can email you a link instead.
-          </p>
+          <p className="text-muted-foreground text-sm">{t("forgotten")}</p>
           <Button
             variant="outline"
             disabled={reset.isPending}
             onClick={() => reset.mutate()}
           >
-            Email me a reset link
+            {t("emailReset")}
           </Button>
         </div>
       ) : null}

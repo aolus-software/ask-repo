@@ -1,0 +1,23 @@
+{
+  "welcome": "Welcome back, {name}",
+  "description": "Ask questions about any codebase indexed on this instance.",
+  "stats": {
+    "projects": "Projects on this instance",
+    "conversations": "Your conversations"
+  },
+  "recentProjects": {
+    "title": "Recent projects",
+    "viewAll": "View all",
+    "emptyTitle": "No projects yet",
+    "emptyDescription": "Add a repository and {appName} will clone and index it.",
+    "emptyAction": "Add one"
+  },
+  "recentQuestions": {
+    "title": "Your recent questions",
+    "ask": "Ask",
+    "emptyTitle": "Nothing asked yet",
+    "emptyDescription": "Ask a question about any indexed project.",
+    "emptyAction": "Ask a question",
+    "untitled": "Untitled conversation"
+  }
+}

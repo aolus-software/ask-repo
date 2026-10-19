@@ -92,7 +92,13 @@ async def test_an_admin_sees_only_real_memberships(
 
 
 async def test_me_routes_require_a_token(client: AsyncClient) -> None:
-    for path in ("/me/memberships", "/me/sessions", "/me/activity", "/me/answer-style"):
+    for path in (
+        "/me/memberships",
+        "/me/sessions",
+        "/me/activity",
+        "/me/answer-style",
+        "/me/language",
+    ):
         assert (await client.get(path)).status_code == 401, path
     assert (await client.delete(f"/me/sessions/{uuid.uuid4()}")).status_code == 401
 
@@ -106,7 +112,13 @@ async def test_me_routes_are_behind_the_password_change_gate(
     await db_session.commit()
     access, _ = await _login(client, authed_user.email)
 
-    for path in ("/me/memberships", "/me/sessions", "/me/activity", "/me/answer-style"):
+    for path in (
+        "/me/memberships",
+        "/me/sessions",
+        "/me/activity",
+        "/me/answer-style",
+        "/me/language",
+    ):
         response = await client.get(path, headers=_bearer(access))
         assert response.status_code == 403, path
         assert response.json()["detail"]["code"] == "PASSWORD_CHANGE_REQUIRED"
@@ -466,3 +478,57 @@ async def test_an_unchanged_answer_style_writes_no_audit_row(
     await client.put("/me/answer-style", json=STYLE, headers=_bearer(access))
 
     assert len(await audit_rows(AuditEventType.USER_ANSWER_STYLE_UPDATED)) == 1
+
+
+async def test_language_defaults_to_never_chosen(client: AsyncClient, authed_user: User) -> None:
+    access, _ = await _login(client, authed_user.email)
+
+    response = await client.get("/me/language", headers=_bearer(access))
+
+    assert response.status_code == 200
+    assert response.json() == {"language": None}
+
+
+async def test_language_round_trips_and_clears(client: AsyncClient, authed_user: User) -> None:
+    access, _ = await _login(client, authed_user.email)
+
+    put = await client.put("/me/language", json={"language": "zh-TW"}, headers=_bearer(access))
+    got = await client.get("/me/language", headers=_bearer(access))
+    cleared = await client.put("/me/language", json={"language": None}, headers=_bearer(access))
+
+    assert put.status_code == 200
+    assert put.json() == {"language": "zh-TW"}
+    assert got.json() == {"language": "zh-TW"}
+    assert cleared.json() == {"language": None}
+
+
+async def test_language_put_requires_the_key(client: AsyncClient, authed_user: User) -> None:
+    """An omitted key would mean either "unchanged" or "clear it"; a PUT means one thing."""
+    access, _ = await _login(client, authed_user.email)
+
+    response = await client.put("/me/language", json={}, headers=_bearer(access))
+
+    assert response.status_code == 422
+    assert "language" in response.json()["detail"]["fields"]
+
+
+async def test_language_rejects_an_unshipped_code(client: AsyncClient, authed_user: User) -> None:
+    access, _ = await _login(client, authed_user.email)
+
+    response = await client.put("/me/language", json={"language": "fr"}, headers=_bearer(access))
+
+    assert response.status_code == 422
+
+
+async def test_language_change_is_audited_and_a_no_op_is_not(
+    client: AsyncClient, authed_user: User, audit_rows: AuditRows
+) -> None:
+    access, _ = await _login(client, authed_user.email)
+
+    await client.put("/me/language", json={"language": "ko"}, headers=_bearer(access))
+    await client.put("/me/language", json={"language": "ko"}, headers=_bearer(access))
+
+    rows = await audit_rows(AuditEventType.USER_LANGUAGE_UPDATED)
+    assert len(rows) == 1
+    assert rows[0].details == {"changed": {"language": {"before": None, "after": "ko"}}}
+    assert rows[0].actor_user_id == authed_user.id

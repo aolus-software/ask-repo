@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { useState } from "react";
 import { toast } from "sonner";
 
@@ -20,6 +21,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { useRoleLabel } from "@/components/projects/use-role-label";
 import { useAddMember } from "@/hooks/use-member-mutations";
 import { useMembers } from "@/hooks/use-members";
 import { useRoleOptions } from "@/hooks/use-role-options";
@@ -45,10 +47,12 @@ export function AddMemberDialog({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
+  const t = useTranslations("projects.addMemberDialog");
   const [userId, setUserId] = useState<string | null>(null);
   const [role, setRole] = useState(DEFAULT_ROLE);
   const mutation = useAddMember(projectId);
   const roleOptions = useRoleOptions();
+  const roleLabel = useRoleLabel();
   const members = useMembers(projectId, open);
   const usersQuery = useUsers({
     limit: 100,
@@ -75,7 +79,7 @@ export function AddMemberDialog({
       { userId, role },
       {
         onSuccess: () => {
-          toast.success("Member added");
+          toast.success(t("added"));
           reset();
           onOpenChange(false);
         },
@@ -90,16 +94,16 @@ export function AddMemberDialog({
         if (!next) reset();
         onOpenChange(next);
       }}
-      title="Add a member"
-      description="Grant a user access to this project."
-      submitLabel="Add member"
+      title={t("title")}
+      description={t("description")}
+      submitLabel={t("submit")}
       isPending={mutation.isPending}
       error={mutation.error}
       onSubmit={handleSubmit}
     >
       <Field>
         <FieldLabel htmlFor="add-member-user">
-          User <span className="text-danger">*</span>
+          {t("user")} <span className="text-danger">*</span>
         </FieldLabel>
         <Combobox
           items={candidates}
@@ -110,12 +114,12 @@ export function AddMemberDialog({
           <ComboboxInput
             id="add-member-user"
             className="w-full"
-            placeholder={usersQuery.isLoading ? "Loading people…" : "Search people"}
-            aria-label="User"
+            placeholder={usersQuery.isLoading ? t("loadingPeople") : t("searchPeople")}
+            aria-label={t("user")}
           />
           <ComboboxContent>
             <ComboboxEmpty>
-              {usersQuery.isLoading ? "Loading…" : "No user matches."}
+              {usersQuery.isLoading ? t("loading") : t("noMatch")}
             </ComboboxEmpty>
             <ComboboxList>
               {(user: UserResponse) => (
@@ -133,7 +137,7 @@ export function AddMemberDialog({
 
       <Field>
         <FieldLabel htmlFor="add-member-role">
-          Role <span className="text-danger">*</span>
+          {t("role")} <span className="text-danger">*</span>
         </FieldLabel>
         <Select
           value={role}
@@ -142,12 +146,12 @@ export function AddMemberDialog({
           }}
         >
           <SelectTrigger id="add-member-role" className="w-full">
-            <SelectValue />
+            <SelectValue>{(value: string) => roleLabel(value)}</SelectValue>
           </SelectTrigger>
           <SelectContent>
             {roleOptions.map((option) => (
               <SelectItem key={option.name} value={option.name}>
-                {option.label}
+                {roleLabel(option.name)}
               </SelectItem>
             ))}
           </SelectContent>

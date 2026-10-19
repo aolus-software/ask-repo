@@ -1,0 +1,50 @@
+{
+  "recordsTable": {
+    "deleteAria": "Hapus rekaman",
+    "deleteTitle": "Hapus rekaman ini?",
+    "deleteDescription": "Ini tidak dapat dibatalkan.",
+    "delete": "Hapus",
+    "deleted": "Rekaman dihapus",
+    "generatingTitle": "Membuat data tiruan…",
+    "emptyTitle": "Belum ada data tiruan",
+    "generatingDescription": "Pembuatan sedang berjalan. Rekaman akan muncul di sini setelah selesai.",
+    "emptyDescription": "Buat satu kelompok, atau mintalah lewat obrolan."
+  },
+  "generateControl": {
+    "started": "Pembuatan dimulai",
+    "generate": "Buat",
+    "countAria": "Jumlah rekaman yang akan dibuat"
+  },
+  "changeSetPanel": {
+    "noFields": "(tanpa bidang)",
+    "applied": "Perubahan diterapkan",
+    "discarded": "Usulan dibuang",
+    "ops": {
+      "add": "Tambah",
+      "update": "Perbarui",
+      "remove": "Hapus"
+    },
+    "recordLine": "Rekaman <id>{recordId}</id>",
+    "orphaned": "Rekaman ini sudah tidak ada — perubahan ini akan dilewati",
+    "title": "Perubahan data tiruan yang diusulkan",
+    "skipped": "{count, plural, other {# perubahan yang diusulkan}} dilewati karena rekaman yang dirujuknya sudah tidak ada.",
+    "discard": "Buang",
+    "applySelected": "Terapkan yang dipilih",
+    "discardTitle": "Buang perubahan yang diusulkan",
+    "discardDescription": "Buang usulan ini? Tidak ada yang akan ditulis ke set data tiruan."
+  },
+  "chatPanel": {
+    "replyStopped": "Balasan terhenti.",
+    "placeholderNoPermission": "Anda tidak memiliki izin untuk menyempurnakan data tiruan ini.",
+    "placeholderGenerating": "Pembuatan sedang berjalan untuk set data ini. Tunggu hingga selesai.",
+    "placeholderPending": "Terapkan atau buang perubahan yang tertunda terlebih dahulu.",
+    "placeholderAnswering": "Menjawab…",
+    "placeholderDefault": "Minta bentuk tertentu, atau sebutkan apa yang ingin Anda ubah",
+    "sharedTitle": "Obrolan ini dibagikan",
+    "sharedDescription": "Semua orang di instans ini dapat membaca percakapan ini.",
+    "loadErrorTitle": "Tidak dapat memuat obrolan ini",
+    "empty": "Belum ada pesan. Minta agar set data disempurnakan, atau jelaskan apa yang perlu diubah.",
+    "replyStoppedTitle": "Balasan terhenti",
+    "sendErrorTitle": "Tidak dapat mengirim itu"
+  }
+}

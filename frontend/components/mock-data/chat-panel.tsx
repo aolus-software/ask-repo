@@ -1,6 +1,7 @@
 "use client";
 
 import { Info } from "lucide-react";
+import { useTranslations } from "next-intl";
 import { useCallback, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 
@@ -15,9 +16,10 @@ import { EmptyState } from "@/components/feedback/empty-state";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Skeleton } from "@/components/ui/skeleton";
 import { apiFetch, apiFetchRaw } from "@/lib/api/client";
-import { isApiError } from "@/lib/api/errors";
+import { type ApiError, apiErrorFromEvent, isApiError } from "@/lib/api/errors";
+import { useErrorText } from "@/lib/i18n/error-text";
 import { endpoints } from "@/lib/api/endpoints";
-import { PHASE_LABELS } from "@/lib/ask/phase-labels";
+import { usePhaseLabel } from "@/hooks/use-phase-label";
 import type { CitationPayload, MockDataMessageResponse } from "@/lib/api/types";
 import { consumeMockDataStream } from "@/lib/mock-data/stream";
 import { keys } from "@/lib/query/keys";
@@ -34,7 +36,8 @@ interface TurnState {
    * quiet note the Ask screen uses, never the destructive `Alert` a real `error`
    * gets (`docs/audit-finding-solved-logs.md` §U8.6). */
   terminal: "done" | "error" | "interrupted" | null;
-  errorMessage: string | null;
+  /** Null for a failure that carried no API error; the panel then says the reply stopped. */
+  error: ApiError | null;
   reconciled: boolean;
 }
 
@@ -47,7 +50,7 @@ function initialTurnState(): TurnState {
     text: "",
     isStreaming: true,
     terminal: null,
-    errorMessage: null,
+    error: null,
     reconciled: false,
   };
 }
@@ -75,6 +78,9 @@ export function MockDataChatPanel({
    */
   canSend: boolean;
 }) {
+  const t = useTranslations("mockData.chatPanel");
+  const phaseLabel = usePhaseLabel();
+  const errorText = useErrorText();
   const queryClient = useQueryClient();
 
   const messages = useQuery({
@@ -151,7 +157,7 @@ export function MockDataChatPanel({
             ...current,
             isStreaming: false,
             terminal: "error",
-            errorMessage: result.error.message,
+            error: apiErrorFromEvent(result.error),
           };
         } else if (result.done) {
           current = {
@@ -180,7 +186,7 @@ export function MockDataChatPanel({
           ...current,
           isStreaming: false,
           terminal: "error",
-          errorMessage: error instanceof Error ? error.message : "The reply stopped.",
+          error: isApiError(error) ? error : null,
         };
       } finally {
         if (frameHandle !== null) cancelAnimationFrame(frameHandle);
@@ -205,23 +211,21 @@ export function MockDataChatPanel({
   // to a worker that later dies. The composer must not let a user type a paragraph
   // only to have it rejected.
   const composerPlaceholder = !canSend
-    ? "You do not have permission to refine this mock data."
+    ? t("placeholderNoPermission")
     : isGenerating
-      ? "A generation is running for this dataset. Wait for it to finish."
+      ? t("placeholderGenerating")
       : hasPendingChangeSet
-        ? "Apply or discard the pending changes first."
+        ? t("placeholderPending")
         : isStreaming
-          ? "Answering…"
-          : "Ask for a specific shape, or say what you'd like changed";
+          ? t("placeholderAnswering")
+          : t("placeholderDefault");
 
   return (
     <div className="space-y-6">
       <Alert>
         <Info />
-        <AlertTitle>This chat is shared</AlertTitle>
-        <AlertDescription>
-          Everyone on this instance can read this conversation.
-        </AlertDescription>
+        <AlertTitle>{t("sharedTitle")}</AlertTitle>
+        <AlertDescription>{t("sharedDescription")}</AlertDescription>
       </Alert>
 
       {messages.isLoading ? (
@@ -231,25 +235,20 @@ export function MockDataChatPanel({
         </div>
       ) : messages.isError ? (
         <Alert variant="destructive">
-          <AlertTitle>Could not load this chat</AlertTitle>
-          <AlertDescription>
-            {isApiError(messages.error) ? messages.error.message : "Try again."}
-          </AlertDescription>
+          <AlertTitle>{t("loadErrorTitle")}</AlertTitle>
+          <AlertDescription>{errorText(messages.error)}</AlertDescription>
         </Alert>
       ) : messages.data && messages.data.length > 0 ? (
         <MessageList messages={messages.data} feedbackTarget="mock_data_message" />
       ) : (
-        <EmptyState
-          size="compact"
-          description="No messages yet. Ask for the dataset to be refined, or explain what should change."
-        />
+        <EmptyState size="compact" description={t("empty")} />
       )}
 
       {turn ? (
         <AssistantTurn>
           {turn.phase && turn.isStreaming ? (
             <p className="text-muted-foreground mb-2 text-sm">
-              {PHASE_LABELS[turn.phase]}
+              {phaseLabel(turn.phase)}
             </p>
           ) : null}
 
@@ -271,8 +270,10 @@ export function MockDataChatPanel({
 
           {turn.terminal === "error" ? (
             <Alert variant="destructive" className="mt-4">
-              <AlertTitle>The reply stopped</AlertTitle>
-              <AlertDescription>{turn.errorMessage}</AlertDescription>
+              <AlertTitle>{t("replyStoppedTitle")}</AlertTitle>
+              <AlertDescription>
+                {turn.error ? errorText(turn.error) : t("replyStopped")}
+              </AlertDescription>
             </Alert>
           ) : null}
         </AssistantTurn>
@@ -280,12 +281,8 @@ export function MockDataChatPanel({
 
       {preflightError ? (
         <Alert variant="destructive">
-          <AlertTitle>Could not send that</AlertTitle>
-          <AlertDescription>
-            {isApiError(preflightError)
-              ? preflightError.message
-              : "Something went wrong."}
-          </AlertDescription>
+          <AlertTitle>{t("sendErrorTitle")}</AlertTitle>
+          <AlertDescription>{errorText(preflightError)}</AlertDescription>
         </Alert>
       ) : null}
 

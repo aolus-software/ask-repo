@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { useState } from "react";
 import { toast } from "sonner";
 
@@ -20,7 +21,7 @@ import {
   useGenerateChecklistModuleById,
 } from "@/hooks/use-checklist-mutations";
 import { useProjects } from "@/hooks/use-projects";
-import { fieldError } from "@/lib/api/errors";
+import { useFieldErrorText } from "@/lib/i18n/error-text";
 import { SORT } from "@/lib/api/endpoints";
 import type { ProjectResponse } from "@/lib/api/types";
 import { PERMISSION, can } from "@/lib/can";
@@ -34,8 +35,13 @@ export function CreateModuleDialog({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
+  const t = useTranslations("checklist.createModuleDialog");
+  const fieldErrorText = useFieldErrorText();
   const [values, setValues] = useState(EMPTY);
   const mutation = useCreateChecklistModule();
+  const projectIdError = fieldErrorText(mutation.error, "projectId");
+  const nameError = fieldErrorText(mutation.error, "name");
+  const sourcePathError = fieldErrorText(mutation.error, "sourcePath");
   const generate = useGenerateChecklistModuleById();
 
   const query = useProjects({
@@ -76,14 +82,11 @@ export function CreateModuleDialog({
         // module exists either way, and chaining them would report a generation
         // failure as a failed create, inviting a retry that makes a second module.
         onSuccess: (module) => {
-          toast.success("Module created");
+          toast.success(t("created"));
           setValues(EMPTY);
           onOpenChange(false);
           generate.mutate(module.id, {
-            onError: () =>
-              toast.error(
-                "Module created, but generation did not start. Use Generate on the module.",
-              ),
+            onError: () => toast.error(t("generationNotStarted")),
           });
         },
       },
@@ -94,16 +97,16 @@ export function CreateModuleDialog({
     <FormDialog
       open={open}
       onOpenChange={onOpenChange}
-      title="Create a module"
-      description="Generate a test checklist for a code path in an indexed repository."
-      submitLabel="Create module"
+      title={t("title")}
+      description={t("description")}
+      submitLabel={t("submit")}
       isPending={mutation.isPending}
       error={mutation.error}
       onSubmit={handleSubmit}
     >
       <Field>
         <FieldLabel>
-          Project <span className="text-danger">*</span>
+          {t("project")} <span className="text-danger">*</span>
         </FieldLabel>
         <Combobox
           items={readyProjects}
@@ -115,12 +118,12 @@ export function CreateModuleDialog({
         >
           <ComboboxInput
             className="w-full"
-            placeholder={query.isLoading ? "Loading projects…" : "Search projects"}
-            aria-label="Project"
+            placeholder={query.isLoading ? t("loadingProjects") : t("searchProjects")}
+            aria-label={t("projectAria")}
           />
           <ComboboxContent>
             <ComboboxEmpty>
-              {query.isLoading ? "Loading…" : "No indexed project matches."}
+              {query.isLoading ? t("loading") : t("noProjectMatches")}
             </ComboboxEmpty>
             <ComboboxList>
               {(project: ProjectResponse) => (
@@ -131,49 +134,37 @@ export function CreateModuleDialog({
             </ComboboxList>
           </ComboboxContent>
         </Combobox>
-        <FieldDescription>
-          A module can only be created against an indexed project. Offering others
-          produces a 409 the user cannot act on.
-        </FieldDescription>
-        {fieldError(mutation.error, "projectId") ? (
-          <FieldError>{fieldError(mutation.error, "projectId")}</FieldError>
-        ) : null}
+        <FieldDescription>{t("projectHint")}</FieldDescription>
+        {projectIdError ? <FieldError>{projectIdError}</FieldError> : null}
       </Field>
 
       <Field>
         <FieldLabel htmlFor="name">
-          Name <span className="text-danger">*</span>
+          {t("name")} <span className="text-danger">*</span>
         </FieldLabel>
         <Input
           id="name"
-          placeholder="e.g., Auth module"
+          placeholder={t("namePlaceholder")}
           value={values.name}
           onChange={(event) => setValues({ ...values, name: event.target.value })}
-          aria-invalid={Boolean(fieldError(mutation.error, "name"))}
+          aria-invalid={Boolean(nameError)}
         />
-        {fieldError(mutation.error, "name") ? (
-          <FieldError>{fieldError(mutation.error, "name")}</FieldError>
-        ) : null}
+        {nameError ? <FieldError>{nameError}</FieldError> : null}
       </Field>
 
       <Field>
         <FieldLabel htmlFor="sourcePath">
-          Source path <span className="text-danger">*</span>
+          {t("sourcePath")} <span className="text-danger">*</span>
         </FieldLabel>
         <PathPicker
           projectId={values.projectId}
           value={values.sourcePath}
           onValueChange={(sourcePath) => setValues({ ...values, sourcePath })}
           inputId="sourcePath"
-          invalid={Boolean(fieldError(mutation.error, "sourcePath"))}
+          invalid={Boolean(sourcePathError)}
         />
-        <FieldDescription>
-          Browse or search the indexed repository, or type a repository-relative path. A
-          path that matches nothing in the index is refused (phase 1.1).
-        </FieldDescription>
-        {fieldError(mutation.error, "sourcePath") ? (
-          <FieldError>{fieldError(mutation.error, "sourcePath")}</FieldError>
-        ) : null}
+        <FieldDescription>{t("sourcePathHint")}</FieldDescription>
+        {sourcePathError ? <FieldError>{sourcePathError}</FieldError> : null}
       </Field>
     </FormDialog>
   );

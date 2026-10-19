@@ -1,0 +1,24 @@
+{
+  "validation": {
+    "missing": "Kolom ini wajib diisi.",
+    "string_too_short": "Ini terlalu pendek.",
+    "string_too_long": "Ini terlalu panjang.",
+    "enum": "Pilih salah satu opsi yang tersedia.",
+    "literal_error": "Pilih salah satu opsi yang tersedia.",
+    "url_parsing": "Masukkan URL yang valid.",
+    "url_scheme": "URL harus diawali dengan https://.",
+    "int_parsing": "Masukkan bilangan bulat.",
+    "greater_than_equal": "Angka ini terlalu kecil.",
+    "less_than_equal": "Angka ini terlalu besar.",
+    "uuid_parsing": "Ini bukan id yang valid."
+  },
+  "passwordInput": {
+    "show": "Tampilkan kata sandi",
+    "hide": "Sembunyikan kata sandi"
+  },
+  "passwordField": {
+    "notAccepted": "Kata sandi itu tidak diterima.",
+    "looksGood": "Sejauh ini bagus.",
+    "hint": "Pilih kata sandi yang kuat yang tidak Anda gunakan di tempat lain."
+  }
+}

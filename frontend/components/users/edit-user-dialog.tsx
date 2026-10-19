@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { useState } from "react";
 import { toast } from "sonner";
 
@@ -8,7 +9,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Field, FieldError, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { useUpdateUser } from "@/hooks/use-user-mutations";
-import { fieldError } from "@/lib/api/errors";
+import { useFieldErrorText } from "@/lib/i18n/error-text";
 import type { UserResponse } from "@/lib/api/types";
 
 export function EditUserDialog({
@@ -20,6 +21,8 @@ export function EditUserDialog({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
+  const t = useTranslations("settings.users.edit");
+  const fieldErrorText = useFieldErrorText();
   // Seeded during render, keyed on the row's id — never from an effect
   // (`forms.md` §6). Reopening on a different row re-seeds; the operator's own
   // edits survive a refetch.
@@ -37,34 +40,34 @@ export function EditUserDialog({
     event.preventDefault();
     mutation.mutate(values, {
       onSuccess: () => {
-        toast.success("Account updated");
+        toast.success(t("done"));
         onOpenChange(false);
       },
     });
   }
+
+  const nameError = fieldErrorText(mutation.error, "name");
 
   return (
     <FormDialog
       open={open}
       onOpenChange={onOpenChange}
       size="sm"
-      title={`Edit ${user.name}`}
-      submitLabel="Save changes"
+      title={t("title", { name: user.name })}
+      submitLabel={t("submit")}
       isPending={mutation.isPending}
       error={mutation.error}
       onSubmit={handleSubmit}
     >
       <Field>
-        <FieldLabel htmlFor="edit-name">Name</FieldLabel>
+        <FieldLabel htmlFor="edit-name">{t("fields.name")}</FieldLabel>
         <Input
           id="edit-name"
           value={values.name}
           onChange={(event) => setValues({ ...values, name: event.target.value })}
-          aria-invalid={Boolean(fieldError(mutation.error, "name"))}
+          aria-invalid={Boolean(nameError)}
         />
-        {fieldError(mutation.error, "name") ? (
-          <FieldError>{fieldError(mutation.error, "name")}</FieldError>
-        ) : null}
+        {nameError ? <FieldError>{nameError}</FieldError> : null}
       </Field>
 
       <Field orientation="horizontal">
@@ -75,7 +78,7 @@ export function EditUserDialog({
             setValues({ ...values, isAdmin: checked === true })
           }
         />
-        <FieldLabel htmlFor="edit-isAdmin">Administrator</FieldLabel>
+        <FieldLabel htmlFor="edit-isAdmin">{t("fields.administrator")}</FieldLabel>
       </Field>
     </FormDialog>
   );

@@ -71,8 +71,12 @@ Application code raises `AppError(status_code, ErrorCode.SOME_CODE, "message")` 
 { "detail": { "code": "PASSWORD_CHANGE_REQUIRED", "message": "Change your password first." } }
 ```
 
-`422` adds a `fields` map keyed by the `camelCase` field name the client sent, because
-`docs/design.md` renders an error per field and should not be parsing Pydantic `loc` arrays.
+`422` adds two maps, both keyed by the `camelCase` field name the client sent: `fields`,
+Pydantic's English message, and `fieldTypes`, Pydantic's error `type` (`missing`,
+`string_too_short`, `enum`, …). `docs/design.md` renders an error per field and should not be
+parsing Pydantic `loc` arrays; the frontend translates each one by its type and falls back to its
+text (`.claude/rules/forms.md` §4). `fieldTypes` is a sibling rather than a change to `fields`'
+values because a sibling is additive and objects in `fields` would break every existing client.
 
 `ErrorCode` values are a **wire contract**: renaming a member breaks a frontend branch. Add
 members; do not rename them.

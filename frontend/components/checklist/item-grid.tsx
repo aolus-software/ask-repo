@@ -1,6 +1,7 @@
 "use client";
 
 import { ClipboardCheck, Pencil, Trash2 } from "lucide-react";
+import { useTranslations } from "next-intl";
 import { useState } from "react";
 import { toast } from "sonner";
 
@@ -44,24 +45,15 @@ import {
   useUpdateChecklistItemDetail,
 } from "@/hooks/use-checklist-mutations";
 import { useProject } from "@/hooks/use-projects";
-import { fieldError, isApiError } from "@/lib/api/errors";
+import { useErrorText, useFieldErrorText } from "@/lib/i18n/error-text";
 import type { ChecklistItemKind, ChecklistItemResponse } from "@/lib/api/types";
 import { PERMISSION, can } from "@/lib/can";
 import { groupByFeature } from "@/lib/checklist/operations";
-import { checklistItemResultLabel, checklistItemResultTone } from "@/lib/status";
+import { checklistItemResultLabelKey, checklistItemResultTone } from "@/lib/status";
 
 const COLUMN_COUNT = 6;
 
-/** The server's own message when there is one; it is written for the user. */
-function reportFailure(error: unknown): void {
-  toast.error(isApiError(error) ? error.message : "That did not save. Try again.");
-}
-
-/** Shown wherever a kind is chosen or displayed, so the wording never diverges. */
-export const KIND_LABELS: Record<ChecklistItemKind, string> = {
-  positive: "Positive",
-  negative: "Negative",
-};
+const KINDS: ChecklistItemKind[] = ["positive", "negative"];
 
 interface Draft {
   testName: string;
@@ -95,6 +87,13 @@ export function ItemGrid({
   /** While a generation runs the empty state must not invite starting another. */
   isGenerating: boolean;
 }) {
+  const t = useTranslations("checklist");
+  const tStatus = useTranslations("status");
+  const errorText = useErrorText();
+  const fieldErrorText = useFieldErrorText();
+  function reportFailure(error: unknown): void {
+    toast.error(errorText(error));
+  }
   const [recording, setRecording] = useState<ChecklistItemResponse | null>(null);
   const [editing, setEditing] = useState<ChecklistItemResponse | null>(null);
   const [draft, setDraft] = useState<Draft | null>(null);
@@ -104,6 +103,8 @@ export function ItemGrid({
 
   const saveResult = useSaveChecklistItemResult(moduleId);
   const updateDetail = useUpdateChecklistItemDetail(moduleId);
+  const testNameError = fieldErrorText(updateDetail.error, "testName");
+  const expectedResultError = fieldErrorText(updateDetail.error, "expectedResult");
   const deleteItem = useDeleteChecklistItem(moduleId);
   const project = useProject(items[0]?.projectId ?? "");
 
@@ -138,7 +139,7 @@ export function ItemGrid({
       { itemId: editing.id, ...draft },
       {
         onSuccess: () => {
-          toast.success("Test case updated");
+          toast.success(t("itemGrid.updated"));
           stopEditing();
         },
         onError: (error) => reportFailure(error),
@@ -151,11 +152,13 @@ export function ItemGrid({
       <Card className="p-0">
         <EmptyState
           icon={ClipboardCheck}
-          title={isGenerating ? "Generating test cases…" : "No test cases yet"}
+          title={
+            isGenerating ? t("itemGrid.generatingTitle") : t("itemGrid.emptyTitle")
+          }
           description={
             isGenerating
-              ? "A generation is running. The test cases appear here when it finishes."
-              : "Generate the checklist, or add one by hand."
+              ? t("itemGrid.generatingDescription")
+              : t("itemGrid.emptyDescription")
           }
         />
       </Card>
@@ -176,12 +179,14 @@ export function ItemGrid({
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Test case</TableHead>
-                <TableHead>Expected result</TableHead>
-                <TableHead>Result</TableHead>
-                <TableHead>Notes</TableHead>
-                <TableHead>Sources</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
+                <TableHead>{t("itemGrid.columns.testCase")}</TableHead>
+                <TableHead>{t("itemGrid.columns.expectedResult")}</TableHead>
+                <TableHead>{t("itemGrid.columns.result")}</TableHead>
+                <TableHead>{t("itemGrid.columns.notes")}</TableHead>
+                <TableHead>{t("itemGrid.columns.sources")}</TableHead>
+                <TableHead className="text-right">
+                  {t("itemGrid.columns.actions")}
+                </TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -190,8 +195,7 @@ export function ItemGrid({
                   <TableCell colSpan={COLUMN_COUNT} className="text-sm font-semibold">
                     {group.feature}
                     <span className="text-muted-foreground ml-2 font-normal">
-                      {group.items.length} test{" "}
-                      {group.items.length === 1 ? "case" : "cases"}
+                      {t("itemGrid.testCaseCount", { count: group.items.length })}
                     </span>
                   </TableCell>
                 </TableRow>,
@@ -210,7 +214,7 @@ export function ItemGrid({
                               variant="outline"
                               className="text-warning border-warning/60 w-fit text-xs font-normal"
                             >
-                              Negative
+                              {t("kinds.negative")}
                             </Badge>
                           ) : null}
                           {item.source === "manual" ? (
@@ -218,7 +222,7 @@ export function ItemGrid({
                               variant="outline"
                               className="w-fit text-xs font-normal"
                             >
-                              Hand-written
+                              {t("itemGrid.handWritten")}
                             </Badge>
                           ) : null}
                         </div>
@@ -233,7 +237,7 @@ export function ItemGrid({
                       <div className="flex flex-col gap-1">
                         <StatusBadge
                           tone={checklistItemResultTone(item.status)}
-                          label={checklistItemResultLabel(item.status)}
+                          label={tStatus(checklistItemResultLabelKey(item.status))}
                           className="w-fit"
                         />
                         {item.currentResult ? (
@@ -267,7 +271,7 @@ export function ItemGrid({
                             onClick={() => setRecording(item)}
                           >
                             <ClipboardCheck className="size-4" />
-                            Record result
+                            {t("itemGrid.recordResult")}
                           </Button>
                         ) : null}
                         {canEdit() ? (
@@ -275,7 +279,9 @@ export function ItemGrid({
                             <Button
                               size="icon"
                               variant="ghost"
-                              aria-label={`Edit ${item.testName}`}
+                              aria-label={t("itemGrid.editAria", {
+                                name: item.testName,
+                              })}
                               onClick={() => startEditing(item)}
                             >
                               <Pencil className="size-4" />
@@ -283,7 +289,9 @@ export function ItemGrid({
                             <Button
                               size="icon"
                               variant="ghost"
-                              aria-label={`Delete ${item.testName}`}
+                              aria-label={t("itemGrid.deleteAria", {
+                                name: item.testName,
+                              })}
                               onClick={() => setPendingDelete(item)}
                             >
                               <Trash2 className="size-4" />
@@ -311,13 +319,13 @@ export function ItemGrid({
       >
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Record a result</DialogTitle>
+            <DialogTitle>{t("itemGrid.recordTitle")}</DialogTitle>
             <DialogDescription>{recording?.testName}</DialogDescription>
           </DialogHeader>
           {recording ? (
             <>
               <p className="text-muted-foreground text-sm">
-                Expected: {recording.expectedResult}
+                {t("itemGrid.expectedLine", { expected: recording.expectedResult })}
               </p>
               <ResultCell
                 item={recording}
@@ -328,7 +336,7 @@ export function ItemGrid({
                     { itemId: recording.id, ...input },
                     {
                       onSuccess: () => {
-                        toast.success("Result recorded");
+                        toast.success(t("itemGrid.resultRecorded"));
                         setRecording(null);
                       },
                       onError: (error) => reportFailure(error),
@@ -346,9 +354,9 @@ export function ItemGrid({
         onOpenChange={(open) => {
           if (!open) stopEditing();
         }}
-        title="Edit the test case"
-        description="What it is called, what it should do, and why it exists. The recorded result is not editable here."
-        submitLabel="Save changes"
+        title={t("itemGrid.editTitle")}
+        description={t("itemGrid.editDescription")}
+        submitLabel={t("itemGrid.saveChanges")}
         isPending={updateDetail.isPending}
         error={updateDetail.error}
         onSubmit={saveDefinition}
@@ -356,22 +364,22 @@ export function ItemGrid({
         {draft ? (
           <>
             <Field>
-              <FieldLabel htmlFor="edit-test-name">Test name</FieldLabel>
+              <FieldLabel htmlFor="edit-test-name">{t("itemGrid.testName")}</FieldLabel>
               <Input
                 id="edit-test-name"
                 value={draft.testName}
                 onChange={(event) =>
                   setDraft({ ...draft, testName: event.target.value })
                 }
-                aria-invalid={Boolean(fieldError(updateDetail.error, "testName"))}
+                aria-invalid={Boolean(testNameError)}
               />
-              {fieldError(updateDetail.error, "testName") ? (
-                <FieldError>{fieldError(updateDetail.error, "testName")}</FieldError>
-              ) : null}
+              {testNameError ? <FieldError>{testNameError}</FieldError> : null}
             </Field>
 
             <Field>
-              <FieldLabel htmlFor="edit-expected">Expected result</FieldLabel>
+              <FieldLabel htmlFor="edit-expected">
+                {t("itemGrid.expectedResult")}
+              </FieldLabel>
               <Textarea
                 id="edit-expected"
                 className="min-h-24"
@@ -379,17 +387,15 @@ export function ItemGrid({
                 onChange={(event) =>
                   setDraft({ ...draft, expectedResult: event.target.value })
                 }
-                aria-invalid={Boolean(fieldError(updateDetail.error, "expectedResult"))}
+                aria-invalid={Boolean(expectedResultError)}
               />
-              {fieldError(updateDetail.error, "expectedResult") ? (
-                <FieldError>
-                  {fieldError(updateDetail.error, "expectedResult")}
-                </FieldError>
+              {expectedResultError ? (
+                <FieldError>{expectedResultError}</FieldError>
               ) : null}
             </Field>
 
             <Field>
-              <FieldLabel htmlFor="edit-kind">Kind</FieldLabel>
+              <FieldLabel htmlFor="edit-kind">{t("itemGrid.kind")}</FieldLabel>
               <Select
                 value={draft.kind}
                 onValueChange={(value: string | null | undefined) =>
@@ -401,13 +407,13 @@ export function ItemGrid({
               >
                 <SelectTrigger id="edit-kind" className="w-full">
                   <SelectValue>
-                    {(value: string) => KIND_LABELS[value as ChecklistItemKind]}
+                    {(value: string) => t(`kinds.${value as ChecklistItemKind}`)}
                   </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
-                  {Object.entries(KIND_LABELS).map(([value, label]) => (
+                  {KINDS.map((value) => (
                     <SelectItem key={value} value={value}>
-                      {label}
+                      {t(`kinds.${value}`)}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -415,7 +421,7 @@ export function ItemGrid({
             </Field>
 
             <Field>
-              <FieldLabel htmlFor="edit-notes">Notes</FieldLabel>
+              <FieldLabel htmlFor="edit-notes">{t("itemGrid.notes")}</FieldLabel>
               <Textarea
                 id="edit-notes"
                 className="min-h-20"
@@ -434,16 +440,16 @@ export function ItemGrid({
         onOpenChange={(open) => {
           if (!open) setPendingDelete(null);
         }}
-        title="Delete this test case?"
-        description="The test case and the result recorded against it both go."
-        confirmLabel="Delete"
+        title={t("itemGrid.deleteTitle")}
+        description={t("itemGrid.deleteDescription")}
+        confirmLabel={t("itemGrid.delete")}
         isPending={deleteItem.isPending}
         error={deleteItem.error}
         onConfirm={() => {
           if (!pendingDelete) return;
           deleteItem.mutate(pendingDelete.id, {
             onSuccess: () => {
-              toast.success("Test case deleted");
+              toast.success(t("itemGrid.deleted"));
               setPendingDelete(null);
             },
             onError: (error) => reportFailure(error),

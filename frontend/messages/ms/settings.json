@@ -1,0 +1,84 @@
+{
+  "users": {
+    "title": "Pengguna",
+    "description": "Akaun pada instans ini.",
+    "add": "Tambah pengguna",
+    "searchPlaceholder": "Cari mengikut nama atau e-mel",
+    "forbidden": "Hanya pentadbir yang boleh mengurus akaun.",
+    "empty": {
+      "noMatchTitle": "Tiada akaun yang sepadan",
+      "noneTitle": "Belum ada akaun",
+      "noMatchDescription": "Cuba nama atau e-mel lain.",
+      "noneDescription": "Sediakan akaun untuk rakan sekerja bagi membolehkan mereka bermula."
+    },
+    "table": {
+      "columns": {
+        "name": "Nama",
+        "email": "E-mel",
+        "role": "Peranan",
+        "lastLogin": "Log masuk terakhir",
+        "created": "Dicipta",
+        "actions": "Tindakan"
+      },
+      "never": "Tidak pernah"
+    },
+    "roleBadge": {
+      "admin": "Pentadbir",
+      "member": "Ahli"
+    },
+    "actionsFor": "Tindakan untuk {name}",
+    "actions": {
+      "edit": "Sunting",
+      "resetPassword": "Tetapkan semula kata laluan",
+      "deactivate": "Nyahaktifkan"
+    },
+    "create": {
+      "title": "Tambah pengguna",
+      "description": "Mereka akan diminta memilih kata laluan sendiri apabila mereka log masuk buat kali pertama.",
+      "submit": "Cipta akaun",
+      "done": "Akaun dicipta",
+      "fields": {
+        "name": "Nama",
+        "email": "E-mel",
+        "password": "Kata laluan sementara",
+        "administrator": "Pentadbir"
+      }
+    },
+    "edit": {
+      "title": "Sunting {name}",
+      "submit": "Simpan perubahan",
+      "done": "Akaun dikemas kini",
+      "fields": {
+        "name": "Nama",
+        "administrator": "Pentadbir"
+      }
+    },
+    "reset": {
+      "title": "Tetapkan semula kata laluan untuk {name}",
+      "description": "Setiap sesi bagi akaun ini akan dilog keluar.",
+      "submit": "Tetapkan semula kata laluan",
+      "done": "Kata laluan ditetapkan semula",
+      "fields": {
+        "password": "Kata laluan sementara"
+      }
+    },
+    "deactivate": {
+      "title": "Nyahaktifkan {name}?",
+      "description": "Sesi mereka berakhir serta-merta. Projek yang mereka cipta kekal.",
+      "confirm": "Nyahaktifkan",
+      "done": "Akaun dinyahaktifkan"
+    },
+    "lastOwner": "Projek ini akan ditinggalkan tanpa pemilik: <projects></projects>. Berikan peranan pemilik kepada orang lain terlebih dahulu.",
+    "changePassword": {
+      "current": "Kata laluan semasa",
+      "new": "Kata laluan baharu"
+    }
+  },
+  "feedback": {
+    "title": "Maklum balas",
+    "description": "Bagaimana orang menilai jawapan, balasan sembang dan cadangan. Siapa yang mengundi, dan soalan di sebalik sesuatu undi, tidak sekali-kali ditunjukkan.",
+    "forbidden": "Hanya pentadbir yang boleh membaca maklum balas tentang output model.",
+    "emptyTitle": "Belum ada maklum balas",
+    "emptyDescription": "Undi pada jawapan, balasan sembang dan set perubahan akan dipaparkan di sini."
+  }
+}

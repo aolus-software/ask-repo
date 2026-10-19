@@ -1,5 +1,7 @@
 "use client";
 
+import { useTranslations } from "next-intl";
+
 import { Answer } from "@/components/ask/answer";
 import { EvalStatusBadge } from "@/components/eval/eval-status-badge";
 import { EvalVerdictBadge } from "@/components/eval/eval-verdict-badge";
@@ -27,6 +29,7 @@ export function EvalRunSheet({
   pairs: EvalPair[];
   onClose: () => void;
 }) {
+  const t = useTranslations("eval.runSheet");
   const query = useEvalRun(runId ?? "");
   const run = query.data;
   const questions = new Map(pairs.map((pair) => [pair.id, pair.question]));
@@ -36,15 +39,15 @@ export function EvalRunSheet({
       <SheetContent className="w-full overflow-y-auto data-[side=right]:sm:max-w-3xl data-[side=right]:lg:max-w-5xl">
         <SheetHeader>
           <SheetTitle className="flex items-center gap-2">
-            Run results
+            {t("title")}
             {run ? <EvalStatusBadge status={run.status} /> : null}
           </SheetTitle>
           <SheetDescription>
             {run
               ? formatAbsolute(run.createdAt)
               : query.error
-                ? "The run could not be loaded"
-                : "Loading the run…"}
+                ? t("loadFailed")
+                : t("loading")}
           </SheetDescription>
         </SheetHeader>
         <div className="space-y-4 px-4 pb-4">
@@ -52,19 +55,19 @@ export function EvalRunSheet({
           {query.error ? (
             <DetailError
               error={query.error}
-              notFoundMessage="That run does not exist, or it has been deleted."
+              notFoundMessage={t("notFound")}
               onRetry={() => query.refetch()}
             />
           ) : null}
           {run?.status === "failed" && run.error ? (
-            <JobFailureAlert title="Run failed" message={run.error} />
+            <JobFailureAlert title={t("failedTitle")} message={run.error} />
           ) : null}
           {run?.results.map((result) => (
             <section key={result.id} className="space-y-2 rounded-md border p-3">
               <div className="flex flex-wrap items-center gap-2">
                 <EvalVerdictBadge verdict={result.verdict} />
                 <span className="text-muted-foreground text-xs">
-                  Retrieval {result.retrievalHit ? "hit" : "miss"}
+                  {result.retrievalHit ? t("retrievalHit") : t("retrievalMiss")}
                 </span>
               </div>
               <p className="text-sm font-medium">
@@ -73,12 +76,12 @@ export function EvalRunSheet({
               <Answer content={result.answer} />
               {result.judgeReason ? (
                 <p className="text-muted-foreground text-sm">
-                  Judge: {result.judgeReason}
+                  {t("judge", { reason: result.judgeReason })}
                 </p>
               ) : null}
               {result.groundingWarnings.length > 0 ? (
                 <p className="text-warning text-xs">
-                  Warnings: {result.groundingWarnings.join(", ")}
+                  {t("warnings", { warnings: result.groundingWarnings.join(", ") })}
                 </p>
               ) : null}
             </section>

@@ -1,0 +1,14 @@
+{
+  "operationRow": {
+    "include": "Sertakan perubahan ini",
+    "noRationale": "Tidak ada alasan yang diberikan."
+  },
+  "operationCounts": {
+    "summary": "{added} ditambahkan, {updated} diubah, {removed} dihapus"
+  },
+  "operationGroups": {
+    "added": "Ditambahkan",
+    "changed": "Diubah",
+    "removed": "Dihapus"
+  }
+}

@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { useMemo } from "react";
 
 import { ProjectStatusBadge } from "@/components/feedback/status-badge";
@@ -38,6 +39,7 @@ export function ProjectPicker({
   value: string | null;
   onChange: (projectId: string) => void;
 }) {
+  const t = useTranslations("ask");
   const query = useProjects({
     limit: 100,
     sort: SORT.projects.updatedAt,
@@ -58,12 +60,16 @@ export function ProjectPicker({
     >
       <ComboboxInput
         className="w-full max-w-sm"
-        placeholder={query.isLoading ? "Loading projects…" : "Search projects"}
-        aria-label="Project"
+        placeholder={
+          query.isLoading
+            ? t("projectPicker.loadingProjects")
+            : t("projectPicker.searchProjects")
+        }
+        aria-label={t("projectPicker.label")}
       />
       <ComboboxContent>
         <ComboboxEmpty>
-          {query.isLoading ? "Loading…" : "No project matches."}
+          {query.isLoading ? t("projectPicker.loading") : t("projectPicker.noMatch")}
         </ComboboxEmpty>
         <ComboboxList>
           {(project: ProjectResponse) => (

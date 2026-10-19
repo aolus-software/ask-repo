@@ -81,7 +81,7 @@ erDiagram
 
 | Table | Notable columns |
 | --- | --- |
-| `users` | `email` (partial unique index where not deleted), `password_hash`, `is_admin`, `must_change_password`, `last_login_at`, `answer_detail`, `answer_familiarity`, `answer_format` (the Ask answer style, Phase 2.6: nullable text columns holding `brief`/`thorough`, `new`/`expert` and `prose`/`bullets`; `NULL` = no preference; migration `a7c3e19d5b42`) |
+| `users` | `email` (partial unique index where not deleted), `password_hash`, `is_admin`, `must_change_password`, `last_login_at`, `answer_detail`, `answer_familiarity`, `answer_format` (the Ask answer style, Phase 2.6: nullable text columns holding `brief`/`thorough`, `new`/`expert` and `prose`/`bullets`; `NULL` = no preference; migration `a7c3e19d5b42`), `language` (the interface language, Phase 2.7: nullable `String(8)` holding a BCP-47 tag from `app/core/language.py`; `NULL` = never chose, so `Accept-Language` decides; plain text rather than a Postgres ENUM, so a new language needs no migration; migration `c4e8a1f20b97`) |
 | `refresh_tokens` | `token_hash`, `family_id`, `issued_at`, `expires_at`, `used_at`, `revoked_at`, `revoked_reason`, `user_agent` (255), `ip_address` (45) |
 | `password_reset_tokens` | `id`, `user_id`, `token_hash`, `created_at`, `expires_at`, `used_at`, `revoked_at`, `sent_at` (hard-deleted if expired or used > 24h ago) |
 
@@ -233,8 +233,8 @@ Four non-partial indexes — `created_at`, `actor_user_id`, `event_type`, `proje
 them is partial because there is no `deleted_at` to filter, which is the one place this table
 diverges from every other group above.
 
-**The catalogue is a `StrEnum` in `app/core/audit.py`, not a table** — 45 event types across auth
-(including session revoke, added with the profile page), accounts (including `user.answer_style.updated`, which allowlists `answerDetail`, `answerFamiliarity` and `answerFormat`), projects, RBAC, password reset,
+**The catalogue is a `StrEnum` in `app/core/audit.py`, not a table** — 46 event types across auth
+(including session revoke, added with the profile page), accounts (including `user.answer_style.updated`, which allowlists `answerDetail`, `answerFamiliarity` and `answerFormat`, and `user.language.updated`, which allowlists `language`), projects, RBAC, password reset,
 checklist modules and items, change sets, mock data, the eval harness (`eval_set.generation.requested`, `eval_set.deleted`, `eval_pair.updated`, `eval_run.requested`), exports and conversations. Existence lives in
 code for the reason `app/core/permissions.py` gives for the
 permission catalogue: if it lived in a table, deleting a row would orphan every write site that
@@ -247,7 +247,7 @@ reduced to its host by `urlsplit().hostname`, which excludes the userinfo a PAT 
 content (no prompt, no message, no source excerpt, and **`target_label` is `NULL` for a
 conversation**, because its title derives from the user's first question).
 
-**`details` is one envelope** for all 45 events:
+**`details` is one envelope** for all 46 events:
 
 ```json
 {

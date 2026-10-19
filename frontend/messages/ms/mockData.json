@@ -1,0 +1,50 @@
+{
+  "recordsTable": {
+    "deleteAria": "Padam rekod",
+    "deleteTitle": "Padam rekod ini?",
+    "deleteDescription": "Ini tidak boleh dibatalkan.",
+    "delete": "Padam",
+    "deleted": "Rekod dipadam",
+    "generatingTitle": "Menjana data olok-olok…",
+    "emptyTitle": "Belum ada data olok-olok",
+    "generatingDescription": "Penjanaan sedang berjalan. Rekod akan dipaparkan di sini apabila ia selesai.",
+    "emptyDescription": "Jana satu kelompok, atau minta melalui sembang."
+  },
+  "generateControl": {
+    "started": "Penjanaan dimulakan",
+    "generate": "Jana",
+    "countAria": "Bilangan rekod untuk dijana"
+  },
+  "changeSetPanel": {
+    "noFields": "(tiada medan)",
+    "applied": "Perubahan dilaksanakan",
+    "discarded": "Cadangan dibuang",
+    "ops": {
+      "add": "Tambah",
+      "update": "Kemas kini",
+      "remove": "Buang"
+    },
+    "recordLine": "Rekod <id>{recordId}</id>",
+    "orphaned": "Rekod ini tidak lagi wujud — perubahan ini akan dilangkau",
+    "title": "Perubahan data olok-olok yang dicadangkan",
+    "skipped": "{count, plural, other {# perubahan yang dicadangkan}} dilangkau kerana rekod yang dirujuknya tidak lagi wujud.",
+    "discard": "Buang",
+    "applySelected": "Laksanakan yang dipilih",
+    "discardTitle": "Buang perubahan yang dicadangkan",
+    "discardDescription": "Buang cadangan ini? Tiada apa-apa akan ditulis ke dalam set data olok-olok."
+  },
+  "chatPanel": {
+    "replyStopped": "Balasan terhenti.",
+    "placeholderNoPermission": "Anda tiada kebenaran untuk memperhalusi data olok-olok ini.",
+    "placeholderGenerating": "Penjanaan sedang berjalan untuk set data ini. Tunggu sehingga selesai.",
+    "placeholderPending": "Laksanakan atau buang perubahan yang belum selesai terlebih dahulu.",
+    "placeholderAnswering": "Sedang menjawab…",
+    "placeholderDefault": "Minta bentuk tertentu, atau nyatakan apa yang anda mahu ubah",
+    "sharedTitle": "Sembang ini dikongsi",
+    "sharedDescription": "Semua orang pada instans ini boleh membaca perbualan ini.",
+    "loadErrorTitle": "Tidak dapat memuatkan sembang ini",
+    "empty": "Belum ada mesej. Minta set data diperhalusi, atau terangkan apa yang patut diubah.",
+    "replyStoppedTitle": "Balasan terhenti",
+    "sendErrorTitle": "Tidak dapat menghantarnya"
+  }
+}

@@ -1,7 +1,8 @@
 "use client";
 
-import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
+import { useTranslations } from "next-intl";
+import Link from "next/link";
 
 import {
   AuditEventCurrent,
@@ -17,19 +18,22 @@ import { Card } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useAuditEvent } from "@/hooks/use-audit-events";
 import { useSession } from "@/hooks/use-session";
-import { auditEventLabel } from "@/lib/audit";
-import { formatRelative } from "@/lib/dates";
-import { auditOutcomeLabel, auditOutcomeTone } from "@/lib/status";
+import { useAuditEventLabel } from "@/lib/audit";
+import { auditOutcomeLabelKey, auditOutcomeTone } from "@/lib/status";
+import { useFormatRelative } from "@/hooks/use-format-date";
 
 export function AuditEventScreen({ id }: { id: string }) {
+  const t = useTranslations("audit");
+  const tStatus = useTranslations("status");
+  const auditEventLabel = useAuditEventLabel();
+  const formatRelative = useFormatRelative();
   const user = useSession();
   const query = useAuditEvent(id);
 
   // The route body is wrapped in its gate. Hiding the nav item is not gating the
   // route — an operator can type the URL (navigation.md §6). This mirrors the
   // backend's admin-only dependency; it does not replace it.
-  if (!user.isAdmin)
-    return <Forbidden message="Only administrators can read the audit trail." />;
+  if (!user.isAdmin) return <Forbidden message={t("forbidden")} />;
 
   if (query.isLoading) {
     return (
@@ -45,7 +49,7 @@ export function AuditEventScreen({ id }: { id: string }) {
       <div className="mx-auto w-full max-w-3xl">
         <DetailError
           error={query.error}
-          notFoundMessage="That event does not exist, or has aged out of the retention window."
+          notFoundMessage={t("detail.notFound")}
           onRetry={() => query.refetch()}
         />
       </div>
@@ -62,10 +66,10 @@ export function AuditEventScreen({ id }: { id: string }) {
         titleAddon={
           <StatusBadge
             tone={auditOutcomeTone(event.outcome)}
-            label={auditOutcomeLabel(event.outcome)}
+            label={tStatus(auditOutcomeLabelKey(event.outcome))}
           />
         }
-        description={`Recorded ${formatRelative(event.createdAt)}`}
+        description={t("detail.recorded", { time: formatRelative(event.createdAt) })}
         action={
           <Button
             variant="outline"
@@ -74,7 +78,7 @@ export function AuditEventScreen({ id }: { id: string }) {
             render={<Link href="/settings/audit" />}
           >
             <ArrowLeft className="size-4" />
-            Back to audit trail
+            {t("detail.backToTrail")}
           </Button>
         }
       />

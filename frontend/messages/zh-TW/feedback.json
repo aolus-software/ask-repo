@@ -1,0 +1,10 @@
+{
+  "listTitle": "無法載入此清單",
+  "detailTitle": "無法載入此頁面",
+  "retry": "再試一次",
+  "forbidden": {
+    "title": "你沒有權限存取此內容",
+    "description": "如果你認為應該有權限，請洽詢管理員。"
+  },
+  "notFound": { "title": "找不到", "description": "它可能已被刪除，或從未存在。" }
+}

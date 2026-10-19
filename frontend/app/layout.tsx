@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 import { Geist_Mono, Lexend } from "next/font/google";
+import { NextIntlClientProvider } from "next-intl";
+import { getLocale } from "next-intl/server";
 import { ThemeProvider } from "next-themes";
 
 import { Toaster } from "@/components/ui/sonner";
@@ -22,25 +24,30 @@ export const metadata: Metadata = {
   description: "Ask questions about a codebase and get grounded, cited answers.",
 };
 
-export default function RootLayout({ children }: LayoutProps<"/">) {
+export default async function RootLayout({ children }: LayoutProps<"/">) {
+  const locale = await getLocale();
   return (
     // suppressHydrationWarning: the theme provider sets `class="dark"` on <html>
     // before paint, which the server render cannot know about.
     <html
-      lang="en"
+      lang={locale}
       className={`${lexend.variable} ${geistMono.variable} h-full`}
       suppressHydrationWarning
     >
       <body className="bg-background text-foreground flex min-h-full flex-col">
-        <ThemeProvider
-          attribute="class"
-          defaultTheme="system"
-          enableSystem
-          disableTransitionOnChange
-        >
-          <QueryProvider>{children}</QueryProvider>
-          <Toaster />
-        </ThemeProvider>
+        {/* In next-intl 4 a provider rendered by a Server Component inherits the
+            request's locale and messages; no props needed. */}
+        <NextIntlClientProvider>
+          <ThemeProvider
+            attribute="class"
+            defaultTheme="system"
+            enableSystem
+            disableTransitionOnChange
+          >
+            <QueryProvider>{children}</QueryProvider>
+            <Toaster />
+          </ThemeProvider>
+        </NextIntlClientProvider>
       </body>
     </html>
   );

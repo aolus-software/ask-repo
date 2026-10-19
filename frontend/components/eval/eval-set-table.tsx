@@ -1,6 +1,7 @@
 "use client";
 
 import { FlaskConical, MoreHorizontal, Trash2 } from "lucide-react";
+import { useTranslations } from "next-intl";
 import Link from "next/link";
 import { useState } from "react";
 
@@ -25,13 +26,8 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { useEvalSets } from "@/hooks/use-eval";
-import type { EvalRunSummary } from "@/lib/api/types";
-import { formatAbsolute, formatRelative } from "@/lib/dates";
-
-/** The tally a run's list row shows. Counts only — never a question or an answer. */
-function tally(run: EvalRunSummary): string {
-  return `hits ${run.hits}/${run.pairsAnswered} · correct ${run.correct} · partial ${run.partial} · wrong ${run.wrong}`;
-}
+import { formatAbsolute } from "@/lib/dates";
+import { useFormatRelative } from "@/hooks/use-format-date";
 
 /** Column order is fixed by `docs/design.md`: identity, status, results, timestamps. */
 export function EvalSetTable({
@@ -42,6 +38,8 @@ export function EvalSetTable({
   /** `eval.run`, the permission the delete route checks. The backend still enforces it. */
   canDelete?: boolean;
 }) {
+  const t = useTranslations("eval");
+  const formatRelative = useFormatRelative();
   const query = useEvalSets(projectId);
   const [deleting, setDeleting] = useState<{ id: string; name: string } | null>(null);
   const sets = query.data?.items ?? [];
@@ -54,8 +52,8 @@ export function EvalSetTable({
     return (
       <EmptyState
         icon={FlaskConical}
-        title="No eval sets yet"
-        description="Generate a set of questions with reference answers, then run it to see how the assistant does on this project."
+        title={t("setTable.emptyTitle")}
+        description={t("setTable.emptyDescription")}
       />
     );
   }
@@ -65,13 +63,17 @@ export function EvalSetTable({
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead>Set</TableHead>
-            <TableHead>Path</TableHead>
-            <TableHead>Pairs</TableHead>
-            <TableHead>Status</TableHead>
-            <TableHead>Latest run</TableHead>
-            <TableHead>Created</TableHead>
-            {canDelete ? <TableHead className="text-right">Actions</TableHead> : null}
+            <TableHead>{t("setTable.columns.set")}</TableHead>
+            <TableHead>{t("setTable.columns.path")}</TableHead>
+            <TableHead>{t("setTable.columns.pairs")}</TableHead>
+            <TableHead>{t("setTable.columns.status")}</TableHead>
+            <TableHead>{t("setTable.columns.latestRun")}</TableHead>
+            <TableHead>{t("setTable.columns.created")}</TableHead>
+            {canDelete ? (
+              <TableHead className="text-right">
+                {t("setTable.columns.actions")}
+              </TableHead>
+            ) : null}
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -89,14 +91,24 @@ export function EvalSetTable({
                   </Link>
                 </TableCell>
                 <TableCell className="text-muted-foreground font-mono text-sm">
-                  {set.sourcePath ?? <span className="font-sans">Whole project</span>}
+                  {set.sourcePath ?? (
+                    <span className="font-sans">{t("wholeProject")}</span>
+                  )}
                 </TableCell>
                 <TableCell className="text-sm">{set.pairCount}</TableCell>
                 <TableCell>
                   <EvalStatusBadge status={set.status} />
                 </TableCell>
                 <TableCell className="text-muted-foreground text-sm">
-                  {set.latestRun ? tally(set.latestRun) : "No runs yet"}
+                  {set.latestRun
+                    ? t("tally.summary", {
+                        hits: set.latestRun.hits,
+                        answered: set.latestRun.pairsAnswered,
+                        correct: set.latestRun.correct,
+                        partial: set.latestRun.partial,
+                        wrong: set.latestRun.wrong,
+                      })
+                    : t("setTable.noRuns")}
                 </TableCell>
                 <TableCell
                   className="text-muted-foreground text-sm"
@@ -112,7 +124,7 @@ export function EvalSetTable({
                           <Button
                             variant="ghost"
                             size="icon"
-                            aria-label={`Actions for ${set.name}`}
+                            aria-label={t("setTable.actionsFor", { name: set.name })}
                           />
                         }
                       >
@@ -123,7 +135,7 @@ export function EvalSetTable({
                           onClick={() => setDeleting({ id: set.id, name: set.name })}
                         >
                           <Trash2 className="size-4" />
-                          Delete
+                          {t("setTable.delete")}
                         </DropdownMenuItem>
                       </DropdownMenuContent>
                     </DropdownMenu>

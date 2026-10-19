@@ -1,6 +1,7 @@
 "use client";
 
 import { Bell } from "lucide-react";
+import { useTranslations } from "next-intl";
 
 import { NotificationFilters } from "@/components/notifications/notification-filters";
 import { NotificationList } from "@/components/notifications/notification-list";
@@ -37,6 +38,8 @@ function changedKey(
 }
 
 export function NotificationsScreen() {
+  const t = useTranslations("notifications");
+  const tCommon = useTranslations("common");
   const { params, setPage, setParam } = useListParams(
     { limit: 25 },
     { extraParams: EXTRA_PARAMS },
@@ -52,15 +55,15 @@ export function NotificationsScreen() {
   return (
     <div className="mx-auto w-full max-w-7xl">
       <PageHeader
-        title="Notifications"
-        description="Everything AskRepo has told you about, newest first."
+        title={t("title")}
+        description={t("description", { appName: tCommon("appName") })}
         action={
           <Button
             variant="outline"
             disabled={(unreadCount.data?.count ?? 0) === 0 || markAllRead.isPending}
             onClick={() => markAllRead.mutate()}
           >
-            Mark all read
+            {t("markAllRead")}
           </Button>
         }
       />
@@ -98,13 +101,13 @@ export function NotificationsScreen() {
             icon={Bell}
             title={
               listParams.projectId || listParams.eventType || listParams.unreadOnly
-                ? "No notifications match"
-                : "Nothing yet"
+                ? t("emptyState.noMatchTitle")
+                : t("emptyState.noneTitle")
             }
             description={
               listParams.projectId || listParams.eventType || listParams.unreadOnly
-                ? "Try clearing your filters."
-                : "Project and checklist events will appear here as they happen."
+                ? t("emptyState.noMatchDescription")
+                : t("emptyState.noneDescription")
             }
           />
         ) : (

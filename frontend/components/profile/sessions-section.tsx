@@ -1,5 +1,6 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { useState } from "react";
 import { toast } from "sonner";
 
@@ -21,14 +22,34 @@ import { useRevokeSession, useSessions } from "@/hooks/use-profile";
 import { useSession } from "@/hooks/use-session";
 import type { SessionSummary } from "@/lib/api/types";
 import { signOut } from "@/lib/auth/sign-out";
-import { formatAbsolute, formatRelative } from "@/lib/dates";
-import { deviceLabel } from "@/lib/user-agent";
+import { formatAbsolute } from "@/lib/dates";
+import { parseDevice } from "@/lib/user-agent";
+import { useFormatRelative } from "@/hooks/use-format-date";
 
 export function SessionsSection() {
+  const t = useTranslations("profile.sessions");
+  const formatRelative = useFormatRelative();
   const user = useSession();
   const sessions = useSessions();
   const revoke = useRevokeSession();
   const [pending, setPending] = useState<SessionSummary | null>(null);
+
+  const deviceText = (userAgent: string | null): string => {
+    const device = parseDevice(userAgent);
+    if (!device) return t("unknownDevice");
+    if (device.browser && device.system)
+      return t("device", { browser: device.browser, system: device.system });
+    return device.browser ?? device.system ?? userAgent ?? t("unknownDevice");
+  };
+
+  const lastSignedIn = t.rich("lastSignedIn", {
+    time: user.lastLoginAt ? formatRelative(user.lastLoginAt) : t("never"),
+    when: (chunks) => (
+      <span className="text-foreground" title={formatAbsolute(user.lastLoginAt)}>
+        {chunks}
+      </span>
+    ),
+  });
 
   function logOut(session: SessionSummary) {
     if (session.current) {
@@ -42,12 +63,7 @@ export function SessionsSection() {
 
   return (
     <Card className="gap-4 p-6">
-      <p className="text-muted-foreground text-sm">
-        Last signed in{" "}
-        <span className="text-foreground" title={formatAbsolute(user.lastLoginAt)}>
-          {user.lastLoginAt ? formatRelative(user.lastLoginAt) : "never"}
-        </span>
-      </p>
+      <p className="text-muted-foreground text-sm">{lastSignedIn}</p>
 
       {sessions.isError ? (
         <ListError error={sessions.error} onRetry={() => sessions.refetch()} />
@@ -56,11 +72,11 @@ export function SessionsSection() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Device</TableHead>
-                <TableHead>IP address</TableHead>
-                <TableHead>Started</TableHead>
-                <TableHead>Last active</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
+                <TableHead>{t("columns.device")}</TableHead>
+                <TableHead>{t("columns.ipAddress")}</TableHead>
+                <TableHead>{t("columns.started")}</TableHead>
+                <TableHead>{t("columns.lastActive")}</TableHead>
+                <TableHead className="text-right">{t("columns.actions")}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -72,10 +88,10 @@ export function SessionsSection() {
                     <TableCell>
                       <div className="flex flex-wrap items-center gap-2">
                         <span title={session.userAgent ?? undefined}>
-                          {deviceLabel(session.userAgent)}
+                          {deviceText(session.userAgent)}
                         </span>
                         {session.current ? (
-                          <StatusBadge tone="info" label="This device" />
+                          <StatusBadge tone="info" label={t("thisDevice")} />
                         ) : null}
                       </div>
                     </TableCell>
@@ -96,7 +112,7 @@ export function SessionsSection() {
                     </TableCell>
                     <TableCell className="text-right">
                       <Button variant="ghost" size="sm" onClick={() => logOut(session)}>
-                        Log out
+                        {t("logOut")}
                       </Button>
                     </TableCell>
                   </TableRow>
@@ -109,23 +125,23 @@ export function SessionsSection() {
 
       <div className="flex justify-end">
         <Button variant="outline" onClick={() => void signOut(true)}>
-          Log out everywhere
+          {t("logOutEverywhere")}
         </Button>
       </div>
 
       <ConfirmDialog
         open={pending !== null}
         onOpenChange={(open) => !open && setPending(null)}
-        title="Sign this session out?"
-        description="It can't refresh again, but it may stay signed in until its current access token expires — 15 minutes by default."
-        confirmLabel="Sign it out"
+        title={t("confirmTitle")}
+        description={t("confirmDescription")}
+        confirmLabel={t("confirmLabel")}
         isPending={revoke.isPending}
         error={revoke.error}
         onConfirm={() =>
           pending &&
           revoke.mutate(pending.id, {
             onSuccess: () => {
-              toast.success("Session signed out");
+              toast.success(t("signedOut"));
               setPending(null);
             },
           })

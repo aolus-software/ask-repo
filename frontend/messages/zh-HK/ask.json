@@ -1,0 +1,94 @@
+{
+  "newConversation": {
+    "title": "提問",
+    "description": "問題會根據已索引的程式碼作答，並附上引用來源。只有你能看到這些對話。",
+    "placeholderReady": "提款計算是如何運作的？",
+    "placeholderChooseProject": "請先選擇專案"
+  },
+  "conversation": {
+    "untitled": "未命名對話",
+    "newTitle": "新對話",
+    "notFound": "該對話不存在。",
+    "projectUnavailable": "該專案已不可用。",
+    "answerStopped": "回答已中斷",
+    "tryAgain": "重試",
+    "answering": "回答中…",
+    "askFollowUp": "追問"
+  },
+  "phases": {
+    "queued": "排隊中…",
+    "classifying": "正在理解問題…",
+    "retrieving": "正在搜尋程式碼庫…",
+    "grading": "正在檢查搜尋結果…",
+    "generating": "正在撰寫回答…"
+  },
+  "stream": {
+    "noStream": "伺服器沒有傳送回答串流。",
+    "failed": "回答失敗。"
+  },
+  "composer": {
+    "questionLabel": "你的問題",
+    "ask": "提問"
+  },
+  "answer": {
+    "copyCode": "複製程式碼"
+  },
+  "groundingWarnings": {
+    "no_context": "在此專案中找不到相關內容，因此沒有根據其程式碼生成回答。",
+    "uncited_answer": "此回答沒有引用所提供的任何摘錄，請審慎對待。",
+    "unknown_paths": "此回答提及的檔案不在所擷取的摘錄之中，這些引用可能並不存在。",
+    "weak_evidence": "所擷取的程式碼可能未能完全涵蓋此問題。回答已列明無法確定的部分。",
+    "unknown": "依據警告：{warning}"
+  },
+  "interruptedNote": "連線中斷。上方已收到的內容會保留。",
+  "messages": {
+    "showFull": "顯示完整訊息",
+    "collapse": "收起訊息",
+    "interrupted": "此回答已中斷，已收到的內容會保留。",
+    "endedEarly": "此回答提早結束（{reason}）。"
+  },
+  "projectPicker": {
+    "loadingProjects": "正在載入專案…",
+    "searchProjects": "搜尋專案",
+    "label": "專案",
+    "loading": "載入中…",
+    "noMatch": "沒有符合的專案。"
+  },
+  "sources": {
+    "title": "來源（{count}）",
+    "lines": "第 {start}–{end} 行"
+  },
+  "preflight": {
+    "couldNotAnswer": "無法回答該問題",
+    "genericError": "發生錯誤。",
+    "needsReindexTitle": "此專案需要重新索引",
+    "needsReindexBody": "此專案是以另一個嵌入模型建立索引的，因此其已儲存的向量無法以本實例目前使用的模型搜尋。請重新索引，之後便可提問。",
+    "reindexNow": "立即重新索引",
+    "reindexStarted": "已開始重新索引",
+    "reindexAlreadyRunning": "重新索引正在進行中",
+    "askToReindex": "請聯絡新增此專案的人員或管理員進行重新索引。",
+    "notReadyTitle": "此專案尚未就緒",
+    "notReadyBody": "專案仍在複製或索引中。狀態變為「就緒」後即可提問。"
+  },
+  "rail": {
+    "deleteConversation": "刪除對話",
+    "deleteTitle": "刪除此對話？",
+    "deleteDescription": "只有你能看到此對話，刪除後無法復原。",
+    "delete": "刪除",
+    "deleted": "已刪除對話",
+    "conversations": "對話",
+    "newConversation": "新對話",
+    "searchConversations": "搜尋對話",
+    "loadingProjects": "正在載入專案…",
+    "allProjects": "所有專案",
+    "filterByProject": "按專案篩選",
+    "loading": "載入中…",
+    "couldNotLoadProjects": "無法載入專案。",
+    "noProjectMatches": "沒有符合的專案。",
+    "noConversationMatches": "沒有符合的對話。",
+    "nothingYet": "暫時沒有內容。請選擇專案並提出問題。",
+    "untitled": "未命名對話",
+    "showConversations": "顯示對話",
+    "hideConversations": "隱藏對話"
+  }
+}

@@ -1,0 +1,64 @@
+{
+  "helpful": "Membantu",
+  "notHelpful": "Tidak membantu",
+  "saveFailed": "Umpan balik Anda tidak tersimpan. Coba lagi.",
+  "whatWentWrong": "Apa yang salah?",
+  "noteLabel": "Ada lagi?",
+  "notePlaceholder": "Ada lagi? (opsional)",
+  "noteDisclosure": "Administrator dapat membaca catatan ini. Catatan ini tidak pernah dikirim ke model AI.",
+  "send": "Kirim umpan balik",
+  "reasons": {
+    "wrong_file_cited": "Mengutip berkas yang salah",
+    "missed_something": "Melewatkan sesuatu di repositori",
+    "invented_something": "Mengarang sesuatu",
+    "right_but_unusable": "Benar, tetapi tidak dapat dipakai",
+    "wrong_language_or_tone": "Bahasa atau nada salah",
+    "duplicate_or_redundant": "Duplikat atau berlebihan",
+    "wrong_scope": "Cakupan salah",
+    "other": "Lainnya"
+  },
+  "features": {
+    "answer": "Jawaban Tanya",
+    "refine_checklist": "Obrolan daftar periksa",
+    "refine_mock_data": "Obrolan data tiruan",
+    "generate_checklist": "Pembuatan daftar periksa",
+    "propose_checklist": "Usulan obrolan daftar periksa",
+    "generate_mock_data": "Pembuatan data tiruan",
+    "propose_mock_data": "Usulan obrolan data tiruan"
+  },
+  "summary": {
+    "hint": "dinilai buruk · {votes, plural, other {# suara}}",
+    "feature": "Fitur",
+    "reason": "Alasan",
+    "count": "Jumlah",
+    "promptVersion": "Versi prompt",
+    "votes": "Suara",
+    "downVoted": "Dinilai buruk",
+    "versionNote": "Setiap suara diberi cap versi prompt fitur terkait yang berjalan saat suara diberikan; untuk set perubahan yang ditinjau berhari-hari kemudian, versi ini bisa lebih baru daripada yang membuatnya. Setiap fitur memiliki versinya sendiri, jadi bandingkan versi hanya dalam satu fitur."
+  },
+  "table": {
+    "when": "Kapan",
+    "project": "Proyek",
+    "feature": "Fitur",
+    "vote": "Suara",
+    "reasons": "Alasan",
+    "note": "Catatan",
+    "prompt": "Prompt",
+    "trace": "Jejak",
+    "up": "Baik",
+    "down": "Buruk",
+    "openTrace": "Buka jejak"
+  },
+  "filters": {
+    "allFeatures": "Semua fitur",
+    "allVotes": "Semua suara",
+    "allReasons": "Semua alasan",
+    "filterByFeature": "Filter berdasarkan fitur",
+    "filterByVote": "Filter berdasarkan suara",
+    "filterByReason": "Filter berdasarkan alasan",
+    "up": "Baik",
+    "down": "Buruk",
+    "fromDate": "Dari tanggal",
+    "toDate": "Sampai tanggal"
+  }
+}

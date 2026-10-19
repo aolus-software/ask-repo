@@ -250,8 +250,8 @@ nothing else, so it cannot be aimed at anyone's entries. Never add an `update` m
 a route that writes.
 
 **`AuditRecorder.record` opens its own session and never raises.** That is what makes "an audit
-failure cannot fail a user's action" structural rather than a promise each of the 47 call sites
-keeps (46 in services, plus the `seed-admins` CLI). The accepted consequence is not to be quietly reframed as a guarantee: an action that
+failure cannot fail a user's action" structural rather than a promise each of the 49 call sites
+keeps (48 in services, plus the `seed-admins` CLI). The accepted consequence is not to be quietly reframed as a guarantee: an action that
 commits and then crashes before its audit write leaves no row, silently — the trail is a strong
 record, not a complete one. Services record **after** the commit that made the change true, from
 plain locals, never from an ORM object.
@@ -428,8 +428,10 @@ whether it belongs in `GATE_EXEMPT_PREFIXES`.
 ### One error shape
 
 Every error the app raises is `{"detail": {"code": ..., "message": ...}}`, built by `AppError`.
-`ErrorCode` values are a wire contract — add members, never rename them. `422` adds a `fields`
-map keyed by the `camelCase` field name.
+`ErrorCode` values are a wire contract — add members, never rename them; the frontend translates
+an error by its code, never by its English `message`. `422` adds a `fields` map and a
+`fieldTypes` map (Pydantic's error `type`, which is what the frontend translates a field error
+by), both keyed by the `camelCase` field name.
 
 A body may be widened past those two keys only where the extra field is what makes the error
 actionable — `409 LAST_OWNER` names the projects that would be left with no owner, because
@@ -507,16 +509,19 @@ only redirects to its first reachable child.
 session and calls the API on the browser's behalf**, so no token is ever readable by a script on
 the page.
 
-- **Two cookies, both set by Next, both httpOnly and `Path=/`**: `askrepo_access` (the JWT) and
+- **Three cookies, all set by Next, all httpOnly and `Path=/`**: `askrepo_access` (the JWT),
   `askrepo_session` (the backend's own refresh cookie, stored as a verbatim `name=value` pair
-  because `REFRESH_COOKIE_NAME` is operator-configurable). The `Path=/` differs from the
-  backend's `/auth` scope on purpose: `proxy.ts` runs at `/projects` and is only sent cookies
-  whose path matches.
+  because `REFRESH_COOKIE_NAME` is operator-configurable), and `askrepo_locale` — the interface
+  language, a display preference rather than a credential, mirroring `users.language` and never
+  cleared on logout. The `Path=/` differs from the backend's `/auth` scope on purpose: `proxy.ts`
+  runs at `/projects` and is only sent cookies whose path matches.
 - **`app/api/[...path]/route.ts` is almost the only route the browser talks to.** It attaches the
   bearer, strips `set-cookie` from every backend response, and relays the body untouched. The
-  cookie writers are the three `/api/auth/*` handlers (login, refresh, logout), this catch-all
-  itself — on its refresh-and-retry path and in `unauthenticated()` — and `proxy.ts`, on a
-  navigation refresh and a redirect to `/login`. Four more `/api/auth/*` routes are a deliberate,
+  cookie writers are the four `/api/auth/*` handlers (login, refresh, logout, and `locale`, which
+  sets the language for a signed-out browser and calls no backend), this catch-all itself — on
+  its refresh-and-retry path, in `unauthenticated()`, and after `PUT /me/language`, the one
+  response whose body it reads (a clone) — and `proxy.ts`, on a navigation refresh and a redirect
+  to `/login`. Four more `/api/auth/*` routes are a deliberate,
   narrow exception: `password-policy` and the
   `password-reset/{availability,request,confirm}` trio each forward through
   `lib/auth/public-forward.ts` with no bearer and no cookie, because the catch-all proxy answers
@@ -543,7 +548,12 @@ the page.
 
 Vitest runs in `make test` alongside pytest. The suite covers the pieces that fail silently: the
 nav filter, the error envelope, the SSE parser, single-flight refresh, the proxy's
-refresh-and-retry, the answer stream's ordering contract, and the form shells' error routing.
+refresh-and-retry, the answer stream's ordering contract, the form shells' error routing, and
+key and placeholder parity between the English catalogue and every translated one.
+
+**Every string a user reads comes from `frontend/messages/<locale>/`**, never a JSX literal —
+`i18next/no-literal-string` fails `bun lint` on one. `messages/en/` is the source of every key;
+adding a key or a language is in `frontend/README.md`.
 
 **`docs/design.md` is the design reference**, and `frontend/app/globals.css` implements it.
 Palette values come from the Fexend design system; the structure is one semantic token per role,

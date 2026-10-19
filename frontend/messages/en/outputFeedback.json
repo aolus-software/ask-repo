@@ -1,0 +1,64 @@
+{
+  "helpful": "Helpful",
+  "notHelpful": "Not helpful",
+  "saveFailed": "Your feedback was not saved. Try again.",
+  "whatWentWrong": "What went wrong?",
+  "noteLabel": "Anything else?",
+  "notePlaceholder": "Anything else? (optional)",
+  "noteDisclosure": "Administrators can read this note. It is never sent to the AI model.",
+  "send": "Send feedback",
+  "reasons": {
+    "wrong_file_cited": "Cited the wrong file",
+    "missed_something": "Missed something in the repo",
+    "invented_something": "Invented something",
+    "right_but_unusable": "Right, but not usable",
+    "wrong_language_or_tone": "Wrong language or tone",
+    "duplicate_or_redundant": "Duplicate or redundant",
+    "wrong_scope": "Wrong scope",
+    "other": "Something else"
+  },
+  "features": {
+    "answer": "Ask answers",
+    "refine_checklist": "Checklist chat",
+    "refine_mock_data": "Mock-data chat",
+    "generate_checklist": "Checklist generation",
+    "propose_checklist": "Checklist chat proposals",
+    "generate_mock_data": "Mock-data generation",
+    "propose_mock_data": "Mock-data chat proposals"
+  },
+  "summary": {
+    "hint": "down-voted · {votes, plural, one {# vote} other {# votes}}",
+    "feature": "Feature",
+    "reason": "Reason",
+    "count": "Count",
+    "promptVersion": "Prompt version",
+    "votes": "Votes",
+    "downVoted": "Down-voted",
+    "versionNote": "A vote is stamped with the version of its feature's prompts running when it was cast, which for a change set reviewed days later can be newer than the one that generated it. Each feature has its own version, so compare versions within a feature."
+  },
+  "table": {
+    "when": "When",
+    "project": "Project",
+    "feature": "Feature",
+    "vote": "Vote",
+    "reasons": "Reasons",
+    "note": "Note",
+    "prompt": "Prompt",
+    "trace": "Trace",
+    "up": "Up",
+    "down": "Down",
+    "openTrace": "Open trace"
+  },
+  "filters": {
+    "allFeatures": "All features",
+    "allVotes": "All votes",
+    "allReasons": "All reasons",
+    "filterByFeature": "Filter by feature",
+    "filterByVote": "Filter by vote",
+    "filterByReason": "Filter by reason",
+    "up": "Up",
+    "down": "Down",
+    "fromDate": "From date",
+    "toDate": "To date"
+  }
+}

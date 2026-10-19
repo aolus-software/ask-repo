@@ -1,5 +1,7 @@
 "use client";
 
+import { useTranslations } from "next-intl";
+
 import { Separator } from "@/components/ui/separator";
 
 interface OperationLike {
@@ -25,9 +27,14 @@ export function countOperations<T extends OperationLike>(
 
 /** "3 added, 1 changed, 2 removed" -- the at-a-glance shape of a mixed change set. */
 export function OperationCountsLine({ counts }: { counts: OperationCounts }) {
+  const t = useTranslations("changeSets.operationCounts");
   return (
     <p className="text-muted-foreground text-sm">
-      {counts.added} added, {counts.updated} changed, {counts.removed} removed
+      {t("summary", {
+        added: counts.added,
+        updated: counts.updated,
+        removed: counts.removed,
+      })}
     </p>
   );
 }
@@ -47,6 +54,7 @@ export function OperationGroups<T extends OperationLike>({
   operations: T[];
   renderRow: (operation: T) => React.ReactNode;
 }) {
+  const t = useTranslations("changeSets.operationGroups");
   const added = operations.filter((operation) => operation.op === "add");
   const updated = operations.filter((operation) => operation.op === "update");
   const removed = operations.filter((operation) => operation.op === "remove");
@@ -55,7 +63,7 @@ export function OperationGroups<T extends OperationLike>({
     <>
       {added.length > 0 ? (
         <div>
-          <h3 className="text-primary text-sm font-medium">Added</h3>
+          <h3 className="text-primary text-sm font-medium">{t("added")}</h3>
           <Separator className="mt-2" />
           <div className="divide-y">{added.map(renderRow)}</div>
         </div>
@@ -63,7 +71,7 @@ export function OperationGroups<T extends OperationLike>({
 
       {updated.length > 0 ? (
         <div>
-          <h3 className="text-muted-foreground text-sm font-medium">Changed</h3>
+          <h3 className="text-muted-foreground text-sm font-medium">{t("changed")}</h3>
           <Separator className="mt-2" />
           <div className="divide-y">{updated.map(renderRow)}</div>
         </div>
@@ -71,7 +79,7 @@ export function OperationGroups<T extends OperationLike>({
 
       {removed.length > 0 ? (
         <div>
-          <h3 className="text-danger text-sm font-medium">Removed</h3>
+          <h3 className="text-danger text-sm font-medium">{t("removed")}</h3>
           <Separator className="mt-2" />
           <div className="divide-y">{removed.map(renderRow)}</div>
         </div>

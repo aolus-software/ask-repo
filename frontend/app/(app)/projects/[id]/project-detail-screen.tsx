@@ -1,6 +1,7 @@
 "use client";
 
 import { MessagesSquare, UserPlus } from "lucide-react";
+import { useTranslations } from "next-intl";
 import Link from "next/link";
 import { useState, useSyncExternalStore } from "react";
 
@@ -24,7 +25,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useBreadcrumbLabel } from "@/components/layout/breadcrumb-labels";
 import { useProject } from "@/hooks/use-projects";
 import { can, PERMISSION } from "@/lib/can";
-import { statusLabel } from "@/lib/status";
+import { statusLabelKey } from "@/lib/status";
 
 function subscribeToHash(onChange: () => void) {
   window.addEventListener("hashchange", onChange);
@@ -32,6 +33,8 @@ function subscribeToHash(onChange: () => void) {
 }
 
 export function ProjectDetailScreen({ id }: { id: string }) {
+  const tStatus = useTranslations("status");
+  const t = useTranslations("projects.detail");
   const query = useProject(id);
   useBreadcrumbLabel(`/projects/${id}`, query.data?.name);
   const [addingMember, setAddingMember] = useState(false);
@@ -60,7 +63,7 @@ export function ProjectDetailScreen({ id }: { id: string }) {
     return (
       <DetailError
         error={query.error}
-        notFoundMessage="That project does not exist, or it has been deleted."
+        notFoundMessage={t("notFound")}
         onRetry={() => query.refetch()}
       />
     );
@@ -98,7 +101,7 @@ export function ProjectDetailScreen({ id }: { id: string }) {
                 render={<Link href={`/ask?projectId=${project.id}`} />}
               >
                 <MessagesSquare className="size-4" />
-                Ask about this project
+                {t("askAboutProject")}
               </Button>
             ) : null}
             <ProjectRowActions project={project} context="detail" />
@@ -108,16 +111,20 @@ export function ProjectDetailScreen({ id }: { id: string }) {
 
       <Tabs value={visibleTab} onValueChange={(next) => setPicked(String(next))}>
         <TabsList>
-          <TabsTrigger value="overview">Overview</TabsTrigger>
-          {canReadMembers ? <TabsTrigger value="members">Members</TabsTrigger> : null}
-          {canReadEval ? <TabsTrigger value="eval">Eval</TabsTrigger> : null}
+          <TabsTrigger value="overview">{t("tabs.overview")}</TabsTrigger>
+          {canReadMembers ? (
+            <TabsTrigger value="members">{t("tabs.members")}</TabsTrigger>
+          ) : null}
+          {canReadEval ? (
+            <TabsTrigger value="eval">{t("tabs.eval")}</TabsTrigger>
+          ) : null}
         </TabsList>
 
         <TabsContent value="overview" className="space-y-6">
           {isWorking ? (
             <div className="space-y-2">
               <p className="text-muted-foreground text-sm font-medium">
-                {statusLabel(project.status)}…
+                {t("working", { status: tStatus(statusLabelKey(project.status)) })}
               </p>
               {/*
                 Indeterminate on purpose: the API reports a phase, never a percentage.
@@ -130,15 +137,13 @@ export function ProjectDetailScreen({ id }: { id: string }) {
 
           {project.reindexInProgress ? (
             <Alert variant="info">
-              <AlertTitle>Re-index running</AlertTitle>
-              <AlertDescription>
-                The current index stays queryable until the new one is ready.
-              </AlertDescription>
+              <AlertTitle>{t("reindexRunning")}</AlertTitle>
+              <AlertDescription>{t("reindexRunningDescription")}</AlertDescription>
             </Alert>
           ) : null}
 
           {project.status === "failed" && project.error ? (
-            <JobFailureAlert title="Indexing failed" message={project.error} />
+            <JobFailureAlert title={t("indexingFailed")} message={project.error} />
           ) : null}
 
           <ProjectStats project={project} />
@@ -148,15 +153,17 @@ export function ProjectDetailScreen({ id }: { id: string }) {
           <TabsContent value="members" className="space-y-4">
             <div className="flex items-center justify-between gap-4">
               <div>
-                <h2 className="text-xl font-semibold tracking-tight">Members</h2>
+                <h2 className="text-xl font-semibold tracking-tight">
+                  {t("membersHeading")}
+                </h2>
                 <p className="text-muted-foreground text-sm">
-                  Who can reach this project, and as what.
+                  {t("membersDescription")}
                 </p>
               </div>
               {canGrantMembers ? (
                 <Button onClick={() => setAddingMember(true)}>
                   <UserPlus className="size-4" />
-                  Add member
+                  {t("addMember")}
                 </Button>
               ) : null}
             </div>
@@ -177,10 +184,10 @@ export function ProjectDetailScreen({ id }: { id: string }) {
           <TabsContent value="eval" className="space-y-4">
             <div className="flex items-center justify-between gap-4">
               <div>
-                <h2 className="text-xl font-semibold tracking-tight">Eval</h2>
-                <p className="text-muted-foreground text-sm">
-                  Generated questions with reference answers, run against this project.
-                </p>
+                <h2 className="text-xl font-semibold tracking-tight">
+                  {t("evalHeading")}
+                </h2>
+                <p className="text-muted-foreground text-sm">{t("evalDescription")}</p>
               </div>
               <GenerateEvalSetDialog
                 projectId={project.id}

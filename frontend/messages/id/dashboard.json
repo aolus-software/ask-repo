@@ -1,0 +1,23 @@
+{
+  "welcome": "Selamat datang kembali, {name}",
+  "description": "Ajukan pertanyaan tentang basis kode apa pun yang diindeks pada instans ini.",
+  "stats": {
+    "projects": "Proyek pada instans ini",
+    "conversations": "Percakapan Anda"
+  },
+  "recentProjects": {
+    "title": "Proyek terbaru",
+    "viewAll": "Lihat semua",
+    "emptyTitle": "Belum ada proyek",
+    "emptyDescription": "Tambahkan repositori dan {appName} akan mengkloning serta mengindeksnya.",
+    "emptyAction": "Tambahkan"
+  },
+  "recentQuestions": {
+    "title": "Pertanyaan terbaru Anda",
+    "ask": "Tanya",
+    "emptyTitle": "Belum ada pertanyaan",
+    "emptyDescription": "Ajukan pertanyaan tentang proyek mana pun yang sudah diindeks.",
+    "emptyAction": "Ajukan pertanyaan",
+    "untitled": "Percakapan tanpa judul"
+  }
+}

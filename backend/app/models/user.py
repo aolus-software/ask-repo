@@ -44,3 +44,7 @@ class User(Base, TimestampMixin, SoftDeleteMixin):
     answer_detail: Mapped[str | None] = mapped_column(String(16), nullable=True)
     answer_familiarity: Mapped[str | None] = mapped_column(String(16), nullable=True)
     answer_format: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    # The caller's interface language (`app/core/language.py`). `NULL` is "never
+    # chose", which is not the same as choosing English: the frontend then follows
+    # the browser's `Accept-Language`. Written only by the user, never by an admin.
+    language: Mapped[str | None] = mapped_column(String(8), nullable=True)
