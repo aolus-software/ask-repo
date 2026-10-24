@@ -39,13 +39,16 @@ _READER_PREFERENCES = frozenset(
 CALL_PROMPTS: dict[CallFeature, frozenset[str]] = {
     CallFeature.CLASSIFY: frozenset({"CLASSIFY_SYSTEM"}),
     CallFeature.GRADE: frozenset({"GRADE_SYSTEM"}),
-    CallFeature.ANSWER: frozenset({"ANSWER_SYSTEM"}) | _READER_PREFERENCES,
-    CallFeature.HISTORY_ANSWER: frozenset({"HISTORY_ANSWER_SYSTEM"}) | _READER_PREFERENCES,
-    CallFeature.PROPOSE_CHECKLIST: frozenset({"PROPOSE_SYSTEM", "TESTER_LANGUAGE"}),
-    CallFeature.PROPOSE_MOCK_DATA: frozenset({"MOCK_DATA_PROPOSE_SYSTEM"}),
+    CallFeature.ANSWER: frozenset({"ANSWER_SYSTEM", "REPLY_LANGUAGE"}) | _READER_PREFERENCES,
+    CallFeature.HISTORY_ANSWER: frozenset({"HISTORY_ANSWER_SYSTEM", "REPLY_LANGUAGE"})
+    | _READER_PREFERENCES,
+    CallFeature.PROPOSE_CHECKLIST: frozenset(
+        {"PROPOSE_SYSTEM", "TESTER_LANGUAGE", "CONTENT_LANGUAGE"}
+    ),
+    CallFeature.PROPOSE_MOCK_DATA: frozenset({"MOCK_DATA_PROPOSE_SYSTEM", "CONTENT_LANGUAGE"}),
     CallFeature.MAP: frozenset({"MAP_FILE_SYSTEM"}),
-    CallFeature.REDUCE: frozenset({"REDUCE_SYSTEM", "TESTER_LANGUAGE"}),
-    CallFeature.GENERATE_MOCK_DATA: frozenset({"MOCK_DATA_GENERATE_SYSTEM"}),
+    CallFeature.REDUCE: frozenset({"REDUCE_SYSTEM", "TESTER_LANGUAGE", "CONTENT_LANGUAGE"}),
+    CallFeature.GENERATE_MOCK_DATA: frozenset({"MOCK_DATA_GENERATE_SYSTEM", "CONTENT_LANGUAGE"}),
     CallFeature.EVAL_GENERATE: frozenset({"EVAL_PAIR_SYSTEM"}),
     CallFeature.EVAL_JUDGE: frozenset({"EVAL_JUDGE_SYSTEM"}),
     CallFeature.EVAL_TRANSLATE: frozenset({"EVAL_TRANSLATE_SYSTEM"}),
