@@ -120,6 +120,18 @@ client can have received it, so it is recorded under Changed and allowed in a `M
 - **A count of one reads "1 file", "1 pair"**, not "1 files": counts that built their noun by
   hand now go through an ICU plural.
 
+### Security
+
+- **Next.js 16.3.3 → 16.3.8** (and `eslint-config-next` to match), closing eight advisories
+  including a critical remote code execution in `next/og`'s `ImageResponse`
+  (GHSA-vcvr-r3jv-pc5j), a server-side request forgery in image optimisation
+  (GHSA-cjq9-62q9-8jv4), and SSG/ISR cache poisoning.
+- **urllib3 2.7.0 → 2.8.0**, closing an ignored HTTPS-proxy TLS configuration
+  (GHSA-8988-9cw3-xx77), an unbounded chunk-size line buffered into memory
+  (GHSA-vxq7-64xx-v4gw), and an infinite loop on chunked deflate streams (GHSA-gh4c-6fx4-qh6g).
+- **Mako 1.4.1 → 1.4.3**, closing a Windows-only path traversal in `TemplateLookup`
+  (GHSA-5639-2j2p-m4mx). Mako arrives through Alembic.
+
 ## [2.3.0] — 2026-10-17
 
 ### Added
