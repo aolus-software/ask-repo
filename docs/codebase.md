@@ -145,7 +145,7 @@ backend/app/
 │
 ├── api/
 │   ├── deps.py        shared dependencies (CurrentUser, AdminUser, service factories)
-│   └── routes/        21 routers, 96 routes
+│   └── routes/        21 routers, 97 routes
 │
 ├── core/              cross-cutting: access, audit, crypto, errors, feedback, grant_cache,
 │                      logging, middleware, notifications, passwords, permissions, rate_limit,
@@ -155,8 +155,9 @@ backend/app/
 ├── repositories/      24 repositories — the only place SQL is written
 ├── schemas/           request/response shapes, all on ApiModel
 ├── services/          22 services — business rules and authorization,
-│                      plus path_tree.py (pure tree shaping, no I/O) and
-│                      index_guards.py (the shared "is the index stable" refusals)
+│                      plus path_tree.py (pure tree shaping, no I/O),
+│                      index_guards.py (the shared "is the index stable" refusals) and
+│                      export_labels.py (the export column and label table, pure)
 │
 ├── ingestion/         cloner, walker, chunker, embedder/, vector_store, pipeline, errors
 ├── observability/     the AI call log: features, record, recorder, trace_ids, langfuse_sink

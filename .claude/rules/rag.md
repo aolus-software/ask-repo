@@ -208,7 +208,8 @@ each fails silently when broken:
 | Eval runner | the set's `language` | A run must not depend on who requested it |
 
 The refusals follow `reply_language` too. `NO_CONTEXT_ANSWERS` and `OUT_OF_SCOPE_ANSWERS` in
-`app/rag/grounding.py` are `dict[Language, str]`, each value a reviewed constant. They are still
+`app/rag/grounding.py` are `dict[Language, str]`, each value a fixed constant (a machine-assisted
+draft pending native-speaker review). They are still
 fixed, still streamed as ordinary `token` events and never generated, so "no evidence, no
 generation" holds unchanged, and a test requires every `Language` in both tables. The stored
 `Message.content` keeps the language it was streamed in.

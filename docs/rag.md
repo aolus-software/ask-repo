@@ -293,8 +293,11 @@ verbatim is what lets `unknown_paths` and `uncited_answer` run in every language
 `Answerer.answer` takes a required `reply_language`: the asker's stored language, else the
 request's `Accept-Language`, else `en` on Ask; the project's `content_language` on the checklist
 and mock-data chats, whose replies are shared documents; the set's `language` on an eval run. The
-two fixed refusals are `dict[Language, str]` tables in `app/rag/grounding.py`, one reviewed
-constant per language, and a test requires every language in both.
+two fixed refusals are `dict[Language, str]` tables in `app/rag/grounding.py`, one fixed
+constant per language (a machine-assisted draft pending native-speaker review), and a test
+requires every language in both. A refusal uses the caller's tiebreak language, not the
+question's: an off-topic question in Japanese from a user whose tiebreak is English gets the
+English refusal (spec §4.5).
 
 Generated shared content is written in the project's `content_language`:
 `render_content_language` appends the `CONTENT_LANGUAGE` constant to the reduce and propose
