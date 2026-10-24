@@ -6,9 +6,11 @@ A finding that has been fixed moves, verbatim, to
 [`audit-finding-solved-logs.md`](audit-finding-solved-logs.md). A number cited below that is not
 in this file (§1.1, §9.1 and so on) is there.
 
-**Sweeps:** 2026-09-19 (at `f902f4c`, phase 2.2 branch), 2026-09-27 (at `5b43564`, `main`) and
-2026-10-04 (at `df7594e`, `main`). All three were read-only. The first two were each followed by a
-separate, explicitly requested fix pass; the third has had none.
+**Sweeps:** 2026-09-19 (at `f902f4c`, phase 2.2 branch), 2026-09-27 (at `5b43564`, `main`),
+2026-10-04 (at `df7594e`, `main`) and 2026-10-24 (at `ac3a52c`, `main`). All four were read-only.
+The first two were each followed by a separate, explicitly requested fix pass; the last two have
+had none. The 2026-10-24 sweep re-checked every open finding: all fifteen are still open, with
+their current locations listed under [Sweep 2026-10-24](#sweep-2026-10-24).
 
 **Re-verified 2026-10-17**, still at `df7594e` (no application code had changed). Every open
 finding was re-checked against the code. None was refuted. §8.5 and §8.6 were promoted from
@@ -33,7 +35,7 @@ settle it, is stated).
 
 Every finding from the 2026-09-19 and 2026-09-27 sweeps has been fixed and is in
 [`audit-finding-solved-logs.md`](audit-finding-solved-logs.md). Everything below was raised on
-2026-10-04 and is still open; what was fixed on 2026-10-17 is in the log.
+2026-10-04 or 2026-10-24 and is still open; what was fixed on 2026-10-17 is in the log.
 
 | # | Finding | Severity | Raised |
 | --- | --- | --- | --- |
@@ -52,19 +54,44 @@ Every finding from the 2026-09-19 and 2026-09-27 sweeps has been fixed and is in
 | §9.21 | Four dead `STRANDED_AFTER_SECONDS` constants | 🟡 | 2026-10-04 |
 | §9.22 | Eval does not normalise `sourcePath` the way checklist modules do | 🟡 | 2026-10-04 |
 | §9.30 | Stale comments in the feedback schema and the audit coverage test | 📄 | 2026-10-04 |
+| §4.1 | A timed-out or cancelled clone leaves its `git` process behind | 🟡 | 2026-10-24 |
+| §4.2 | The connect-time address pin uses only the first record, and may not accept IPv6 (SUSPECT) | 🟡 | 2026-10-24 |
+| §6.1 | Embedding and vector-store error text reaches `Project.error` unscrubbed | 🟡 | 2026-10-24 |
+| §6.2 | A refused reset email may log the recipient's address (SUSPECT) | 🟡 | 2026-10-24 |
+| §7.4 | The four membership routes declare no `summary` and no error responses | 🟡 | 2026-10-24 |
+| §7.5 | The source-path check's errors are undeclared on three routes | 🟡 | 2026-10-24 |
+| §7.6 | The `409` on `DELETE /users/{id}` is declared with a shape `LAST_ADMIN` does not have | 🟡 | 2026-10-24 |
+| §7.7 | The three download routes document no body | 🟡 | 2026-10-24 |
+| §7.8 | The eval-set create body marks every field optional | 🟡 | 2026-10-24 |
+| §7.9 | An eval set with a retired language would fail every list it appears in (SUSPECT) | 🟡 | 2026-10-24 |
+| §8.7 | Translating an eval set whose source is deleted mid-job fails with the wrong reason | 🟡 | 2026-10-24 |
+| §9.32 | Five English-only constants survive the translated tables | 🟡 | 2026-10-24 |
+| §9.33 | "An unset or unshipped language reads as English" is written out eight times | 🟡 | 2026-10-24 |
+| §9.34 | The single- and multi-module checklist exports duplicate their filter and cap logic | 🟡 | 2026-10-24 |
+| §9.35 | PRD §6 still says Phase 2.7 PR C is "in progress" | 📄 | 2026-10-24 |
+| §9.36 | `docs/architecture.md` counts nine notification fan-out sites; there are thirteen | 📄 | 2026-10-24 |
+| §9.37 | `CHANGELOG.md`'s `[Unreleased]` has two `### Added` headings | 📄 | 2026-10-24 |
+| §9.38 | A project-list docstring still describes phase 1 | 📄 | 2026-10-24 |
 
-## Top priorities (2026-10-17)
+## Top priorities (2026-10-24)
 
-Both 🔴 bugs and all three 🟠 findings from 2026-10-04 were fixed on 2026-10-17, along with §3.3,
-§9.18, §9.23–§9.29 and §9.31, and are in the log. Everything still open is hygiene or documentation.
+The 2026-10-24 sweep found no security finding, no 🔴 bug and no 🟠 risk in the backend. Access,
+read scoping, conversation privacy, the clone's address checks and soft delete all held across
+Phase 2.7. Everything open is hygiene or documentation.
 
-1. **The eval job edge cases** (§5.1, §8.3–§8.6): about a minute of orphan results after a
-   mid-run project delete, a failed run's empty tallies, a generator that never checks its lease,
-   a resumed run's overwritten stamp, and audit-after-publish ordering.
-2. **The response-contract gaps** (§7.1–§7.3), the duplication (§9.19–§9.22), and the scope
-   plumbing in two services (§2.2).
-3. **The documentation** left (§9.30): stale comments in the feedback schema and the audit coverage
-   test.
+1. **Error text and logs that say more than they should** (§6.1, §6.2): a provider outage can put an
+   internal URL on the project screen, and a refused reset email may log the address. Neither leaks
+   a secret.
+2. **The eval job edge cases** (§5.1, §8.3–§8.7): orphan results after a mid-run delete, a failed
+   run's empty tallies, a generator that never checks its lease, a resumed run's overwritten stamp,
+   audit-after-publish ordering, and a translation that fails for the wrong reason.
+3. **The response-contract gaps** (§7.1–§7.9), led by the membership routes (§7.4) and the
+   undeclared path error on module create (§7.5).
+4. **The duplication and dead code** (§9.17, §9.19–§9.22, §9.32–§9.34), the clone process clean-up
+   (§4.1), the scope plumbing in two services (§2.2), and the IPv6 pin question (§4.2).
+5. **The documentation** (§9.30, §9.35–§9.38). Three of these should be fixed before the next
+   release is cut: the PRD still calls Phase 2.7 unfinished (§9.35), the architecture page
+   undercounts notification sites (§9.36), and the changelog has two "Added" headings (§9.37).
 
 ---
 
@@ -755,6 +782,426 @@ has seven);
     `eval_generate` and `eval_judge`.
 - **No regressions** of §1.1, §1.2, §2.1, §9.2, §9.3, §9.6, §9.8, §9.13, §9.14 or §9.16. §9.4 is
   partly fixed; the remainder is §9.19.
+
+---
+
+# Sweep 2026-10-24
+
+**Swept:** 2026-10-24 at `ac3a52c` (`main`). **Scope:** the whole backend and infrastructure,
+weighted toward the 111 commits since `df7594e`: eval notifications (#66), the multi-module
+checklist export (#67), and Phase 2.7 — the interface language (#68), eval languages and
+translation (#69), and a project's content language (#70) — plus the Dependabot bumps (#71).
+**Ground truth:** unchanged. **Read-only** — nothing below has been fixed.
+
+**Numbering** continues each category and never reuses a number. §4 and §6 had never had a
+finding; theirs start at §4.1 and §6.1.
+
+**Evidence:** every finding below was traced in the code. Where the trace stops short of the
+trigger, the finding says SUSPECT and names what would settle it. Nothing was executed — no tests,
+no server, no clone.
+
+## Open findings re-checked
+
+All fifteen findings open before this sweep are **still open**; none was fixed and none refuted.
+Their line numbers have moved; the current locations are:
+
+| # | Still open at |
+| --- | --- |
+| §2.2 | `backend/app/services/feedback.py:290`, `backend/app/services/me.py:127` → `backend/app/repositories/feedback.py:27,45-46`, `backend/app/repositories/audit_event.py:35,53,63-70,124-136` |
+| §5.1 | `backend/app/services/project.py:349-452` (no `active_for_project` check; reindex has one at `:312`); runner commits every 10 results, `backend/app/eval/runner.py:61,181-184` |
+| §7.1 | `backend/app/api/routes/eval.py:98`, `:111`, `:143`, `:177` |
+| §7.2 | `backend/app/api/routes/eval.py:85`, `:164`, `backend/app/api/routes/me.py:91`; the feedback list's `FeedbackListQuery` likewise |
+| §7.3 | `backend/app/schemas/eval.py:35` (no strip); `backend/app/services/eval.py:148` strips afterwards |
+| §8.3 | `backend/app/queue/eval.py:148-158`; tallies and `finished_at` only on the done path, `backend/app/eval/runner.py:195-205` |
+| §8.4 | `backend/app/eval/generator.py:104` (renewal task created), `:120` (only cancelled) |
+| §8.5 | `backend/app/eval/runner.py:143-150`; `started_at` reset at `backend/app/repositories/eval_run.py:93` |
+| §8.6 | `backend/app/services/eval.py:101/103/116` (`create_set`), `:376/380/390` (`start_run`) |
+| §9.17 | `backend/app/config.py:47-48` |
+| §9.19 | `backend/app/services/index_guards.py:21`, `backend/app/core/access.py` (`require_answerable`), `backend/app/services/indexed_path.py:207`, plus bare `embedding_collection` checks in `backend/app/eval/runner.py:121`, `backend/app/checklist/generator.py:115`, `backend/app/mockdata/generator.py:127` |
+| §9.20 | `renew_lease` in five repositories; `claim_stranded` in four |
+| §9.21 | `backend/app/repositories/checklist_module.py:33`, `mock_data_dataset.py:28`, `eval_run.py:23`, `eval_set.py:23`; the live one is `backend/app/worker.py:73` |
+| §9.22 | `backend/app/services/eval.py:142-149` vs `backend/app/services/checklist_module.py:163` |
+| §9.30 | `backend/app/schemas/feedback.py:97`; `backend/tests/test_audit_coverage.py:11,14,51,227,244`; `backend/tests/test_auth_middleware.py:219` |
+
+## §4 Ingestion and server-side request forgery
+
+### §4.1 A timed-out or cancelled clone leaves its `git` process behind — 🟡 hygiene
+
+**Evidence:** CONFIRMED by reading the code; not reproduced.
+
+**Where:** `backend/app/ingestion/cloner.py:218-230`; the scratch directory is removed by
+`backend/app/ingestion/pipeline.py` (`shutil.rmtree`)
+
+**What this is.** Indexing a project starts by running `git clone` as a child process. The cloner
+waits for it with a 120-second timeout (`docs/PRD.md` §9) and a size watcher, so a hung or huge
+clone cannot hold its job forever.
+
+**Why this can happen.** On timeout the code calls `process.kill()` and raises at once — it never
+awaits `process.wait()`, so the dead process is not reaped until the event loop gets round to it.
+If the worker is cancelled mid-clone (a shutdown, a redeploy), the `finally` block stops only the
+size watcher: `git` is neither killed nor awaited, and keeps writing into `/data/repos` while the
+pipeline's `rmtree` removes the same directory.
+
+**What it costs.** No user sees anything. An operator may find stray `git` processes after a
+redeploy, or leftover scratch directories that the next run has to step around.
+
+**What we should do.** In the `finally`, kill the process if it is still running and await
+`process.wait()` (under `asyncio.shield`, since the task may be cancelled). Half an hour.
+
+### §4.2 The connect-time address pin uses only the first record, and may not accept IPv6 — 🟡 hygiene
+
+**Evidence:** SUSPECT. Unverified: whether the deployed `git`/`curl` accepts an unbracketed IPv6
+literal in `http.curloptResolve`. Running `git -c http.curloptResolve=github.com:443:<ipv6> ls-remote
+https://github.com/…` in the production image settles it.
+
+**Where:** `backend/app/core/repo_url.py:124-130`; `backend/app/ingestion/cloner.py:44`
+
+**What this is.** To stop a repository URL from being re-resolved to a private address between the
+check and the clone, the validator checks every address the host resolves to, then pins the clone
+to one of them with curl's resolve override.
+
+**Why this can happen.** It pins `addresses[0]`. If that is an IPv6 address and curl wants it
+bracketed, the clone fails; if that one address is unreachable, the clone fails rather than trying
+the next. Either way the failure is a retryable "clone failed", never a request to an unchecked
+address — the security control holds.
+
+**What we should do.** Settle the IPv6 question first. If it bites, prefer an IPv4 record or
+bracket IPv6 literals. One hour, including a test.
+
+## §6 Secret handling
+
+### §6.1 Embedding and vector-store error text reaches `Project.error` unscrubbed — 🟡 hygiene
+
+**Evidence:** CONFIRMED.
+
+**Where:** `backend/app/queue/consumer.py:113-123` (the comment), `:200-206` (the write);
+`backend/app/ingestion/embedder/openai.py:44`, `voyage.py:42`, `ollama.py:31`;
+`backend/app/ingestion/vector_store.py:100-101`
+
+**What this is.** A project that fails to index shows its error on the project screen.
+`CLAUDE.md` ("Nothing derived from clone output is stored or logged unscrubbed") and `docs/PRD.md`
+§9 require that text to be scrubbed first, because the clone path can carry a personal access
+token.
+
+**Why this can happen.** The consumer stores `str(error)` for every `RetryableIngestionError`, with
+a comment saying they are all built from already-scrubbed clone output. That is true for the
+cloner, but the embedders and the vector store raise the same class with the underlying
+`httpx`/Qdrant exception interpolated (`f"Embedding request failed: {error}"`). When a provider
+outage exhausts the retries, that text becomes `Project.error`.
+
+**What it costs.** No token can leak this way — the token never reaches those clients. What can
+appear on the project screen is an internal embedder URL or a fragment of a Qdrant response, and a
+comment that promises more than the code delivers.
+
+**What we should do.** Build those three messages from the exception's class name (as the
+unexpected-error branch at `consumer.py:127-131` already does), and correct the comment. Half an
+hour.
+
+### §6.2 A refused reset email may log the recipient's address — 🟡 hygiene
+
+**Evidence:** SUSPECT. Unverified: whether `aiosmtplib`'s `SMTPRecipientsRefused` text includes the
+address. Reading its `__str__` settles it.
+
+**Where:** `backend/app/services/password_reset.py:173-180`; `backend/app/mail/sender.py:60-70`
+
+**What this is.** When a reset email cannot be sent, the service logs a `WARNING` with the token
+row's id — deliberately never the token (`.claude/rules/mail.md`).
+
+**Why this can happen.** The same line also logs the `MailSendError`, which is built from the SMTP
+library's own message. A relay that refuses the recipient produces a message that may quote the
+address.
+
+**What it costs.** A user's email address in operator logs. Not a secret, and not the audit trail,
+but more than the line needs.
+
+**What we should do.** Log `type(error.__cause__).__name__` and `error.retryable` instead of the
+message. Fifteen minutes.
+
+## §7 The response contract
+
+### §7.4 The four membership routes declare no `summary` and no error responses — 🟡 hygiene
+
+**Evidence:** CONFIRMED.
+
+**Where:** `backend/app/api/routes/members.py:29`, `:37-40`, `:52`, `:64`; the raises are in
+`backend/app/services/membership.py:84`, `:87`, `:89`, `:168`, `:181`, `:216`, `:249`
+
+**What this is.** `.claude/rules/response-api.md` requires every route to declare a `summary`, a
+`status_code`, and a `responses` block listing what its service raises, so `/docs` and every
+generated client describe the real errors.
+
+**Why this can happen.** The members router never had its contract pass. Its four routes (list,
+add, change role, remove) declare none of it, and two have no `status_code`. The service raises
+`404` (`ROLE_NOT_FOUND`, `USER_NOT_FOUND`, `MEMBERSHIP_NOT_FOUND`), `409` (`MEMBERSHIP_EXISTS`,
+`LAST_OWNER`) and `403 INSUFFICIENT_ROLE`.
+
+**What it costs.** `/docs` shows these routes with only their success status, titled by function
+name. A generated client has no typed error for "this would leave the project with no owner".
+
+**What we should do.** Add `summary`, `status_code` and `responses` (401/403/404/422 on all four,
+409 on add, change and remove). Half an hour. No other router has this gap.
+
+### §7.5 The source-path check's errors are undeclared on three routes — 🟡 hygiene
+
+**Evidence:** CONFIRMED.
+
+**Where:** `backend/app/api/routes/checklist_modules.py:140-146` (`POST`), `:170-176` (`PATCH`);
+`backend/app/api/routes/eval.py:58-70` (`POST /projects/{id}/eval-sets`); the raises are in
+`backend/app/services/index_guards.py:15-27`, `:74-87` and `backend/app/services/indexed_path.py:143-148`
+
+**What this is.** A checklist module or an eval set can be pointed at a path in the repository.
+`require_path_indexed` refuses a path the index does not contain with
+`400 MODULE_PATH_NOT_INDEXED`, and answers `503 VECTOR_STORE_UNAVAILABLE` if the vector store cannot
+be read.
+
+**Why this can happen.** Neither module route declares `400` or `503`, the module `PATCH` also
+omits the `409 PROJECT_NOT_READY` that `require_indexed` raises, and the eval-set route omits `503`.
+
+**What it costs.** The most common error on module create — a mistyped path — is absent from
+`/docs` and from every generated client, and a vector-store outage arrives as an undocumented
+status.
+
+**What we should do.** Declare `400` and `503` on all three, and `409` on the module `PATCH`.
+Fifteen minutes.
+
+### §7.6 The `409` on `DELETE /users/{id}` is declared with a shape `LAST_ADMIN` does not have — 🟡 hygiene
+
+**Evidence:** CONFIRMED.
+
+**Where:** `backend/app/api/routes/users.py:96-117`; `backend/app/schemas/errors.py:40-41`;
+`backend/app/services/user.py:87-88` (`LAST_ADMIN`), `:236` (`LAST_OWNER` with `extra`)
+
+**What this is.** Deactivating a user can be refused two ways: `LAST_OWNER` (it would leave projects
+ownerless), whose body lists those projects, and `LAST_ADMIN` (it would remove the last
+administrator), whose body is the plain `{code, message}`.
+
+**Why this can happen.** The route declares `LastOwnerErrorResponse` for every `409`, and that model
+makes `projects` a required list.
+
+**What it costs.** A client generated from `/docs` that deserialises the `409` strictly fails on a
+`LAST_ADMIN` refusal — the one case where an admin most needs to read the message.
+
+**What we should do.** Make `projects` optional, or declare the two shapes as a union. Fifteen
+minutes.
+
+### §7.7 The three download routes document no body — 🟡 hygiene
+
+**Evidence:** CONFIRMED.
+
+**Where:** `backend/app/api/routes/projects.py:~166-190` (`.xlsx`/`.zip`, chosen at runtime);
+`backend/app/api/routes/checklist_items.py:73` (`.xlsx`); `backend/app/api/routes/mock_data_datasets.py:203-240`
+(`.json`/`.xlsx`)
+
+**What this is.** The export routes return a file with `response_class=Response`.
+`.claude/rules/response-api.md` treats an undeclared success body as a defect unless a reason is
+documented.
+
+**Why this can happen.** None declares a `200` content type or the `Content-Disposition` header, and
+none documents why.
+
+**What it costs.** `/docs` shows a `200` with no body; a generated client returns an untyped blob.
+
+**What we should do.** Add `responses={200: {"content": {<media type>: {}}, …}}` to each. Fifteen
+minutes.
+
+### §7.8 The eval-set create body marks every field optional — 🟡 hygiene
+
+**Evidence:** CONFIRMED.
+
+**Where:** `backend/app/schemas/eval.py:22-57`
+
+**What this is.** `POST /projects/{id}/eval-sets` takes one of two bodies: generate (`name`,
+`count`, `mix`, optional `sourcePath`) or translate (`sourceSetId`, `language`). A
+`model_validator` enforces "exactly one shape".
+
+**Why this can happen.** Both shapes live in one model, so every field is optional in the schema.
+The shape rule exists only in the validator and a docstring. The reason is stated — a union would
+prefix the field keys in `422` bodies — but the route's description does not say so.
+
+**What it costs.** A generated client accepts a body that always answers `422`.
+
+**What we should do.** Describe the two shapes in the route's `description` (and note that shape
+errors key as `fields["request"]`). Fifteen minutes.
+
+### §7.9 An eval set with a retired language would fail every list it appears in — 🟡 hygiene
+
+**Evidence:** SUSPECT. Unverified: whether a shipped language can ever be removed —
+`backend/app/core/language.py` says members are added, never renamed. A test that loads an eval set
+row with language `xx` settles the behaviour.
+
+**Where:** `backend/app/schemas/eval.py` (`EvalSetSummary.language: Language`);
+`backend/app/services/eval.py:479`; compare `backend/app/schemas/project.py:64-70`
+
+**Why this can happen.** A project's stored language that is no longer shipped reads as English
+(`_unshipped_language_reads_as_english`). An eval set's does not: the strict enum would raise during
+serialisation and answer `500` for the whole list.
+
+**What we should do.** Reuse the project schema's tolerant validator. Fifteen minutes. See §9.33,
+which would put that fallback in one place.
+
+## §8 Job and status handling
+
+### §8.7 Translating an eval set whose source is deleted mid-job fails with the wrong reason — 🟡 hygiene
+
+**Evidence:** CONFIRMED.
+
+**Where:** `backend/app/eval/generator.py:107-109`, `:197-235`;
+`backend/app/repositories/eval_pair.py:18-24` (`list_for_set` uses `active_select`);
+`backend/app/services/eval.py:251-262` (`delete_set` refuses only on an active run)
+
+**What this is.** Since #69 an English eval set can be translated into another language; the worker
+reads the source set's pairs and translates each one.
+
+**Why this can happen.** User A requests a translation of set S → the worker starts → user B
+deletes S, which is allowed because no *run* is active → the worker's read of S's pairs filters
+out the soft-deleted rows and finds none → the translation is released as `failed` with "No
+question could be translated with its code kept intact", and an `eval_set.failed` notification
+goes out.
+
+**What it costs.** The project's members are told the translation failed for a reason that is not
+true. No row is stuck.
+
+**What we should do.** Refuse to delete a set while a translation of it is generating — the same
+guard §8.4 proposes for a set that is itself generating. One hour, both together.
+
+## §9 Code health — dead code, duplication, and documentation
+
+### §9.32 Five English-only constants survive the translated tables — 🟡 hygiene
+
+**Evidence:** CONFIRMED (`grep -rnw` finds each defined once in `backend/app`).
+
+**Where:** `backend/app/rag/grounding.py:87` (`NO_CONTEXT_ANSWER`), `:132` (`OUT_OF_SCOPE_ANSWER`);
+`backend/app/mail/compose.py:315` (`RESET_MESSAGE`); `backend/app/services/checklist_export.py:21`
+(`SHEET_TITLE`); `backend/app/services/mock_data_export.py:23` (`NO_DATA_LABEL`)
+
+Each is `TABLE[Language.EN]`, left behind when the table it came from was translated. Nothing in the
+application reads them; three are read only by tests (`tests/test_grounding.py`, `test_graph.py`,
+`test_checklist_export.py`, `test_project_export.py`), which therefore test the English constant
+rather than the language-picked path production takes. **Fix:** delete all five and point the
+tests at the tables. Half an hour.
+
+### §9.33 "An unset or unshipped language reads as English" is written out eight times — 🟡 hygiene
+
+**Evidence:** CONFIRMED (`grep -rn "parse_language(.*) or Language.EN" backend/app` → 8).
+
+**Where:** `backend/app/mockdata/generator.py:136`; `backend/app/checklist/generator.py:125`;
+`backend/app/services/mock_data_dataset.py:249`, `:373`; `backend/app/services/checklist_module.py:421`;
+`backend/app/services/project_export.py:102`; `backend/app/schemas/project.py:69`;
+`backend/app/repositories/notification.py:211`
+
+The eight copies agree today. If the fallback ever changes — the obvious next step is "the viewer's
+language" — the change has to land in eight places and any one missed makes a shared document's
+language depend on which code path produced it. `shared_language` in `app/core/language.py:113`
+hides a ninth. The `"en"` server defaults in `backend/app/models/project.py:107` and
+`backend/app/models/eval.py:110` are fine (a migration cannot import the enum) but deserve a comment
+naming `Language.EN`. **Fix:** one `language_or_default()` in `app/core/language.py`. One hour.
+
+### §9.34 The single- and multi-module checklist exports duplicate their filter and cap logic — 🟡 hygiene
+
+**Evidence:** CONFIRMED.
+
+**Where:** `backend/app/services/checklist_item.py:296-372` (`ChecklistItemService.export`);
+`backend/app/services/project_export.py:140-200` (`ProjectExportService._checklist`), and its
+mock-data cap at `:~210`
+
+Both build the same `list_all(...)` arguments, raise the same `409 EXPORT_TOO_LARGE` with different
+wording ("rows" vs "test cases"), and build the same audit `filter` details. A comment at
+`project_export.py:~183` says "same envelope as the per-module export" — the comment is the only
+thing keeping them aligned. **Fix:** extract the filter-to-details mapping and the cap check beside
+`build_workbook` in `app/services/checklist_export.py`. One hour.
+
+### §9.35 PRD §6 still says Phase 2.7 PR C is "in progress" — 📄 doc
+
+**Evidence:** CONFIRMED.
+
+**Where:** `docs/PRD.md:1055`; compare `CHANGELOG.md:14-58` and `docs/PRD.md:668`
+
+PR C (#70) merged on 2026-10-24 (`d33c33f`). §6 is the only place milestone progress is recorded
+(`.claude/rules/documentation.md`), and its Phase 2.7 row neither says PR C shipped nor carries the
+"(shipped)" tag the rows before it have. **Fix:** mark the row shipped and name #70. Five minutes.
+
+### §9.36 `docs/architecture.md` counts nine notification fan-out sites; there are thirteen — 📄 doc
+
+**Evidence:** CONFIRMED.
+
+**Where:** `docs/architecture.md:303`; the sites are `backend/app/ingestion/pipeline.py:140,184`,
+`backend/app/checklist/generator.py:198`, `backend/app/mockdata/generator.py:218`,
+`backend/app/services/checklist_change_set.py:186,255`, `backend/app/services/mock_data_change_set.py:144,210`,
+`backend/app/services/membership.py:116`, and the four eval callers of `backend/app/eval/notifications.py`
+(`eval/generator.py:147`, `eval/runner.py:213`, `queue/eval.py:120,162`)
+
+`.claude/rules/notifications.md` already says thirteen. The architecture page predates #66 and also
+words the generators as "two checklist and two mock-data", which reads as four. **Fix:** "Thirteen",
+listing the eval generator, runner and terminal-failure path. `docs/PRD.md` §6 items 7 and 8 also
+quote "40 events", "eleven members" and "nine call sites" (now 47, 15 and 13); they read as
+snapshots, and adding "at the time" would make that explicit. Ten minutes.
+
+### §9.37 `CHANGELOG.md`'s `[Unreleased]` has two `### Added` headings — 📄 doc
+
+**Evidence:** CONFIRMED.
+
+**Where:** `CHANGELOG.md:16`, `:60`
+
+Keep a Changelog expects one heading per kind. PR C's entries were stacked above the earlier ones.
+**Fix:** merge them before the next release is cut. Five minutes.
+
+### §9.38 A project-list docstring still describes phase 1 — 📄 doc
+
+**Evidence:** CONFIRMED.
+
+**Where:** `backend/app/services/project.py:192-194`
+
+"In phase 1 it is unrestricted; phase 2 changes the resolver's body" — phase 2.1 shipped per-project
+access long ago. **Fix:** "The scope comes from the access resolver and nowhere else." Two minutes.
+
+## Verified correct in this sweep (2026-10-24), with what was checked
+
+- **Access on every new or changed route.** `PATCH /projects/{id}` checks `require_readable_project`
+  then `PROJECT_UPDATE` (`backend/app/services/project.py:245-246`). Every `DELETE` gates on a named
+  permission after the readable-project check, with no `created_by` or inline `is_admin`.
+  `/me/language` touches only the caller's row. No new prefix joined the forced-password-change
+  exemptions, so `/me/language`, the export route and the eval routes are all gated.
+- **The multi-module export cannot cross projects.** Modules come from the scoped
+  `list_in_scope`; an id outside it is `404 CHECKLIST_MODULE_NOT_FOUND`; each part checks
+  `CHECKLIST_READ` or `MOCKDATA_READ`; the unscoped record reads receive only ids from the scoped
+  list; audit is written after every part is built.
+- **Eval notifications resolve recipients through `access.py`.** `MembershipRepository.recipients_for`
+  is still called only from `backend/app/core/access.py`. The eval events use
+  `RECIPIENT_PERMISSIONS = EVAL_READ`, have no admin branch, and carry only `projectName`,
+  `setName` and counts. The fan-out runs inside the transaction before the commit on all four sites;
+  `_fail` in `backend/app/queue/eval.py` writes `failed` and notifies together.
+- **Conversation privacy.** Every conversation read goes through `resolve_conversation_owner`;
+  `prepare_turn` reads only the asker's own language. The new admin `by_prompt_version` feedback rows
+  carry no voter.
+- **Server-side request forgery** (making the server fetch an address an attacker chose). The
+  validator still requires https, an allowlisted host, no credentials in the URL, and a global
+  address for every resolved record; the clone re-validates at connect time and pins the result;
+  redirects are off; the personal access token travels in the environment, never the command line.
+  No new outbound fetch was added since `df7594e`.
+- **Secrets and content.** No response model carries `encrypted_pat`. The new audit fields
+  (`language`, `contentLanguage`, `moduleCount`, `sourceSetId`) are closed values or ids. The mail
+  composers gained only a `Language` enum parameter, and the signatures in `.claude/rules/mail.md`
+  match `backend/app/mail/compose.py:426,469` exactly. The call log's new `EVAL_TRANSLATE` feature
+  records the error's class only.
+- **Soft delete.** A project delete still hard-deletes its Qdrant points before the commit and
+  soft-deletes results, runs, pairs, sets and feedback in the same transaction. Every new query
+  (`content_languages`, `list_in_scope`, `get_by_modules`, `list_for_modules`, `live_translation`)
+  filters `deleted_at`. The new partial unique index on translations excludes deleted rows.
+- **Live events.** The eval set and run repositories stage an event on `claim`, `release`, `defer` and
+  `claim_stranded`, and the services stage on create, start and soft delete.
+- **Response contract.** Every schema inherits `ApiModel`; `SSE_EVENT_MODELS` lists all ten stream
+  event classes. Since `df7594e` one `ErrorCode` was added (`EVAL_TRANSLATION_EXISTS`) and none
+  renamed or removed. No route puts a scalar query parameter beside a query model.
+- **Language resolution is written once.** "Stored language, else `Accept-Language`, else English"
+  is `resolve_language` in `backend/app/core/language.py`, called from Ask and password reset only;
+  the header is read at two routes. The backend language list is held to the frontend's by a test.
+- **Counts that hold.** 19 rule files and 7 commands (`CLAUDE.md`); 50 `AuditRecorder` call sites
+  (49 in services plus the CLI); 47 audit event types; 26 tables; 13 notification fan-out sites
+  (`.claude/rules/notifications.md`); every `Settings` field in `backend/.env.example` and
+  `docs/configuration.md`, and every field read except §9.17's two; the `backend/README.md` route
+  table covers all routes.
+- **Language docs.** `docs/rag.md`, `docs/langgraph.md` and `.claude/rules/rag.md` agree on the
+  reply-language table and the translated refusals.
 
 ---
 
