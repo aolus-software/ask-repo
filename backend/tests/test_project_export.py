@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import Settings
 from app.core.audit import AuditEventType, AuditRecorder
 from app.core.errors import AppError, ErrorCode
+from app.core.language import Language
 from app.core.middleware import ProjectGrant
 from app.core.permissions import EDITOR_NAME, VIEWER_NAME, Permission
 from app.db.session import get_sessionmaker
@@ -22,6 +23,7 @@ from app.models.mock_data import MockDataDataset, MockDataDatasetStatus
 from app.models.project import Project
 from app.models.user import User
 from app.schemas.project_export import ProjectExportPart, ProjectExportQuery
+from app.services.export_labels import EXPORT_LABELS
 from app.services.mock_data_export import NO_DATA_LABEL, sheet_title
 from app.services.project_export import ProjectExportService
 from tests.conftest import AuditRows, GrantMembership
@@ -130,6 +132,23 @@ async def test_the_checklist_part_covers_every_module_grouped_by_name(
         "moduleCount": 3,
     }
     assert "Refunds" not in str(event.details)
+
+
+async def test_the_checklist_part_uses_the_projects_content_language(
+    authed_client: AsyncClient,
+    authed_user: User,
+    grant_membership: GrantMembership,
+    db_session: AsyncSession,
+) -> None:
+    project, _ = await _project_with_modules(db_session)
+    project.content_language = "id"
+    await db_session.commit()
+    await grant_membership(authed_user.id, project.id, VIEWER_NAME)
+
+    response = await _export(authed_client, project.id, "include=checklist")
+
+    header, *_ = _sheet_rows(response.content)
+    assert list(header) == list(EXPORT_LABELS[Language.ID].checklist_headers)
 
 
 async def test_the_grid_filters_narrow_the_checklist_part(

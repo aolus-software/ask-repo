@@ -245,7 +245,9 @@ class MockDataDatasetService:
         """Every applied record of one module, as a spreadsheet."""
         module = await self._require_readable_module(module_id, actor)
         records = await self._records_within_cap(module_id)
-        content = build_mock_data_workbook(records)
+        project = await self.projects.get(module.project_id)
+        language = (parse_language(project.content_language) if project else None) or Language.EN
+        content = build_mock_data_workbook(records, language=language)
         await self._record_export(module, actor=actor, format_="xlsx", row_count=len(records))
         return content
 

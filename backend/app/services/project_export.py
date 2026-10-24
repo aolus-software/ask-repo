@@ -22,6 +22,7 @@ from app.config import Settings
 from app.core import access
 from app.core.audit import AuditEntry, AuditEventType, AuditRecorder, ContextValue
 from app.core.errors import AppError, ErrorCode
+from app.core.language import Language, parse_language
 from app.core.middleware import AuthenticatedUser
 from app.core.permissions import Permission
 from app.models.checklist import ChecklistItem, ChecklistModule
@@ -98,11 +99,12 @@ class ProjectExportService:
             access.require_permission(actor, project.id, Permission.MOCKDATA_READ)
 
         modules = await self._chosen_modules(project, query.module_ids, actor)
+        language = parse_language(project.content_language) or Language.EN
         built: list[_Part] = []
         if ProjectExportPart.CHECKLIST in parts:
-            built.append(await self._checklist(project, modules, query, actor))
+            built.append(await self._checklist(project, modules, query, actor, language))
         if ProjectExportPart.MOCK_DATA in parts:
-            built.append(await self._mock_data(project, modules, actor))
+            built.append(await self._mock_data(project, modules, actor, language))
 
         for part in built:
             await self._recorder.record(part.audit)
@@ -141,6 +143,7 @@ class ProjectExportService:
         modules: list[ChecklistModule],
         query: ProjectExportQuery,
         actor: AuthenticatedUser,
+        language: Language,
     ) -> _Part:
         """Today's one-sheet workbook, its rows grouped by module in name order."""
         cap = self.settings.checklist_export_max_rows
@@ -168,6 +171,7 @@ class ProjectExportService:
             rows,
             names=await self._display_names(project, rows),
             module_names={module.id: module.name for module in modules},
+            language=language,
         )
         # Same envelope as the per-module export: the filters as named values, the
         # feature only as a flag because it is picked from generated content.
@@ -198,7 +202,11 @@ class ProjectExportService:
         )
 
     async def _mock_data(
-        self, project: Project, modules: list[ChecklistModule], actor: AuthenticatedUser
+        self,
+        project: Project,
+        modules: list[ChecklistModule],
+        actor: AuthenticatedUser,
+        language: Language,
     ) -> _Part:
         """A cover sheet listing every chosen module, and a sheet per module with records."""
         cap = self.settings.mock_data_export_max_rows
@@ -231,7 +239,8 @@ class ProjectExportService:
                     name=module.name, records=by_module[module.id], stale=stale(module.id)
                 )
                 for module in modules
-            ]
+            ],
+            language=language,
         )
         return _Part(
             MOCK_DATA_FILENAME,

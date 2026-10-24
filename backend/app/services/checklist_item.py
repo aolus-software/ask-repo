@@ -22,6 +22,7 @@ from app.config import Settings
 from app.core import access
 from app.core.audit import AuditEntry, AuditEventType, AuditRecorder, ChangedValue
 from app.core.errors import AppError, ErrorCode
+from app.core.language import shared_language
 from app.core.middleware import AuthenticatedUser
 from app.core.permissions import Permission
 from app.models.checklist import (
@@ -312,10 +313,16 @@ class ChecklistItemService:
                 ErrorCode.EXPORT_TOO_LARGE,
                 f"That filter matches more than {cap} rows. Narrow it and try again.",
             )
+        # A filter can span projects, and a document spanning projects has no single
+        # owner whose language could decide it: one shared language is used, else English.
+        language = shared_language(
+            await self.projects.content_languages({row.project_id for row in rows})
+        )
         workbook = build_workbook(
             rows,
             names=await self._display_names(rows),
             module_names=await self._module_names(rows),
+            language=language,
         )
         # An export changes nothing, and is audited anyway: it is the one action
         # that takes a private repository's derived content out of the instance.

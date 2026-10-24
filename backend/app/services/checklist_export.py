@@ -14,9 +14,11 @@ from openpyxl import Workbook
 from openpyxl.styles import Alignment, Font
 from openpyxl.utils import get_column_letter
 
+from app.core.language import Language
 from app.models.checklist import ChecklistItem
+from app.services.export_labels import EXPORT_LABELS
 
-SHEET_TITLE = "QA Checklist"
+SHEET_TITLE = EXPORT_LABELS[Language.EN].checklist_sheet
 
 # Column header, and the width it gets. The prose columns are wide and wrap.
 COLUMNS: tuple[tuple[str, int], ...] = (
@@ -36,9 +38,9 @@ COLUMNS: tuple[tuple[str, int], ...] = (
     ("Citations", 40),
     ("Project", 36),
 )
-WRAPPED_COLUMNS = frozenset(
-    {"Test name", "Expected result", "Current result", "Notes", "Citations"}
-)
+# 1-based column indexes that wrap: Test name, Expected result, Current result, Notes,
+# Citations. By position rather than by header, because the header is now translated.
+WRAPPED_COLUMNS = frozenset({3, 4, 5, 8, 12})
 
 
 def _citations(item: ChecklistItem) -> str:
@@ -55,6 +57,7 @@ def build_workbook(
     *,
     names: dict[uuid.UUID, str],
     module_names: dict[uuid.UUID, str],
+    language: Language,
 ) -> bytes:
     """One sheet, header frozen, prose wrapped.
 
@@ -69,9 +72,10 @@ def build_workbook(
     # could have zero sheets; a freshly constructed one always has exactly one, so
     # `worksheets[0]` gets the same sheet with a type mypy accepts unconditionally.
     sheet = book.worksheets[0]
-    sheet.title = SHEET_TITLE
+    labels = EXPORT_LABELS[language]
+    sheet.title = labels.checklist_sheet
 
-    sheet.append([header for header, _ in COLUMNS])
+    sheet.append(list(labels.checklist_headers))
     for index, (_, width) in enumerate(COLUMNS, start=1):
         sheet.column_dimensions[get_column_letter(index)].width = width
     for cell in sheet[1]:
@@ -98,9 +102,7 @@ def build_workbook(
             ]
         )
 
-    wrapped = {
-        index for index, (header, _) in enumerate(COLUMNS, start=1) if header in WRAPPED_COLUMNS
-    }
+    wrapped = WRAPPED_COLUMNS
     for row in sheet.iter_rows(min_row=2):
         for cell in row:
             if cell.column in wrapped:
