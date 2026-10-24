@@ -13,7 +13,7 @@
 # and npm would resolve it afresh.
 
 # ── Dependency stage ──────────────────────────────────────────────────────────
-FROM oven/bun:1.3.14-debian AS deps
+FROM oven/bun:1.4.3-debian AS deps
 
 WORKDIR /app
 
@@ -26,7 +26,7 @@ RUN bun install --frozen-lockfile
 # Installed separately rather than pruned afterwards, because `bun install` has no
 # prune and deleting from a resolved tree by hand is how a runtime import goes
 # missing on a Tuesday.
-FROM oven/bun:1.3.14-debian AS prod-deps
+FROM oven/bun:1.4.3-debian AS prod-deps
 
 WORKDIR /app
 
