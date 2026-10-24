@@ -32,9 +32,19 @@ test, which is what makes a silent addition impossible.
 
 `compose_subject` builds `"{message} | {MAIL_APP_NAME}"`, prefixed with `"[{APP_ENV}] "` in
 every environment except `production`, where the tag is omitted. There is no per-call
-templating for the subject: `MESSAGES` maps each `NotificationType` to one subject and one
-body sentence, and the reset email's subject is the same fixed string (`RESET_MESSAGE`) every
-time.
+templating for the subject: `MESSAGES` maps each `Language` and `NotificationType` to one subject
+and one body sentence, and the reset email's subject is one fixed string per language
+(`RESET_MESSAGES`). The templates' fixed chrome (button labels, footer, manage link, reset intro and expiry) comes from
+`CHROME`, a per-language `MailChrome`, and is passed to Jinja as fixed strings. A test requires
+every `Language` × every `NotificationType` in `MESSAGES` and every `Language` in `RESET_MESSAGES`
+and `CHROME`, so a new event or language without its translations fails the test rather than the
+email. The non-English tables are machine-assisted drafts pending native-speaker review.
+
+**The language is the recipient's, never the actor's.** A notification email uses
+`users.language` of the recipient, read at send time by the outbox (else `en`); that is not a
+visibility decision, so the fan-out snapshot rule (`notifications.md` rule 4) does not apply. A
+reset email uses the account's language, else the `Accept-Language` of the request that asked,
+else `en`; an unknown address still sends nothing. Every HTML part sets `<html lang>` from it.
 
 The plain-text body (`EmailMessage.set_content`) is still built first and is byte-identical to
 what it always was — a reset link is still a bare URL on its own line,

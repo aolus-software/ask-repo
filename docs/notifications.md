@@ -172,6 +172,14 @@ No answer text, no proposal body, no snippet. `MAIL_ENABLED` also requires `APP_
 set (e.g. `https://askrepo.internal`), so reset links and notification links can be
 constructed server-side.
 
+**Email is composed in the recipient's language.** A notification email uses the recipient's
+`users.language`, read at send time by the mail loop (which already loads the recipient to check
+for deactivation), else English. It is not a visibility decision, so the fan-out snapshot rule does
+not apply to it. A password-reset email uses the account's language, else the `Accept-Language` of
+the request that asked for it, else English. The subjects and sentences are fixed tables per
+language, with English unchanged; the other languages are machine-assisted drafts pending
+native-speaker review.
+
 Full mechanism: `.claude/rules/mail.md` and `.claude/rules/notifications.md` rule 4.
 
 ---

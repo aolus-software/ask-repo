@@ -181,7 +181,42 @@ when broken:
 - **Ask only.** `Answerer` raises on a style alongside a `propose_target`, and only
   `app/services/conversation.py` passes one (`tests/test_answer_style_scope.py`). A
   refinement chat or a generation run shaped by one user's preferences would make a shared
-  document depend on who pressed the button.
+  document depend on who pressed the button. `reply_language` is not a style: every caller
+  passes one, and a shared caller passes the project's language, not a person's.
+
+## The reply-language slot
+
+`{reply_language}` sits beside `{reader_preferences}` in `ANSWER_SYSTEM` and
+`HISTORY_ANSWER_SYSTEM` (`app/rag/prompts.py`, `render_reply_language`). Three things hold it, and
+each fails silently when broken:
+
+- **It is a fixed constant, filled from `LANGUAGE_NAMES`, never from a request.** `REPLY_LANGUAGE`
+  is the only sentence, and the language name is the only variable. Free text here would be prompt
+  injection by preference.
+- **It is always rendered, `en` included, and it precedes the grounding rules.** It never mentions
+  citing, evidence, confidence or guessing (`tests/test_language_prompts.py`), and it keeps code,
+  identifiers, paths, quoted code and `[n]` labels verbatim. That is the only reason
+  `unknown_paths` and `uncited_answer` keep working in a language other than English: a translated
+  path would be reported as a file that does not exist.
+- **The tiebreak is chosen by the caller, per this table**, because the question's own language
+  wins and the tiebreak only decides when the question does not settle it:
+
+| Caller | Tiebreak | Why |
+| --- | --- | --- |
+| Ask (`app/services/conversation.py`) | the asker's `language`; if `NULL`, the request's `Accept-Language`; then `en` | A private conversation: one user's preference is correct |
+| Checklist and mock-data refinement chats | the project's `content_language` | The replies are shared documents (`feedback.md` rule 5); who pressed Send must not decide them |
+| Eval runner | the set's `language` | A run must not depend on who requested it |
+
+The refusals follow `reply_language` too. `NO_CONTEXT_ANSWERS` and `OUT_OF_SCOPE_ANSWERS` in
+`app/rag/grounding.py` are `dict[Language, str]`, each value a reviewed constant. They are still
+fixed, still streamed as ordinary `token` events and never generated, so "no evidence, no
+generation" holds unchanged, and a test requires every `Language` in both tables. The stored
+`Message.content` keeps the language it was streamed in.
+
+`classify`'s `search_query` and the grader's `better_query` are written in English whatever the
+question's language (the index is English source code), keeping identifiers and paths as typed.
+If `classify` fails its fallback still searches the raw question; that is a quality drop, not an
+error, and no per-turn check reports it.
 
 ## Every model call passes a feature config
 

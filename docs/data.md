@@ -151,7 +151,7 @@ project permission — and `GET /projects?ownerless=true` lists them for an admi
 
 ### Projects
 
-`projects` carries four groups of columns beyond the obvious:
+`projects` carries six groups of columns beyond the obvious:
 
 | Group | Columns | Why |
 | --- | --- | --- |
@@ -159,6 +159,7 @@ project permission — and `GET /projects?ownerless=true` lists them for an admi
 | Lease | `lease_owner`, `lease_expires_at`, `last_job_id` | The deduplication boundary — see below |
 | Generation | `active_generation`, `reindex_in_progress` | Which vector generation is being served |
 | Embedding provenance | `embedding_collection`, `embedding_model` | Which Qdrant collection this project's points are in |
+| Content language | `content_language` | The language shared content is written in: checklist and mock-data generation, both refinement chats, and export labels. A code from the language catalogue, default `en`; changing it rewrites no row |
 | Credential | `encrypted_pat` | Encrypted at rest with `PAT_ENCRYPTION_KEY` |
 
 `embedding_collection` is recorded rather than recomputed. A project indexed before a provider
@@ -235,8 +236,8 @@ Four non-partial indexes — `created_at`, `actor_user_id`, `event_type`, `proje
 them is partial because there is no `deleted_at` to filter, which is the one place this table
 diverges from every other group above.
 
-**The catalogue is a `StrEnum` in `app/core/audit.py`, not a table** — 46 event types across auth
-(including session revoke, added with the profile page), accounts (including `user.answer_style.updated`, which allowlists `answerDetail`, `answerFamiliarity` and `answerFormat`, and `user.language.updated`, which allowlists `language`), projects, RBAC, password reset,
+**The catalogue is a `StrEnum` in `app/core/audit.py`, not a table** — 47 event types across auth
+(including session revoke, added with the profile page), accounts (including `user.answer_style.updated`, which allowlists `answerDetail`, `answerFamiliarity` and `answerFormat`, and `user.language.updated`, which allowlists `language`), projects (`project.updated` allowlists `contentLanguage`, and `project.created` carries it too), RBAC, password reset,
 checklist modules and items, change sets, mock data, the eval harness (`eval_set.generation.requested`, `eval_set.deleted`, `eval_pair.updated`, `eval_run.requested`), exports and conversations. `eval_set.generation.requested` carries `language` and, for a translation, `sourceSetId` as context. Existence lives in
 code for the reason `app/core/permissions.py` gives for the
 permission catalogue: if it lived in a table, deleting a row would orphan every write site that
@@ -249,7 +250,7 @@ reduced to its host by `urlsplit().hostname`, which excludes the userinfo a PAT 
 content (no prompt, no message, no source excerpt, and **`target_label` is `NULL` for a
 conversation**, because its title derives from the user's first question).
 
-**`details` is one envelope** for all 46 events:
+**`details` is one envelope** for all 47 events:
 
 ```json
 {

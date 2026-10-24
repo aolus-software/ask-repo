@@ -215,6 +215,14 @@ nothing anywhere reports an error. The guard refuses with `409 EMBEDDING_MODEL_C
 called unrelated; letting adjacency drag it in behind a strong neighbour would make the floor
 depend on chunk ordering.
 
+**The search query is English.** The index holds source code written in English, so a question
+embedded in another language lands in a different neighbourhood of the vector space than the code
+that answers it, and recall drops with no error anywhere. `classify` and the grader's
+`better_query` therefore write the query in English, keeping identifiers and paths as typed. It
+degrades rather than fails: if `classify` falls back, the raw question is searched and the turn is
+still answered. The signals that it is happening are the eval baselines and the `wrong_language_or_tone`
+feedback reason, not a per-turn check.
+
 **No evidence, no generation.** If nothing clears the floor, the model is **not called at all** —
 a fixed refusal is streamed instead, with `groundingWarnings: ["no_context"]`. The prompt asks
 the model not to invent things, but that is an instruction to a system whose defining failure
@@ -271,6 +279,27 @@ one that shipped before the feature, which is what the eval harness relies on. A
 overrides grounding: `uncited_answer` and `unknown_paths` are still computed from the finished
 answer, so they remain the backstop whatever a preference said. The style reaches Ask answers
 only — never a refinement chat or a generation run, which write documents other people use.
+
+## The reply language
+
+`ANSWER_SYSTEM` and `HISTORY_ANSWER_SYSTEM` carry a second slot beside `{reader_preferences}`,
+`{reply_language}`, filled by `render_reply_language` from the `REPLY_LANGUAGE` constant and
+`LANGUAGE_NAMES`: reply in the language the question is written in, and when the question does not
+settle it, in the tiebreak language; code, identifiers, paths, quoted code and `[n]` labels stay as
+written. Unlike a style it is always rendered, English included, so the default answer prompt
+changed and its version moved. It never mentions citing or evidence. Keeping paths and `[n]` labels
+verbatim is what lets `unknown_paths` and `uncited_answer` run in every language.
+
+`Answerer.answer` takes a required `reply_language`: the asker's stored language, else the
+request's `Accept-Language`, else `en` on Ask; the project's `content_language` on the checklist
+and mock-data chats, whose replies are shared documents; the set's `language` on an eval run. The
+two fixed refusals are `dict[Language, str]` tables in `app/rag/grounding.py`, one reviewed
+constant per language, and a test requires every language in both.
+
+Generated shared content is written in the project's `content_language`:
+`render_content_language` appends the `CONTENT_LANGUAGE` constant to the reduce and propose
+prompts for the checklist and to the generate and propose prompts for mock data. It also tells the
+proposer not to raise an `update` only to translate an existing row. The map step stays English.
 
 ---
 
