@@ -681,3 +681,40 @@ async def test_files_beyond_the_cap_are_skipped_not_mapped(db_session: AsyncSess
     change_set = await ChecklistChangeSetRepository(db_session).pending_for_module(module.id)
     assert change_set is not None
     assert "skipped: 1 files over the 2-file cap" in change_set.summary
+
+
+async def test_the_reduce_prompt_follows_the_projects_content_language(
+    db_session: AsyncSession,
+) -> None:
+    """Shared content follows the project's language; map summaries stay English."""
+    project = await create_project(db_session)
+    project.active_generation = 1
+    project.embedding_collection = "in-memory"
+    project.content_language = "id"
+    module = await create_checklist_module(
+        db_session, project_id=project.id, source_path="app/auth"
+    )
+    store = InMemoryVectorStore(dimensions=8)
+    await _index(store, project_id=project.id, path="app/auth/login.py")
+    chat = StructuredScriptedChatModel(
+        {
+            FileObservations: [FileObservations(behaviours=[])],
+            ProposedChangeSet: [ProposedChangeSet(summary="no change", operations=[])],
+        }
+    )
+    generator = ChecklistGenerator(
+        db_session, Settings(), store_factory=lambda _: store, chat_model=cast(BaseChatModel, chat)
+    )
+    job_id = uuid.uuid4()
+    await ChecklistModuleRepository(db_session).claim(
+        module_id=module.id, job_id=job_id, worker_id="w1", lease_seconds=300
+    )
+
+    await generator.run(module_id=module.id, job_id=job_id, worker_id="w1")
+
+    reduce_system = str(chat.prompts_for(ProposedChangeSet)[0][0].content)
+    assert "Indonesian" in reduce_system
+    assert "only to translate" in reduce_system
+    map_prompts = chat.prompts_for(FileObservations)
+    assert map_prompts
+    assert all("Indonesian" not in str(p[0].content) for p in map_prompts)

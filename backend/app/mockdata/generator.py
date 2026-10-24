@@ -23,6 +23,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.checklist.source import ModuleSource, rebuild_files
 from app.config import Settings
 from app.core.notifications import NotificationType
+from app.core.language import Language, parse_language
 from app.db.session import get_sessionmaker
 from app.ingestion.errors import RetryableIngestionError, TerminalIngestionError
 from app.ingestion.vector_store import VectorStoreFactory
@@ -130,6 +131,9 @@ class MockDataGenerator:
         # ORM object.
         project_name = project.name
         module_name = module.name
+        # Shared content follows the project, never the requester (spec §4.4). Read
+        # into a local before the first await that could expire the row.
+        language = parse_language(project.content_language) or Language.EN
         self._scope = {
             "trace_seed": str(change_set_id),
             "project_id": project.id,
@@ -153,7 +157,11 @@ class MockDataGenerator:
                 for record in await self.records.list_for_module(module.id)
             ]
             proposal = await self._propose(
-                module_name=module.name, source=source, existing=existing, count=count
+                module_name=module.name,
+                source=source,
+                existing=existing,
+                count=count,
+                language=language,
             )
         finally:
             await self._stop_renewal(renewal, dataset_id=dataset_id)
@@ -291,6 +299,7 @@ class MockDataGenerator:
         source: ModuleSource,
         existing: list[ExistingRecord],
         count: int,
+        language: Language,
     ) -> ProposedMockDataSet:
         """One model call over the module's whole (capped) source text."""
         source_text = "\n\n".join(
@@ -307,6 +316,7 @@ class MockDataGenerator:
                     existing=existing,
                     partial_paths=source.partial_paths,
                     skipped_paths=source.skipped_paths,
+                    language=language,
                 ),
                 config=call_config(CallFeature.GENERATE_MOCK_DATA, **self._scope),
             )

@@ -21,6 +21,7 @@ from app.checklist.operations import stored_operation
 from app.checklist.source import ModuleFile, ModuleSource, rebuild_files
 from app.config import Settings
 from app.core.notifications import NotificationType
+from app.core.language import Language, parse_language
 from app.db.session import get_sessionmaker
 from app.ingestion.errors import RetryableIngestionError, TerminalIngestionError
 from app.ingestion.vector_store import VectorStoreFactory
@@ -119,6 +120,9 @@ class ChecklistGenerator:
         # objects are in then.
         project_name = project.name
         module_name = module.name
+        # Shared content follows the project, never the requester (spec §4.4). Read
+        # into a local before the first await that could expire the row.
+        language = parse_language(project.content_language) or Language.EN
         self._scope = {
             "trace_seed": str(change_set_id),
             "project_id": project.id,
@@ -148,7 +152,7 @@ class ChecklistGenerator:
                 for item in await self.items.list_for_module(module_id)
             ]
             proposal = await self._propose(
-                module_name=module.name, source=source, existing=existing
+                module_name=module.name, source=source, existing=existing, language=language
             )
             operations = self._to_operations(proposal, source=source)
         finally:
@@ -306,7 +310,12 @@ class ChecklistGenerator:
         ]
 
     async def _propose(
-        self, *, module_name: str, source: ModuleSource, existing: list[ExistingItem]
+        self,
+        *,
+        module_name: str,
+        source: ModuleSource,
+        existing: list[ExistingItem],
+        language: Language,
     ) -> ProposedChangeSet:
         """Map over the files, then reduce once against the existing checklist."""
         semaphore = asyncio.Semaphore(self.settings.checklist_map_concurrency)
@@ -340,6 +349,7 @@ class ChecklistGenerator:
                     existing=existing,
                     partial_paths=source.partial_paths,
                     skipped_paths=source.skipped_paths,
+                    language=language,
                 ),
                 config=call_config(CallFeature.REDUCE, **self._scope),
             )

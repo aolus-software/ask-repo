@@ -339,3 +339,40 @@ async def test_operations_with_a_mismatched_field_key_set_are_dropped(
     change_set = await MockDataChangeSetRepository(db_session).pending_for_module(module.id)
     assert change_set is not None
     assert change_set.operations == []
+
+
+async def test_the_generate_prompt_follows_the_projects_content_language(
+    db_session: AsyncSession,
+) -> None:
+    project = await create_project(db_session)
+    project.active_generation = 1
+    project.embedding_collection = "in-memory"
+    project.content_language = "id"
+    module = await create_checklist_module(
+        db_session, project_id=project.id, source_path="app/features/project"
+    )
+    store = InMemoryVectorStore(dimensions=8)
+    await _index(store, project_id=project.id, path="app/features/project/models.py")
+    chat = StructuredScriptedChatModel(
+        {
+            ProposedMockDataSet: [
+                ProposedMockDataSet(
+                    schema_found=True, field_keys=["name"], summary="none", operations=[]
+                )
+            ]
+        }
+    )
+    generator = MockDataGenerator(
+        db_session,
+        Settings(),
+        store_factory=lambda _: store,
+        chat_model=cast(BaseChatModel, chat),
+    )
+    job_id = uuid.uuid4()
+    dataset_id = await _claimed_dataset(db_session, module_id=module.id, job_id=job_id)
+
+    await generator.run(dataset_id=dataset_id, job_id=job_id, worker_id="w1", count=1)
+
+    system = str(chat.prompts_for(ProposedMockDataSet)[0][0].content)
+    assert "Indonesian" in system
+    assert "only to translate" in system
