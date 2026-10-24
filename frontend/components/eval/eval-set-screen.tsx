@@ -157,8 +157,22 @@ export function EvalSetScreen({
     doneSourceRuns.length > 0 &&
     doneRuns.length > 0;
   const sourceCompareSelects = [
-    ["source", t("sourceRun"), sourceRunId, setSourceRunId, doneSourceRuns, sourceRunList],
-    ["translated", t("translatedRun"), translatedRunId, setTranslatedRunId, doneRuns, runs],
+    [
+      "source",
+      t("sourceRun"),
+      sourceRunId,
+      setSourceRunId,
+      doneSourceRuns,
+      sourceRunList,
+    ],
+    [
+      "translated",
+      t("translatedRun"),
+      translatedRunId,
+      setTranslatedRunId,
+      doneRuns,
+      runs,
+    ],
   ] as const;
 
   const compareSelects = [
@@ -325,7 +339,9 @@ export function EvalSetScreen({
 
       {showSourceCompare ? (
         <section className="space-y-3">
-          <h2 className="text-xl font-semibold tracking-tight">{t("compareWithSource")}</h2>
+          <h2 className="text-xl font-semibold tracking-tight">
+            {t("compareWithSource")}
+          </h2>
           <div className="flex flex-wrap gap-3">
             {sourceCompareSelects.map(([key, label, value, setValue, options, all]) => (
               <Select
@@ -348,7 +364,9 @@ export function EvalSetScreen({
               </Select>
             ))}
           </div>
-          {sourceRunId && translatedRunId && (sourceRun.error || translatedRun.error) ? (
+          {sourceRunId &&
+          translatedRunId &&
+          (sourceRun.error || translatedRun.error) ? (
             <Alert variant="destructive">
               <AlertTitle>{t("compareFailed")}</AlertTitle>
               <AlertDescription>
@@ -357,7 +375,9 @@ export function EvalSetScreen({
                   : t("somethingWrong")}
               </AlertDescription>
             </Alert>
-          ) : sourceRunId && translatedRunId && !(sourceRun.data && translatedRun.data) ? (
+          ) : sourceRunId &&
+            translatedRunId &&
+            !(sourceRun.data && translatedRun.data) ? (
             <Skeleton className="h-32 w-full" />
           ) : sourceRun.data && translatedRun.data && sourceRunId && translatedRunId ? (
             <Card className="px-4">

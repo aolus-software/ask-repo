@@ -12,6 +12,7 @@ from app.core.notifications import NotificationType
 from app.eval import generator as generator_module
 from app.eval.generator import NO_FAITHFUL_TRANSLATION_ERROR, EvalSetGenerator
 from app.eval.model_output import TranslatedQuestion
+from app.ingestion.vector_store import VectorStoreFactory
 from app.models.eval import EvalPair, EvalSet, EvalSetStatus
 from app.repositories.eval_pair import EvalPairRepository
 from app.repositories.eval_set import EvalSetRepository
@@ -66,7 +67,7 @@ def _generator(session: AsyncSession, chat: object) -> EvalSetGenerator:
     return EvalSetGenerator(
         session,
         Settings(),
-        store_factory=cast("generator_module.VectorStoreFactory", _NoStore()),
+        store_factory=cast(VectorStoreFactory, _NoStore()),
         chat_model=cast(BaseChatModel, chat),
     )
 

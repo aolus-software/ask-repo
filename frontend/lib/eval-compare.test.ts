@@ -67,8 +67,14 @@ describe("compareRuns", () => {
 
 describe("compareRuns across languages", () => {
   it("pairs a translated run's results with the source's through headToBase", () => {
-    const source = run("m", [result("en-1", true, "correct"), result("en-2", true, "correct")]);
-    const translated = run("m", [result("id-1", false, "wrong"), result("id-2", true, "correct")]);
+    const source = run("m", [
+      result("en-1", true, "correct"),
+      result("en-2", true, "correct"),
+    ]);
+    const translated = run("m", [
+      result("id-1", false, "wrong"),
+      result("id-2", true, "correct"),
+    ]);
     const headToBase = new Map([
       ["id-1", "en-1"],
       ["id-2", "en-2"],
@@ -96,10 +102,21 @@ describe("compareRuns across languages", () => {
 
 describe("stamp differences", () => {
   it("flags a chat model or prompt version change apart from the judge", () => {
-    const base = { ...run("j", []), chatModel: "a", promptVersion: "1", judgePromptVersion: "1" };
-    expect(compareRuns(base, { ...base, chatModel: "b" }).otherStampsChanged).toBe(true);
-    expect(compareRuns(base, { ...base, promptVersion: "2" }).otherStampsChanged).toBe(true);
-    expect(compareRuns(base, { ...base, judgePromptVersion: "2" }).otherStampsChanged).toBe(true);
+    const base = {
+      ...run("j", []),
+      chatModel: "a",
+      promptVersion: "1",
+      judgePromptVersion: "1",
+    };
+    expect(compareRuns(base, { ...base, chatModel: "b" }).otherStampsChanged).toBe(
+      true,
+    );
+    expect(compareRuns(base, { ...base, promptVersion: "2" }).otherStampsChanged).toBe(
+      true,
+    );
+    expect(
+      compareRuns(base, { ...base, judgePromptVersion: "2" }).otherStampsChanged,
+    ).toBe(true);
     expect(compareRuns(base, { ...base }).otherStampsChanged).toBe(false);
   });
 });

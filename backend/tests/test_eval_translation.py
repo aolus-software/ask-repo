@@ -1,9 +1,11 @@
 """The translation call and its mechanical faithfulness check (spec §3.4)."""
 
 import uuid
-from typing import Any
+from typing import Any, cast
 
 import pytest
+from langchain_core.messages import BaseMessage
+from langchain_core.runnables import Runnable
 
 from app.core.language import Language
 from app.eval.model_output import TranslatedQuestion
@@ -16,6 +18,11 @@ SCOPE: dict[str, Any] = {"trace_seed": "s", "project_id": uuid.uuid4(), "attempt
 
 class AuthenticationError(Exception):
     """Named so `classify_chat_error` maps it to terminal, as a provider's would be."""
+
+
+def _as_model(model: object) -> Runnable[list[BaseMessage], Any]:
+    """`_Replay` stands in for a chat model; the call site expects the runnable type."""
+    return cast("Runnable[list[BaseMessage], Any]", model)
 
 
 class _Replay:
@@ -61,7 +68,7 @@ async def test_a_faithful_first_attempt_makes_one_tagged_call() -> None:
     model = _Replay([TranslatedQuestion(question="Apa yang dilakukan `claim`?")])
 
     outcome = await translate_question(
-        model, question="What does `claim` do?", language=Language.ID, scope=SCOPE
+        _as_model(model), question="What does `claim` do?", language=Language.ID, scope=SCOPE
     )
 
     assert outcome == Translation(question="Apa yang dilakukan `claim`?", faithful=True)
@@ -78,7 +85,7 @@ async def test_an_unfaithful_attempt_is_retried_once_then_kept_as_unfaithful() -
     )
 
     outcome = await translate_question(
-        model, question="What does `claim` do?", language=Language.ID, scope=SCOPE
+        _as_model(model), question="What does `claim` do?", language=Language.ID, scope=SCOPE
     )
 
     assert outcome == Translation(question="Apa fungsi klaim?", faithful=False)
@@ -89,7 +96,7 @@ async def test_a_malformed_response_counts_as_a_failed_attempt() -> None:
     model = _Replay([ValueError("bad json"), ValueError("bad json")])
 
     outcome = await translate_question(
-        model, question="What does `claim` do?", language=Language.KO, scope=SCOPE
+        _as_model(model), question="What does `claim` do?", language=Language.KO, scope=SCOPE
     )
 
     assert outcome == Translation(question=None, faithful=False)
@@ -99,4 +106,4 @@ async def test_a_terminal_provider_error_propagates() -> None:
     model = _Replay([AuthenticationError("bad key")])
 
     with pytest.raises(TerminalChatError):
-        await translate_question(model, question="q", language=Language.JA, scope=SCOPE)
+        await translate_question(_as_model(model), question="q", language=Language.JA, scope=SCOPE)

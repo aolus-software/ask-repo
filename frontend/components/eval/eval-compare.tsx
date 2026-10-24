@@ -42,7 +42,10 @@ export function EvalCompare({
   const t = useTranslations("eval.compare");
   const comparison = compareRuns(base, head, { headToBase });
   const questions = new Map(
-    pairs.map((pair) => [headToBase ? (pair.sourcePairId ?? pair.id) : pair.id, pair.question]),
+    pairs.map((pair) => [
+      headToBase ? (pair.sourcePairId ?? pair.id) : pair.id,
+      pair.question,
+    ]),
   );
 
   return (

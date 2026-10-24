@@ -284,7 +284,9 @@ describe("EvalSetScreen", () => {
     expect(screen.getByText("Bahasa Indonesia:")).toBeInTheDocument();
     // The source run hit and the translated one missed, on the pair they share.
     // (The pair table lists the question too, so look inside the comparison.)
-    const comparison = screen.getByText("English:").closest("div.space-y-3") as HTMLElement;
+    const comparison = screen
+      .getByText("English:")
+      .closest("div.space-y-3") as HTMLElement;
     expect(within(comparison).getByText("Apa?")).toBeInTheDocument();
   });
 
