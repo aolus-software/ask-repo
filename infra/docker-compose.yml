@@ -194,7 +194,7 @@ services:
       start_period: 5s
 
   kafka:
-    image: apache/kafka:3.9.1
+    image: apache/kafka:4.3.1
     restart: unless-stopped
     environment:
       # Single-node KRaft: this one container is both the broker and the controller,
