@@ -395,6 +395,8 @@ async def create_eval_set(
     name: str = "Baseline",
     status: EvalSetStatus = EvalSetStatus.READY,
     pair_count: int = 0,
+    language: str = "en",
+    source_set_id: uuid.UUID | None = None,
 ) -> EvalSet:
     """A set against `project_id`, or against a freshly created project."""
     if created_by is None:
@@ -407,6 +409,8 @@ async def create_eval_set(
         name=name,
         requested_count=10,
         mix="balanced",
+        language=language,
+        source_set_id=source_set_id,
         status=status.value,
         pair_count=pair_count,
         created_by=created_by,
@@ -417,7 +421,13 @@ async def create_eval_set(
 
 
 async def create_eval_pair(
-    session: AsyncSession, *, set_id: uuid.UUID, position: int = 0, excluded: bool = False
+    session: AsyncSession,
+    *,
+    set_id: uuid.UUID,
+    position: int = 0,
+    excluded: bool = False,
+    source_pair_id: uuid.UUID | None = None,
+    exclusion_reason: str | None = None,
 ) -> EvalPair:
     """A pair in `set_id`, optionally already excluded."""
     pair = EvalPair(
@@ -431,6 +441,8 @@ async def create_eval_pair(
         start_line=1,
         end_line=20,
         excluded_at=datetime.now(UTC) if excluded else None,
+        source_pair_id=source_pair_id,
+        exclusion_reason=exclusion_reason,
     )
     session.add(pair)
     await session.flush()

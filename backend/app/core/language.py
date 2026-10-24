@@ -31,3 +31,16 @@ def parse_language(value: str | None) -> Language | None:
         return Language(value) if value else None
     except ValueError:
         return None
+
+
+# Each language's English name. Used only to fill fixed prompt text, so a prompt never
+# carries a user-supplied language string (spec §1.1).
+LANGUAGE_NAMES: dict[Language, str] = {
+    Language.EN: "English",
+    Language.ID: "Indonesian",
+    Language.JA: "Japanese",
+    Language.MS: "Malay",
+    Language.ZH_HK: "Traditional Chinese (Hong Kong)",
+    Language.ZH_TW: "Traditional Chinese (Taiwan)",
+    Language.KO: "Korean",
+}

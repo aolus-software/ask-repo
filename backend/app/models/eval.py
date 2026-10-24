@@ -69,11 +69,31 @@ class EvalVerdict(StrEnum):
     ERROR = "error"
 
 
+class EvalExclusionReason(StrEnum):
+    """Why a pair was excluded by the system rather than by a person.
+
+    A hand exclusion leaves the column `NULL`; this phase adds one machine reason.
+    """
+
+    TRANSLATION_UNFAITHFUL = "translation_unfaithful"
+
+
 class EvalSet(Base, TimestampMixin, SoftDeleteMixin):
     """A frozen set of generated Q&A pairs over a project, or one indexed path of it."""
 
     __tablename__ = "eval_sets"
-    __table_args__ = (Index("ix_eval_sets_project_id", "project_id"),)
+    __table_args__ = (
+        Index("ix_eval_sets_project_id", "project_id"),
+        # One live translation per source and language (spec §3.3). The service checks
+        # first under the source's row lock; this is the backstop.
+        Index(
+            "uq_eval_sets_source_language",
+            "source_set_id",
+            "language",
+            unique=True,
+            postgresql_where=text("deleted_at IS NULL AND source_set_id IS NOT NULL"),
+        ),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(
         PgUUID(as_uuid=True), primary_key=True, default=uuid.uuid4
@@ -85,6 +105,14 @@ class EvalSet(Base, TimestampMixin, SoftDeleteMixin):
     source_path: Mapped[str | None] = mapped_column(String(1024), nullable=True)
     requested_count: Mapped[int] = mapped_column(SmallInteger, nullable=False)
     mix: Mapped[str] = mapped_column(String(16), nullable=False)
+    # A BCP-47 tag from `Language`, stored as a string like `users.language`.
+    language: Mapped[str] = mapped_column(
+        String(8), nullable=False, default="en", server_default=text("'en'")
+    )
+    # `NULL` for a natively generated (English) set; otherwise the set it translates.
+    source_set_id: Mapped[uuid.UUID | None] = mapped_column(
+        PgUUID(as_uuid=True), ForeignKey("eval_sets.id"), nullable=True
+    )
     status: Mapped[str] = mapped_column(String(16), nullable=False)
     error: Mapped[str | None] = mapped_column(Text, nullable=True)
     pair_count: Mapped[int] = mapped_column(SmallInteger, nullable=False, default=0)
@@ -119,6 +147,12 @@ class EvalPair(Base, TimestampMixin, SoftDeleteMixin):
     start_line: Mapped[int] = mapped_column(Integer, nullable=False)
     end_line: Mapped[int] = mapped_column(Integer, nullable=False)
     excluded_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    # The pair this one translates; what pairs two runs in different languages.
+    source_pair_id: Mapped[uuid.UUID | None] = mapped_column(
+        PgUUID(as_uuid=True), ForeignKey("eval_pairs.id"), nullable=True
+    )
+    # `EvalExclusionReason` when the system excluded the pair; `NULL` for a hand exclusion.
+    exclusion_reason: Mapped[str | None] = mapped_column(String(32), nullable=True)
 
 
 class EvalRun(Base, TimestampMixin, SoftDeleteMixin):

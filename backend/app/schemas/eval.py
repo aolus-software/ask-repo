@@ -6,7 +6,15 @@ from typing import Literal
 
 from pydantic import Field
 
-from app.models.eval import EvalMix, EvalQuestionType, EvalRunStatus, EvalSetStatus, EvalVerdict
+from app.core.language import Language
+from app.models.eval import (
+    EvalExclusionReason,
+    EvalMix,
+    EvalQuestionType,
+    EvalRunStatus,
+    EvalSetStatus,
+    EvalVerdict,
+)
 from app.schemas.base import ApiModel
 
 NAME_MAX_LENGTH = 120
@@ -59,6 +67,8 @@ class EvalSetSummary(ApiModel):
     source_path: str | None
     requested_count: int
     mix: EvalMix
+    language: Language
+    source_set_id: uuid.UUID | None
     status: EvalSetStatus
     error: str | None
     pair_count: int
@@ -79,6 +89,8 @@ class EvalPairRead(ApiModel):
     start_line: int
     end_line: int
     excluded: bool
+    source_pair_id: uuid.UUID | None
+    exclusion_reason: EvalExclusionReason | None
 
 
 class EvalSetDetail(EvalSetSummary):

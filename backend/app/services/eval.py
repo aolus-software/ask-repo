@@ -391,6 +391,8 @@ class EvalService:
             source_path=eval_set.source_path,
             requested_count=eval_set.requested_count,
             mix=eval_set.mix,  # type: ignore[arg-type]  # str column; pydantic coerces to EvalMix
+            language=eval_set.language,  # type: ignore[arg-type]  # str column; coerced to Language
+            source_set_id=eval_set.source_set_id,
             status=eval_set.status,  # type: ignore[arg-type]  # str column; coerced to EvalSetStatus
             error=eval_set.error,
             pair_count=eval_set.pair_count,
@@ -411,6 +413,8 @@ class EvalService:
             start_line=pair.start_line,
             end_line=pair.end_line,
             excluded=pair.excluded_at is not None,
+            source_pair_id=pair.source_pair_id,
+            exclusion_reason=pair.exclusion_reason,  # type: ignore[arg-type]  # str column; coerced
         )
 
     @staticmethod

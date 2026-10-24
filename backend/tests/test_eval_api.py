@@ -748,3 +748,25 @@ async def test_starting_a_run_locks_the_project_before_the_set(
 
     assert response.status_code == 202, response.text
     assert order == ["project", "set"]
+
+
+@pytest.mark.asyncio
+async def test_reads_carry_language_and_lineage(
+    authed_client: AsyncClient,
+    authed_user: User,
+    grant_membership: GrantMembership,
+    db_session: AsyncSession,
+) -> None:
+    project = await _ready_project(db_session)
+    eval_set = await create_eval_set(db_session, project_id=project.id, pair_count=1)
+    await create_eval_pair(db_session, set_id=eval_set.id)
+    await db_session.commit()
+    await grant_membership(authed_user.id, project.id, VIEWER_NAME)
+
+    listed = (await authed_client.get(f"/projects/{project.id}/eval-sets")).json()
+    detail = (await authed_client.get(f"/eval-sets/{eval_set.id}")).json()
+
+    assert listed["items"][0]["language"] == "en"
+    assert listed["items"][0]["sourceSetId"] is None
+    assert detail["pairs"][0]["sourcePairId"] is None
+    assert detail["pairs"][0]["exclusionReason"] is None

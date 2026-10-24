@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from app.core.language import Language, parse_language
+from app.core.language import LANGUAGE_NAMES, Language, parse_language
 
 FRONTEND_LANGUAGES = (
     Path(__file__).resolve().parents[2] / "frontend" / "lib" / "i18n" / "languages.ts"
@@ -45,3 +45,9 @@ def test_parse_language_treats_unset_and_unshipped_as_no_preference(
     stored: str | None, expected: Language | None
 ) -> None:
     assert parse_language(stored) is expected
+
+
+def test_every_language_has_an_english_name() -> None:
+    """Prompt constants name a language through this table, never through user input."""
+    assert set(LANGUAGE_NAMES) == set(Language)
+    assert all(name.isascii() and name.strip() for name in LANGUAGE_NAMES.values())
