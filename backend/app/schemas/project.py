@@ -9,9 +9,9 @@ import uuid
 from datetime import datetime
 from typing import Literal
 
-from pydantic import Field
+from pydantic import Field, field_validator
 
-from app.core.language import Language
+from app.core.language import Language, parse_language
 from app.models.project import ProjectStatus
 from app.schemas.base import ApiModel
 from app.schemas.pagination import ListQuery
@@ -60,6 +60,14 @@ class ProjectResponse(ApiModel):
     # inventing one would put a word on screen that matches no row.
     role: str | None = None
     permissions: list[str] = Field(default_factory=list)
+
+    @field_validator("content_language", mode="before")
+    @classmethod
+    def _unshipped_language_reads_as_english(cls, value: object) -> object:
+        """A stored tag a later release no longer ships reads as English, not a 500."""
+        if isinstance(value, str):
+            return parse_language(value) or Language.EN
+        return value
 
 
 class IndexedPathEntry(ApiModel):

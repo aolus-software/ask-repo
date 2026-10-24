@@ -132,3 +132,33 @@ async def test_creation_records_the_language(client_for_user_a: Any, audit_rows:
     [event] = await audit_rows("project.created")
     changed = cast("dict[str, Any]", event.details["changed"])
     assert changed["contentLanguage"] == {"before": None, "after": "zh-TW"}
+
+
+def test_an_unshipped_stored_language_reads_as_english() -> None:
+    """`projects.content_language` is a plain string; a tag a later release drops must
+    not 500 every read of the project."""
+    from datetime import UTC, datetime
+    from types import SimpleNamespace
+
+    from app.models.project import ProjectStatus
+    from app.schemas.project import ProjectResponse
+
+    row = SimpleNamespace(
+        id=uuid.uuid4(),
+        created_by=uuid.uuid4(),
+        name="r",
+        repo_url="https://github.com/o/r.git",
+        branch="main",
+        status=ProjectStatus.READY,
+        error=None,
+        last_indexed_commit=None,
+        file_count=None,
+        chunk_count=None,
+        embedding_model=None,
+        reindex_in_progress=False,
+        content_language="xx",
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
+    )
+
+    assert ProjectResponse.model_validate(row, from_attributes=True).content_language == "en"

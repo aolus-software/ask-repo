@@ -79,12 +79,13 @@ class TurnContext:
     question: str
     history: list[Turn]
     message_id: uuid.UUID
+    # Read once here like `answer_style`: the asker's own language (spec §4.3). No
+    # default, so a constructor that forgets it fails instead of answering in English.
+    reply_language: Language
     # The caller's answer style, read once here so the stream never touches the
     # request's session. Ask only: the refinement services never set it, and
     # `Answerer` refuses one alongside a `propose_target`.
     answer_style: AnswerStyle = field(default_factory=AnswerStyle)
-    # Read once here like `answer_style`: the asker's own language (spec §4.3).
-    reply_language: Language = Language.EN
 
 
 class ConversationService:
