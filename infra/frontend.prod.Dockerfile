@@ -34,7 +34,7 @@ COPY package.json bun.lock ./
 RUN bun install --frozen-lockfile --production
 
 # ── Build stage ───────────────────────────────────────────────────────────────
-FROM node:22-bookworm-slim AS build
+FROM node:25-bookworm-slim AS build
 
 ENV NEXT_TELEMETRY_DISABLED=1
 
@@ -56,7 +56,7 @@ COPY . .
 RUN node node_modules/.bin/next build && rm -rf .next/cache
 
 # ── Runtime stage ─────────────────────────────────────────────────────────────
-FROM node:22-bookworm-slim
+FROM node:25-bookworm-slim
 
 ENV NODE_ENV=production \
     NEXT_TELEMETRY_DISABLED=1
