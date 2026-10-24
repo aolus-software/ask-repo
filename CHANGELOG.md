@@ -110,6 +110,12 @@ client can have received it, so it is recorded under Changed and allowed in a `M
 
 ### Fixed
 
+- **`unknown_paths` and the translation faithfulness check work beside Japanese, Chinese and
+  Korean text.** The path pattern used Unicode word characters, so a path followed by a Korean
+  particle (`access.py에서`) was missed and one preceded by Japanese prose was reported as a
+  different, invented path. Boundaries and segments are now ASCII.
+- **A project whose stored content language is no longer shipped reads as English** instead of
+  failing every read of it.
 - **A count of one reads "1 file", "1 pair"**, not "1 files": counts that built their noun by
   hand now go through an ICU plural.
 

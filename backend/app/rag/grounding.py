@@ -134,7 +134,13 @@ OUT_OF_SCOPE_ANSWER = OUT_OF_SCOPE_ANSWERS[Language.EN]
 # A path-shaped token: at least one directory separator, and a dotted extension.
 # Both conditions are needed — without the separator this matches every sentence
 # ending in a filename-like word, and without the extension it matches "3/4".
-_PATH_PATTERN = re.compile(r"\b(?:[\w.-]+/)+[\w-]+\.[A-Za-z0-9]+\b")
+#
+# ASCII-only boundaries and segments, not `\w`/`\b`: Unicode `\w` matches Japanese,
+# Chinese and Korean text, so a path glued to a particle (`access.py에서`) was missed and
+# one preceded by prose (`設定はapp/x.py`) swallowed the prose into the token.
+_PATH_PATTERN = re.compile(
+    r"(?<![A-Za-z0-9_./-])(?:[A-Za-z0-9_.-]+/)+[A-Za-z0-9_-]+\.[A-Za-z0-9]+(?![A-Za-z0-9_])"
+)
 
 # Removed before scanning. A URL is path-shaped by construction — a dotted host
 # followed by slash-separated segments — so `https://github.com/acme/repo.git`
