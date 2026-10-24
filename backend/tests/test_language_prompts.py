@@ -1,4 +1,4 @@
-"""The language sentences: fixed constants, filled only from `LANGUAGE_NAMES` (spec §4.1 to §4.4)."""
+"""The language sentences: fixed constants, filled from `LANGUAGE_NAMES` (spec §4.1-§4.4)."""
 
 import pytest
 
