@@ -320,7 +320,7 @@ what was expected.
 | Method | Path | Auth | Description |
 | --- | --- | --- | --- |
 | `GET` | `/checklist-modules` | any member | List modules for projects you are a member of, paginated |
-| `POST` | `/checklist-modules` | `module.create` | Name a module and point it at a path in the indexed repository. `400 MODULE_PATH_NOT_INDEXED` if the path matches nothing |
+| `POST` | `/checklist-modules` | `module.create` | Name a module and point it at a path in the indexed repository. `400 MODULE_PATH_NOT_INDEXED` if the path matches nothing. Or send `{sourceSetId, language}` to translate a ready English set of this project into another language. The set is copied pair for pair, and the response is `202`. `422` (on `sourceSetId`, field type `eval_source_invalid`) if the source is not a ready, natively generated English set here; `409 EVAL_TRANSLATION_EXISTS` if a live translation into that language exists |
 | `GET` | `/checklist-modules/{id}` | any member | One module with its test cases, grouped by feature |
 | `PATCH` | `/checklist-modules/{id}` | `module.edit` | Rename or re-point the module |
 | `DELETE` | `/checklist-modules/{id}` | `module.delete` | Soft-delete the module, its items, its change sets, and its chat |

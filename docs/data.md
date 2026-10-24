@@ -198,10 +198,12 @@ checklist failed, and one lease does not block the other.
 
 | Table | Holds |
 | --- | --- |
-| `eval_sets` | A frozen set of synthetic pairs for a project or one `source_path`: `requested_count` (10, 25 or 50), `mix`, `status`, the lease, `pair_count` and the `indexed_generation` it was generated from |
-| `eval_pairs` | One `question` and `reference_answer` grounded in one chunk, with `source_file`, its line range, `question_type` (`explain` or `locate`), `position`, and `excluded_at` |
+| `eval_sets` | A frozen set of synthetic pairs for a project or one `source_path`: `requested_count` (10, 25 or 50), `mix`, `status`, the lease, `pair_count` and the `indexed_generation` it was generated from, plus `language` (a `Language` tag, `'en'` for a natively generated set) and `source_set_id` (the English set it translates, `NULL` when generated natively). A partial unique index allows one live translation per source and language |
+| `eval_pairs` | One `question` and `reference_answer` grounded in one chunk, with `source_file`, its line range, `question_type` (`explain` or `locate`), `position`, and `excluded_at`, plus `source_pair_id` (the source pair a translated pair translates) and `exclusion_reason` (`translation_unfaithful` when the system excluded it; `NULL` for a hand exclusion) |
 | `eval_runs` | One pass of a set through the answer graph: `status`, the lease, the tallies (`pairs_answered`, `hits`, `correct`, `partial`, `wrong`, `errors`) and the stamp — `prompt_version` (the answer graph's), `judge_prompt_version` (the judge's), `chat_provider`, `chat_model`, `judge_model`, `embedding_model`, `project_generation` |
 | `eval_results` | One row per pair per run: `retrieval_hit`, `verdict` (`correct` / `partial` / `wrong` / `error`), `judge_reason`, the `answer` as streamed, `grounding_warnings` and `retrieval_attempts` |
+
+A translated set copies its source's `source_path`, `requested_count`, `mix` and `indexed_generation`, reads no index of its own, and is exactly as stale as its source.
 
 A set is `generating` → `ready` / `failed` and a run is `running` → `done` / `failed`. The request
 writes the first status directly, as mock-data generation does, so there is no `pending` state and
@@ -235,7 +237,7 @@ diverges from every other group above.
 
 **The catalogue is a `StrEnum` in `app/core/audit.py`, not a table** — 46 event types across auth
 (including session revoke, added with the profile page), accounts (including `user.answer_style.updated`, which allowlists `answerDetail`, `answerFamiliarity` and `answerFormat`, and `user.language.updated`, which allowlists `language`), projects, RBAC, password reset,
-checklist modules and items, change sets, mock data, the eval harness (`eval_set.generation.requested`, `eval_set.deleted`, `eval_pair.updated`, `eval_run.requested`), exports and conversations. Existence lives in
+checklist modules and items, change sets, mock data, the eval harness (`eval_set.generation.requested`, which carries `language` and, for a translation, `sourceSetId` as context, `eval_set.deleted`, `eval_pair.updated`, `eval_run.requested`), exports and conversations. Existence lives in
 code for the reason `app/core/permissions.py` gives for the
 permission catalogue: if it lived in a table, deleting a row would orphan every write site that
 names it. Which operations must record one is a rule rather than a list —
