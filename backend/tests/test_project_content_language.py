@@ -1,7 +1,7 @@
 """A project's content language: set at creation, changed by `PATCH`, gated and audited."""
 
 import uuid
-from typing import Any
+from typing import Any, cast
 
 import httpx
 
@@ -130,4 +130,5 @@ async def test_creation_records_the_language(client_for_user_a: Any, audit_rows:
     await _create(client_for_user_a, contentLanguage="zh-TW")
 
     [event] = await audit_rows("project.created")
-    assert event.details["changed"]["contentLanguage"] == {"before": None, "after": "zh-TW"}
+    changed = cast("dict[str, Any]", event.details["changed"])
+    assert changed["contentLanguage"] == {"before": None, "after": "zh-TW"}

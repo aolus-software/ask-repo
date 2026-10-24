@@ -219,6 +219,7 @@ async def test_reduce_never_fills_in_a_current_result(settings: Settings) -> Non
     model = build_chat_model(settings).with_structured_output(ProposedChangeSet)
     result = await model.ainvoke(
         build_reduce_prompt(
+            language=Language.EN,
             module_name="Authentication",
             observations=[
                 ("app/auth/login.py", "raises 401 when bcrypt.checkpw fails", 30, 44),
@@ -250,6 +251,7 @@ async def test_reduce_proposes_an_update_rather_than_a_duplicate_add(settings: S
     ]
     result = await model.ainvoke(
         build_reduce_prompt(
+            language=Language.EN,
             module_name="Authentication",
             observations=[
                 ("app/auth/login.py", "raises 401 INVALID_CREDENTIALS on a wrong password", 30, 44)
@@ -288,6 +290,7 @@ async def test_reduce_proposes_both_kinds_not_only_one(
     model = build_chat_model(settings).with_structured_output(ProposedChangeSet)
     result = await model.ainvoke(
         build_reduce_prompt(
+            language=Language.EN,
             module_name="Authentication",
             observations=[
                 ("app/auth/login.py", "returns an access token on a correct password", 45, 52),
@@ -363,6 +366,7 @@ async def test_reduce_writes_for_a_tester_who_has_never_seen_the_code(
     model = build_chat_model(settings).with_structured_output(ProposedChangeSet)
     result = await model.ainvoke(
         build_reduce_prompt(
+            language=Language.EN,
             module_name="Users",
             observations=[
                 (
@@ -421,6 +425,7 @@ async def test_a_chat_proposal_from_a_technical_answer_is_plain(settings: Settin
     model = build_chat_model(settings).with_structured_output(ProposedChangeSet)
     result = await model.ainvoke(
         build_propose_prompt(
+            language=Language.EN,
             module_name="Users",
             answer=(
                 "There is no test for a missing user. `usersService.findOne` raises "
