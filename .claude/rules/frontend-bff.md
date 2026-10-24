@@ -24,7 +24,7 @@ verbatim `name=value` pair because `REFRESH_COOKIE_NAME` is operator-configurabl
 readable from client-side JavaScript.
 
 The third, `askrepo_locale`, is a **display preference, not a credential**: the interface
-language, which `i18n/request.ts` reads first, before `Accept-Language`. It mirrors
+language, which `i18n/request.ts` reads first, before the browser's `Accept-Language` (the API proxy applies the same cookie-then-header order when it sets `Accept-Language` for the backend). It mirrors
 `users.language` and is never the source of truth. Login and both refresh paths set it from the
 response's `language`, and leave it alone when that is `null`; the API proxy sets it after a
 successful `PUT /me/language`, and clears it when the user chose `null`; `/api/auth/locale` sets
@@ -98,6 +98,8 @@ Two properties to keep:
 - **Relaying a browser-settable header is safe only because of how the backend reads it.** It
   counts from the right, discarding one entry per trusted hop, so a forged entry a client
   prepends is discarded. Do not pair this with a backend that reads the leftmost entry.
+
+`localeHeaders` in the same file sets `Accept-Language` on the catch-all proxy and on `forwardPublic`: a valid `askrepo_locale` cookie wins, else the browser's own header is relayed, so the backend breaks answer- and email-language ties by the language the screen shows. This is the backend's input, separate from `i18n/request.ts` reading the cookie before the header to pick the interface language.
 
 ## Refresh happens in two places, and that split is structural
 

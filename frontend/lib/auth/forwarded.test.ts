@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { forwardedHeaders } from "@/lib/auth/forwarded";
+import { forwardedHeaders, localeHeaders } from "@/lib/auth/forwarded";
 
 function request(headers: Record<string, string>): Request {
   return new Request("http://localhost:3000/api/auth/login", { headers });
@@ -26,5 +26,37 @@ describe("forwardedHeaders", () => {
 
   it("sends nothing when there is no proxy in front to have set one", () => {
     expect(forwardedHeaders(request({}))).toEqual({});
+  });
+});
+
+describe("localeHeaders", () => {
+  it("sends the locale cookie as Accept-Language", () => {
+    const req = new Request("http://x", {
+      headers: { cookie: "askrepo_locale=ja", "accept-language": "en-US" },
+    });
+    expect(localeHeaders(req)).toEqual({ "accept-language": "ja" });
+  });
+
+  it("falls back to the browser's header when no cookie is set", () => {
+    const req = new Request("http://x", { headers: { "accept-language": "id-ID" } });
+    expect(localeHeaders(req)).toEqual({ "accept-language": "id-ID" });
+  });
+
+  it("ignores an unshipped cookie value", () => {
+    const req = new Request("http://x", {
+      headers: { cookie: "askrepo_locale=fr", "accept-language": "ko" },
+    });
+    expect(localeHeaders(req)).toEqual({ "accept-language": "ko" });
+  });
+
+  it("falls back to the header on a malformed cookie instead of throwing", () => {
+    const req = new Request("http://x", {
+      headers: { cookie: "askrepo_locale=%E0%A4%A", "accept-language": "ko" },
+    });
+    expect(localeHeaders(req)).toEqual({ "accept-language": "ko" });
+  });
+
+  it("sends nothing when there is nothing to send", () => {
+    expect(localeHeaders(new Request("http://x"))).toEqual({});
   });
 });
