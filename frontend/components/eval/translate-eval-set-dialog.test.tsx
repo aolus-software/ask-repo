@@ -67,9 +67,11 @@ describe("TranslateEvalSetDialog", () => {
 
     await openAndSubmit();
 
-    // The catalogue sentence for this code arrives with the backend lane's errors.json;
-    // until then an unknown code falls back to the server message, so assert only that
-    // the dialog surfaces the failure as an alert. Tighten once the sentence exists.
-    expect(await screen.findByRole("alert")).toBeInTheDocument();
+    expect(
+      await screen.findByText(
+        "This set already has a translation into that language. Delete it first to make a new one.",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("server text")).toBeNull();
   });
 });

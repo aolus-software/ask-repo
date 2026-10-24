@@ -116,7 +116,7 @@ export function EvalSetScreen({
   const generating = set.status === "generating";
   const doneRuns = runs.filter((run) => run.status === "done");
   const unfaithful = set.pairs.filter(
-    (pair) => pair.exclusionReason === "translation_unfaithful",
+    (pair) => pair.excluded && pair.exclusionReason === "translation_unfaithful",
   ).length;
   const running = runs.some((run) => run.status === "running");
   const description = [

@@ -82,8 +82,14 @@ function stubTranslated(
   permissions: string[],
   source: "found" | "gone",
   runs: boolean = false,
+  reincluded: boolean = false,
 ) {
-  const pair = (id: string, sourcePairId: string, question: string) => ({
+  const pair = (
+    id: string,
+    sourcePairId: string,
+    question: string,
+    excluded: boolean = true,
+  ) => ({
     id,
     position: 0,
     questionType: "explain",
@@ -92,7 +98,7 @@ function stubTranslated(
     sourceFile: "a.py",
     startLine: 1,
     endLine: 2,
-    excluded: true,
+    excluded,
     sourcePairId,
     exclusionReason: "translation_unfaithful",
   });
@@ -124,7 +130,7 @@ function stubTranslated(
           language: "id",
           sourceSetId: "src",
           pairCount: 2,
-          pairs: [pair("a", "ea", "Apa?"), pair("b", "eb", "Bagaimana?")],
+          pairs: [pair("a", "ea", "Apa?"), pair("b", "eb", "Bagaimana?", !reincluded)],
           indexedGeneration: 1,
           projectGeneration: 1,
           error: null,
@@ -261,6 +267,16 @@ describe("EvalSetScreen", () => {
       ),
     ).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /^translate$/i })).toBeNull();
+  });
+
+  it("counts only still-excluded unfaithful pairs in the banner", async () => {
+    stubTranslated([PERMISSION.EVAL_READ], "found", false, true);
+    renderScreen();
+    expect(
+      await screen.findByText(
+        "1 question could not be translated with their code kept intact, and are excluded from runs.",
+      ),
+    ).toBeInTheDocument();
   });
 
   it("says when its source has been deleted", async () => {
