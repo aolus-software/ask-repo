@@ -21,6 +21,7 @@ from app.schemas.project import (
     ProjectCreateRequest,
     ProjectListQuery,
     ProjectResponse,
+    ProjectUpdateRequest,
     ReindexResponse,
 )
 from app.schemas.project_export import ProjectExportQuery
@@ -195,6 +196,22 @@ async def create_project(
     payload: ProjectCreateRequest, current_user: CurrentUser, service: ProjectServiceDep
 ) -> ProjectResponse:
     return await service.create(payload, actor=current_user)
+
+
+@router.patch(
+    "/{project_id}",
+    response_model=ProjectResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Change a project's content language",
+    responses={code: ERROR_RESPONSES[code] for code in (401, 403, 404, 422)},
+)
+async def update_project(
+    project_id: uuid.UUID,
+    payload: ProjectUpdateRequest,
+    current_user: CurrentUser,
+    service: ProjectServiceDep,
+) -> ProjectResponse:
+    return await service.update(project_id, payload, actor=current_user)
 
 
 @router.post(

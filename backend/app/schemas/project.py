@@ -11,6 +11,7 @@ from typing import Literal
 
 from pydantic import Field
 
+from app.core.language import Language
 from app.models.project import ProjectStatus
 from app.schemas.base import ApiModel
 from app.schemas.pagination import ListQuery
@@ -23,6 +24,17 @@ class ProjectCreateRequest(ApiModel):
     branch: str = Field(default="main", max_length=255)
     # Write-only: accepted here, encrypted immediately, never echoed back.
     pat: str | None = Field(default=None, max_length=512)
+    content_language: Language = Language.EN
+
+
+class ProjectUpdateRequest(ApiModel):
+    """`PATCH /projects/{id}`. The content language and nothing else (spec §1.3).
+
+    Unknown keys are ignored, as on every request body here; widening this body is a
+    separate change with its own audit allowlist entries.
+    """
+
+    content_language: Language
 
 
 class ProjectResponse(ApiModel):
@@ -40,6 +52,7 @@ class ProjectResponse(ApiModel):
     chunk_count: int | None
     embedding_model: str | None
     reindex_in_progress: bool
+    content_language: Language
     created_at: datetime
     updated_at: datetime
     # The caller's own role and effective permissions on this project. `None` for an

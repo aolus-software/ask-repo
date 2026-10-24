@@ -52,6 +52,7 @@ from app.schemas.project import (
     ProjectCreateRequest,
     ProjectListQuery,
     ProjectResponse,
+    ProjectUpdateRequest,
     ReindexResponse,
 )
 
@@ -123,6 +124,7 @@ class ProjectService:
             branch=payload.branch,
             status=ProjectStatus.PENDING.value,
             encrypted_pat=encrypted_pat,
+            content_language=payload.content_language.value,
         )
         await self._repository.add(project)
         stage_live_event(self.session, project_event(project.id))
@@ -163,6 +165,7 @@ class ProjectService:
                     "name": (None, project_name),
                     "repoUrlHost": (None, repo_url_host(payload.repo_url)),
                     "branch": (None, payload.branch),
+                    "contentLanguage": (None, payload.content_language.value),
                 },
                 context={"patSupplied": payload.pat is not None},
             )
@@ -227,6 +230,43 @@ class ProjectService:
     async def get(self, project_id: uuid.UUID, *, actor: AuthenticatedUser) -> ProjectResponse:
         """One project, by id."""
         project = await access.require_readable_project(self._repository, project_id, actor)
+        return self._to_response(project, actor)
+
+    async def update(
+        self, project_id: uuid.UUID, payload: ProjectUpdateRequest, *, actor: AuthenticatedUser
+    ) -> ProjectResponse:
+        """Change a project's content language. Gated on `project.update`.
+
+        Existing checklist and mock-data rows are not rewritten (spec §4.4): the setting
+        decides what the next generation, chat turn and export are written in. No live
+        event, because no screen polls for this value (spec §1.5); the project page
+        refetches after its own `PATCH`.
+        """
+        project = await access.require_readable_project(self._repository, project_id, actor)
+        access.require_permission(actor, project.id, Permission.PROJECT_UPDATE)
+
+        before = project.content_language
+        after = payload.content_language.value
+        if before == after:
+            return self._to_response(project, actor)
+
+        project.content_language = after
+        project.updated_at = datetime.now(UTC)
+        # Captured before the commit: the recorder reads plain locals, never the row.
+        project_name = project.name
+        await self.session.commit()
+        await self._recorder.record(
+            AuditEntry(
+                event_type=AuditEventType.PROJECT_UPDATED,
+                actor_user_id=actor.id,
+                actor_email=actor.email,
+                target_type="project",
+                target_id=project_id,
+                target_label=project_name,
+                project_id=project_id,
+                changed={"contentLanguage": (before, after)},
+            )
+        )
         return self._to_response(project, actor)
 
     async def reindex(self, project_id: uuid.UUID, *, actor: AuthenticatedUser) -> ReindexResponse:

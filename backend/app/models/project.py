@@ -99,3 +99,10 @@ class Project(Base, TimestampMixin, SoftDeleteMixin):
     # them after the embedding provider has been switched.
     embedding_collection: Mapped[str | None] = mapped_column(String(255), nullable=True)
     embedding_model: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    # The language shared content is written in: generated checklists and mock data,
+    # both refinement chats, and export labels (spec §1.2, §4.4). A BCP-47 tag from
+    # `Language`, stored as a string like `users.language`, so a new language needs
+    # no migration. Changing it never rewrites existing rows.
+    content_language: Mapped[str] = mapped_column(
+        String(8), nullable=False, default="en", server_default=text("'en'")
+    )
