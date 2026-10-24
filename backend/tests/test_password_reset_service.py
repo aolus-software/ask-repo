@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from app.config import Settings, get_settings
 from app.core.audit import AuditEventType, AuditRecorder
 from app.core.errors import AppError, ErrorCode
+from app.core.language import Language
 from app.core.security import generate_opaque_token, hash_password, sha256_hex, verify_password
 from app.mail.recording import RecordingMailSender
 from app.mail.sender import MailSendError
@@ -33,13 +34,16 @@ def _mail_on() -> Settings:
     )
 
 
-async def _user(session: AsyncSession, *, must_change: bool = False) -> User:
+async def _user(
+    session: AsyncSession, *, must_change: bool = False, language: str | None = None
+) -> User:
     user = User(
         id=uuid.uuid4(),
         name="Dev",
         email="dev@example.com",
         password_hash=hash_password("a-perfectly-fine-passphrase", cost=4),
         must_change_password=must_change,
+        language=language,
     )
     session.add(user)
     await session.commit()
@@ -94,6 +98,40 @@ async def test_a_known_address_stores_only_the_hash(
     [row] = await audit_rows(event_type=AuditEventType.AUTH_PASSWORD_RESET_REQUESTED.value)
     assert row.actor_user_id == user.id
     assert row.details == {"unknownAccount": False}
+
+
+async def test_the_stored_language_beats_the_header(
+    db_session: AsyncSession, sessionmaker: async_sessionmaker[AsyncSession]
+) -> None:
+    await _user(db_session, language="ja")
+    pending = await _service(db_session, sessionmaker, _mail_on()).request(
+        PasswordResetRequest(email="dev@example.com"), accept_language="ko"
+    )
+    assert pending is not None
+    assert pending.language is Language.JA
+
+
+async def test_an_unset_language_falls_back_to_the_header(
+    db_session: AsyncSession, sessionmaker: async_sessionmaker[AsyncSession]
+) -> None:
+    await _user(db_session, language=None)
+    pending = await _service(db_session, sessionmaker, _mail_on()).request(
+        PasswordResetRequest(email="dev@example.com"), accept_language="ko"
+    )
+    assert pending is not None
+    assert pending.language is Language.KO
+
+
+async def test_an_unknown_address_still_returns_nothing_with_a_header(
+    db_session: AsyncSession, sessionmaker: async_sessionmaker[AsyncSession]
+) -> None:
+    service = _service(db_session, sessionmaker, _mail_on())
+    assert (
+        await service.request(
+            PasswordResetRequest(email="nobody@example.com"), accept_language="ko"
+        )
+        is None
+    )
 
 
 async def test_a_second_request_revokes_the_first(

@@ -255,10 +255,11 @@ async def request_password_reset(
     sender: MailSenderDep,
     limiter: RateLimiterDep,
     settings: SettingsDep,
+    accept_language: Annotated[str | None, Header()] = None,
 ) -> Response:
     if settings.mail_enabled:
         await enforce_password_reset_email_limit(payload.email, limiter, settings)
-    pending = await service.request(payload)
+    pending = await service.request(payload, accept_language=accept_language)
     if pending is not None:
         background.add_task(
             deliver_password_reset,

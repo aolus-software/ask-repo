@@ -19,13 +19,13 @@ that every message is okay" — it is "accept no parameter that would allow one 
 code". `tests/test_mail_compose.py` pins both signatures; adding a parameter means updating that
 test, which is what makes a silent addition impossible.
 
-- **`compose_notification(*, event_type, target_type, target_id, project_id, to, settings)`.**
+- **`compose_notification(*, event_type, target_type, target_id, project_id, to, settings, language)`.**
   No `name`, no `path`, no `details` — nothing that could carry a display name, a repository
   name, a module name, or free text out of the app. The subject and body sentence come from a
   fixed table (`MESSAGES`, keyed by `NotificationType`) and the only thing composed per call is
   a link built from ids: `_link` returns `/checklist/{target_id}` for a checklist module target
   and `/projects/{project_id}` otherwise.
-- **`compose_password_reset(*, raw_token, to, settings)`.** The reset link is the entire message.
+- **`compose_password_reset(*, raw_token, to, settings, language)`.** The reset link is the entire message.
   `raw_token` is handed in as an argument and lives nowhere else — see the token lifecycle below.
 
 ## Subjects are fixed strings per event; bodies are plain text plus a guarded HTML part

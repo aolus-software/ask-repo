@@ -15,6 +15,10 @@ client can have received it, so it is recorded under Changed and allowed in a `M
 
 ### Added
 
+- **Email in the recipient's language**: notification and password-reset email are
+  composed in the recipient's `users.language` (a reset falls back to the request's
+  `Accept-Language`, then English). English text is unchanged; the other languages are
+  machine-assisted drafts awaiting native-speaker review.
 - **Project-wide checklist and mock-data export** (`docs/PRD.md` §4.3/§4.4, issue #60):
   `GET /projects/{projectId}/export` and a new `/checklist/export` page, opened from an Export
   button on `/checklist`. Choose a project, every module or a chosen set, and the test

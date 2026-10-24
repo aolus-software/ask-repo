@@ -8,10 +8,13 @@ from typing import Any
 import pytest
 
 from app.config import Settings
+from app.core.language import Language
 from app.core.notifications import TARGET_TYPES, NotificationType
 from app.mail.compose import (
     _ENVIRONMENT,
+    CHROME,
     MESSAGES,
+    RESET_MESSAGES,
     compose_notification,
     compose_password_reset,
     compose_subject,
@@ -68,9 +71,9 @@ def test_the_app_name_is_configurable() -> None:
 
 
 def test_every_event_type_has_a_message() -> None:
-    assert set(MESSAGES) == set(NotificationType)
-    for subject_message, body_sentence in MESSAGES.values():
-        assert subject_message and body_sentence
+    for table in MESSAGES.values():
+        for subject_message, body_sentence in table.values():
+            assert subject_message and body_sentence
 
 
 @pytest.mark.parametrize("event_type", list(NotificationType))
@@ -84,9 +87,10 @@ def test_every_event_type_composes_with_a_link(event_type: NotificationType) -> 
         project_id=PROJECT,
         to="dev@example.com",
         settings=_settings("production"),
+        language=Language.EN,
     )
     assert email.to == "dev@example.com"
-    assert email.subject == f"{MESSAGES[event_type][0]} | AskRepo"
+    assert email.subject == f"{MESSAGES[Language.EN][event_type][0]} | AskRepo"
     assert "https://askrepo.internal/settings/notifications" in email.body
     assert f"Open: {expected}" in email.body
 
@@ -108,17 +112,22 @@ def test_the_composer_cannot_receive_content() -> None:
         "project_id",
         "to",
         "settings",
+        "language",
     }
     assert set(inspect.signature(compose_password_reset).parameters) == {
         "raw_token",
         "to",
         "settings",
+        "language",
     }
 
 
 def test_the_reset_link_carries_the_token_in_the_fragment() -> None:
     email = compose_password_reset(
-        raw_token="abc-123_XYZ", to="dev@example.com", settings=_settings("production")
+        raw_token="abc-123_XYZ",
+        to="dev@example.com",
+        settings=_settings("production"),
+        language=Language.EN,
     )
     assert email.subject == "Reset your password | AskRepo"
     assert "https://askrepo.internal/reset-password#token=abc-123_XYZ" in email.body
@@ -143,3 +152,60 @@ def test_the_environment_autoescapes() -> None:
     assert _ENVIRONMENT.autoescape
     template = _ENVIRONMENT.from_string("{{ value }}")
     assert template.render(value="<b>hi</b>") == "&lt;b&gt;hi&lt;/b&gt;"
+
+
+def test_every_language_covers_every_event() -> None:
+    assert set(MESSAGES) == set(Language)
+    for language, table in MESSAGES.items():
+        assert set(table) == set(NotificationType), language
+    assert set(RESET_MESSAGES) == set(Language)
+    assert set(CHROME) == set(Language)
+
+
+def test_the_english_text_body_is_unchanged() -> None:
+    """Spec §5.1 adds languages; it does not reword the English email."""
+    email = compose_notification(
+        event_type=NotificationType.PROJECT_READY,
+        target_type="project",
+        target_id=None,
+        project_id=PROJECT,
+        to="a@example.com",
+        settings=_settings("production"),
+        language=Language.EN,
+    )
+    assert email.body == (
+        "A project you are a member of finished indexing.\n\n"
+        f"Open: https://askrepo.internal/projects/{PROJECT}\n\n"
+        "—\n"
+        "You are receiving this because email notifications are on for this event.\n"
+        "Manage them: https://askrepo.internal/settings/notifications\n"
+    )
+
+
+@pytest.mark.parametrize("language", list(Language))
+def test_a_notification_composes_in_every_language(language: Language) -> None:
+    email = compose_notification(
+        event_type=NotificationType.EVAL_RUN_FINISHED,
+        target_type="eval_set",
+        target_id=EVAL_SET,
+        project_id=PROJECT,
+        to="a@example.com",
+        settings=_settings("production"),
+        language=language,
+    )
+    subject, sentence = MESSAGES[language][NotificationType.EVAL_RUN_FINISHED]
+
+    assert subject in email.subject
+    assert sentence in email.body
+    assert f'<html lang="{language.value}">' in (email.html or "")
+
+
+@pytest.mark.parametrize("language", list(Language))
+def test_a_reset_composes_in_every_language(language: Language) -> None:
+    email = compose_password_reset(
+        raw_token="tok", to="a@example.com", settings=_settings("production"), language=language
+    )
+
+    assert RESET_MESSAGES[language] in email.subject
+    assert "#token=tok" in email.body
+    assert f'<html lang="{language.value}">' in (email.html or "")

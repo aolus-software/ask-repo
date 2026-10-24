@@ -12,6 +12,7 @@ from typing import cast
 
 from sqlalchemy import CursorResult, Select, func, or_, select, update
 
+from app.core.language import Language, parse_language
 from app.models import User
 from app.models.notification import EmailState, Notification, NotificationEvent
 from app.repositories.base import BaseRepository
@@ -30,6 +31,7 @@ class PendingEmail:
     event_created_at: datetime
     to: str
     recipient_deactivated: bool
+    language: Language
 
 
 class NotificationRepository(BaseRepository[Notification]):
@@ -189,6 +191,7 @@ class NotificationRepository(BaseRepository[Notification]):
                 NotificationEvent.created_at,
                 User.email,
                 User.deleted_at,
+                User.language,
             )
             .join(NotificationEvent, NotificationEvent.id == Notification.event_id)
             .join(User, User.id == Notification.user_id)
@@ -205,6 +208,7 @@ class NotificationRepository(BaseRepository[Notification]):
                 event_created_at=row[6],
                 to=row[7],
                 recipient_deactivated=row[8] is not None,
+                language=parse_language(row[9]) or Language.EN,
             )
             for row in rows.all()
         ]
