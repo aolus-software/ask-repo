@@ -22,8 +22,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.checklist.source import ModuleSource, rebuild_files
 from app.config import Settings
-from app.core.notifications import NotificationType
 from app.core.language import Language, parse_language
+from app.core.notifications import NotificationType
 from app.db.session import get_sessionmaker
 from app.ingestion.errors import RetryableIngestionError, TerminalIngestionError
 from app.ingestion.vector_store import VectorStoreFactory
