@@ -1,5 +1,9 @@
 {
-  "roles": { "viewer": "뷰어", "editor": "편집자", "owner": "소유자" },
+  "roles": {
+    "viewer": "뷰어",
+    "editor": "편집자",
+    "owner": "소유자"
+  },
   "list": {
     "title": "프로젝트",
     "description": "이 인스턴스에 인덱싱된 모든 저장소입니다. 여기 있는 누구나 어느 저장소든 질의할 수 있습니다.",
@@ -57,7 +61,9 @@
     "branch": "브랜치",
     "pat": "액세스 토큰",
     "patHint": "비공개 저장소에만 필요합니다. 저장된 토큰을 그대로 두려면 비워 두세요. 읽기 전용으로 범위를 지정하세요. 이 인스턴스의 모든 사용자가 인덱싱된 내용을 질의할 수 있습니다.",
-    "queued": "프로젝트가 인덱싱 대기열에 추가되었습니다"
+    "queued": "프로젝트가 인덱싱 대기열에 추가되었습니다",
+    "contentLanguage": "콘텐츠 언어",
+    "contentLanguageHint": "생성되는 테스트 체크리스트, 모의 데이터, 개선 채팅, 내보내기는 이 언어로 작성됩니다."
   },
   "stats": {
     "filesIndexed": "인덱싱된 파일",
@@ -68,7 +74,11 @@
   "detail": {
     "notFound": "해당 프로젝트가 존재하지 않거나 삭제되었습니다.",
     "askAboutProject": "이 프로젝트에 질문하기",
-    "tabs": { "overview": "개요", "members": "멤버", "eval": "평가" },
+    "tabs": {
+      "overview": "개요",
+      "members": "멤버",
+      "eval": "평가"
+    },
     "working": "{status}…",
     "reindexRunning": "다시 인덱싱 진행 중",
     "reindexRunningDescription": "새 인덱스가 준비될 때까지 현재 인덱스를 계속 질의할 수 있습니다.",
@@ -110,5 +120,12 @@
       "confirm": "접근 권한 해지",
       "revoked": "접근 권한을 해지했습니다"
     }
+  },
+  "contentLanguage": {
+    "title": "콘텐츠 언어",
+    "description": "생성되는 테스트 체크리스트, 모의 데이터, 개선 채팅, 내보내기는 이 언어로 작성됩니다. 변경해도 이미 있는 내용은 다시 쓰이지 않습니다.",
+    "save": "저장",
+    "saved": "콘텐츠 언어를 저장했습니다",
+    "current": "콘텐츠는 {language}(으)로 작성됩니다."
   }
 }

@@ -61,7 +61,9 @@
     "branch": "Cabang",
     "pat": "Token akses",
     "patHint": "Hanya untuk repositori privat. Biarkan kosong agar token yang tersimpan tidak berubah. Batasi cakupannya hanya-baca — semua orang di instans ini dapat menanyakan apa yang diindeksnya.",
-    "queued": "Proyek masuk antrean pengindeksan"
+    "queued": "Proyek masuk antrean pengindeksan",
+    "contentLanguage": "Bahasa konten",
+    "contentLanguageHint": "Checklist pengujian, data tiruan, obrolan penyempurnaan, dan ekspor yang dihasilkan ditulis dalam bahasa ini."
   },
   "stats": {
     "filesIndexed": "Berkas terindeks",
@@ -118,5 +120,12 @@
       "confirm": "Cabut akses",
       "revoked": "Akses dicabut"
     }
+  },
+  "contentLanguage": {
+    "title": "Bahasa konten",
+    "description": "Checklist pengujian, data tiruan, obrolan penyempurnaan, dan ekspor yang dihasilkan ditulis dalam bahasa ini. Mengubahnya tidak menulis ulang apa pun yang sudah ada.",
+    "save": "Simpan",
+    "saved": "Bahasa konten disimpan",
+    "current": "Konten ditulis dalam {language}."
   }
 }

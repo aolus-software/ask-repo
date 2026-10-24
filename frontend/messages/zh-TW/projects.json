@@ -1,5 +1,9 @@
 {
-  "roles": { "viewer": "檢視者", "editor": "編輯者", "owner": "擁有者" },
+  "roles": {
+    "viewer": "檢視者",
+    "editor": "編輯者",
+    "owner": "擁有者"
+  },
   "list": {
     "title": "專案",
     "description": "此執行個體上所有已建立索引的儲存庫。這裡的任何人都可以查詢其中任何一個。",
@@ -57,7 +61,9 @@
     "branch": "分支",
     "pat": "存取權杖",
     "patHint": "僅適用於私有儲存庫。留空則保留已儲存的權杖不變。請將其範圍設為唯讀——此執行個體上的每個人都能查詢它所索引的內容。",
-    "queued": "專案已排入索引建立佇列"
+    "queued": "專案已排入索引建立佇列",
+    "contentLanguage": "內容語言",
+    "contentLanguageHint": "產生的測試清單、模擬資料、優化對話與匯出內容都會以此語言撰寫。"
   },
   "stats": {
     "filesIndexed": "已索引的檔案",
@@ -68,7 +74,11 @@
   "detail": {
     "notFound": "該專案不存在，或已被刪除。",
     "askAboutProject": "針對此專案提問",
-    "tabs": { "overview": "概覽", "members": "成員", "eval": "評估" },
+    "tabs": {
+      "overview": "概覽",
+      "members": "成員",
+      "eval": "評估"
+    },
     "working": "{status}…",
     "reindexRunning": "重新建立索引執行中",
     "reindexRunningDescription": "在新索引就緒之前，目前的索引仍可查詢。",
@@ -110,5 +120,12 @@
       "confirm": "撤銷存取權",
       "revoked": "已撤銷存取權"
     }
+  },
+  "contentLanguage": {
+    "title": "內容語言",
+    "description": "產生的測試清單、模擬資料、優化對話與匯出內容都會以此語言撰寫。變更語言不會改寫既有的內容。",
+    "save": "儲存",
+    "saved": "已儲存內容語言",
+    "current": "內容以{language}撰寫。"
   }
 }

@@ -1,3 +1,6 @@
+import { LOCALE_COOKIE } from "@/lib/auth/cookies";
+import { isLanguage } from "@/lib/i18n/languages";
+
 /**
  * Relaying the caller's address to the backend.
  *
@@ -24,4 +27,26 @@
 export function forwardedHeaders(request: Request): Record<string, string> {
   const forwardedFor = request.headers.get("x-forwarded-for");
   return forwardedFor ? { "x-forwarded-for": forwardedFor } : {};
+}
+
+function cookieValue(request: Request, name: string): string | undefined {
+  const header = request.headers.get("cookie") ?? "";
+  for (const part of header.split(";")) {
+    const [key, ...rest] = part.trim().split("=");
+    if (key === name) return decodeURIComponent(rest.join("="));
+  }
+  return undefined;
+}
+
+/**
+ * The language the backend should break ties with when the user row has none — the
+ * one this screen is showing. The `askrepo_locale` cookie mirrors the user's choice,
+ * or this browser's on a signed-out page; without it, the browser's own header. Sent
+ * as `Accept-Language` so the backend has one input to read (spec §4.3, §5.1).
+ */
+export function localeHeaders(request: Request): Record<string, string> {
+  const locale = cookieValue(request, LOCALE_COOKIE);
+  if (isLanguage(locale)) return { "accept-language": locale };
+  const header = request.headers.get("accept-language");
+  return header ? { "accept-language": header } : {};
 }

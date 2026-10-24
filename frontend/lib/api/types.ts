@@ -202,6 +202,8 @@ export interface ProjectResponse {
   chunkCount: number | null;
   embeddingModel: string | null;
   reindexInProgress: boolean;
+  /** The language generated content for this project is written in. */
+  contentLanguage: Language;
   /** The caller's role on this project. `null` for an admin with no membership. */
   role: string | null;
   /** The caller's effective permissions. See `lib/can.ts`. */
