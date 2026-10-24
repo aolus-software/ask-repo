@@ -6,7 +6,7 @@ one skipped poll rather than two workers indexing the same repository.
 """
 
 import uuid
-from collections.abc import Sequence
+from collections.abc import Collection, Sequence
 from datetime import UTC, datetime, timedelta
 from typing import Any, NamedTuple, cast
 
@@ -327,3 +327,14 @@ class ProjectRepository(BaseRepository[Project]):
             project_id: ProjectSummary(name=name, active_generation=generation)
             for project_id, name, generation in result.all()
         }
+
+    async def content_languages(self, ids: Collection[uuid.UUID]) -> list[str]:
+        """The distinct content languages of these projects. One query, no rows loaded."""
+        if not ids:
+            return []
+        result = await self.session.execute(
+            select(Project.content_language)
+            .where(Project.id.in_(ids), Project.deleted_at.is_(None))
+            .distinct()
+        )
+        return list(result.scalars().all())

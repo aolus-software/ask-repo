@@ -250,8 +250,8 @@ nothing else, so it cannot be aimed at anyone's entries. Never add an `update` m
 a route that writes.
 
 **`AuditRecorder.record` opens its own session and never raises.** That is what makes "an audit
-failure cannot fail a user's action" structural rather than a promise each of the 49 call sites
-keeps (48 in services, plus the `seed-admins` CLI). The accepted consequence is not to be quietly reframed as a guarantee: an action that
+failure cannot fail a user's action" structural rather than a promise each of the 50 call sites
+keeps (49 in services, plus the `seed-admins` CLI). The accepted consequence is not to be quietly reframed as a guarantee: an action that
 commits and then crashes before its audit write leaves no row, silently — the trail is a strong
 record, not a complete one. Services record **after** the commit that made the change true, from
 plain locals, never from an ORM object.
@@ -534,6 +534,10 @@ the page.
   way to tell one caller from another — without it the per-caller login limit is one
   instance-wide bucket. Next appends nothing, so `TRUSTED_PROXY_HOPS` still counts only the
   proxies that do.
+- **The interface language reaches the API as `Accept-Language`.** The catch-all API proxy and the
+  public forward (`lib/auth/public-forward.ts`) set it from a valid `askrepo_locale` cookie, else
+  relay the browser's own header, so the backend breaks answer- and email-language ties by the
+  language the screen shows (`localeHeaders` in `lib/auth/forwarded.ts`).
 - **Refresh happens in two places, and that split is structural.** A Server Component cannot set
   a cookie, so a token refreshed during render could never be persisted. Navigations refresh in
   `proxy.ts` — Next's request gate, called `middleware.ts` before Next 16 renamed the convention,

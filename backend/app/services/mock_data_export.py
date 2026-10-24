@@ -16,15 +16,11 @@ from openpyxl.styles import Alignment, Font
 from openpyxl.utils import get_column_letter
 from openpyxl.worksheet.worksheet import Worksheet
 
+from app.core.language import Language
 from app.models.mock_data import MockDataRecord
+from app.services.export_labels import EXPORT_LABELS
 
-SHEET_TITLE = "Mock Data"
-
-# The multi-module workbook's first sheet, and what its Sheet column says for a module
-# that had no records to put on one.
-COVER_SHEET_TITLE = "Modules"
-COVER_COLUMNS = ("Module", "Records", "Stale", "Sheet")
-NO_DATA_LABEL = "(no data)"
+NO_DATA_LABEL = EXPORT_LABELS[Language.EN].no_data
 
 MAX_SHEET_TITLE = 31
 _ILLEGAL_SHEET_CHARS = re.compile(r"[\\/*?:\[\]]")
@@ -69,11 +65,11 @@ def _save(book: Workbook) -> bytes:
     return buffer.getvalue()
 
 
-def build_mock_data_workbook(records: list[MockDataRecord]) -> bytes:
+def build_mock_data_workbook(records: list[MockDataRecord], *, language: Language) -> bytes:
     """One sheet, one column per field key (union across records), header frozen."""
     book = Workbook()
     sheet = book.worksheets[0]
-    sheet.title = SHEET_TITLE
+    sheet.title = EXPORT_LABELS[language].mock_data_sheet
     _write_records(sheet, records)
     return _save(book)
 
@@ -87,15 +83,16 @@ class ModuleRecords:
     stale: bool
 
 
-def sheet_title(name: str, taken: set[str]) -> str:
+def sheet_title(name: str, taken: set[str], *, fallback: str = "Module") -> str:
     """A legal, unique worksheet name for a module.
 
     Excel refuses `[]:*?/\\` in a sheet name, caps it at 31 characters, and compares
     names case-insensitively, so two modules whose names differ only past the cut, or
     only in case, still need two sheets. `taken` holds the lower-cased names already
-    used and is updated in place.
+    used and is updated in place. `fallback` names a sheet whose module name cleans
+    to nothing.
     """
-    cleaned = _ILLEGAL_SHEET_CHARS.sub("_", name).strip("'").strip() or "Module"
+    cleaned = _ILLEGAL_SHEET_CHARS.sub("_", name).strip("'").strip() or fallback
     candidate = cleaned[:MAX_SHEET_TITLE]
     suffix = 2
     while candidate.lower() in taken:
@@ -106,7 +103,7 @@ def sheet_title(name: str, taken: set[str]) -> str:
     return candidate
 
 
-def build_project_mock_data_workbook(modules: list[ModuleRecords]) -> bytes:
+def build_project_mock_data_workbook(modules: list[ModuleRecords], *, language: Language) -> bytes:
     """A cover sheet naming every chosen module, then one sheet per module with records.
 
     A module with no records gets a cover row and no sheet. Each module keeps its own
@@ -114,22 +111,25 @@ def build_project_mock_data_workbook(modules: list[ModuleRecords]) -> bytes:
     whole project would be mostly blank cells. The cover says what the file covered,
     so a module left without a sheet is visible rather than silently missing.
     """
+    labels = EXPORT_LABELS[language]
     book = Workbook()
     cover = book.worksheets[0]
-    cover.title = COVER_SHEET_TITLE
-    cover.append(list(COVER_COLUMNS))
+    cover.title = labels.cover_sheet
+    cover.append(list(labels.cover_headers))
     for index, width in enumerate((36, 10, 8, 32), start=1):
         cover.column_dimensions[get_column_letter(index)].width = width
     for cell in cover[1]:
         cell.font = Font(bold=True)
     cover.freeze_panes = "A2"
 
-    taken = {COVER_SHEET_TITLE.lower()}
+    taken = {labels.cover_sheet.lower()}
     for module in modules:
         if not module.records:
-            cover.append([module.name, 0, "", NO_DATA_LABEL])
+            cover.append([module.name, 0, "", labels.no_data])
             continue
-        title = sheet_title(module.name, taken)
-        cover.append([module.name, len(module.records), "yes" if module.stale else "no", title])
+        title = sheet_title(module.name, taken, fallback=labels.cover_headers[0])
+        cover.append(
+            [module.name, len(module.records), labels.yes if module.stale else labels.no, title]
+        )
         _write_records(book.create_sheet(title), module.records)
     return _save(book)

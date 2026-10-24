@@ -26,6 +26,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from app.config import Settings
 from app.core.audit import AuditEntry, AuditEventType, AuditRecorder
 from app.core.errors import AppError, ErrorCode
+from app.core.language import Language, resolve_language
 from app.core.passwords import validate_and_hash_new_password
 from app.core.security import generate_opaque_token, sha256_hex
 from app.mail.compose import compose_password_reset
@@ -46,6 +47,7 @@ class PendingResetEmail:
     token_id: uuid.UUID
     raw_token: str
     to: str
+    language: Language
 
 
 class PasswordResetService:
@@ -65,8 +67,15 @@ class PasswordResetService:
         self._recorder = recorder
         self._client_ip = client_ip
 
-    async def request(self, payload: PasswordResetRequest) -> PendingResetEmail | None:
-        """Mint a token for a live account; return `None`, silently, for anything else."""
+    async def request(
+        self, payload: PasswordResetRequest, *, accept_language: str | None = None
+    ) -> PendingResetEmail | None:
+        """Mint a token for a live account; return `None`, silently, for anything else.
+
+        The email's language is the account's own, else the request's `Accept-Language`.
+        It only picks the text of a message the caller never sees, so it cannot tell a
+        known address from an unknown one.
+        """
         if not self.settings.mail_enabled:
             raise AppError(
                 status.HTTP_409_CONFLICT,
@@ -91,7 +100,12 @@ class PasswordResetService:
                 )
             )
             await self.session.commit()
-            pending = PendingResetEmail(token_id=token.id, raw_token=raw_token, to=user.email)
+            pending = PendingResetEmail(
+                token_id=token.id,
+                raw_token=raw_token,
+                to=user.email,
+                language=resolve_language(user.language, accept_language),
+            )
 
         await self._recorder.record(
             AuditEntry(
@@ -148,7 +162,12 @@ async def deliver_password_reset(
 
     Opens its own session: this runs after the request's session has closed.
     """
-    email = compose_password_reset(raw_token=pending.raw_token, to=pending.to, settings=settings)
+    email = compose_password_reset(
+        raw_token=pending.raw_token,
+        to=pending.to,
+        settings=settings,
+        language=pending.language,
+    )
     try:
         await sender.send(email)
     except MailSendError as error:

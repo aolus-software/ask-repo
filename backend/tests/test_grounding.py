@@ -1,5 +1,7 @@
 """Post-hoc checks on whether an answer stayed inside what was retrieved."""
 
+import pytest
+
 from app.rag.grounding import (
     NO_CONTEXT,
     UNCITED_ANSWER,
@@ -112,3 +114,44 @@ def test_the_out_of_scope_refusal_says_what_to_ask_instead() -> None:
 
     assert OUT_OF_SCOPE_ANSWER.strip()
     assert "project" in OUT_OF_SCOPE_ANSWER.lower()
+
+
+@pytest.mark.parametrize(
+    "answer",
+    [
+        "設定はapp/services/billing.py 。",
+        "该文件是app/services/billing.py。",
+        "x app/services/billing.py에서 확인하세요",
+        "파일 app/services/billing.py를 보세요",
+        "見て、`app/services/billing.py`、そして",
+    ],
+)
+def test_a_path_is_found_beside_cjk_text_and_punctuation(answer: str) -> None:
+    """Unicode `\\w` would swallow adjacent CJK/Hangul, or miss a particle-attached path."""
+    spans = [_span("app/core/repo_url.py", 0, 1, 10)]
+    assert unknown_paths(answer, spans) == ["app/services/billing.py"]
+
+
+def test_a_retrieved_path_beside_cjk_text_is_not_reported() -> None:
+    spans = [_span("app/core/access.py", 0, 1, 10)]
+    assert unknown_paths("設定はapp/core/access.py 。", spans) == []
+    assert unknown_paths("x app/core/access.py에서", spans) == []
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("/app/core/x.py", ["app/core/x.py"]),
+        ("~/x/y.py", ["x/y.py"]),
+        ("see -src/a.py", ["src/a.py"]),
+        ("x app/core/access.py에서", ["app/core/access.py"]),
+        ("設定はapp/core/access.py 。", ["app/core/access.py"]),
+    ],
+)
+def test_a_leading_slash_tilde_or_hyphen_does_not_hide_a_path(
+    text: str, expected: list[str]
+) -> None:
+    """An invented `/app/x.py` must still be checked, minus its prefix."""
+    from app.rag.grounding import path_tokens
+
+    assert path_tokens(text) == expected

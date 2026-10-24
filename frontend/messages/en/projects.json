@@ -61,7 +61,9 @@
     "branch": "Branch",
     "pat": "Access token",
     "patHint": "Only for a private repository. Leave blank to keep any stored token unchanged. Scope it read-only — everyone on this instance can query what it indexes.",
-    "queued": "Project queued for indexing"
+    "queued": "Project queued for indexing",
+    "contentLanguage": "Content language",
+    "contentLanguageHint": "Generated test checklists, mock data, refinement chats and exports are written in this language."
   },
   "stats": {
     "filesIndexed": "Files indexed",
@@ -118,5 +120,12 @@
       "confirm": "Revoke access",
       "revoked": "Access revoked"
     }
+  },
+  "contentLanguage": {
+    "title": "Content language",
+    "description": "Generated test checklists, mock data, refinement chats and exports are written in this language. Changing it does not rewrite anything that already exists.",
+    "save": "Save",
+    "saved": "Content language saved",
+    "current": "Content is written in {language}."
   }
 }

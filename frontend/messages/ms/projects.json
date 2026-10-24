@@ -61,7 +61,9 @@
     "branch": "Cabang",
     "pat": "Token akses",
     "patHint": "Hanya untuk repositori persendirian. Biarkan kosong untuk mengekalkan sebarang token yang disimpan tanpa perubahan. Hadkan skopnya kepada baca sahaja — semua orang pada instans ini boleh membuat pertanyaan tentang apa yang diindeksnya.",
-    "queued": "Projek dimasukkan ke dalam baris gilir pengindeksan"
+    "queued": "Projek dimasukkan ke dalam baris gilir pengindeksan",
+    "contentLanguage": "Bahasa kandungan",
+    "contentLanguageHint": "Senarai semak ujian, data olok-olok, sembang penambahbaikan dan eksport yang dijana ditulis dalam bahasa ini."
   },
   "stats": {
     "filesIndexed": "Fail diindeks",
@@ -118,5 +120,12 @@
       "confirm": "Batalkan akses",
       "revoked": "Akses dibatalkan"
     }
+  },
+  "contentLanguage": {
+    "title": "Bahasa kandungan",
+    "description": "Senarai semak ujian, data olok-olok, sembang penambahbaikan dan eksport yang dijana ditulis dalam bahasa ini. Menukarnya tidak menulis semula apa-apa yang sudah wujud.",
+    "save": "Simpan",
+    "saved": "Bahasa kandungan disimpan",
+    "current": "Kandungan ditulis dalam {language}."
   }
 }

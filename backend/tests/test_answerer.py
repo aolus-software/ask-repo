@@ -9,12 +9,13 @@ from langchain_core.language_models import BaseChatModel
 from pydantic import BaseModel
 
 from app.config import Settings
+from app.core.language import Language
 from app.models.conversation import FinishReason
 from app.observability.recorder import CallRecorder
 from app.rag.answer_style import AnswerDetail, AnswerStyle
 from app.rag.answerer import Answerer, cited_indexes
 from app.rag.graph.state import Classification, EvidenceVerdict, Intent
-from app.rag.grounding import NO_CONTEXT, NO_CONTEXT_ANSWER, UNCITED_ANSWER, UNKNOWN_PATHS
+from app.rag.grounding import NO_CONTEXT, NO_CONTEXT_ANSWERS, UNCITED_ANSWER, UNKNOWN_PATHS
 from app.rag.prompts import Turn
 from app.rag.retriever import RetrievedChunk, Retriever
 from app.schemas.conversation import (
@@ -82,6 +83,7 @@ async def collect(
             project_id=uuid.uuid4(),
             generation=0,
             message_id=uuid.uuid4(),
+            reply_language=Language.EN,
         )
     ]
 
@@ -202,7 +204,12 @@ async def test_a_contended_semaphore_announces_the_wait() -> None:
 
 async def _drain(answerer: Answerer, sink: list[StreamEvent]) -> None:
     async for event in answerer.answer(
-        question="q", history=[], project_id=uuid.uuid4(), generation=0, message_id=uuid.uuid4()
+        question="q",
+        history=[],
+        project_id=uuid.uuid4(),
+        generation=0,
+        message_id=uuid.uuid4(),
+        reply_language=Language.EN,
     ):
         sink.append(event)
 
@@ -234,7 +241,28 @@ async def test_the_refusal_reaches_the_client_as_ordinary_tokens() -> None:
     events = await collect(build(ScriptedChatModel(tokens=["x"]), RecordingRetriever(spans=[])))
     streamed = "".join(e.text for e in events if isinstance(e, TokenEvent))
 
-    assert streamed == NO_CONTEXT_ANSWER
+    assert streamed == NO_CONTEXT_ANSWERS[Language.EN]
+
+
+async def test_the_refusal_follows_the_reply_language() -> None:
+    answerer = build(ScriptedChatModel(tokens=["x"]), RecordingRetriever(spans=[]))
+
+    events = [
+        event
+        async for event in answerer.answer(
+            question="how does it work",
+            history=[],
+            project_id=uuid.uuid4(),
+            generation=0,
+            message_id=uuid.uuid4(),
+            reply_language=Language.KO,
+        )
+    ]
+
+    tokens = [e for e in events if isinstance(e, TokenEvent)]
+    assert [t.text for t in tokens] == [NO_CONTEXT_ANSWERS[Language.KO]]
+    assert isinstance(events[-1], DoneEvent)
+    assert events[-1].grounding_warnings == ["no_context"]
 
 
 async def test_an_answer_naming_an_unretrieved_file_is_flagged() -> None:
@@ -363,6 +391,7 @@ async def _terminator_without_a_message(model: ScriptedChatModel) -> StreamEvent
             project_id=uuid.uuid4(),
             generation=0,
             message_id=None,
+            reply_language=Language.EN,
         )
     ]
     return events[-1]
@@ -433,6 +462,7 @@ async def test_a_proposing_answerer_emits_citations_then_tokens_then_change_set_
             project_id=uuid.uuid4(),
             generation=1,
             message_id=message_id,
+            reply_language=Language.EN,
             existing_items=[],
             change_set_id=change_set_id,
             module_name="Authentication",
@@ -463,6 +493,7 @@ async def test_a_non_proposing_answerer_emits_no_change_set() -> None:
             project_id=uuid.uuid4(),
             generation=1,
             message_id=uuid.uuid4(),
+            reply_language=Language.EN,
         )
     ]
     assert not any(type(event).__name__ == "ChangeSetEvent" for event in events)
@@ -490,6 +521,7 @@ async def test_the_graph_scope_reaches_the_answer_call() -> None:
             project_id=project_id,
             generation=0,
             message_id=message_id,
+            reply_language=Language.EN,
         )
     ]
 
@@ -514,6 +546,7 @@ async def test_a_proposing_answerer_refuses_an_answer_style(
                 project_id=uuid.uuid4(),
                 generation=0,
                 message_id=uuid.uuid4(),
+                reply_language=Language.EN,
                 answer_style=AnswerStyle(detail=AnswerDetail.BRIEF),
             )
         )
@@ -535,6 +568,7 @@ async def test_a_style_cannot_talk_the_answer_out_of_its_citation_warning() -> N
             project_id=uuid.uuid4(),
             generation=0,
             message_id=uuid.uuid4(),
+            reply_language=Language.EN,
             answer_style=AnswerStyle(detail=AnswerDetail.BRIEF),
         )
     ]

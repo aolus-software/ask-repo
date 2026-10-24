@@ -7,7 +7,7 @@ import {
   accessCookieMaxAge,
   cookieOptions,
 } from "@/lib/auth/cookies";
-import { forwardedHeaders } from "@/lib/auth/forwarded";
+import { forwardedHeaders, localeHeaders } from "@/lib/auth/forwarded";
 import { applyLocale, clearLocale } from "@/lib/auth/locale-cookie";
 import { type RefreshResult, apiUrl, refreshSession } from "@/lib/auth/session";
 
@@ -142,6 +142,7 @@ function forward(
   request.headers.forEach((value, key) => {
     if (!STRIPPED_REQUEST_HEADERS.has(key.toLowerCase())) headers[key] = value;
   });
+  Object.assign(headers, localeHeaders(request));
   headers.authorization = `Bearer ${accessToken}`;
 
   return fetch(target, {

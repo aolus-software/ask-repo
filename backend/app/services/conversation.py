@@ -23,6 +23,7 @@ from app.core import access
 from app.core.audit import AuditEntry, AuditEventType, AuditRecorder
 from app.core.errors import AppError, ErrorCode
 from app.core.feedback import FeedbackTarget
+from app.core.language import Language, resolve_language
 from app.core.middleware import AuthenticatedUser
 from app.models.conversation import (
     MAX_TITLE_CHARS,
@@ -78,6 +79,9 @@ class TurnContext:
     question: str
     history: list[Turn]
     message_id: uuid.UUID
+    # Read once here like `answer_style`: the asker's own language (spec §4.3). No
+    # default, so a constructor that forgets it fails instead of answering in English.
+    reply_language: Language
     # The caller's answer style, read once here so the stream never touches the
     # request's session. Ask only: the refinement services never set it, and
     # `Answerer` refuses one alongside a `propose_target`.
@@ -217,6 +221,7 @@ class ConversationService:
         payload: MessageCreateRequest,
         *,
         actor: AuthenticatedUser,
+        accept_language: str | None = None,
     ) -> TurnContext:
         """Everything that can still set a status code, then commit the question.
 
@@ -249,6 +254,11 @@ class ConversationService:
             if row is not None
             else AnswerStyle()
         )
+        # The tiebreak for a private answer is the asker's own (spec §4.3): their
+        # stored language, else this request's `Accept-Language`, else English.
+        reply_language = resolve_language(
+            row.language if row is not None else None, accept_language
+        )
 
         return TurnContext(
             conversation_id=conversation.id,
@@ -259,6 +269,7 @@ class ConversationService:
             history=await self._history(conversation.id),
             message_id=uuid.uuid4(),
             answer_style=answer_style,
+            reply_language=reply_language,
         )
 
     # `builtins.list`, and it has to be: this class defines a method named `list`,
@@ -347,6 +358,7 @@ async def stream_turn(
         generation=context.generation,
         message_id=context.message_id,
         answer_style=context.answer_style,
+        reply_language=context.reply_language,
     )
     iterator = events.__aiter__()
     pending: asyncio.Task[StreamEvent] | None = None

@@ -9,8 +9,9 @@ import uuid
 from datetime import datetime
 from typing import Literal
 
-from pydantic import Field
+from pydantic import Field, field_validator
 
+from app.core.language import Language, parse_language
 from app.models.project import ProjectStatus
 from app.schemas.base import ApiModel
 from app.schemas.pagination import ListQuery
@@ -23,6 +24,17 @@ class ProjectCreateRequest(ApiModel):
     branch: str = Field(default="main", max_length=255)
     # Write-only: accepted here, encrypted immediately, never echoed back.
     pat: str | None = Field(default=None, max_length=512)
+    content_language: Language = Language.EN
+
+
+class ProjectUpdateRequest(ApiModel):
+    """`PATCH /projects/{id}`. The content language and nothing else (spec §1.3).
+
+    Unknown keys are ignored, as on every request body here; widening this body is a
+    separate change with its own audit allowlist entries.
+    """
+
+    content_language: Language
 
 
 class ProjectResponse(ApiModel):
@@ -40,6 +52,7 @@ class ProjectResponse(ApiModel):
     chunk_count: int | None
     embedding_model: str | None
     reindex_in_progress: bool
+    content_language: Language
     created_at: datetime
     updated_at: datetime
     # The caller's own role and effective permissions on this project. `None` for an
@@ -47,6 +60,14 @@ class ProjectResponse(ApiModel):
     # inventing one would put a word on screen that matches no row.
     role: str | None = None
     permissions: list[str] = Field(default_factory=list)
+
+    @field_validator("content_language", mode="before")
+    @classmethod
+    def _unshipped_language_reads_as_english(cls, value: object) -> object:
+        """A stored tag a later release no longer ships reads as English, not a 500."""
+        if isinstance(value, str):
+            return parse_language(value) or Language.EN
+        return value
 
 
 class IndexedPathEntry(ApiModel):

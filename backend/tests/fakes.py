@@ -19,6 +19,7 @@ from langchain_core.outputs import ChatGeneration, ChatGenerationChunk, ChatResu
 from langchain_core.runnables import Runnable, RunnableLambda
 from pydantic import BaseModel, Field, PrivateAttr
 
+from app.core.language import Language
 from app.models.conversation import FinishReason, Intent
 from app.queue.topics import IngestionMessage
 from app.rag.prompts import ExistingItem, Turn
@@ -371,6 +372,7 @@ class FakeAnswerer:
         existing_items: list[ExistingItem] | None = None,
         change_set_id: uuid.UUID | None = None,
         module_name: str = "",
+        reply_language: Language = Language.EN,
     ) -> AsyncGenerator[StreamEvent]:
         """Yield the scripted events, then hang forever if `hang` was requested.
 

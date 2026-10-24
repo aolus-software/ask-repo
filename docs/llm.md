@@ -113,6 +113,11 @@ generated row to plain language for a manual tester — no paths, code names, HT
 error codes — and sends the file reference to `citation_paths` instead. The map step stays
 technical on purpose: its observations are input to the reduce step, never shown to a tester.
 
+Phase 2.7 PR C moved eight prompt versions (`app/rag/prompt_version.py`): `classify` and `grade`
+(the search query is written in English), `answer` and `history_answer` (the `REPLY_LANGUAGE`
+slot, always rendered), and `reduce`, `propose_checklist`, `propose_mock_data` and
+`generate_mock_data` (the `CONTENT_LANGUAGE` paragraph). `map` and the eval prompts did not move.
+
 Keeping them in one module matters more than it looks: **no ordinary test can catch a prompt
 that routes or cites wrongly**, because every other test drives a `ScriptedChatModel`. That is
 what `uv run pytest -m model` exists for — it needs a real served model. Run it after touching

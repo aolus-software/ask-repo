@@ -80,6 +80,7 @@ ROUTE_EVENTS: dict[tuple[str, str], AuditEventType | str] = {
     ("POST", "/users/{user_id}/reset-password"): AuditEventType.USER_PASSWORD_RESET,
     # --- Task 6: projects ---
     ("POST", "/projects"): AuditEventType.PROJECT_CREATED,
+    ("PATCH", "/projects/{project_id}"): AuditEventType.PROJECT_UPDATED,
     ("POST", "/projects/{project_id}/reindex"): AuditEventType.PROJECT_REINDEX_REQUESTED,
     ("DELETE", "/projects/{project_id}"): AuditEventType.PROJECT_DELETED,
     # --- Task 7: RBAC ---

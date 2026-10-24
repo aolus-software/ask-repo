@@ -11,7 +11,7 @@ import uuid
 from collections.abc import Callable
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Query, Request, Response, status
+from fastapi import APIRouter, Depends, Header, Query, Request, Response, status
 from fastapi.responses import StreamingResponse
 from langchain_core.language_models import BaseChatModel
 
@@ -192,6 +192,7 @@ async def ask_question(
     service: ConversationServiceDep,
     answerer_factory: AnswererFactoryDep,
     settings: Annotated[Settings, Depends(get_settings)],
+    accept_language: Annotated[str | None, Header()] = None,
 ) -> Response:
     """Validate, persist the question, then stream the answer.
 
@@ -200,7 +201,9 @@ async def ask_question(
     decision that needs one has to happen in `prepare_turn` first. All of the policy
     is still in the service — the route only chooses the transport.
     """
-    context = await service.prepare_turn(conversation_id, payload, actor=current_user)
+    context = await service.prepare_turn(
+        conversation_id, payload, actor=current_user, accept_language=accept_language
+    )
     return StreamingResponse(
         stream_turn(
             context=context,

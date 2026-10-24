@@ -78,10 +78,15 @@ class TurnState(TypedDict):
     answer: str
     failure: FinishReason | None
     answer_style: AnswerStyle | None  # the asker's dials; None = default prompt
+    reply_language: Language          # the tiebreak language, chosen by the caller
 ```
 
 `question` and `search_query` are separate on purpose: **the model answers what the user asked,
 while retrieval embeds the rewritten query.**
+
+`classify` writes `search_query` in English whatever language the question is in, keeping identifiers, paths and quoted code as typed, and `grade`'s `better_query` carries the same rule, so a re-retrieval is not sent in the original language on the turns already struggling. For `conversational` and `out_of_scope` the question is repeated unchanged. If `classify` fails the fallback is unchanged (`codebase_question` plus the raw question): the turn is answered, retrieval simply searches in the original language and recall drops, and nothing reports it per turn.
+
+`reply_language` is set by the caller and never by a node: the asker's language on Ask, the project's `content_language` on both refinement chats, the set's `language` on an eval run. It fills the reply-language slot in the answer prompts and picks the fixed refusal (`NO_CONTEXT_ANSWERS` or `OUT_OF_SCOPE_ANSWERS`, indexed by it), which is still streamed as ordinary `token` events and never generated. On a refinement chat it is also the language the proposal is written in.
 
 `answer_style` is read by `generate` and `answer_from_history`, which render it into the
 `{reader_preferences}` slot of their system prompts (`docs/rag.md`, "Answer style"). `Answerer`

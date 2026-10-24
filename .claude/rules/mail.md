@@ -19,22 +19,33 @@ that every message is okay" — it is "accept no parameter that would allow one 
 code". `tests/test_mail_compose.py` pins both signatures; adding a parameter means updating that
 test, which is what makes a silent addition impossible.
 
-- **`compose_notification(*, event_type, target_type, target_id, project_id, to, settings)`.**
+- **`compose_notification(*, event_type, target_type, target_id, project_id, to, settings, language)`.**
   No `name`, no `path`, no `details` — nothing that could carry a display name, a repository
   name, a module name, or free text out of the app. The subject and body sentence come from a
   fixed table (`MESSAGES`, keyed by `NotificationType`) and the only thing composed per call is
   a link built from ids: `_link` returns `/checklist/{target_id}` for a checklist module target
   and `/projects/{project_id}` otherwise.
-- **`compose_password_reset(*, raw_token, to, settings)`.** The reset link is the entire message.
+- **`compose_password_reset(*, raw_token, to, settings, language)`.** The reset link is the entire message.
   `raw_token` is handed in as an argument and lives nowhere else — see the token lifecycle below.
 
 ## Subjects are fixed strings per event; bodies are plain text plus a guarded HTML part
 
 `compose_subject` builds `"{message} | {MAIL_APP_NAME}"`, prefixed with `"[{APP_ENV}] "` in
 every environment except `production`, where the tag is omitted. There is no per-call
-templating for the subject: `MESSAGES` maps each `NotificationType` to one subject and one
-body sentence, and the reset email's subject is the same fixed string (`RESET_MESSAGE`) every
-time.
+templating for the subject: `MESSAGES` maps each `Language` and `NotificationType` to one subject
+and one body sentence, and the reset email's subject is one fixed string per language
+(`RESET_MESSAGES`). The templates' fixed chrome (button labels, footer, manage link, reset intro
+and expiry) comes from `CHROME`, a per-language `MailChrome`, and is passed to Jinja as fixed
+strings. A test requires
+every `Language` × every `NotificationType` in `MESSAGES` and every `Language` in `RESET_MESSAGES`
+and `CHROME`, so a new event or language without its translations fails the test rather than the
+email. The non-English tables are machine-assisted drafts pending native-speaker review.
+
+**The language is the recipient's, never the actor's.** A notification email uses
+`users.language` of the recipient, read at send time by the outbox (else `en`); that is not a
+visibility decision, so the fan-out snapshot rule (`notifications.md` rule 4) does not apply. A
+reset email uses the account's language, else the `Accept-Language` of the request that asked,
+else `en`; an unknown address still sends nothing. Every HTML part sets `<html lang>` from it.
 
 The plain-text body (`EmailMessage.set_content`) is still built first and is byte-identical to
 what it always was — a reset link is still a bare URL on its own line,

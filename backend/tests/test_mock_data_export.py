@@ -17,9 +17,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import Settings
 from app.core.audit import AuditRecorder
 from app.core.errors import AppError
+from app.core.language import Language
 from app.core.permissions import VIEWER_NAME
 from app.db.session import get_sessionmaker
 from app.models.mock_data import MockDataRecord
+from app.services.export_labels import EXPORT_LABELS
 from app.services.mock_data_dataset import MockDataDatasetService
 from app.services.mock_data_export import build_mock_data_json, build_mock_data_workbook
 from tests.conftest import GrantMembership
@@ -60,7 +62,7 @@ def test_build_mock_data_workbook_unions_field_keys_across_records() -> None:
             created_by=uuid.uuid4(),
         ),
     ]
-    book = load_workbook(BytesIO(build_mock_data_workbook(records)))
+    book = load_workbook(BytesIO(build_mock_data_workbook(records, language=Language.EN)))
     sheet = book.active
     assert sheet is not None
     header = [cell.value for cell in sheet[1]]
@@ -152,6 +154,26 @@ async def test_export_xlsx_succeeds_under_cap(
     assert header == ["name", "start"]
     assert [cell.value for cell in sheet[2]] == ["Acme", None]
     assert [cell.value for cell in sheet[3]] == ["Globex", "2026-01-01"]
+
+
+async def test_export_xlsx_titles_its_sheet_in_the_projects_language(
+    db_session: AsyncSession, grant_membership: GrantMembership
+) -> None:
+    project = await create_project(db_session)
+    project.content_language = "ja"
+    module = await create_checklist_module(db_session, project_id=project.id)
+    user = await create_user(db_session)
+    await grant_membership(user.id, project.id, VIEWER_NAME)
+    actor = await authenticated(db_session, user)
+    await db_session.commit()
+    service = MockDataDatasetService(
+        db_session, Settings(), recorder=AuditRecorder(get_sessionmaker())
+    )
+
+    result = await service.export_xlsx(module.id, actor=actor)
+
+    sheet = load_workbook(BytesIO(result)).worksheets[0]
+    assert sheet.title == EXPORT_LABELS[Language.JA].mock_data_sheet
 
 
 async def test_export_refuses_over_the_row_cap(

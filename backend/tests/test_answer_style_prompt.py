@@ -38,14 +38,23 @@ def test_no_style_renders_nothing() -> None:
     assert render_reader_preferences(AnswerStyle()) == ""
 
 
-def test_an_unset_style_leaves_the_answer_prompt_byte_identical() -> None:
+def test_an_unset_style_and_slot_leave_the_answer_prompt_byte_identical() -> None:
+    """The always-rendered reply-language slot changes the live prompt (spec §4.2); the
+    fixture pins everything else."""
     before = (FIXTURES / "answer_system.txt").read_text()
-    assert ANSWER_SYSTEM.replace("{reader_preferences}", "") == before
+    assert (
+        ANSWER_SYSTEM.replace("{reader_preferences}", "").replace("{reply_language}", "") == before
+    )
 
 
-def test_an_unset_style_leaves_the_history_prompt_byte_identical() -> None:
+def test_an_unset_style_and_slot_leave_the_history_prompt_byte_identical() -> None:
+    """The always-rendered reply-language slot changes the live prompt (spec §4.2); the
+    fixture pins everything else."""
     before = (FIXTURES / "history_answer_system.txt").read_text()
-    assert HISTORY_ANSWER_SYSTEM.replace("{reader_preferences}", "") == before
+    assert (
+        HISTORY_ANSWER_SYSTEM.replace("{reader_preferences}", "").replace("{reply_language}", "")
+        == before
+    )
 
 
 def test_fragments_render_in_fixed_order_after_the_preamble() -> None:
@@ -72,6 +81,7 @@ def test_the_block_precedes_the_grounding_rules() -> None:
         question="q",
         evidence_note="",
         reader_preferences=render_reader_preferences(FULL),
+        reply_language="",
     )[0].content
     assert isinstance(system, str)
 
@@ -80,7 +90,10 @@ def test_the_block_precedes_the_grounding_rules() -> None:
 
 def test_the_history_prompt_takes_the_block_before_its_routing_cases() -> None:
     system = HISTORY_ANSWER_PROMPT.format_messages(
-        history=[], question="q", reader_preferences=render_reader_preferences(FULL)
+        history=[],
+        question="q",
+        reader_preferences=render_reader_preferences(FULL),
+        reply_language="",
     )[0].content
     assert isinstance(system, str)
 

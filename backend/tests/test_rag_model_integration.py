@@ -29,6 +29,7 @@ import pytest
 from app.checklist.model_output import ProposedChangeSet
 from app.checklist.operations import _narrow_kind
 from app.config import Settings
+from app.core.language import Language
 from app.eval.model_output import GeneratedPair, JudgeVerdict
 from app.eval.sampling import SampledChunk, names_its_file
 from app.models.checklist import ChecklistItemKind
@@ -46,6 +47,7 @@ from app.rag.prompts import (
     build_reduce_prompt,
     format_spans,
     render_reader_preferences,
+    render_reply_language,
 )
 from app.rag.retriever import RetrievedChunk
 
@@ -200,6 +202,7 @@ async def test_the_answer_carries_citation_labels(settings: Settings) -> None:
                 question=question,
                 evidence_note="",
                 reader_preferences="",
+                reply_language=render_reply_language(Language.EN),
             )
         )
         answer = str(message.content)
@@ -216,6 +219,7 @@ async def test_reduce_never_fills_in_a_current_result(settings: Settings) -> Non
     model = build_chat_model(settings).with_structured_output(ProposedChangeSet)
     result = await model.ainvoke(
         build_reduce_prompt(
+            language=Language.EN,
             module_name="Authentication",
             observations=[
                 ("app/auth/login.py", "raises 401 when bcrypt.checkpw fails", 30, 44),
@@ -247,6 +251,7 @@ async def test_reduce_proposes_an_update_rather_than_a_duplicate_add(settings: S
     ]
     result = await model.ainvoke(
         build_reduce_prompt(
+            language=Language.EN,
             module_name="Authentication",
             observations=[
                 ("app/auth/login.py", "raises 401 INVALID_CREDENTIALS on a wrong password", 30, 44)
@@ -285,6 +290,7 @@ async def test_reduce_proposes_both_kinds_not_only_one(
     model = build_chat_model(settings).with_structured_output(ProposedChangeSet)
     result = await model.ainvoke(
         build_reduce_prompt(
+            language=Language.EN,
             module_name="Authentication",
             observations=[
                 ("app/auth/login.py", "returns an access token on a correct password", 45, 52),
@@ -360,6 +366,7 @@ async def test_reduce_writes_for_a_tester_who_has_never_seen_the_code(
     model = build_chat_model(settings).with_structured_output(ProposedChangeSet)
     result = await model.ainvoke(
         build_reduce_prompt(
+            language=Language.EN,
             module_name="Users",
             observations=[
                 (
@@ -418,6 +425,7 @@ async def test_a_chat_proposal_from_a_technical_answer_is_plain(settings: Settin
     model = build_chat_model(settings).with_structured_output(ProposedChangeSet)
     result = await model.ainvoke(
         build_propose_prompt(
+            language=Language.EN,
             module_name="Users",
             answer=(
                 "There is no test for a missing user. `usersService.findOne` raises "
@@ -453,6 +461,7 @@ async def test_brief_answers_are_shorter_than_thorough_ones_and_both_cite(
                 question=question,
                 evidence_note="",
                 reader_preferences=render_reader_preferences(AnswerStyle(detail=detail)),
+                reply_language=render_reply_language(Language.EN),
             )
         )
         return str(message.content)
@@ -510,3 +519,55 @@ async def test_the_judge_accepts_the_reference_and_rejects_a_wrong_location(
 
     assert isinstance(same, JudgeVerdict) and same.verdict == "correct", same
     assert isinstance(other, JudgeVerdict) and other.verdict == "wrong", other
+
+
+NON_ENGLISH_SEARCH_QUESTIONS = [
+    "Di mana validate_repo_url dipanggil?",
+    "validate_repo_url은 어디에서 호출되나요?",
+]
+
+# Answerable from SPANS (mirrors the English question about resolve_project_scope).
+NON_ENGLISH_ANSWERABLE = [
+    ("Apa yang dikembalikan resolve_project_scope di fase 1?", Language.ID),
+    ("resolve_project_scope는 1단계에서 무엇을 반환하나요?", Language.KO),
+]
+
+
+@pytest.mark.parametrize("question", NON_ENGLISH_SEARCH_QUESTIONS)
+async def test_a_non_english_question_searches_in_english_and_keeps_the_identifier(
+    settings: Settings, question: str
+) -> None:
+    """Retrieval embeds the search query against English-leaning code, so the rewrite
+    must be English while the identifier survives exactly as typed."""
+    model = build_chat_model(settings)
+    result = await model.with_structured_output(Classification).ainvoke(
+        CLASSIFY_PROMPT.format_messages(history=[], question=question)
+    )
+    classification = Classification.model_validate(result)
+
+    assert "validate_repo_url" in classification.search_query
+    assert classification.search_query.isascii(), classification.search_query
+
+
+@pytest.mark.parametrize(("question", "language"), NON_ENGLISH_ANSWERABLE)
+async def test_a_non_english_answer_still_cites(
+    settings: Settings, question: str, language: Language
+) -> None:
+    """Replying in another language must not cost the `[n]` labels the sources panel
+    is keyed by."""
+    model = build_chat_model(settings)
+    message = await model.ainvoke(
+        ANSWER_PROMPT.format_messages(
+            context=format_spans(SPANS),
+            history=[],
+            question=question,
+            evidence_note="",
+            reader_preferences="",
+            reply_language=render_reply_language(language),
+        )
+    )
+    answer = str(message.content)
+    labels = set(CITATION_LABEL.findall(answer))
+
+    assert labels, f"an answer in {language.value} carried no [n] label: {answer}"
+    assert not labels - {"1", "2", "3"}, f"cited an excerpt that does not exist: {answer}"

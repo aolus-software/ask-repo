@@ -8,7 +8,9 @@ from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.config import Settings, get_settings
+from app.core.language import Language
 from app.core.notifications import NotificationType
+from app.mail.compose import MESSAGES
 from app.mail.outbox import MAX_EMAIL_ATTEMPTS, send_pending_once
 from app.mail.recording import RecordingMailSender
 from app.mail.sender import MailSendError
@@ -62,6 +64,23 @@ async def test_a_pending_row_is_sent_and_marked(
     await db_session.refresh(row)
     assert row.email_state == "sent"
     assert row.email_sent_at is not None
+
+
+async def test_the_email_is_in_the_recipients_language(
+    db_session: AsyncSession,
+    sessionmaker: async_sessionmaker[AsyncSession],
+    authed_user: User,
+    project_id: uuid.UUID,
+) -> None:
+    await db_session.execute(update(User).where(User.id == authed_user.id).values(language="id"))
+    await db_session.commit()
+    await _pending(db_session, authed_user, project_id)
+    sender = RecordingMailSender()
+
+    await send_pending_once(sessionmaker=sessionmaker, sender=sender, settings=_mail_on())
+
+    [email] = sender.sent
+    assert MESSAGES[Language.ID][NotificationType.MEMBERSHIP_GRANTED][0] in email.subject
 
 
 async def test_a_retryable_failure_stays_pending(

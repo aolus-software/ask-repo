@@ -174,7 +174,8 @@ repository exists to anyone who can guess an id. A **member** whose role is too 
 | `GET` | `/projects/{id}` | any member | One project, including your own `role` and effective `permissions` on it |
 | `GET` | `/projects/{id}/indexed-paths` | any member | Browse (`?path=`) or search (`?search=`) the project's indexed file tree, for the checklist path picker |
 | `GET` | `/projects/{id}/export` | `checklist.read` / `mockdata.read` | Export the test checklist (`include=checklist`), the mock data (`include=mockData`), or both as a `.zip`, for every module or the repeated `moduleIds`; `feature`, `status`, `source` and `kind` narrow the checklist |
-| `POST` | `/projects` | any user | Register a repository and enqueue its first index. The creator is granted `owner` on it |
+| `POST` | `/projects` | any user | Register a repository and enqueue its first index. The creator is granted `owner` on it. The optional `contentLanguage` (default `en`) is the language shared content is written in |
+| `PATCH` | `/projects/{id}` | `project.update` | Change the project's `contentLanguage` (the only field this body takes). Rewrites no existing row. `404` for a non-member, `403 INSUFFICIENT_ROLE` for a member without the permission; records `project.updated` |
 | `POST` | `/projects/{id}/reindex` | `project.reindex` | Re-index; raises `reindexInProgress` before publishing, a run already in flight is a no-op, and `409 EVAL_RUN_IN_PROGRESS` while an eval run is `running` |
 | `DELETE` | `/projects/{id}` | `project.delete` | Soft-delete the row and hard-delete its vectors |
 
@@ -426,7 +427,7 @@ scope would not describe this read.
 | `GET` | `/audit-events` | admin | A page of events, newest first. Filters: `eventType`, `actorUserId`, `projectId`, `outcome` (`success`/`failure`), `occurredFrom`, `occurredTo`, `search`, plus `page`/`limit`. A bare `occurredTo` date (no time component) is inclusive of that whole day. `search` matches `actorEmail`/`targetLabel` by substring and `ipAddress` by prefix. `sort` accepts the literal `created_at` only — the one ordering the `created_at` index supports — with `sortDirection` defaulting to `desc` |
 | `GET` | `/audit-events/{id}` | admin | One event with its full `details` payload, `ipAddress`, and a `current` block saying whether the actor is still active and the target still exists. `404 AUDIT_EVENT_NOT_FOUND` |
 
-Every write and every export in the app records one of **46 event types** catalogued in
+Every write and every export in the app records one of **47 event types** catalogued in
 `app/core/audit.py`; which operations must is a rule (`.claude/rules/audit-trail.md`), enforced in
 both directions by `tests/test_audit_coverage.py`. The payload is an allowlist per event type,
 never a diff of dirty attributes, and it never carries a secret or any content — no message text,

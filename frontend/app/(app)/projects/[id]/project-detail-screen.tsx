@@ -14,6 +14,7 @@ import { AddMemberDialog } from "@/components/projects/add-member-dialog";
 import { EvalSetTable } from "@/components/eval/eval-set-table";
 import { GenerateEvalSetDialog } from "@/components/eval/generate-eval-set-dialog";
 import { MemberTable } from "@/components/projects/member-table";
+import { ContentLanguageSection } from "@/components/projects/content-language-section";
 import { ProjectRowActions } from "@/components/projects/project-row-actions";
 import { ProjectStats } from "@/components/projects/project-stats";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -147,6 +148,7 @@ export function ProjectDetailScreen({ id }: { id: string }) {
           ) : null}
 
           <ProjectStats project={project} />
+          <ContentLanguageSection project={project} />
         </TabsContent>
 
         {canReadMembers ? (

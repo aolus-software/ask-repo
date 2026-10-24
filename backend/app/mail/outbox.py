@@ -93,6 +93,7 @@ async def _deliver(
         target_id=pending.target_id,
         project_id=pending.project_id,
         to=pending.to,
+        language=pending.language,
         settings=settings,
     )
     try:

@@ -1,4 +1,4 @@
-import { forwardedHeaders } from "@/lib/auth/forwarded";
+import { forwardedHeaders, localeHeaders } from "@/lib/auth/forwarded";
 import { apiUrl } from "@/lib/auth/session";
 
 /**
@@ -17,6 +17,7 @@ export async function forwardPublic(request: Request, path: string): Promise<Res
     headers: {
       ...(hasBody ? { "content-type": "application/json" } : {}),
       ...forwardedHeaders(request),
+      ...localeHeaders(request),
     },
     body: hasBody ? await request.text() : undefined,
     cache: "no-store",

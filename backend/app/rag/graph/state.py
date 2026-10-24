@@ -15,6 +15,7 @@ from typing import Literal, TypedDict
 
 from pydantic import BaseModel, Field
 
+from app.core.language import Language
 from app.models.conversation import FinishReason, Intent
 from app.rag.answer_style import AnswerStyle
 from app.rag.prompts import ExistingItem, ExistingRecord, Turn
@@ -103,3 +104,9 @@ class TurnState(TypedDict):
     # system message -- unlike the call log's scope, which is bookkeeping about the
     # run and stays out of the state (`.claude/rules/call-log.md` rule 4).
     answer_style: AnswerStyle | None
+    # The tiebreak language for this turn (spec §4.3), chosen by the caller: the
+    # asker's on Ask, the project's `content_language` on both refinement chats, the
+    # set's on an eval run. Fills the reply slot and picks the refusal; on a
+    # refinement chat it is also the language the proposal is written in, which is
+    # why the chats pass `content_language` rather than the speaker's preference.
+    reply_language: Language

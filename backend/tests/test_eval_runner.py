@@ -11,6 +11,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import Settings
+from app.core.language import Language
 from app.core.notifications import NotificationType
 from app.eval import runner as runner_module
 from app.eval.model_output import JudgeVerdict
@@ -30,6 +31,7 @@ from app.models.eval import (
     EvalVerdict,
 )
 from app.models.notification import Notification, NotificationEvent
+from app.rag.answerer import Answerer
 from app.rag.graph.state import Classification, EvidenceVerdict
 from app.rag.prompt_version import ANSWER_PROMPT_VERSION, JUDGE_PROMPT_VERSION
 from app.rag.prompts import READER_PREFERENCES_PREAMBLE
@@ -92,7 +94,12 @@ class _Setup:
 
 
 async def _setup(
-    session: AsyncSession, *, pairs: int = 2, excluded: int = 0, answer_style: bool = False
+    session: AsyncSession,
+    *,
+    pairs: int = 2,
+    excluded: int = 0,
+    answer_style: bool = False,
+    language: str = "en",
 ) -> _Setup:
     user = await create_user(session)
     if answer_style:
@@ -112,6 +119,7 @@ async def _setup(
         status=EvalSetStatus.READY.value,
         pair_count=pairs,
         created_by=user.id,
+        language=language,
     )
     session.add(eval_set)
     await session.flush()
@@ -444,3 +452,22 @@ async def test_a_finished_run_notifies_eval_readers_and_links_its_set(
         "pairsAnswered": 2,
         "correct": 1,
     }
+
+
+async def test_the_runner_passes_the_sets_language_as_the_reply_language(
+    db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The set's language, never the requester's (spec §4.3)."""
+    setup = await _setup(db_session, pairs=1, language="id")
+    seen: list[Language] = []
+    original = Answerer.answer
+
+    def recording(self: Answerer, **kwargs: Any) -> Any:
+        seen.append(kwargs["reply_language"])
+        return original(self, **kwargs)
+
+    monkeypatch.setattr(Answerer, "answer", recording)
+
+    await _run(_runner(db_session, setup, _chat("correct")), setup)
+
+    assert seen == [Language.ID]

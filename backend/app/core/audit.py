@@ -58,6 +58,7 @@ class AuditEventType(StrEnum):
     USER_LANGUAGE_UPDATED = "user.language.updated"
     # --- projects -----------------------------------------------------------
     PROJECT_CREATED = "project.created"
+    PROJECT_UPDATED = "project.updated"
     PROJECT_REINDEX_REQUESTED = "project.reindex.requested"
     PROJECT_DELETED = "project.deleted"
     # --- RBAC ---------------------------------------------------------------
@@ -120,7 +121,9 @@ CHANGED_FIELDS: dict[AuditEventType, frozenset[str]] = {
     # The caller's own interface language (`PUT /me/language`). A code from a fixed
     # catalogue, never content.
     AuditEventType.USER_LANGUAGE_UPDATED: frozenset({"language"}),
-    AuditEventType.PROJECT_CREATED: frozenset({"name", "repoUrlHost", "branch"}),
+    AuditEventType.PROJECT_CREATED: frozenset({"name", "repoUrlHost", "branch", "contentLanguage"}),
+    # `PATCH /projects/{id}`. A code from a fixed catalogue, never content.
+    AuditEventType.PROJECT_UPDATED: frozenset({"contentLanguage"}),
     AuditEventType.PROJECT_DELETED: frozenset({"name", "repoUrlHost"}),
     AuditEventType.MEMBERSHIP_GRANTED: frozenset({"roleName"}),
     AuditEventType.MEMBERSHIP_ROLE_CHANGED: frozenset({"roleName"}),

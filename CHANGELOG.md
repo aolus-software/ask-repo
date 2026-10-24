@@ -15,6 +15,34 @@ client can have received it, so it is recorded under Changed and allowed in a `M
 
 ### Added
 
+- **`PATCH /projects/{id}` and a content language per project** (`docs/PRD.md` §2.1 Phase 2.7,
+  PR C): `POST /projects` accepts an optional `contentLanguage` (one of `en`, `id`, `ja`, `ms`,
+  `zh-HK`, `zh-TW`, `ko`; default `en`) and every project response carries it. `PATCH
+  /projects/{id}` takes `contentLanguage` only, needs `project.update` (`404` for a non-member,
+  `403 INSUFFICIENT_ROLE` for a member without it), and rewrites no existing row. The project page
+  gains a Content language section and the create dialog a picker.
+- **`project.updated` audit event**, allowlisting `contentLanguage`; `project.created` gains
+  `contentLanguage`. The catalogue is 47 event types.
+- **Answers in the asker's language.** An Ask reply follows the language the question is written
+  in; when the question does not settle it (only code, a path or an error message) it falls back
+  to the asker's interface language, else `Accept-Language`, else English. The search query is
+  still written in English so retrieval against English source code keeps working. Code,
+  identifiers, paths and `[n]` citation labels are never translated. The web proxy now sends
+  `Accept-Language` from the language cookie. Prompt versions moved for `classify`, `grade`,
+  `answer`, `history_answer`, `reduce`, `propose_checklist`, `propose_mock_data` and
+  `generate_mock_data`.
+- **Translated refusals.** The two fixed refusals ("nothing in the index matched" and "out of
+  scope") exist per language and are still never generated. Machine-assisted drafts awaiting
+  native-speaker review.
+- **Generated content and exports in the project's content language.** Checklist and mock-data
+  generation and both refinement chats write in it, and the checklist and mock-data spreadsheets
+  label their headers, sheet titles, cover headers and yes/no and no-data text in it (stored values
+  stay as stored; a cross-project export uses the projects' shared language, else English).
+  Existing rows are not rewritten, and per-file map summaries stay English.
+- **Email in the recipient's language**: notification and password-reset email are
+  composed in the recipient's `users.language` (a reset falls back to the request's
+  `Accept-Language`, then English). English text is unchanged; the other languages are
+  machine-assisted drafts awaiting native-speaker review.
 - **Project-wide checklist and mock-data export** (`docs/PRD.md` §4.3/§4.4, issue #60):
   `GET /projects/{projectId}/export` and a new `/checklist/export` page, opened from an Export
   button on `/checklist`. Choose a project, every module or a chosen set, and the test
@@ -82,6 +110,13 @@ client can have received it, so it is recorded under Changed and allowed in a `M
 
 ### Fixed
 
+- **`unknown_paths` and the translation faithfulness check work beside Japanese, Chinese and
+  Korean text.** The path pattern used Unicode word characters, so a path followed by a Korean
+  particle (`access.py에서`) was missed and one preceded by Japanese prose was reported as a
+  different, invented path. Boundaries and segments are now ASCII, and a path after a leading
+  `/` or `~/` is still checked.
+- **A project whose stored content language is no longer shipped reads as English** instead of
+  failing every read of it.
 - **A count of one reads "1 file", "1 pair"**, not "1 files": counts that built their noun by
   hand now go through an ICU plural.
 

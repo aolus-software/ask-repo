@@ -111,6 +111,24 @@ describe("the proxy", () => {
     }
   });
 
+  it("sends the locale cookie to the backend as Accept-Language", async () => {
+    const spy = vi.fn().mockResolvedValueOnce(jsonOk({ ok: true }));
+    vi.stubGlobal("fetch", spy);
+
+    await GET(
+      proxyRequest(
+        "/api/projects",
+        "askrepo_access=jwt; askrepo_session=askrepo_refresh%3Dold; askrepo_locale=ko",
+        "GET",
+        { "accept-language": "en" },
+      ),
+      context(["projects"]),
+    );
+
+    const [, init] = spy.mock.calls[0] as [string, RequestInit];
+    expect((init.headers as Record<string, string>)["accept-language"]).toBe("ko");
+  });
+
   it("refreshes once and retries once on a 401", async () => {
     const spy = vi
       .fn()
