@@ -68,9 +68,7 @@ Every finding from the 2026-09-19 and 2026-09-27 sweeps has been fixed and is in
 | §9.32 | Five English-only constants survive the translated tables | 🟡 | 2026-10-24 |
 | §9.33 | "An unset or unshipped language reads as English" is written out eight times | 🟡 | 2026-10-24 |
 | §9.34 | The single- and multi-module checklist exports duplicate their filter and cap logic | 🟡 | 2026-10-24 |
-| §9.35 | PRD §6 still says Phase 2.7 PR C is "in progress" | 📄 | 2026-10-24 |
 | §9.36 | `docs/architecture.md` counts nine notification fan-out sites; there are thirteen | 📄 | 2026-10-24 |
-| §9.37 | `CHANGELOG.md`'s `[Unreleased]` has two `### Added` headings | 📄 | 2026-10-24 |
 | §9.38 | A project-list docstring still describes phase 1 | 📄 | 2026-10-24 |
 
 ## Top priorities (2026-10-24)
@@ -89,9 +87,9 @@ Phase 2.7. Everything open is hygiene or documentation.
    undeclared path error on module create (§7.5).
 4. **The duplication and dead code** (§9.17, §9.19–§9.22, §9.32–§9.34), the clone process clean-up
    (§4.1), the scope plumbing in two services (§2.2), and the IPv6 pin question (§4.2).
-5. **The documentation** (§9.30, §9.35–§9.38). Three of these should be fixed before the next
-   release is cut: the PRD still calls Phase 2.7 unfinished (§9.35), the architecture page
-   undercounts notification sites (§9.36), and the changelog has two "Added" headings (§9.37).
+5. **The documentation** (§9.30, §9.36, §9.38): stale test and schema comments, the architecture
+   page's notification-site count, and a phase-1 docstring. §9.35 and §9.37 were fixed with the
+   v2.4.0 release cut and are in the log.
 
 ---
 
@@ -1110,16 +1108,6 @@ wording ("rows" vs "test cases"), and build the same audit `filter` details. A c
 thing keeping them aligned. **Fix:** extract the filter-to-details mapping and the cap check beside
 `build_workbook` in `app/services/checklist_export.py`. One hour.
 
-### §9.35 PRD §6 still says Phase 2.7 PR C is "in progress" — 📄 doc
-
-**Evidence:** CONFIRMED.
-
-**Where:** `docs/PRD.md:1055`; compare `CHANGELOG.md:14-58` and `docs/PRD.md:668`
-
-PR C (#70) merged on 2026-10-24 (`d33c33f`). §6 is the only place milestone progress is recorded
-(`.claude/rules/documentation.md`), and its Phase 2.7 row neither says PR C shipped nor carries the
-"(shipped)" tag the rows before it have. **Fix:** mark the row shipped and name #70. Five minutes.
-
 ### §9.36 `docs/architecture.md` counts nine notification fan-out sites; there are thirteen — 📄 doc
 
 **Evidence:** CONFIRMED.
@@ -1135,15 +1123,6 @@ words the generators as "two checklist and two mock-data", which reads as four. 
 listing the eval generator, runner and terminal-failure path. `docs/PRD.md` §6 items 7 and 8 also
 quote "40 events", "eleven members" and "nine call sites" (now 47, 15 and 13); they read as
 snapshots, and adding "at the time" would make that explicit. Ten minutes.
-
-### §9.37 `CHANGELOG.md`'s `[Unreleased]` has two `### Added` headings — 📄 doc
-
-**Evidence:** CONFIRMED.
-
-**Where:** `CHANGELOG.md:16`, `:60`
-
-Keep a Changelog expects one heading per kind. PR C's entries were stacked above the earlier ones.
-**Fix:** merge them before the next release is cut. Five minutes.
 
 ### §9.38 A project-list docstring still describes phase 1 — 📄 doc
 

@@ -1011,6 +1011,36 @@ code", which is itself new in this release. **Fix:** merge the headings and move
 before the release is cut.
 
 
+## Sweep 2026-10-24
+
+### §9.35 PRD §6 still says Phase 2.7 PR C is "in progress" — 📄 doc — ✅ RESOLVED 2026-10-24
+
+> Fixed. The Phase 2.7 row in `docs/PRD.md` §6 is marked shipped and names #70 for PR C. On `release/v2.4.0`, with the release cut.
+>
+> Original finding follows.
+
+**Evidence:** CONFIRMED.
+
+**Where:** `docs/PRD.md:1055`; compare `CHANGELOG.md:14-58` and `docs/PRD.md:668`
+
+PR C (#70) merged on 2026-10-24 (`d33c33f`). §6 is the only place milestone progress is recorded
+(`.claude/rules/documentation.md`), and its Phase 2.7 row neither says PR C shipped nor carries the
+"(shipped)" tag the rows before it have. **Fix:** mark the row shipped and name #70. Five minutes.
+
+### §9.37 `CHANGELOG.md`'s `[Unreleased]` has two `### Added` headings — 📄 doc — ✅ RESOLVED 2026-10-24
+
+> Fixed. The two `### Added` blocks were merged into one, and `[Unreleased]` became `## [2.4.0] — 2026-10-24`. On `release/v2.4.0`.
+>
+> Original finding follows.
+
+**Evidence:** CONFIRMED.
+
+**Where:** `CHANGELOG.md:16`, `:60`
+
+Keep a Changelog expects one heading per kind. PR C's entries were stacked above the earlier ones.
+**Fix:** merge them before the next release is cut. Five minutes.
+
+
 # Frontend (`/audit-ui`)
 
 ## Sweep 2026-09-13

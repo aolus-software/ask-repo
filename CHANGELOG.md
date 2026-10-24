@@ -13,6 +13,8 @@ client can have received it, so it is recorded under Changed and allowed in a `M
 
 ## [Unreleased]
 
+## [2.4.0] — 2026-10-24
+
 ### Added
 
 - **`PATCH /projects/{id}` and a content language per project** (`docs/PRD.md` §2.1 Phase 2.7,
@@ -56,8 +58,6 @@ client can have received it, so it is recorded under Changed and allowed in a `M
   CHECKLIST_MODULE_NOT_FOUND`, and each part keeps its row cap (`409 EXPORT_TOO_LARGE`).
   `checklist.exported` and `mock_data.exported` audit events gain a `moduleCount` context key.
   The per-module exports are unchanged.
-
-### Added
 
 - **Eval sets in other languages** (`docs/PRD.md` §2.1 Phase 2.7, PR B): translate a ready English
   eval set into Indonesian, Japanese, Malay, Traditional Chinese (Hong Kong or Taiwan) or
@@ -944,7 +944,8 @@ None of these is a defect. Each is a documented, deliberate scope decision:
 
 ---
 
-[Unreleased]: https://github.com/aolus-software/ask-repo/compare/v2.3.0...HEAD
+[Unreleased]: https://github.com/aolus-software/ask-repo/compare/v2.4.0...HEAD
+[2.4.0]: https://github.com/aolus-software/ask-repo/compare/v2.3.0...v2.4.0
 [2.3.0]: https://github.com/aolus-software/ask-repo/compare/v2.2.0...v2.3.0
 [2.2.0]: https://github.com/aolus-software/ask-repo/compare/v2.1.0...v2.2.0
 [2.1.0]: https://github.com/aolus-software/ask-repo/compare/v2.0.0...v2.1.0
