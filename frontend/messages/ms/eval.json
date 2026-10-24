@@ -13,12 +13,14 @@
     "summaryWithErrors": "tepat {hits}/{answered} · betul {correct} · separa {partial} · salah {wrong} · ralat {errors}"
   },
   "wholeProject": "Keseluruhan projek",
+  "unfaithful": "Tidak diterjemahkan dengan setia",
   "setTable": {
     "emptyTitle": "Belum ada set penilaian",
     "emptyDescription": "Jana set soalan dengan jawapan rujukan, kemudian jalankannya untuk melihat prestasi pembantu pada projek ini.",
     "columns": {
       "set": "Set",
       "path": "Laluan",
+      "language": "Bahasa",
       "pairs": "Pasangan",
       "status": "Status",
       "latestRun": "Larian terkini",
@@ -85,7 +87,8 @@
     "noChange": "Tiada pasangan berubah antara larian ini.",
     "retrievalChange": "Capaian: {from} → {to}",
     "hit": "tepat",
-    "miss": "tersasar"
+    "miss": "tersasar",
+    "stampsChanged": "Run ini menggunakan model sembang atau versi prompt yang berbeza, jadi perubahan mungkin datang daripada itu dan bukan daripada soalan."
   },
   "generateDialog": {
     "trigger": "Jana set penilaian",
@@ -101,6 +104,15 @@
     "countAria": "Bilangan soalan",
     "mixLabel": "Campuran",
     "mixAria": "Campuran soalan"
+  },
+  "translateDialog": {
+    "title": "Terjemah {name}",
+    "description": "Terjemahkan setiap soalan ke bahasa lain, dengan kod, laluan fail dan pengecam kekal seperti asal. Larian terjemahan boleh dibandingkan dengan larian set ini, soalan demi soalan.",
+    "submit": "Terjemah",
+    "started": "Terjemahan dimulakan",
+    "languageLabel": "Bahasa",
+    "languageAria": "Bahasa sasaran",
+    "alreadyTranslated": "{language} (sudah diterjemah)"
   },
   "screen": {
     "pairCount": "{count, plural, other {# pasangan}}",
@@ -122,6 +134,13 @@
     "baseRun": "Larian asas",
     "headRun": "Larian terkini",
     "compareFailed": "Tidak dapat memuatkan perbandingan",
-    "somethingWrong": "Sesuatu telah berlaku."
+    "somethingWrong": "Sesuatu telah berlaku.",
+    "translatedFrom": "Diterjemahkan daripada {name}",
+    "translatedFromDeleted": "Diterjemahkan daripada set yang telah dipadam",
+    "unfaithfulCount": "{count, plural, other {# soalan}} tidak dapat diterjemahkan dengan kod kekal utuh, dan dikecualikan daripada larian.",
+    "translate": "Terjemah",
+    "compareWithSource": "Banding dengan sumber",
+    "sourceRun": "Run sumber",
+    "translatedRun": "Run terjemahan"
   }
 }

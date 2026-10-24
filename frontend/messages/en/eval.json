@@ -13,12 +13,14 @@
     "summaryWithErrors": "hits {hits}/{answered} · correct {correct} · partial {partial} · wrong {wrong} · errors {errors}"
   },
   "wholeProject": "Whole project",
+  "unfaithful": "Not translated faithfully",
   "setTable": {
     "emptyTitle": "No eval sets yet",
     "emptyDescription": "Generate a set of questions with reference answers, then run it to see how the assistant does on this project.",
     "columns": {
       "set": "Set",
       "path": "Path",
+      "language": "Language",
       "pairs": "Pairs",
       "status": "Status",
       "latestRun": "Latest run",
@@ -85,7 +87,8 @@
     "noChange": "No pair changed between these runs.",
     "retrievalChange": "Retrieval: {from} → {to}",
     "hit": "hit",
-    "miss": "miss"
+    "miss": "miss",
+    "stampsChanged": "These runs used a different chat model or prompt version, so a change may come from that rather than from the questions."
   },
   "generateDialog": {
     "trigger": "Generate eval set",
@@ -101,6 +104,15 @@
     "countAria": "Number of questions",
     "mixLabel": "Mix",
     "mixAria": "Question mix"
+  },
+  "translateDialog": {
+    "title": "Translate {name}",
+    "description": "Translate every question into another language, keeping code, file paths and identifiers as written. Runs of the translation compare with runs of this set, question by question.",
+    "submit": "Translate",
+    "started": "Translation started",
+    "languageLabel": "Language",
+    "languageAria": "Target language",
+    "alreadyTranslated": "{language} (already translated)"
   },
   "screen": {
     "pairCount": "{count, plural, one {# pair} other {# pairs}}",
@@ -122,6 +134,13 @@
     "baseRun": "Base run",
     "headRun": "Head run",
     "compareFailed": "Could not load the comparison",
-    "somethingWrong": "Something went wrong."
+    "somethingWrong": "Something went wrong.",
+    "translatedFrom": "Translated from {name}",
+    "translatedFromDeleted": "Translated from a set that has since been deleted",
+    "unfaithfulCount": "{count, plural, one {# question} other {# questions}} could not be translated with their code kept intact, and are excluded from runs.",
+    "translate": "Translate",
+    "compareWithSource": "Compare with source",
+    "sourceRun": "Source run",
+    "translatedRun": "Translated run"
   }
 }

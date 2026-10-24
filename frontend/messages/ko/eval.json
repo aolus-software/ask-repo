@@ -1,17 +1,26 @@
 {
-  "questionTypes": { "explain": "설명", "locate": "위치 찾기" },
-  "mix": { "balanced": "균형", "explain": "설명만", "locate": "위치 찾기만" },
+  "questionTypes": {
+    "explain": "설명",
+    "locate": "위치 찾기"
+  },
+  "mix": {
+    "balanced": "균형",
+    "explain": "설명만",
+    "locate": "위치 찾기만"
+  },
   "tally": {
     "summary": "적중 {hits}/{answered} · 정답 {correct} · 부분 정답 {partial} · 오답 {wrong}",
     "summaryWithErrors": "적중 {hits}/{answered} · 정답 {correct} · 부분 정답 {partial} · 오답 {wrong} · 오류 {errors}"
   },
   "wholeProject": "프로젝트 전체",
+  "unfaithful": "충실하게 번역되지 않음",
   "setTable": {
     "emptyTitle": "아직 평가 세트가 없습니다",
     "emptyDescription": "참조 답변이 포함된 질문 세트를 생성한 다음 실행해 이 프로젝트에서 어시스턴트가 어떻게 답하는지 확인하세요.",
     "columns": {
       "set": "세트",
       "path": "경로",
+      "language": "언어",
       "pairs": "쌍",
       "status": "상태",
       "latestRun": "최근 실행",
@@ -78,7 +87,8 @@
     "noChange": "이 실행들 사이에 변경된 쌍이 없습니다.",
     "retrievalChange": "검색: {from} → {to}",
     "hit": "적중",
-    "miss": "실패"
+    "miss": "실패",
+    "stampsChanged": "이 실행들은 채팅 모델이나 프롬프트 버전이 달라서, 변화가 질문이 아니라 그 차이에서 비롯되었을 수 있습니다."
   },
   "generateDialog": {
     "trigger": "평가 세트 생성",
@@ -94,6 +104,15 @@
     "countAria": "질문 수",
     "mixLabel": "구성",
     "mixAria": "질문 구성"
+  },
+  "translateDialog": {
+    "title": "{name} 번역",
+    "description": "모든 질문을 다른 언어로 번역합니다. 코드, 파일 경로, 식별자는 그대로 유지됩니다. 번역본의 실행은 이 세트의 실행과 질문별로 비교할 수 있습니다.",
+    "submit": "번역",
+    "started": "번역을 시작했습니다",
+    "languageLabel": "언어",
+    "languageAria": "대상 언어",
+    "alreadyTranslated": "{language} (번역됨)"
   },
   "screen": {
     "pairCount": "{count, plural, other {#개 쌍}}",
@@ -115,6 +134,13 @@
     "baseRun": "기준 실행",
     "headRun": "대상 실행",
     "compareFailed": "비교를 불러오지 못했습니다",
-    "somethingWrong": "문제가 발생했습니다."
+    "somethingWrong": "문제가 발생했습니다.",
+    "translatedFrom": "{name}에서 번역됨",
+    "translatedFromDeleted": "삭제된 세트에서 번역됨",
+    "unfaithfulCount": "{count, plural, other {질문 #개}}는 코드를 그대로 유지한 채 번역할 수 없어 실행에서 제외됩니다.",
+    "translate": "번역",
+    "compareWithSource": "원본과 비교",
+    "sourceRun": "원본 실행",
+    "translatedRun": "번역본 실행"
   }
 }

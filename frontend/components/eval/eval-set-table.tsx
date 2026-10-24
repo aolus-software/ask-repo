@@ -26,6 +26,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { useEvalSets } from "@/hooks/use-eval";
+import { ENDONYMS } from "@/lib/i18n/languages";
 import { formatAbsolute } from "@/lib/dates";
 import { useFormatRelative } from "@/hooks/use-format-date";
 
@@ -65,6 +66,7 @@ export function EvalSetTable({
           <TableRow>
             <TableHead>{t("setTable.columns.set")}</TableHead>
             <TableHead>{t("setTable.columns.path")}</TableHead>
+            <TableHead>{t("setTable.columns.language")}</TableHead>
             <TableHead>{t("setTable.columns.pairs")}</TableHead>
             <TableHead>{t("setTable.columns.status")}</TableHead>
             <TableHead>{t("setTable.columns.latestRun")}</TableHead>
@@ -78,7 +80,7 @@ export function EvalSetTable({
         </TableHeader>
         <TableBody>
           {query.isLoading ? (
-            <TableSkeleton columns={canDelete ? 7 : 6} />
+            <TableSkeleton columns={canDelete ? 8 : 7} />
           ) : (
             sets.map((set) => (
               <TableRow key={set.id}>
@@ -95,6 +97,7 @@ export function EvalSetTable({
                     <span className="font-sans">{t("wholeProject")}</span>
                   )}
                 </TableCell>
+                <TableCell className="text-sm">{ENDONYMS[set.language]}</TableCell>
                 <TableCell className="text-sm">{set.pairCount}</TableCell>
                 <TableCell>
                   <EvalStatusBadge status={set.status} />

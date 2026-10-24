@@ -38,6 +38,8 @@ function makeSet(overrides: Partial<EvalSetSummary> = {}): EvalSetSummary {
     mix: "balanced",
     status: "ready",
     error: null,
+    language: "en",
+    sourceSetId: null,
     pairCount: 25,
     indexedGeneration: 1,
     createdAt: "2026-10-01T09:00:00Z",
@@ -99,6 +101,21 @@ describe("EvalSetTable", () => {
     renderTable();
 
     expect(await screen.findByText("No eval sets yet")).toBeInTheDocument();
+  });
+
+  it("shows each set's language in its own name", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        Response.json(
+          page([makeSet(), makeSet({ id: "s2", name: "Auth ja", language: "ja" })]),
+        ),
+      ),
+    );
+    renderTable();
+
+    expect(await screen.findByText("English")).toBeInTheDocument();
+    expect(screen.getByText("日本語")).toBeInTheDocument();
   });
 
   it("links each row to its set", async () => {

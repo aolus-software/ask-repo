@@ -12,6 +12,7 @@ import type {
   EvalSetCreateInput,
   EvalSetDetail,
   EvalSetSummary,
+  EvalSetTranslateInput,
   PaginatedResponse,
 } from "@/lib/api/types";
 import { keys } from "@/lib/query/keys";
@@ -22,7 +23,7 @@ function pollWhile(live: boolean, connected: boolean): number | false {
 }
 
 /** A project's eval sets, newest first. Polls while any set is still generating. */
-export function useEvalSets(projectId: string) {
+export function useEvalSets(projectId: string, enabled = true) {
   const { connected } = useLiveEvents();
   return useQuery({
     queryKey: keys.eval.sets(projectId),
@@ -30,7 +31,7 @@ export function useEvalSets(projectId: string) {
       apiFetch<PaginatedResponse<EvalSetSummary>>(
         `${endpoints.eval.projectSets(projectId)}?limit=100`,
       ),
-    enabled: Boolean(projectId),
+    enabled: enabled && Boolean(projectId),
     refetchInterval: (query) =>
       pollWhile(
         (query.state.data?.items ?? []).some(
@@ -128,6 +129,20 @@ export function useDeleteEvalSet(projectId: string) {
   return useMutation({
     mutationFn: (setId: string) =>
       apiFetch<void>(endpoints.eval.set(setId), { method: "DELETE" }),
+    onSuccess: () =>
+      queryClient.invalidateQueries({ queryKey: keys.eval.sets(projectId) }),
+  });
+}
+
+/** Ask for a translation of a ready English set. The same route as generation, a second body. */
+export function useTranslateEvalSet(projectId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: EvalSetTranslateInput) =>
+      apiFetch<EvalSetSummary>(endpoints.eval.projectSets(projectId), {
+        method: "POST",
+        body: JSON.stringify(input),
+      }),
     onSuccess: () =>
       queryClient.invalidateQueries({ queryKey: keys.eval.sets(projectId) }),
   });
