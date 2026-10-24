@@ -202,7 +202,7 @@ async def test_the_answer_carries_citation_labels(settings: Settings) -> None:
                 question=question,
                 evidence_note="",
                 reader_preferences="",
-                reply_language="",
+                reply_language=render_reply_language(Language.EN),
             )
         )
         answer = str(message.content)
@@ -461,7 +461,7 @@ async def test_brief_answers_are_shorter_than_thorough_ones_and_both_cite(
                 question=question,
                 evidence_note="",
                 reader_preferences=render_reader_preferences(AnswerStyle(detail=detail)),
-                reply_language="",
+                reply_language=render_reply_language(Language.EN),
             )
         )
         return str(message.content)
