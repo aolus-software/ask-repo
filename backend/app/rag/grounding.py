@@ -139,7 +139,7 @@ OUT_OF_SCOPE_ANSWER = OUT_OF_SCOPE_ANSWERS[Language.EN]
 # Chinese and Korean text, so a path glued to a particle (`access.py에서`) was missed and
 # one preceded by prose (`設定はapp/x.py`) swallowed the prose into the token.
 _PATH_PATTERN = re.compile(
-    r"(?<![A-Za-z0-9_./-])(?:[A-Za-z0-9_.-]+/)+[A-Za-z0-9_-]+\.[A-Za-z0-9]+(?![A-Za-z0-9_])"
+    r"(?<![A-Za-z0-9_.])(?:[A-Za-z0-9_.][A-Za-z0-9_.-]*/)+[A-Za-z0-9_-]+\.[A-Za-z0-9]+(?![A-Za-z0-9_])"
 )
 
 # Removed before scanning. A URL is path-shaped by construction — a dotted host
