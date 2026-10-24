@@ -26,7 +26,7 @@ from app.mockdata.operations import stored_mock_data_operation
 from app.models.conversation import FinishReason
 from app.observability.features import CallFeature, call_config
 from app.rag.graph.state import Classification, EvidenceVerdict, Intent, TurnState
-from app.rag.grounding import OUT_OF_SCOPE_ANSWER
+from app.rag.grounding import OUT_OF_SCOPE_ANSWERS
 from app.rag.prompts import (
     ANSWER_PROMPT,
     CLASSIFY_PROMPT,
@@ -36,6 +36,7 @@ from app.rag.prompts import (
     build_propose_prompt,
     format_spans,
     render_reader_preferences,
+    render_reply_language,
     to_langchain_history,
 )
 from app.rag.retriever import RetrievedChunk, Retriever
@@ -258,6 +259,7 @@ def build_generate(chat_model: BaseChatModel, *, timeout_seconds: float) -> Node
             question=state["question"],
             evidence_note=note,
             reader_preferences=render_reader_preferences(state["answer_style"]),
+            reply_language=render_reply_language(state["reply_language"]),
         )
 
         parts: list[str] = []
@@ -305,6 +307,7 @@ def build_answer_from_history(chat_model: BaseChatModel, *, timeout_seconds: flo
             history=to_langchain_history(state["history"]),
             question=state["question"],
             reader_preferences=render_reader_preferences(state["answer_style"]),
+            reply_language=render_reply_language(state["reply_language"]),
         )
 
         parts: list[str] = []
@@ -335,16 +338,17 @@ def build_refuse() -> Node:
     No model call, no retrieval, no dependency of any kind -- that is the saving
     this route exists for, making an out-of-scope question the cheapest path in the
     system: one classify call and nothing else. The fixed refusal is streamed as
-    ordinary tokens rather than a distinct event type, following the
-    `NO_CONTEXT_ANSWER` precedent: a client renders a refusal exactly as it renders
-    an answer, and the machine-readable distinction rides in the `done` event's
-    `intent`.
+    ordinary tokens rather than a distinct event type, in the turn's reply
+    language, following the `NO_CONTEXT_ANSWERS` precedent: a client renders a
+    refusal exactly as it renders an answer, and the machine-readable distinction
+    rides in the `done` event's `intent`.
     """
 
     async def refuse(state: TurnState) -> dict[str, object]:
+        refusal = OUT_OF_SCOPE_ANSWERS[state["reply_language"]]
         emit(CitationsEvent(citations=[]))
-        emit(TokenEvent(text=OUT_OF_SCOPE_ANSWER))
-        return {"answer": OUT_OF_SCOPE_ANSWER, "failure": None}
+        emit(TokenEvent(text=refusal))
+        return {"answer": refusal, "failure": None}
 
     return refuse
 
@@ -378,6 +382,7 @@ def build_propose_changes(chat_model: BaseChatModel, *, enabled: bool) -> Node:
                     module_name=state["module_name"],
                     answer=state["answer"],
                     existing=state["existing_items"],
+                    language=state["reply_language"],
                 ),
                 config=call_config(CallFeature.PROPOSE_CHECKLIST),
             )
@@ -447,6 +452,7 @@ def build_propose_mock_data_changes(chat_model: BaseChatModel, *, enabled: bool)
                     module_name=state["module_name"],
                     answer=state["answer"],
                     existing=state["existing_records"],
+                    language=state["reply_language"],
                 ),
                 config=call_config(CallFeature.PROPOSE_MOCK_DATA),
             )

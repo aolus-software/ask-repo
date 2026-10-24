@@ -22,12 +22,13 @@ from langchain_core.language_models import BaseChatModel
 
 from app.config import Settings
 from app.core.errors import ErrorCode
+from app.core.language import Language
 from app.models.conversation import FinishReason
 from app.observability.features import scope_config
 from app.rag.answer_style import AnswerStyle
 from app.rag.graph import build_answer_graph
 from app.rag.graph.state import Intent, TurnState
-from app.rag.grounding import NO_CONTEXT_ANSWER, WEAK_EVIDENCE, grounding_warnings
+from app.rag.grounding import NO_CONTEXT_ANSWERS, WEAK_EVIDENCE, grounding_warnings
 from app.rag.prompts import ExistingItem, ExistingRecord, Turn
 from app.rag.retriever import Retriever
 from app.schemas.conversation import (
@@ -86,6 +87,7 @@ class Answerer:
         project_id: uuid.UUID,
         generation: int,
         message_id: uuid.UUID | None,
+        reply_language: Language,
         existing_items: list[ExistingItem] | None = None,
         existing_records: list[ExistingRecord] | None = None,
         change_set_id: uuid.UUID | None = None,
@@ -110,6 +112,9 @@ class Answerer:
         refinement chat, whose proposal becomes a document the whole project shares,
         so a style there is refused outright rather than ignored: a call-site mistake
         fails the first request instead of quietly shaping shared content.
+
+        `reply_language` is not a style, so it is allowed alongside a `propose_target`.
+        Every caller picks it per spec §4.3.
         """
         if answer_style is not None and self.propose_target is not None:
             raise ValueError(
@@ -145,6 +150,7 @@ class Answerer:
                 "record_operations": [],
                 "record_change_summary": "",
                 "answer_style": answer_style,
+                "reply_language": reply_language,
             }
 
             final: TurnState | None = None
@@ -174,7 +180,7 @@ class Answerer:
                 # spend a full generation on a fabrication with no evidence behind
                 # it. The fixed refusal is streamed here as ordinary tokens instead,
                 # so a client renders it exactly as it renders an answer.
-                yield TokenEvent(text=NO_CONTEXT_ANSWER)
+                yield TokenEvent(text=NO_CONTEXT_ANSWERS[reply_language])
 
             yield self._terminate(final, message_id=message_id)
 

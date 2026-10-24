@@ -10,6 +10,7 @@ from langchain_core.runnables import RunnableLambda
 from langgraph.graph import END, START, StateGraph
 from langgraph.graph.state import CompiledStateGraph
 
+from app.core.language import Language
 from app.rag.answer_style import AnswerDetail, AnswerFamiliarity, AnswerStyle
 from app.rag.graph.nodes import Node, build_answer_from_history, build_generate
 from app.rag.graph.state import Classification, EvidenceVerdict, Intent, TurnState
@@ -222,6 +223,7 @@ def base_state(**overrides: object) -> TurnState:
         "record_operations": [],
         "record_change_summary": "",
         "answer_style": None,
+        "reply_language": Language.EN,
     }
     state.update(overrides)  # type: ignore[typeddict-item]  # test helper takes arbitrary overrides
     return state
