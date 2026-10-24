@@ -159,6 +159,7 @@ If nothing appears, see [Troubleshooting](#troubleshooting).
 | One checklist generation | One `map` per file, then `reduce` — a 200-file run is one trace with about 201 generations | The change set id |
 | One mock-data generation | `generate_mock_data` | The change set id |
 | One eval set generation | One `eval_generate` per sampled chunk | The eval set id |
+| One eval set translation | One `eval_translate` per source pair, two on a retry | The eval set id |
 | One eval pair in a run | The answer's own calls (`classify`, `grade`, `answer`, `history_answer`) and one `eval_judge`, so the answer and its verdict group together | The pair's result row id |
 
 The re-run route and the capability probe have no message or change set to seed from, so their
@@ -178,6 +179,7 @@ calls are recorded without a trace grouping.
 | `reduce` | Checklist generation, combining the per-file notes |
 | `generate_mock_data` | Mock-data generation |
 | `eval_generate` | Eval set generation, writing a question and reference answer from one chunk |
+| `eval_translate` | Eval set translation, translating one English question into the set's language |
 | `eval_judge` | An eval run grading an answer against its reference (the instance's own chat model) |
 | `capability_probe` | The worker's startup check that the model can return structured output |
 | `untagged` | A call that did not say which feature it was — a bug; a test should have caught it |

@@ -13,12 +13,14 @@
     "summaryWithErrors": "ヒット {hits}/{answered} · 正解 {correct} · 部分的 {partial} · 不正解 {wrong} · エラー {errors}"
   },
   "wholeProject": "プロジェクト全体",
+  "unfaithful": "忠実に翻訳されていません",
   "setTable": {
     "emptyTitle": "評価セットはまだありません",
     "emptyDescription": "参照回答付きの質問セットを生成し、実行すると、このプロジェクトでアシスタントがどの程度正しく答えられるかを確認できます。",
     "columns": {
       "set": "セット",
       "path": "パス",
+      "language": "言語",
       "pairs": "ペア",
       "status": "ステータス",
       "latestRun": "最新の実行",
@@ -85,7 +87,8 @@
     "noChange": "これらの実行間で変化したペアはありません。",
     "retrievalChange": "検索: {from} → {to}",
     "hit": "ヒット",
-    "miss": "ミス"
+    "miss": "ミス",
+    "stampsChanged": "これらの実行ではチャットモデルまたはプロンプトのバージョンが異なるため、変化は質問ではなくそれが原因かもしれません。"
   },
   "generateDialog": {
     "trigger": "評価セットを生成",
@@ -101,6 +104,15 @@
     "countAria": "質問の数",
     "mixLabel": "構成",
     "mixAria": "質問の構成"
+  },
+  "translateDialog": {
+    "title": "{name} を翻訳",
+    "description": "すべての質問を別の言語に翻訳します。コード、ファイルパス、識別子はそのまま保持されます。翻訳セットの実行は、このセットの実行と質問ごとに比較できます。",
+    "submit": "翻訳",
+    "started": "翻訳を開始しました",
+    "languageLabel": "言語",
+    "languageAria": "翻訳先の言語",
+    "alreadyTranslated": "{language}（翻訳済み）"
   },
   "screen": {
     "pairCount": "{count, plural, other {# ペア}}",
@@ -122,6 +134,13 @@
     "baseRun": "基準の実行",
     "headRun": "比較対象の実行",
     "compareFailed": "比較を読み込めませんでした",
-    "somethingWrong": "問題が発生しました。"
+    "somethingWrong": "問題が発生しました。",
+    "translatedFrom": "{name} から翻訳",
+    "translatedFromDeleted": "削除済みのセットから翻訳されました",
+    "unfaithfulCount": "{count, plural, other {# 件の質問}}は、コードを保ったまま翻訳できなかったため、実行から除外されています。",
+    "translate": "翻訳",
+    "compareWithSource": "原文と比較",
+    "sourceRun": "原文の実行",
+    "translatedRun": "翻訳の実行"
   }
 }

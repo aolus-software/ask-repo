@@ -16,6 +16,8 @@ const PAIR: EvalPair = {
   startLine: 10,
   endLine: 40,
   excluded: false,
+  sourcePairId: null,
+  exclusionReason: null,
 };
 
 function renderTable(canRun: boolean) {
@@ -28,6 +30,30 @@ function renderTable(canRun: boolean) {
 }
 
 afterEach(() => vi.unstubAllGlobals());
+
+describe("EvalPairTable unfaithful marker", () => {
+  it("marks a pair the translation could not keep faithful, and only that one", () => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={client}>
+        <EvalPairTable
+          setId="s1"
+          pairs={[
+            {
+              ...PAIR,
+              id: "a",
+              excluded: true,
+              exclusionReason: "translation_unfaithful",
+            },
+            { ...PAIR, id: "b", question: "Hand excluded?", excluded: true },
+          ]}
+          canRun={false}
+        />
+      </QueryClientProvider>,
+    );
+    expect(screen.getAllByText("Not translated faithfully")).toHaveLength(1);
+  });
+});
 
 describe("EvalPairTable", () => {
   it("shows the exclude switch only with eval.run", () => {

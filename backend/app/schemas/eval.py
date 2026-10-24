@@ -2,27 +2,64 @@
 
 import uuid
 from datetime import datetime
-from typing import Literal
+from typing import Literal, Self
 
-from pydantic import Field
+from pydantic import Field, model_validator
 
-from app.models.eval import EvalMix, EvalQuestionType, EvalRunStatus, EvalSetStatus, EvalVerdict
+from app.core.language import Language
+from app.models.eval import (
+    EvalExclusionReason,
+    EvalMix,
+    EvalQuestionType,
+    EvalRunStatus,
+    EvalSetStatus,
+    EvalVerdict,
+)
 from app.schemas.base import ApiModel
 
 NAME_MAX_LENGTH = 120
 
 
 class EvalSetCreate(ApiModel):
-    """Ask for a set of generated question/answer pairs.
+    """Ask for a set: generated natively in English, or translated from an English set.
+
+    Generation sends `name`, `count`, `mix` and optionally `sourcePath`; translation sends
+    `sourceSetId` and `language` and nothing else (spec §3.3). One model rather than a
+    union: a union prefixes every `422` field key with the member's class name, which
+    breaks the `fields`/`fieldTypes` keying the frontend translates by.
 
     `count` is a literal rather than a range: three sizes are what the cost estimate
     and the one-job-at-a-time cap were reasoned about.
     """
 
-    name: str = Field(min_length=1, max_length=NAME_MAX_LENGTH)
+    name: str | None = Field(default=None, min_length=1, max_length=NAME_MAX_LENGTH)
     source_path: str | None = Field(default=None, max_length=1024)
-    count: Literal[10, 25, 50]
-    mix: EvalMix
+    count: Literal[10, 25, 50] | None = None
+    mix: EvalMix | None = None
+    source_set_id: uuid.UUID | None = None
+    language: Language | None = None
+
+    @model_validator(mode="after")
+    def _exactly_one_shape(self) -> Self:
+        generation = (self.name, self.source_path, self.count, self.mix)
+        if self.source_set_id is None:
+            if self.language is not None:
+                raise ValueError("language is only sent with sourceSetId")
+            if self.name is None or self.count is None or self.mix is None:
+                raise ValueError("name, count and mix are required")
+            return self
+        if any(value is not None for value in generation):
+            raise ValueError("a translation sends only sourceSetId and language")
+        if self.language is None:
+            raise ValueError("language is required with sourceSetId")
+        if self.language is Language.EN:
+            raise ValueError("a translation's language must not be en")
+        return self
+
+    @property
+    def is_translation(self) -> bool:
+        """Whether this body asks for a translation rather than a generation."""
+        return self.source_set_id is not None
 
 
 class EvalRunSummary(ApiModel):
@@ -59,6 +96,8 @@ class EvalSetSummary(ApiModel):
     source_path: str | None
     requested_count: int
     mix: EvalMix
+    language: Language
+    source_set_id: uuid.UUID | None
     status: EvalSetStatus
     error: str | None
     pair_count: int
@@ -79,6 +118,8 @@ class EvalPairRead(ApiModel):
     start_line: int
     end_line: int
     excluded: bool
+    source_pair_id: uuid.UUID | None
+    exclusion_reason: EvalExclusionReason | None
 
 
 class EvalSetDetail(EvalSetSummary):

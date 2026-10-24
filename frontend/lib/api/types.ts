@@ -697,6 +697,12 @@ export type EvalMix = "balanced" | "explain" | "locate";
 export type EvalQuestionType = "explain" | "locate";
 export type EvalVerdict = "correct" | "partial" | "wrong" | "error";
 export type EvalCount = 10 | 25 | 50;
+export type EvalExclusionReason = "translation_unfaithful";
+
+export interface EvalSetTranslateInput {
+  sourceSetId: string;
+  language: Language;
+}
 
 export interface EvalSetCreateInput {
   name: string;
@@ -737,6 +743,8 @@ export interface EvalSetSummary {
   mix: EvalMix;
   status: EvalSetStatus;
   error: string | null;
+  language: Language;
+  sourceSetId: string | null;
   pairCount: number;
   indexedGeneration: number | null;
   createdAt: string;
@@ -753,6 +761,8 @@ export interface EvalPair {
   startLine: number;
   endLine: number;
   excluded: boolean;
+  sourcePairId: string | null;
+  exclusionReason: EvalExclusionReason | null;
 }
 
 export interface EvalSetDetail extends EvalSetSummary {

@@ -210,6 +210,8 @@ CONTEXT_KEYS: dict[AuditEventType, frozenset[str]] = {
     AuditEventType.MOCK_DATA_EXPORTED: frozenset({"format", "rowCount", "moduleCount"}),
     AuditEventType.CONVERSATION_DELETED: frozenset({"messageCount"}),
     AuditEventType.EVAL_SET_DELETED: frozenset({"pairCount", "runCount"}),
+    # A language code is a choice from a fixed list, never content; the source id is an id.
+    AuditEventType.EVAL_SET_GENERATION_REQUESTED: frozenset({"language", "sourceSetId"}),
     # A run's answers and judge reasons are model output about a private repository and
     # never reach this table; the count of pairs it will answer is all it records.
     AuditEventType.EVAL_RUN_REQUESTED: frozenset({"pairCount"}),

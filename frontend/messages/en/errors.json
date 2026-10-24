@@ -40,6 +40,7 @@
   "EVAL_RUN_NOT_FOUND": "Eval run not found.",
   "EVAL_SET_NOT_READY": "This eval set is not ready to run.",
   "EVAL_RUN_IN_PROGRESS": "An eval run is already in progress. Wait for it to finish, then try again.",
+  "EVAL_TRANSLATION_EXISTS": "This set already has a translation into that language. Delete it first to make a new one.",
   "INSUFFICIENT_ROLE": "Your role on this project does not allow that.",
   "SYSTEM_ROLE_IMMUTABLE": "viewer, editor and owner are built in and cannot be changed.",
   "ROLE_NOT_FOUND": "Role not found.",

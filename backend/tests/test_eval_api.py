@@ -1,7 +1,7 @@
 """The eval set HTTP surface: generate, list, read, delete, exclude a pair."""
 
 import uuid
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from httpx import AsyncClient
@@ -748,3 +748,257 @@ async def test_starting_a_run_locks_the_project_before_the_set(
 
     assert response.status_code == 202, response.text
     assert order == ["project", "set"]
+
+
+@pytest.mark.asyncio
+async def test_reads_carry_language_and_lineage(
+    authed_client: AsyncClient,
+    authed_user: User,
+    grant_membership: GrantMembership,
+    db_session: AsyncSession,
+) -> None:
+    project = await _ready_project(db_session)
+    eval_set = await create_eval_set(db_session, project_id=project.id, pair_count=1)
+    await create_eval_pair(db_session, set_id=eval_set.id)
+    await db_session.commit()
+    await grant_membership(authed_user.id, project.id, VIEWER_NAME)
+
+    listed = (await authed_client.get(f"/projects/{project.id}/eval-sets")).json()
+    detail = (await authed_client.get(f"/eval-sets/{eval_set.id}")).json()
+
+    assert listed["items"][0]["language"] == "en"
+    assert listed["items"][0]["sourceSetId"] is None
+    assert detail["pairs"][0]["sourcePairId"] is None
+    assert detail["pairs"][0]["exclusionReason"] is None
+
+
+async def _english_source(session: AsyncSession, project: Project) -> EvalSet:
+    """A ready, natively generated English set with one pair, as a translation's source."""
+    source = await create_eval_set(session, project_id=project.id, name="Auth", pair_count=1)
+    source.source_path = "backend/app/"
+    source.requested_count = 25
+    source.mix = "locate"
+    source.indexed_generation = 1
+    await create_eval_pair(session, set_id=source.id)
+    await session.flush()
+    return source
+
+
+@pytest.mark.asyncio
+async def test_translating_a_set_copies_its_scope_and_publishes_a_generate_job(
+    authed_client: AsyncClient,
+    authed_user: User,
+    grant_membership: GrantMembership,
+    db_session: AsyncSession,
+    ingestion_queue: InMemoryIngestionQueue,
+    audit_rows: AuditRows,
+) -> None:
+    project = await _ready_project(db_session)
+    source = await _english_source(db_session, project)
+    await db_session.commit()
+    await grant_membership(authed_user.id, project.id, EDITOR_NAME)
+
+    response = await authed_client.post(
+        f"/projects/{project.id}/eval-sets",
+        json={"sourceSetId": str(source.id), "language": "id"},
+    )
+
+    assert response.status_code == 202
+    body = response.json()
+    assert body["status"] == "generating"
+    assert body["language"] == "id"
+    assert body["sourceSetId"] == str(source.id)
+    assert body["name"] == "Auth · id"
+    assert (body["sourcePath"], body["requestedCount"], body["mix"]) == (
+        "backend/app/",
+        25,
+        "locate",
+    )
+    assert body["indexedGeneration"] == 1
+    _, message = ingestion_queue.produced[-1]
+    assert isinstance(message, EvalJobMessage)
+    assert message.kind == "generate"
+    assert str(message.target_id) == body["id"]
+    (row,) = await audit_rows("eval_set.generation.requested")
+    assert row.details["language"] == "id"
+    assert row.details["sourceSetId"] == str(source.id)
+
+
+@pytest.mark.asyncio
+async def test_a_native_set_records_english_and_no_source(
+    authed_client: AsyncClient,
+    authed_user: User,
+    grant_membership: GrantMembership,
+    db_session: AsyncSession,
+    audit_rows: AuditRows,
+) -> None:
+    project = await _ready_project(db_session)
+    await db_session.commit()
+    await grant_membership(authed_user.id, project.id, EDITOR_NAME)
+
+    body = (await authed_client.post(f"/projects/{project.id}/eval-sets", json=BODY)).json()
+
+    assert body["language"] == "en"
+    assert body["sourceSetId"] is None
+    (row,) = await audit_rows("eval_set.generation.requested")
+    assert row.details["language"] == "en"
+    assert "sourceSetId" not in row.details
+
+
+@pytest.mark.asyncio
+async def test_a_second_live_translation_into_one_language_is_409(
+    authed_client: AsyncClient,
+    authed_user: User,
+    grant_membership: GrantMembership,
+    db_session: AsyncSession,
+) -> None:
+    project = await _ready_project(db_session)
+    source = await _english_source(db_session, project)
+    await db_session.commit()
+    await grant_membership(authed_user.id, project.id, EDITOR_NAME)
+    body = {"sourceSetId": str(source.id), "language": "ko"}
+
+    first = await authed_client.post(f"/projects/{project.id}/eval-sets", json=body)
+    second = await authed_client.post(f"/projects/{project.id}/eval-sets", json=body)
+    other_language = await authed_client.post(
+        f"/projects/{project.id}/eval-sets", json={**body, "language": "ja"}
+    )
+
+    assert first.status_code == 202
+    assert second.status_code == 409
+    assert second.json()["detail"]["code"] == "EVAL_TRANSLATION_EXISTS"
+    assert other_language.status_code == 202
+
+
+@pytest.mark.asyncio
+async def test_a_deleted_translation_frees_its_language(
+    authed_client: AsyncClient,
+    authed_user: User,
+    grant_membership: GrantMembership,
+    db_session: AsyncSession,
+) -> None:
+    project = await _ready_project(db_session)
+    source = await _english_source(db_session, project)
+    await db_session.commit()
+    await grant_membership(authed_user.id, project.id, EDITOR_NAME)
+    body = {"sourceSetId": str(source.id), "language": "ms"}
+
+    first = (await authed_client.post(f"/projects/{project.id}/eval-sets", json=body)).json()
+    await authed_client.delete(f"/eval-sets/{first['id']}")
+    again = await authed_client.post(f"/projects/{project.id}/eval-sets", json=body)
+
+    assert again.status_code == 202
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "case", ["unknown", "not_ready", "a_translation", "other_project", "deleted"]
+)
+async def test_an_unusable_source_is_one_422(
+    case: str,
+    authed_client: AsyncClient,
+    authed_user: User,
+    grant_membership: GrantMembership,
+    db_session: AsyncSession,
+) -> None:
+    project = await _ready_project(db_session)
+    source = await _english_source(db_session, project)
+    source_id = source.id
+    if case == "unknown":
+        source_id = uuid.uuid4()
+    elif case == "not_ready":
+        source.status = EvalSetStatus.GENERATING.value
+    elif case == "a_translation":
+        translated = await create_eval_set(
+            db_session, project_id=project.id, language="id", source_set_id=source.id
+        )
+        source_id = translated.id
+    elif case == "other_project":
+        elsewhere = await _ready_project(db_session)
+        source_id = (await create_eval_set(db_session, project_id=elsewhere.id)).id
+    elif case == "deleted":
+        source.deleted_at = datetime.now(UTC)
+    await db_session.commit()
+    await grant_membership(authed_user.id, project.id, EDITOR_NAME)
+
+    response = await authed_client.post(
+        f"/projects/{project.id}/eval-sets",
+        json={"sourceSetId": str(source_id), "language": "id"},
+    )
+
+    assert response.status_code == 422
+    detail = response.json()["detail"]
+    assert detail["code"] == "VALIDATION_ERROR"
+    assert detail["fieldTypes"] == {"sourceSetId": "eval_source_invalid"}
+    assert set(detail["fields"]) == {"sourceSetId"}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "body",
+    [
+        {"sourceSetId": "00000000-0000-0000-0000-000000000000", "language": "en"},
+        {"sourceSetId": "00000000-0000-0000-0000-000000000000", "language": "fr"},
+        {"sourceSetId": "00000000-0000-0000-0000-000000000000"},
+        {"sourceSetId": "00000000-0000-0000-0000-000000000000", "language": "id", "count": 10},
+        {**BODY, "language": "id"},
+        {"count": 10, "mix": "balanced"},
+    ],
+)
+async def test_a_mixed_or_incomplete_body_is_422(
+    body: dict[str, object],
+    authed_client: AsyncClient,
+    authed_user: User,
+    grant_membership: GrantMembership,
+    db_session: AsyncSession,
+) -> None:
+    project = await _ready_project(db_session)
+    await db_session.commit()
+    await grant_membership(authed_user.id, project.id, EDITOR_NAME)
+
+    response = await authed_client.post(f"/projects/{project.id}/eval-sets", json=body)
+
+    assert response.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_translating_needs_eval_run(
+    authed_client: AsyncClient,
+    authed_user: User,
+    grant_membership: GrantMembership,
+    db_session: AsyncSession,
+) -> None:
+    project = await _ready_project(db_session)
+    source = await _english_source(db_session, project)
+    await db_session.commit()
+    await grant_membership(authed_user.id, project.id, VIEWER_NAME)
+
+    response = await authed_client.post(
+        f"/projects/{project.id}/eval-sets",
+        json={"sourceSetId": str(source.id), "language": "id"},
+    )
+
+    assert response.status_code == 403
+    assert response.json()["detail"]["code"] == "INSUFFICIENT_ROLE"
+
+
+@pytest.mark.asyncio
+async def test_translating_needs_a_stable_index(
+    authed_client: AsyncClient,
+    authed_user: User,
+    grant_membership: GrantMembership,
+    db_session: AsyncSession,
+) -> None:
+    project = await _ready_project(db_session)
+    source = await _english_source(db_session, project)
+    project.reindex_in_progress = True
+    await db_session.commit()
+    await grant_membership(authed_user.id, project.id, EDITOR_NAME)
+
+    response = await authed_client.post(
+        f"/projects/{project.id}/eval-sets",
+        json={"sourceSetId": str(source.id), "language": "id"},
+    )
+
+    assert response.status_code == 409
+    assert response.json()["detail"]["code"] == "PROJECT_NOT_READY"

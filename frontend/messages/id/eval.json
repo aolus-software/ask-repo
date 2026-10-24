@@ -13,12 +13,14 @@
     "summaryWithErrors": "tepat sasaran {hits}/{answered} · benar {correct} · sebagian {partial} · salah {wrong} · galat {errors}"
   },
   "wholeProject": "Seluruh proyek",
+  "unfaithful": "Tidak diterjemahkan dengan setia",
   "setTable": {
     "emptyTitle": "Belum ada set evaluasi",
     "emptyDescription": "Buat satu set pertanyaan beserta jawaban acuan, lalu jalankan untuk melihat kinerja asisten pada proyek ini.",
     "columns": {
       "set": "Set",
       "path": "Jalur",
+      "language": "Bahasa",
       "pairs": "Pasangan",
       "status": "Status",
       "latestRun": "Eksekusi terakhir",
@@ -85,7 +87,8 @@
     "noChange": "Tidak ada pasangan yang berubah antara eksekusi-eksekusi ini.",
     "retrievalChange": "Pengambilan: {from} → {to}",
     "hit": "tepat sasaran",
-    "miss": "meleset"
+    "miss": "meleset",
+    "stampsChanged": "Run ini memakai model chat atau versi prompt yang berbeda, jadi perubahan bisa berasal dari itu, bukan dari pertanyaannya."
   },
   "generateDialog": {
     "trigger": "Buat set evaluasi",
@@ -101,6 +104,15 @@
     "countAria": "Jumlah pertanyaan",
     "mixLabel": "Campuran",
     "mixAria": "Campuran pertanyaan"
+  },
+  "translateDialog": {
+    "title": "Terjemahkan {name}",
+    "description": "Terjemahkan setiap pertanyaan ke bahasa lain, dengan kode, jalur file, dan pengenal tetap seperti aslinya. Eksekusi terjemahan dapat dibandingkan dengan eksekusi set ini, pertanyaan demi pertanyaan.",
+    "submit": "Terjemahkan",
+    "started": "Terjemahan dimulai",
+    "languageLabel": "Bahasa",
+    "languageAria": "Bahasa tujuan",
+    "alreadyTranslated": "{language} (sudah diterjemahkan)"
   },
   "screen": {
     "pairCount": "{count, plural, other {# pasangan}}",
@@ -122,6 +134,13 @@
     "baseRun": "Eksekusi dasar",
     "headRun": "Eksekusi pembanding",
     "compareFailed": "Tidak dapat memuat perbandingan",
-    "somethingWrong": "Terjadi kesalahan."
+    "somethingWrong": "Terjadi kesalahan.",
+    "translatedFrom": "Diterjemahkan dari {name}",
+    "translatedFromDeleted": "Diterjemahkan dari set yang sudah dihapus",
+    "unfaithfulCount": "{count, plural, other {# pertanyaan}} tidak dapat diterjemahkan dengan kode tetap utuh, dan dikecualikan dari eksekusi.",
+    "translate": "Terjemahkan",
+    "compareWithSource": "Bandingkan dengan sumber",
+    "sourceRun": "Run sumber",
+    "translatedRun": "Run terjemahan"
   }
 }

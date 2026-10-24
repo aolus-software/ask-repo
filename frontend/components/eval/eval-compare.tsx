@@ -22,19 +22,31 @@ function TallyLine({ label, tally }: { label: string; tally: Tally }) {
   );
 }
 
-/** Two runs of the same set, compared on the pairs both answered. */
+/**
+ * Two runs of one set, or a translated set's run against its source's, compared on the
+ * pairs both answered. `headToBase` and `labels` are set only for the cross-language case.
+ */
 export function EvalCompare({
   base,
   head,
   pairs,
+  labels,
+  headToBase,
 }: {
   base: EvalRunDetail;
   head: EvalRunDetail;
   pairs: EvalPair[];
+  labels?: { base: string; head: string };
+  headToBase?: Map<string, string>;
 }) {
   const t = useTranslations("eval.compare");
-  const comparison = compareRuns(base, head);
-  const questions = new Map(pairs.map((pair) => [pair.id, pair.question]));
+  const comparison = compareRuns(base, head, { headToBase });
+  const questions = new Map(
+    pairs.map((pair) => [
+      headToBase ? (pair.sourcePairId ?? pair.id) : pair.id,
+      pair.question,
+    ]),
+  );
 
   return (
     <div className="space-y-3">
@@ -43,11 +55,16 @@ export function EvalCompare({
           <AlertDescription>{t("judgeChanged")}</AlertDescription>
         </Alert>
       ) : null}
+      {comparison.otherStampsChanged ? (
+        <Alert variant="warning">
+          <AlertDescription>{t("stampsChanged")}</AlertDescription>
+        </Alert>
+      ) : null}
       <p className="text-muted-foreground text-sm">
         {t("comparedOn", { count: comparison.commonPairIds.length })}
       </p>
-      <TallyLine label={t("base")} tally={comparison.base} />
-      <TallyLine label={t("head")} tally={comparison.head} />
+      <TallyLine label={labels?.base ?? t("base")} tally={comparison.base} />
+      <TallyLine label={labels?.head ?? t("head")} tally={comparison.head} />
       {comparison.flips.length === 0 ? (
         <p className="text-muted-foreground text-sm">{t("noChange")}</p>
       ) : (

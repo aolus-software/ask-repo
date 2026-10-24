@@ -32,6 +32,7 @@ class CallFeature(StrEnum):
     GENERATE_MOCK_DATA = "generate_mock_data"
     EVAL_GENERATE = "eval_generate"
     EVAL_JUDGE = "eval_judge"
+    EVAL_TRANSLATE = "eval_translate"
     CAPABILITY_PROBE = "capability_probe"
     UNTAGGED = "untagged"
 

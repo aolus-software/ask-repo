@@ -48,6 +48,7 @@ CALL_PROMPTS: dict[CallFeature, frozenset[str]] = {
     CallFeature.GENERATE_MOCK_DATA: frozenset({"MOCK_DATA_GENERATE_SYSTEM"}),
     CallFeature.EVAL_GENERATE: frozenset({"EVAL_PAIR_SYSTEM"}),
     CallFeature.EVAL_JUDGE: frozenset({"EVAL_JUDGE_SYSTEM"}),
+    CallFeature.EVAL_TRANSLATE: frozenset({"EVAL_TRANSLATE_SYSTEM"}),
     # Neither sends a prompt from `prompts.py`: the probe's fixed message lives in
     # `app/rag/capability.py`, and an untagged call is by definition unattributed.
     CallFeature.CAPABILITY_PROBE: frozenset(),

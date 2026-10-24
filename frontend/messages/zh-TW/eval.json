@@ -1,17 +1,26 @@
 {
-  "questionTypes": { "explain": "說明", "locate": "定位" },
-  "mix": { "balanced": "均衡", "explain": "僅說明", "locate": "僅定位" },
+  "questionTypes": {
+    "explain": "說明",
+    "locate": "定位"
+  },
+  "mix": {
+    "balanced": "均衡",
+    "explain": "僅說明",
+    "locate": "僅定位"
+  },
   "tally": {
     "summary": "命中 {hits}/{answered} · 正確 {correct} · 部分正確 {partial} · 錯誤 {wrong}",
     "summaryWithErrors": "命中 {hits}/{answered} · 正確 {correct} · 部分正確 {partial} · 錯誤 {wrong} · 發生錯誤 {errors}"
   },
   "wholeProject": "整個專案",
+  "unfaithful": "未能忠實翻譯",
   "setTable": {
     "emptyTitle": "目前沒有評估集",
     "emptyDescription": "產生一組附有參考答案的問題，再執行它，即可看出助理在此專案上的表現。",
     "columns": {
       "set": "評估集",
       "path": "路徑",
+      "language": "語言",
       "pairs": "配對",
       "status": "狀態",
       "latestRun": "最近一次執行",
@@ -78,7 +87,8 @@
     "noChange": "這些執行之間沒有任何配對發生變化。",
     "retrievalChange": "擷取：{from} → {to}",
     "hit": "命中",
-    "miss": "未命中"
+    "miss": "未命中",
+    "stampsChanged": "這些執行使用了不同的聊天模型或提示版本，因此變化可能來自這點，而不是問題本身。"
   },
   "generateDialog": {
     "trigger": "產生評估集",
@@ -94,6 +104,15 @@
     "countAria": "問題數量",
     "mixLabel": "組合",
     "mixAria": "問題組合"
+  },
+  "translateDialog": {
+    "title": "翻譯 {name}",
+    "description": "將每個問題翻譯成另一種語言，程式碼、檔案路徑和識別碼保持原樣。翻譯集合的執行可與此集合的執行逐題比較。",
+    "submit": "翻譯",
+    "started": "已開始翻譯",
+    "languageLabel": "語言",
+    "languageAria": "目標語言",
+    "alreadyTranslated": "{language}（已翻譯）"
   },
   "screen": {
     "pairCount": "{count, plural, other {# 組配對}}",
@@ -115,6 +134,13 @@
     "baseRun": "基準執行",
     "headRun": "對照執行",
     "compareFailed": "無法載入比較結果",
-    "somethingWrong": "發生錯誤。"
+    "somethingWrong": "發生錯誤。",
+    "translatedFrom": "翻譯自 {name}",
+    "translatedFromDeleted": "翻譯自已刪除的集合",
+    "unfaithfulCount": "{count, plural, other {# 個問題}}無法在保持程式碼完整的情況下翻譯，已從執行中排除。",
+    "translate": "翻譯",
+    "compareWithSource": "與來源比較",
+    "sourceRun": "來源執行",
+    "translatedRun": "翻譯版執行"
   }
 }

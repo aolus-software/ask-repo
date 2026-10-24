@@ -31,6 +31,16 @@ client can have received it, so it is recorded under Changed and allowed in a `M
 
 ### Added
 
+- **Eval sets in other languages** (`docs/PRD.md` §2.1 Phase 2.7, PR B): translate a ready English
+  eval set into Indonesian, Japanese, Malay, Traditional Chinese (Hong Kong or Taiwan) or
+  Korean from its screen, which gains a Translate dialog, a "Translated from" line and a Language
+  column in the set list. `POST /projects/{id}/eval-sets` accepts `{sourceSetId, language}`;
+  sets and pairs gain `language`, `sourceSetId`, `sourcePairId` and `exclusionReason`. A
+  question whose translation loses an identifier, path or backticked span is excluded as
+  `translation_unfaithful`, and the set screen warns how many. A translated set's runs compare
+  with its source's question by question ("Compare with source"). A source that is not a ready
+  English set of the project is `422` on `sourceSetId` (field type `eval_source_invalid`). New
+  error code `409 EVAL_TRANSLATION_EXISTS`.
 - **Eval notifications** (`docs/PRD.md` §2.1, phase 2.6, issue #59): four new notification
   types, `eval_set.ready`, `eval_set.failed`, `eval_run.finished` and `eval_run.failed`, sent
   to every project member holding `eval.read` — including whoever started the job — when an
@@ -61,6 +71,8 @@ client can have received it, so it is recorded under Changed and allowed in a `M
 
 ### Changed
 
+- The eval judge no longer marks an answer down for being in a different language from its
+  reference. Its prompt version moved, so compare only runs judged after this change.
 - **Errors render the catalogue's text for their `ErrorCode`**, not the backend's English
   `message`, which is now the fallback for a code with no entry. A few codes whose message names
   the specific thing to fix — `WEAK_PASSWORD`, `INVALID_REPO_URL`, `EXPORT_TOO_LARGE` and others —

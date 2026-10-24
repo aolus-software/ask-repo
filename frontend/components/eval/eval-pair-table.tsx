@@ -37,6 +37,7 @@ export function EvalPairTable({
   generating?: boolean;
 }) {
   const t = useTranslations("eval.pairTable");
+  const unfaithfulLabel = useTranslations("eval")("unfaithful");
   const tType = useTranslations("eval.questionTypes");
   const errorText = useErrorText();
   const [open, setOpen] = useState<string | null>(null);
@@ -86,7 +87,14 @@ export function EvalPairTable({
                       ) : (
                         <ChevronRight className="mt-0.5 size-4 shrink-0" />
                       )}
-                      {pair.question}
+                      <span>
+                        {pair.question}
+                        {pair.exclusionReason === "translation_unfaithful" ? (
+                          <span className="text-warning mt-1 block text-xs">
+                            {unfaithfulLabel}
+                          </span>
+                        ) : null}
+                      </span>
                     </button>
                   </TableCell>
                   <TableCell>

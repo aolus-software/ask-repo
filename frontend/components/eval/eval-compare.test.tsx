@@ -69,3 +69,34 @@ describe("EvalCompare", () => {
     expect(screen.getByText("No pair changed between these runs.")).toBeInTheDocument();
   });
 });
+
+it("labels the two sides and shows the translated question", () => {
+  render(
+    <EvalCompare
+      base={run("1", "m", [result("en-1", true, "correct")])}
+      head={run("2", "m", [result("id-1", false, "correct")])}
+      pairs={
+        [
+          { id: "id-1", sourcePairId: "en-1", question: "Bagaimana token diperbarui?" },
+        ] as EvalPair[]
+      }
+      headToBase={new Map([["id-1", "en-1"]])}
+      labels={{ base: "English", head: "Bahasa Indonesia" }}
+    />,
+  );
+  expect(screen.getByText("English:")).toBeInTheDocument();
+  expect(screen.getByText("Bahasa Indonesia:")).toBeInTheDocument();
+  expect(screen.getByText("Bagaimana token diperbarui?")).toBeInTheDocument();
+});
+
+it("warns when the chat model or a prompt version differs", () => {
+  const base = { ...run("1", "m", []), chatModel: "a" } as EvalRunDetail;
+  render(
+    <EvalCompare base={base} head={{ ...base, id: "2", chatModel: "b" }} pairs={[]} />,
+  );
+  expect(
+    screen.getByText(
+      "These runs used a different chat model or prompt version, so a change may come from that rather than from the questions.",
+    ),
+  ).toBeInTheDocument();
+});

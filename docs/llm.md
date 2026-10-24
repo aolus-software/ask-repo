@@ -270,11 +270,11 @@ call with the moment it finished.
 
 **Features.** Each call passes `config=call_config(CallFeature.X)`: `classify`, `grade`, `answer`,
 `history_answer`, `propose_checklist`, `propose_mock_data`, `map`, `reduce`, `generate_mock_data`,
-`eval_generate`, `eval_judge`, `capability_probe`, and `untagged` for one that forgot. `tests/test_call_sites_tagged.py` fails on
+`eval_generate`, `eval_translate`, `eval_judge`, `capability_probe`, and `untagged` for one that forgot. `tests/test_call_sites_tagged.py` fails on
 a call site that omits it. The feature is the dimension feedback shares, so "is the expensive
 reduce step worth it" can be asked of both.
 
-**The eval harness adds two features, and no new model.** `eval_generate` writes a pair from one
+**The eval harness adds three features, and no new model.** `eval_translate` translates one English question into a translated set's language; `eval_generate` writes a pair from one
 chunk and `eval_judge` grades an answer against its reference, both through `with_structured_output`.
 **The judge is the instance's chat model**, the same one that wrote the answer, so a run's verdicts
 share any bias that model has toward its own phrasing, and comparing two chat models compares two

@@ -7,6 +7,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.eval import (
+    EvalExclusionReason,
     EvalPair,
     EvalResult,
     EvalRun,
@@ -15,7 +16,7 @@ from app.models.eval import (
     EvalSetStatus,
     EvalVerdict,
 )
-from tests.factories import create_project, create_user
+from tests.factories import create_eval_pair, create_eval_set, create_project, create_user
 
 
 async def _set(db_session: AsyncSession) -> EvalSet:
@@ -122,3 +123,41 @@ async def test_a_result_is_unique_per_run_and_pair(db_session: AsyncSession) -> 
     with pytest.raises(IntegrityError):
         await db_session.flush()
     assert eval_set.id
+
+
+async def test_a_translated_set_points_at_its_source_and_its_pairs_at_theirs(
+    db_session: AsyncSession,
+) -> None:
+    source = await create_eval_set(db_session, pair_count=1)
+    source_pair = await create_eval_pair(db_session, set_id=source.id)
+    translated = await create_eval_set(
+        db_session, project_id=source.project_id, language="id", source_set_id=source.id
+    )
+    pair = await create_eval_pair(
+        db_session,
+        set_id=translated.id,
+        source_pair_id=source_pair.id,
+        exclusion_reason=EvalExclusionReason.TRANSLATION_UNFAITHFUL.value,
+        excluded=True,
+    )
+    await db_session.commit()
+
+    assert source.language == "en"
+    assert source.source_set_id is None
+    assert translated.source_set_id == source.id
+    assert pair.source_pair_id == source_pair.id
+    assert pair.exclusion_reason == "translation_unfaithful"
+
+
+async def test_two_live_translations_into_one_language_are_refused(
+    db_session: AsyncSession,
+) -> None:
+    source = await create_eval_set(db_session)
+    await create_eval_set(
+        db_session, project_id=source.project_id, language="ko", source_set_id=source.id
+    )
+    with pytest.raises(IntegrityError):
+        await create_eval_set(
+            db_session, project_id=source.project_id, language="ko", source_set_id=source.id
+        )
+    await db_session.rollback()
