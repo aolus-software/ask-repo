@@ -44,6 +44,15 @@ class EvalSetRepository(BaseRepository[EvalSet]):
         )
         return result.scalars().first()
 
+    async def live_translation(self, source_set_id: uuid.UUID, language: str) -> EvalSet | None:
+        """The source's live translation into `language`, if one exists."""
+        result = await self.session.execute(
+            self.active_select().where(
+                EvalSet.source_set_id == source_set_id, EvalSet.language == language
+            )
+        )
+        return result.scalars().first()
+
     async def list_for_project(
         self, project_id: uuid.UUID, *, limit: int, offset: int
     ) -> tuple[list[EvalSet], int]:

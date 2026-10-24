@@ -40,6 +40,7 @@
   "EVAL_RUN_NOT_FOUND": "Eksekusi evaluasi tidak ditemukan.",
   "EVAL_SET_NOT_READY": "Set evaluasi ini belum siap dijalankan.",
   "EVAL_RUN_IN_PROGRESS": "Eksekusi evaluasi sedang berlangsung. Tunggu hingga selesai, lalu coba lagi.",
+  "EVAL_TRANSLATION_EXISTS": "Set ini sudah memiliki terjemahan ke bahasa tersebut. Hapus terlebih dahulu untuk membuat yang baru.",
   "INSUFFICIENT_ROLE": "Peran Anda pada proyek ini tidak mengizinkan hal itu.",
   "SYSTEM_ROLE_IMMUTABLE": "viewer, editor, dan owner adalah bawaan dan tidak dapat diubah.",
   "ROLE_NOT_FOUND": "Peran tidak ditemukan.",

@@ -12,12 +12,14 @@ import uuid
 from datetime import UTC, datetime
 
 from fastapi import status
+from fastapi.exceptions import RequestValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import Settings
 from app.core import access
-from app.core.audit import AuditEntry, AuditEventType, AuditRecorder
+from app.core.audit import AuditEntry, AuditEventType, AuditRecorder, ContextValue
 from app.core.errors import AppError, ErrorCode
+from app.core.language import Language
 from app.core.middleware import AuthenticatedUser
 from app.core.permissions import Permission
 from app.live.events import eval_run_event, eval_set_event
@@ -32,6 +34,7 @@ from app.repositories.eval_run import EvalRunRepository
 from app.repositories.eval_set import EvalSetRepository
 from app.repositories.project import ProjectRepository
 from app.schemas.eval import (
+    NAME_MAX_LENGTH,
     EvalPairExclude,
     EvalPairRead,
     EvalResultRead,
@@ -75,33 +78,26 @@ class EvalService:
         actor: AuthenticatedUser,
         queue: EvalQueue,
     ) -> EvalSetSummary:
-        """Write a `generating` set, publish its job, audit after the commit."""
+        """Write a `generating` set, publish its job, audit after the commit.
+
+        A translation copies its source's scope and reads no index of its own; the job
+        body is what branches (`app/eval/generator.py`).
+        """
         project = await access.require_readable_project(self.projects, project_id, actor)
         access.require_permission(actor, project.id, Permission.EVAL_RUN)
         require_indexed(project)
         require_stable_index(project)
-        if payload.source_path:
-            await require_path_indexed(self.indexed_paths, project, payload.source_path)
+        if payload.is_translation:
+            eval_set = await self._new_translation(project, payload, actor=actor)
+        else:
+            eval_set = await self._new_generation(project, payload, actor=actor)
 
-        eval_set = await self.sets.add(
-            EvalSet(
-                id=uuid.uuid4(),
-                project_id=project.id,
-                name=payload.name.strip(),
-                source_path=payload.source_path or None,
-                requested_count=payload.count,
-                mix=payload.mix.value,
-                status=EvalSetStatus.GENERATING.value,
-                pair_count=0,
-                created_by=actor.id,
-            )
-        )
         stage_live_event(self.session, eval_set_event(eval_set.id, project.id))
         # Captured before the commit expires the row.
         summary = self._summary(eval_set, latest_run=None)
         name, source_path = eval_set.name, eval_set.source_path
         requested_count, mix = eval_set.requested_count, eval_set.mix
-        set_id = eval_set.id
+        set_id, language, source_set_id = eval_set.id, eval_set.language, eval_set.source_set_id
         await self.session.commit()
 
         await queue.enqueue_eval(
@@ -114,6 +110,9 @@ class EvalService:
                 original_topic=self.settings.kafka_eval_topic,
             )
         )
+        context: dict[str, ContextValue] = {"language": language}
+        if source_set_id is not None:
+            context["sourceSetId"] = str(source_set_id)
         await self._recorder.record(
             AuditEntry(
                 event_type=AuditEventType.EVAL_SET_GENERATION_REQUESTED,
@@ -129,9 +128,95 @@ class EvalService:
                     "requestedCount": (None, requested_count),
                     "mix": (None, mix),
                 },
+                context=context,
             )
         )
         return summary
+
+    async def _new_generation(
+        self, project: Project, payload: EvalSetCreate, *, actor: AuthenticatedUser
+    ) -> EvalSet:
+        """A natively generated English set."""
+        if payload.name is None or payload.count is None or payload.mix is None:
+            raise AssertionError("EvalSetCreate validated a generation body without its fields")
+        if payload.source_path:
+            await require_path_indexed(self.indexed_paths, project, payload.source_path)
+        return await self.sets.add(
+            EvalSet(
+                id=uuid.uuid4(),
+                project_id=project.id,
+                name=payload.name.strip(),
+                source_path=payload.source_path or None,
+                requested_count=payload.count,
+                mix=payload.mix.value,
+                language=Language.EN.value,
+                status=EvalSetStatus.GENERATING.value,
+                pair_count=0,
+                created_by=actor.id,
+            )
+        )
+
+    async def _new_translation(
+        self, project: Project, payload: EvalSetCreate, *, actor: AuthenticatedUser
+    ) -> EvalSet:
+        """A set translating a ready English set, pair for pair (spec §3.1-§3.3).
+
+        The source's row lock serialises two requests for the same language, the same
+        lock `start_run` and `delete_set` take; the partial unique index is the backstop.
+        """
+        if payload.source_set_id is None or payload.language is None:
+            raise AssertionError("EvalSetCreate validated a translation body without its fields")
+        source = await self.sets.lock(payload.source_set_id)
+        if (
+            source is None
+            or source.project_id != project.id
+            or source.status != EvalSetStatus.READY.value
+            or source.language != Language.EN.value
+            or source.source_set_id is not None
+        ):
+            raise self._source_invalid()
+        language = payload.language.value
+        if await self.sets.live_translation(source.id, language) is not None:
+            raise AppError(
+                status.HTTP_409_CONFLICT,
+                ErrorCode.EVAL_TRANSLATION_EXISTS,
+                "This set already has a translation into that language.",
+            )
+        suffix = f" · {language}"
+        return await self.sets.add(
+            EvalSet(
+                id=uuid.uuid4(),
+                project_id=project.id,
+                name=source.name[: NAME_MAX_LENGTH - len(suffix)] + suffix,
+                source_path=source.source_path,
+                requested_count=source.requested_count,
+                mix=source.mix,
+                language=language,
+                source_set_id=source.id,
+                indexed_generation=source.indexed_generation,
+                status=EvalSetStatus.GENERATING.value,
+                pair_count=0,
+                created_by=actor.id,
+            )
+        )
+
+    @staticmethod
+    def _source_invalid() -> RequestValidationError:
+        """One `422` for every unusable source, so it never says which reason applied --
+        or whether a set exists in a project the caller cannot see (ruling R2).
+
+        Raised as a `RequestValidationError` so the shared handler builds the standard
+        `fields`/`fieldTypes` body; no `AppError` widening is needed.
+        """
+        return RequestValidationError(
+            [
+                {
+                    "loc": ("body", "sourceSetId"),
+                    "msg": "The source must be a ready English set in this project.",
+                    "type": "eval_source_invalid",
+                }
+            ]
+        )
 
     async def list_sets(
         self, project_id: uuid.UUID, query: ListQuery, *, actor: AuthenticatedUser
