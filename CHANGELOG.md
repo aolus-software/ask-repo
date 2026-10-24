@@ -13,6 +13,17 @@ client can have received it, so it is recorded under Changed and allowed in a `M
 
 ## [Unreleased]
 
+### Security
+
+- **Next.js 16.3.8 → 16.4.2** (and `eslint-config-next` to match), closing two critical
+  unauthenticated remote code execution advisories — in `use cache` functions returning typed
+  arrays (GHSA-673q-mjm6-r5xr) and in the image optimisation API with SVG files
+  (GHSA-2464-fhr4-w9xw) — and a denial of service through Server Actions (GHSA-p3m5-59mp-jv5r).
+- **certifi 2026.7.22 → 2026.10.23**, dropping the emSign root CAs whose intermediate keys were
+  compromised (GHSA-6q48-6c7w-9gw2). certifi arrives through httpx.
+- **opentelemetry-api 1.45.0 → 1.45.1** (with `opentelemetry-sdk` to match), closing unbounded
+  `tracestate` parsing (GHSA-xcq7-p3pf-p88h). OpenTelemetry arrives through Langfuse.
+
 ## [2.4.0] — 2026-10-24
 
 ### Added
