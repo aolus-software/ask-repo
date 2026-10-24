@@ -87,7 +87,8 @@
     "noChange": "No pair changed between these runs.",
     "retrievalChange": "Retrieval: {from} → {to}",
     "hit": "hit",
-    "miss": "miss"
+    "miss": "miss",
+    "stampsChanged": "These runs used a different chat model or prompt version, so a change may come from that rather than from the questions."
   },
   "generateDialog": {
     "trigger": "Generate eval set",
@@ -137,6 +138,9 @@
     "translatedFrom": "Translated from {name}",
     "translatedFromDeleted": "Translated from a set that has since been deleted",
     "unfaithfulCount": "{count, plural, one {# question} other {# questions}} could not be translated with their code kept intact, and are excluded from runs.",
-    "translate": "Translate"
+    "translate": "Translate",
+    "compareWithSource": "Compare with source",
+    "sourceRun": "Source run",
+    "translatedRun": "Translated run"
   }
 }

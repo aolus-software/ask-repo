@@ -87,7 +87,8 @@
     "noChange": "これらの実行間で変化したペアはありません。",
     "retrievalChange": "検索: {from} → {to}",
     "hit": "ヒット",
-    "miss": "ミス"
+    "miss": "ミス",
+    "stampsChanged": "これらの実行ではチャットモデルまたはプロンプトのバージョンが異なるため、変化は質問ではなくそれが原因かもしれません。"
   },
   "generateDialog": {
     "trigger": "評価セットを生成",
@@ -137,6 +138,9 @@
     "translatedFrom": "{name} から翻訳",
     "translatedFromDeleted": "削除済みのセットから翻訳されました",
     "unfaithfulCount": "{count, plural, other {# 件の質問}}は、コードを保ったまま翻訳できなかったため、実行から除外されています。",
-    "translate": "翻訳"
+    "translate": "翻訳",
+    "compareWithSource": "原文と比較",
+    "sourceRun": "原文の実行",
+    "translatedRun": "翻訳の実行"
   }
 }

@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -55,7 +55,34 @@ function stubApi(permissions: string[]) {
   return fetchMock;
 }
 
-function stubTranslated(permissions: string[], source: "found" | "gone") {
+const runDetail = (id: string, pairId: string, hit: boolean) => ({
+  id,
+  setId: "x",
+  status: "done",
+  createdAt: "2026-10-01T10:00:00Z",
+  chatModel: "m",
+  judgeModel: "j",
+  promptVersion: "p",
+  judgePromptVersion: "q",
+  results: [
+    {
+      id: `r-${id}`,
+      pairId,
+      retrievalHit: hit,
+      verdict: "correct",
+      judgeReason: null,
+      answer: "",
+      groundingWarnings: [],
+      retrievalAttempts: 1,
+    },
+  ],
+});
+
+function stubTranslated(
+  permissions: string[],
+  source: "found" | "gone",
+  runs: boolean = false,
+) {
   const pair = (id: string, sourcePairId: string, question: string) => ({
     id,
     position: 0,
@@ -73,6 +100,20 @@ function stubTranslated(permissions: string[], source: "found" | "gone") {
     "fetch",
     vi.fn(async (url: string) => {
       const path = String(url);
+      if (runs) {
+        const summary = (id: string, setId: string) => ({
+          items: [{ id, setId, status: "done", createdAt: "2026-10-01T10:00:00Z" }],
+          total: 1,
+        });
+        if (path.includes("/eval-sets/src/runs"))
+          return Response.json(summary("src-run", "src"));
+        if (path.includes("/eval-sets/s1/runs"))
+          return Response.json(summary("t-run", "s1"));
+        if (path.endsWith("/eval-runs/src-run"))
+          return Response.json(runDetail("src-run", "ea", true));
+        if (path.endsWith("/eval-runs/t-run"))
+          return Response.json(runDetail("t-run", "a", false));
+      }
       if (path.endsWith("/eval-sets/s1"))
         return Response.json({
           id: "s1",
@@ -228,5 +269,30 @@ describe("EvalSetScreen", () => {
     expect(
       await screen.findByText("Translated from a set that has since been deleted"),
     ).toBeInTheDocument();
+  });
+
+  it("compares a translated run with a source run, labelled by language", async () => {
+    stubTranslated([PERMISSION.EVAL_READ], "found", true);
+    renderScreen();
+
+    await userEvent.click(await screen.findByRole("combobox", { name: "Source run" }));
+    await userEvent.click((await screen.findAllByRole("option"))[0]);
+    await userEvent.click(screen.getByRole("combobox", { name: "Translated run" }));
+    await userEvent.click((await screen.findAllByRole("option"))[0]);
+
+    expect(await screen.findByText("English:")).toBeInTheDocument();
+    expect(screen.getByText("Bahasa Indonesia:")).toBeInTheDocument();
+    // The source run hit and the translated one missed, on the pair they share.
+    // (The pair table lists the question too, so look inside the comparison.)
+    const comparison = screen.getByText("English:").closest("div.space-y-3") as HTMLElement;
+    expect(within(comparison).getByText("Apa?")).toBeInTheDocument();
+  });
+
+  it("offers no source comparison once the source is deleted", async () => {
+    stubTranslated([PERMISSION.EVAL_READ], "gone", true);
+    renderScreen();
+
+    await screen.findByText("Translated from a set that has since been deleted");
+    expect(screen.queryByText("Compare with source")).toBeNull();
   });
 });

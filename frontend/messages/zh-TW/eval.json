@@ -87,7 +87,8 @@
     "noChange": "這些執行之間沒有任何配對發生變化。",
     "retrievalChange": "擷取：{from} → {to}",
     "hit": "命中",
-    "miss": "未命中"
+    "miss": "未命中",
+    "stampsChanged": "這些執行使用了不同的聊天模型或提示版本，因此變化可能來自這點，而不是問題本身。"
   },
   "generateDialog": {
     "trigger": "產生評估集",
@@ -137,6 +138,9 @@
     "translatedFrom": "翻譯自 {name}",
     "translatedFromDeleted": "翻譯自已刪除的集合",
     "unfaithfulCount": "{count, plural, other {# 個問題}}無法在保持程式碼完整的情況下翻譯，已從執行中排除。",
-    "translate": "翻譯"
+    "translate": "翻譯",
+    "compareWithSource": "與來源比較",
+    "sourceRun": "來源執行",
+    "translatedRun": "翻譯版執行"
   }
 }

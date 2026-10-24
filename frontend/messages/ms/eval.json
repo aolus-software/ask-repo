@@ -87,7 +87,8 @@
     "noChange": "Tiada pasangan berubah antara larian ini.",
     "retrievalChange": "Capaian: {from} → {to}",
     "hit": "tepat",
-    "miss": "tersasar"
+    "miss": "tersasar",
+    "stampsChanged": "Run ini menggunakan model sembang atau versi prompt yang berbeza, jadi perubahan mungkin datang daripada itu dan bukan daripada soalan."
   },
   "generateDialog": {
     "trigger": "Jana set penilaian",
@@ -137,6 +138,9 @@
     "translatedFrom": "Diterjemahkan daripada {name}",
     "translatedFromDeleted": "Diterjemahkan daripada set yang telah dipadam",
     "unfaithfulCount": "{count, plural, other {# soalan}} tidak dapat diterjemahkan dengan kod kekal utuh, dan dikecualikan daripada larian.",
-    "translate": "Terjemah"
+    "translate": "Terjemah",
+    "compareWithSource": "Banding dengan sumber",
+    "sourceRun": "Run sumber",
+    "translatedRun": "Run terjemahan"
   }
 }

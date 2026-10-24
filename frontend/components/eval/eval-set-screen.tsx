@@ -74,6 +74,11 @@ export function EvalSetScreen({
   const router = useRouter();
   const baseRun = useEvalRun(baseId ?? "");
   const headRun = useEvalRun(headId ?? "");
+  const sourceRuns = useEvalRuns(sourceSetId ?? "", mayRead && Boolean(sourceSetId));
+  const [sourceRunId, setSourceRunId] = useState<string | null>(null);
+  const [translatedRunId, setTranslatedRunId] = useState<string | null>(null);
+  const sourceRun = useEvalRun(sourceRunId ?? "");
+  const translatedRun = useEvalRun(translatedRunId ?? "");
 
   if (projectQuery.isLoading || (mayRead && setQuery.isLoading)) {
     return (
@@ -127,14 +132,34 @@ export function EvalSetScreen({
 
   // Runs arrive newest first, so the oldest is run 1. The number tells apart two
   // runs started in the same second.
-  const runLabel = (id: string) => {
-    const index = runs.findIndex((candidate) => candidate.id === id);
+  const runLabelIn = (list: typeof runs, id: string) => {
+    const index = list.findIndex((candidate) => candidate.id === id);
     if (index < 0) return t("selectRun");
     return t("runLabel", {
-      number: runs.length - index,
-      date: formatAbsolute(runs[index].createdAt) ?? "",
+      number: list.length - index,
+      date: formatAbsolute(list[index].createdAt) ?? "",
     });
   };
+  const runLabel = (id: string) => runLabelIn(runs, id);
+
+  const sourceRunList = sourceRuns.data?.items ?? [];
+  const doneSourceRuns = sourceRunList.filter((run) => run.status === "done");
+  const headToBase = new Map(
+    set.pairs.flatMap((pair) =>
+      pair.sourcePairId ? [[pair.id, pair.sourcePairId] as const] : [],
+    ),
+  );
+  // The source set's runs are read through its own query; a deleted source never loads,
+  // and then there is nothing to offer.
+  const showSourceCompare =
+    Boolean(set.sourceSetId) &&
+    Boolean(sourceQuery.data) &&
+    doneSourceRuns.length > 0 &&
+    doneRuns.length > 0;
+  const sourceCompareSelects = [
+    ["source", t("sourceRun"), sourceRunId, setSourceRunId, doneSourceRuns, sourceRunList],
+    ["translated", t("translatedRun"), translatedRunId, setTranslatedRunId, doneRuns, runs],
+  ] as const;
 
   const compareSelects = [
     ["base", t("baseRun"), baseId, setBaseId],
@@ -293,6 +318,56 @@ export function EvalSetScreen({
           ) : baseRun.data && headRun.data && baseId && headId ? (
             <Card className="px-4">
               <EvalCompare base={baseRun.data} head={headRun.data} pairs={set.pairs} />
+            </Card>
+          ) : null}
+        </section>
+      ) : null}
+
+      {showSourceCompare ? (
+        <section className="space-y-3">
+          <h2 className="text-xl font-semibold tracking-tight">{t("compareWithSource")}</h2>
+          <div className="flex flex-wrap gap-3">
+            {sourceCompareSelects.map(([key, label, value, setValue, options, all]) => (
+              <Select
+                key={key}
+                value={value ?? ""}
+                onValueChange={(next: string | null) => setValue(next || null)}
+              >
+                <SelectTrigger className="w-64" aria-label={label}>
+                  <SelectValue>
+                    {(id: string) => (id ? runLabelIn(all, id) : label)}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  {options.map((run) => (
+                    <SelectItem key={run.id} value={run.id}>
+                      {runLabelIn(all, run.id)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            ))}
+          </div>
+          {sourceRunId && translatedRunId && (sourceRun.error || translatedRun.error) ? (
+            <Alert variant="destructive">
+              <AlertTitle>{t("compareFailed")}</AlertTitle>
+              <AlertDescription>
+                {isApiError(sourceRun.error ?? translatedRun.error)
+                  ? errorText(sourceRun.error ?? translatedRun.error)
+                  : t("somethingWrong")}
+              </AlertDescription>
+            </Alert>
+          ) : sourceRunId && translatedRunId && !(sourceRun.data && translatedRun.data) ? (
+            <Skeleton className="h-32 w-full" />
+          ) : sourceRun.data && translatedRun.data && sourceRunId && translatedRunId ? (
+            <Card className="px-4">
+              <EvalCompare
+                base={sourceRun.data}
+                head={translatedRun.data}
+                pairs={set.pairs}
+                headToBase={headToBase}
+                labels={{ base: ENDONYMS.en, head: ENDONYMS[set.language] }}
+              />
             </Card>
           ) : null}
         </section>

@@ -87,7 +87,8 @@
     "noChange": "Tidak ada pasangan yang berubah antara eksekusi-eksekusi ini.",
     "retrievalChange": "Pengambilan: {from} → {to}",
     "hit": "tepat sasaran",
-    "miss": "meleset"
+    "miss": "meleset",
+    "stampsChanged": "Run ini memakai model chat atau versi prompt yang berbeda, jadi perubahan bisa berasal dari itu, bukan dari pertanyaannya."
   },
   "generateDialog": {
     "trigger": "Buat set evaluasi",
@@ -137,6 +138,9 @@
     "translatedFrom": "Diterjemahkan dari {name}",
     "translatedFromDeleted": "Diterjemahkan dari set yang sudah dihapus",
     "unfaithfulCount": "{count, plural, other {# pertanyaan}} tidak dapat diterjemahkan dengan kode tetap utuh, dan dikecualikan dari eksekusi.",
-    "translate": "Terjemahkan"
+    "translate": "Terjemahkan",
+    "compareWithSource": "Bandingkan dengan sumber",
+    "sourceRun": "Run sumber",
+    "translatedRun": "Run terjemahan"
   }
 }
