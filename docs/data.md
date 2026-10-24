@@ -237,7 +237,7 @@ diverges from every other group above.
 
 **The catalogue is a `StrEnum` in `app/core/audit.py`, not a table** — 46 event types across auth
 (including session revoke, added with the profile page), accounts (including `user.answer_style.updated`, which allowlists `answerDetail`, `answerFamiliarity` and `answerFormat`, and `user.language.updated`, which allowlists `language`), projects, RBAC, password reset,
-checklist modules and items, change sets, mock data, the eval harness (`eval_set.generation.requested`, which carries `language` and, for a translation, `sourceSetId` as context, `eval_set.deleted`, `eval_pair.updated`, `eval_run.requested`), exports and conversations. Existence lives in
+checklist modules and items, change sets, mock data, the eval harness (`eval_set.generation.requested`, `eval_set.deleted`, `eval_pair.updated`, `eval_run.requested`), exports and conversations. `eval_set.generation.requested` carries `language` and, for a translation, `sourceSetId` as context. Existence lives in
 code for the reason `app/core/permissions.py` gives for the
 permission catalogue: if it lived in a table, deleting a row would orphan every write site that
 names it. Which operations must record one is a rule rather than a list —

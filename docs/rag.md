@@ -316,7 +316,17 @@ against a fixed prompt. A run writes no `conversations` or `messages` row, sends
 stamps itself with the answer graph's prompt version and the judge's, the chat and embedding
 models and the project generation it read.
 
-**Sets in other languages.** A non-English set is a translation of an English set, never generated natively, so the gap between two runs is attributable to the language alone. Generating natively would sample different chunks and move the retrieval-hit rate for two reasons at once. The translating job (`app/eval/translation.py`) makes one `eval_translate` call per pair, and holds identifiers, paths and backticked spans verbatim. It checks this mechanically: every backticked span and every path-shaped token, by the same pattern grounding uses, must survive. A pair that fails twice is written excluded with `translation_unfaithful`, never dropped. A translated set's run goes through the same answer graph. The judge is told that the language of an answer is no reason to mark it down, which changed the judge's prompt version, so English baselines judged before that change are not comparable with translated runs. The set screen compares a translated run with a source run question by question, through `source_pair_id`.
+**Sets in other languages.** A non-English set is a translation of an English set, never generated
+natively, so the gap between two runs is attributable to the language alone. Generating natively
+would sample different chunks and move the retrieval-hit rate for two reasons at once. The
+translating job (`app/eval/translation.py`) makes one `eval_translate` call per pair, and holds
+identifiers, paths and backticked spans verbatim. It checks this mechanically: every backticked span
+and every path-shaped token, by the same pattern grounding uses, must survive. A pair that fails
+twice is written excluded with `translation_unfaithful`, never dropped. A translated set's run goes
+through the same answer graph. The judge is told that the language of an answer is no reason to mark
+it down, which changed the judge's prompt version, so English baselines judged before that change
+are not comparable with translated runs. The set screen compares a translated run with a source run
+question by question, through `source_pair_id`.
 
 **Prompt versions are per feature** (`app/rag/prompt_version.py`). `CALL_PROMPTS` names the
 constants each model call's feature sends, and a version hashes only those, so an edit moves

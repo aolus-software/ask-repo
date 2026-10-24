@@ -320,7 +320,7 @@ what was expected.
 | Method | Path | Auth | Description |
 | --- | --- | --- | --- |
 | `GET` | `/checklist-modules` | any member | List modules for projects you are a member of, paginated |
-| `POST` | `/checklist-modules` | `module.create` | Name a module and point it at a path in the indexed repository. `400 MODULE_PATH_NOT_INDEXED` if the path matches nothing. Or send `{sourceSetId, language}` to translate a ready English set of this project into another language. The set is copied pair for pair, and the response is `202`. `422` (on `sourceSetId`, field type `eval_source_invalid`) if the source is not a ready, natively generated English set here; `409 EVAL_TRANSLATION_EXISTS` if a live translation into that language exists |
+| `POST` | `/checklist-modules` | `module.create` | Name a module and point it at a path in the indexed repository. `400 MODULE_PATH_NOT_INDEXED` if the path matches nothing |
 | `GET` | `/checklist-modules/{id}` | any member | One module with its test cases, grouped by feature |
 | `PATCH` | `/checklist-modules/{id}` | `module.edit` | Rename or re-point the module |
 | `DELETE` | `/checklist-modules/{id}` | `module.delete` | Soft-delete the module, its items, its change sets, and its chat |
@@ -399,7 +399,7 @@ the answer path. Every route resolves its project through `access.py`: a non-mem
 
 | Method | Path | Auth | Description |
 | --- | --- | --- | --- |
-| `POST` | `/projects/{id}/eval-sets` | `eval.run` | Request a set of 10, 25 or 50 pairs with a `balanced`, `explain` or `locate` mix, optionally under a `sourcePath`; returns the set in `generating` status (`202`). `409 PROJECT_NOT_READY` while the project is not indexed or is being re-indexed, `400 MODULE_PATH_NOT_INDEXED` if the path matches nothing |
+| `POST` | `/projects/{id}/eval-sets` | `eval.run` | Request a set of 10, 25 or 50 pairs with a `balanced`, `explain` or `locate` mix, optionally under a `sourcePath`; returns the set in `generating` status (`202`). `409 PROJECT_NOT_READY` while the project is not indexed or is being re-indexed, `400 MODULE_PATH_NOT_INDEXED` if the path matches nothing. Or send `{sourceSetId, language}` to translate a ready English set of this project into another language. The set is copied pair for pair, and the response is `202`. `422` (on `sourceSetId`, field type `eval_source_invalid`) if the source is not a ready, natively generated English set here; `409 EVAL_TRANSLATION_EXISTS` if a live translation into that language exists |
 | `GET` | `/projects/{id}/eval-sets` | `eval.read` | List the project's sets, newest first, each with its latest run's tally |
 | `GET` | `/eval-sets/{id}` | `eval.read` | One set with its pairs. `404 EVAL_SET_NOT_FOUND` |
 | `DELETE` | `/eval-sets/{id}` | `eval.run` | Soft-delete the set, its pairs, runs and results. `409 EVAL_RUN_IN_PROGRESS` while a run is live |
