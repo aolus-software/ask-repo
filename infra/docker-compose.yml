@@ -387,7 +387,7 @@ services:
     profiles: ["langfuse"]
 
   langfuse-clickhouse:
-    image: docker.io/clickhouse/clickhouse-server:25.12
+    image: docker.io/clickhouse/clickhouse-server:26.6
     restart: unless-stopped
     user: "101:101"
     environment:
