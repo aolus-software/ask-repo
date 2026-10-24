@@ -49,6 +49,13 @@ describe("localeHeaders", () => {
     expect(localeHeaders(req)).toEqual({ "accept-language": "ko" });
   });
 
+  it("falls back to the header on a malformed cookie instead of throwing", () => {
+    const req = new Request("http://x", {
+      headers: { cookie: "askrepo_locale=%E0%A4%A", "accept-language": "ko" },
+    });
+    expect(localeHeaders(req)).toEqual({ "accept-language": "ko" });
+  });
+
   it("sends nothing when there is nothing to send", () => {
     expect(localeHeaders(new Request("http://x"))).toEqual({});
   });

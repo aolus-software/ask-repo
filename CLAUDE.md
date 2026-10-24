@@ -534,6 +534,10 @@ the page.
   way to tell one caller from another — without it the per-caller login limit is one
   instance-wide bucket. Next appends nothing, so `TRUSTED_PROXY_HOPS` still counts only the
   proxies that do.
+- **The interface language reaches the API as `Accept-Language`.** The catch-all API proxy and the
+  public forward (`lib/auth/public-forward.ts`) set it from a valid `askrepo_locale` cookie, else
+  relay the browser's own header, so the backend breaks answer- and email-language ties by the
+  language the screen shows (`localeHeaders` in `lib/auth/forwarded.ts`).
 - **Refresh happens in two places, and that split is structural.** A Server Component cannot set
   a cookie, so a token refreshed during render could never be persisted. Navigations refresh in
   `proxy.ts` — Next's request gate, called `middleware.ts` before Next 16 renamed the convention,

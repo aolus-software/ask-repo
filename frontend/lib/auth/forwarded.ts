@@ -33,7 +33,13 @@ function cookieValue(request: Request, name: string): string | undefined {
   const header = request.headers.get("cookie") ?? "";
   for (const part of header.split(";")) {
     const [key, ...rest] = part.trim().split("=");
-    if (key === name) return decodeURIComponent(rest.join("="));
+    if (key === name) {
+      try {
+        return decodeURIComponent(rest.join("="));
+      } catch {
+        return undefined; // malformed escape: treat as absent, fall back to the header
+      }
+    }
   }
   return undefined;
 }
