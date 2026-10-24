@@ -12,6 +12,7 @@ CALL_SITE_FILES = [
     "mockdata/generator.py",
     "eval/generator.py",
     "eval/runner.py",
+    "eval/translation.py",
 ]
 MODEL_METHODS = {"ainvoke", "astream"}
 

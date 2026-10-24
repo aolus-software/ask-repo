@@ -26,3 +26,9 @@ class JudgeVerdict(BaseModel):
         description="'correct', 'partial' or 'wrong', per the rubric"
     )
     reason: str = Field(default="", description="one sentence explaining the verdict")
+
+
+class TranslatedQuestion(BaseModel):
+    """One eval question, translated."""
+
+    question: str = Field(default="", description="the question in the target language")

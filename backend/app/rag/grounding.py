@@ -70,6 +70,15 @@ _PATH_PATTERN = re.compile(r"\b(?:[\w.-]+/)+[\w-]+\.[A-Za-z0-9]+\b")
 _URL_PATTERN = re.compile(r"\bhttps?://\S+", re.IGNORECASE)
 
 
+def path_tokens(text: str) -> list[str]:
+    """Every path-shaped token in `text`, by the pattern the grounding check uses.
+
+    Shared with the eval translator's faithfulness check (`app/eval/translation.py`), so
+    "a path the answer names" and "a path a translation must keep" are one definition.
+    """
+    return _PATH_PATTERN.findall(text)
+
+
 def _same_file(candidate: str, retrieved: str) -> bool:
     """Whether two paths name the same file, allowing for a differing prefix.
 
@@ -97,7 +106,7 @@ def unknown_paths(answer: str, spans: list[RetrievedChunk]) -> list[str]:
     scannable = _URL_PATTERN.sub(" ", answer)
     return sorted(
         candidate
-        for candidate in set(_PATH_PATTERN.findall(scannable))
+        for candidate in set(path_tokens(scannable))
         if not any(_same_file(candidate, path) for path in retrieved)
     )
 
