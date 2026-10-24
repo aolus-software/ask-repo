@@ -28,6 +28,8 @@ function stubApi(permissions: string[]) {
         name: "Smoke",
         sourcePath: null,
         status: "ready",
+        language: "en",
+        sourceSetId: null,
         pairCount: 1,
         pairs: [],
         indexedGeneration: null,
@@ -36,6 +38,8 @@ function stubApi(permissions: string[]) {
       });
     if (path.includes("/eval-sets/s1/runs"))
       return Response.json({ items: [RUN_BASE, RUN_HEAD], total: 2 });
+    if (path.includes("/projects/p1/eval-sets"))
+      return Response.json({ items: [], total: 0 });
     if (path.includes("/eval-runs/"))
       return Response.json({
         ...RUN_BASE,
@@ -49,6 +53,64 @@ function stubApi(permissions: string[]) {
   });
   vi.stubGlobal("fetch", fetchMock);
   return fetchMock;
+}
+
+function stubTranslated(permissions: string[], source: "found" | "gone") {
+  const pair = (id: string, sourcePairId: string, question: string) => ({
+    id,
+    position: 0,
+    questionType: "explain",
+    question,
+    referenceAnswer: "x",
+    sourceFile: "a.py",
+    startLine: 1,
+    endLine: 2,
+    excluded: true,
+    sourcePairId,
+    exclusionReason: "translation_unfaithful",
+  });
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (url: string) => {
+      const path = String(url);
+      if (path.endsWith("/eval-sets/s1"))
+        return Response.json({
+          id: "s1",
+          projectId: "p1",
+          name: "Auth · id",
+          sourcePath: null,
+          status: "ready",
+          language: "id",
+          sourceSetId: "src",
+          pairCount: 2,
+          pairs: [pair("a", "ea", "Apa?"), pair("b", "eb", "Bagaimana?")],
+          indexedGeneration: 1,
+          projectGeneration: 1,
+          error: null,
+        });
+      if (path.endsWith("/eval-sets/src"))
+        return source === "found"
+          ? Response.json({
+              id: "src",
+              name: "Auth",
+              language: "en",
+              sourceSetId: null,
+              pairs: [],
+            })
+          : Response.json(
+              {
+                detail: { code: "EVAL_SET_NOT_FOUND", message: "Eval set not found." },
+              },
+              { status: 404 },
+            );
+      if (path.includes("/runs")) return Response.json({ items: [], total: 0 });
+      if (path.endsWith("/projects/p1"))
+        return Response.json({ id: "p1", name: "Proj", permissions });
+      if (path.includes("/projects/p1/eval-sets"))
+        return Response.json({ items: [], total: 0 });
+      return Response.json({});
+    }),
+  );
 }
 
 function renderScreen() {
@@ -131,5 +193,40 @@ describe("EvalSetScreen", () => {
 
     await screen.findByText("Smoke");
     expect(screen.queryByRole("button", { name: "Delete Smoke" })).toBeNull();
+  });
+
+  it("offers Translate on a ready English set to an eval.run holder", async () => {
+    stubApi([PERMISSION.EVAL_READ, PERMISSION.EVAL_RUN]);
+    renderScreen();
+    expect(
+      await screen.findByRole("button", { name: /^translate$/i }),
+    ).toBeInTheDocument();
+  });
+
+  it("does not offer Translate to a viewer", async () => {
+    stubApi([PERMISSION.EVAL_READ]);
+    renderScreen();
+    await screen.findByText("Smoke");
+    expect(screen.queryByRole("button", { name: /^translate$/i })).toBeNull();
+  });
+
+  it("names its source and counts the unfaithful questions on a translated set", async () => {
+    stubTranslated([PERMISSION.EVAL_READ, PERMISSION.EVAL_RUN], "found");
+    renderScreen();
+    expect(await screen.findByText("Translated from Auth")).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "2 questions could not be translated with their code kept intact, and are excluded from runs.",
+      ),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^translate$/i })).toBeNull();
+  });
+
+  it("says when its source has been deleted", async () => {
+    stubTranslated([PERMISSION.EVAL_READ], "gone");
+    renderScreen();
+    expect(
+      await screen.findByText("Translated from a set that has since been deleted"),
+    ).toBeInTheDocument();
   });
 });

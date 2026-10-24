@@ -2,6 +2,7 @@
 
 import { Play, Trash2 } from "lucide-react";
 import { useTranslations } from "next-intl";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
@@ -11,6 +12,7 @@ import { EvalPairTable } from "@/components/eval/eval-pair-table";
 import { EvalRunSheet } from "@/components/eval/eval-run-sheet";
 import { EvalRunTable } from "@/components/eval/eval-run-table";
 import { EvalStatusBadge } from "@/components/eval/eval-status-badge";
+import { TranslateEvalSetDialog } from "@/components/eval/translate-eval-set-dialog";
 import { DetailError } from "@/components/feedback/detail-error";
 import { JobFailureAlert } from "@/components/feedback/job-failure-alert";
 import { NotFound } from "@/components/feedback/not-found";
@@ -27,10 +29,17 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useEvalRun, useEvalRuns, useEvalSet, useStartEvalRun } from "@/hooks/use-eval";
+import {
+  useEvalRun,
+  useEvalRuns,
+  useEvalSet,
+  useEvalSets,
+  useStartEvalRun,
+} from "@/hooks/use-eval";
 import { useProject } from "@/hooks/use-projects";
 import { can, PERMISSION } from "@/lib/can";
 import { isApiError } from "@/lib/api/errors";
+import { ENDONYMS, type Language } from "@/lib/i18n/languages";
 import { useErrorText } from "@/lib/i18n/error-text";
 import { formatAbsolute } from "@/lib/dates";
 import { toast } from "sonner";
@@ -52,6 +61,9 @@ export function EvalSetScreen({
     : false;
   const setQuery = useEvalSet(setId, mayRead);
   const runsQuery = useEvalRuns(setId, mayRead);
+  const sourceSetId = setQuery.data?.sourceSetId ?? null;
+  const sourceQuery = useEvalSet(sourceSetId ?? "", mayRead && Boolean(sourceSetId));
+  const projectSets = useEvalSets(projectId, mayRead);
   useBreadcrumbLabel(`/projects/${projectId}`, projectQuery.data?.name);
   useBreadcrumbLabel(`/projects/${projectId}/eval/${setId}`, setQuery.data?.name);
   const startRun = useStartEvalRun(setId, projectId);
@@ -98,9 +110,13 @@ export function EvalSetScreen({
   const runs = runsQuery.data?.items ?? [];
   const generating = set.status === "generating";
   const doneRuns = runs.filter((run) => run.status === "done");
+  const unfaithful = set.pairs.filter(
+    (pair) => pair.exclusionReason === "translation_unfaithful",
+  ).length;
   const running = runs.some((run) => run.status === "running");
   const description = [
     set.sourcePath ?? tTally("wholeProject"),
+    ENDONYMS[set.language],
     t("pairCount", { count: set.pairCount }),
     set.indexedGeneration !== null
       ? t("generatedFrom", { generation: set.indexedGeneration })
@@ -134,6 +150,15 @@ export function EvalSetScreen({
         action={
           canRun ? (
             <div className="flex items-center gap-2">
+              {set.language === "en" && !set.sourceSetId && set.status === "ready" ? (
+                <TranslateEvalSetDialog
+                  projectId={projectId}
+                  set={{ id: set.id, name: set.name }}
+                  existing={(projectSets.data?.items ?? [])
+                    .filter((candidate) => candidate.sourceSetId === set.id)
+                    .map((candidate) => candidate.language as Language)}
+                />
+              ) : null}
               <Button
                 variant="outline"
                 onClick={() => setConfirmingDelete(true)}
@@ -167,6 +192,29 @@ export function EvalSetScreen({
         <p className="text-muted-foreground text-sm">
           {t("projectNowAt", { generation: set.projectGeneration })}
         </p>
+      ) : null}
+
+      {set.sourceSetId ? (
+        <p className="text-muted-foreground text-sm">
+          {sourceQuery.data ? (
+            <Link
+              href={`/projects/${projectId}/eval/${set.sourceSetId}`}
+              className="hover:text-primary"
+            >
+              {t("translatedFrom", { name: sourceQuery.data.name })}
+            </Link>
+          ) : sourceQuery.error ? (
+            t("translatedFromDeleted")
+          ) : null}
+        </p>
+      ) : null}
+
+      {unfaithful > 0 ? (
+        <Alert variant="warning">
+          <AlertDescription>
+            {t("unfaithfulCount", { count: unfaithful })}
+          </AlertDescription>
+        </Alert>
       ) : null}
 
       {set.status === "failed" && set.error ? (

@@ -13,12 +13,14 @@
     "summaryWithErrors": "命中 {hits}/{answered} · 正確 {correct} · 部分正確 {partial} · 錯誤 {wrong} · 出錯 {errors}"
   },
   "wholeProject": "整個專案",
+  "unfaithful": "未能忠實翻譯",
   "setTable": {
     "emptyTitle": "暫無評測集",
     "emptyDescription": "生成一組附有參考答案的問題，然後執行以查看助手在此專案上的表現。",
     "columns": {
       "set": "評測集",
       "path": "路徑",
+      "language": "語言",
       "pairs": "問答對",
       "status": "狀態",
       "latestRun": "最近一次執行",
@@ -102,6 +104,15 @@
     "mixLabel": "組合",
     "mixAria": "問題組合"
   },
+  "translateDialog": {
+    "title": "翻譯 {name}",
+    "description": "將每條問題翻譯成另一種語言，程式碼、檔案路徑和識別符號保持原樣。翻譯集合的執行可與此集合的執行逐題比較。",
+    "submit": "翻譯",
+    "started": "已開始翻譯",
+    "languageLabel": "語言",
+    "languageAria": "目標語言",
+    "alreadyTranslated": "{language}（已翻譯）"
+  },
   "screen": {
     "pairCount": "{count, plural, other {# 個問答對}}",
     "generatedFrom": "生成自第 {generation} 代",
@@ -122,6 +133,10 @@
     "baseRun": "基準執行",
     "headRun": "對比執行",
     "compareFailed": "無法載入比較結果",
-    "somethingWrong": "發生錯誤。"
+    "somethingWrong": "發生錯誤。",
+    "translatedFrom": "翻譯自 {name}",
+    "translatedFromDeleted": "翻譯自已刪除的集合",
+    "unfaithfulCount": "{count, plural, other {# 條問題}}無法在保持程式碼完整的情況下翻譯，已從執行中排除。",
+    "translate": "翻譯"
   }
 }
