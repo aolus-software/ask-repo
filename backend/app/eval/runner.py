@@ -27,6 +27,7 @@ from langchain_core.language_models import BaseChatModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import Settings
+from app.core.language import Language, parse_language
 from app.core.notifications import NotificationType
 from app.db.session import get_sessionmaker
 from app.eval.model_output import JudgeVerdict
@@ -45,6 +46,7 @@ from app.rag.retriever import CodeRetriever
 from app.repositories.eval_pair import EvalPairRepository
 from app.repositories.eval_result import EvalResultRepository
 from app.repositories.eval_run import LEASE_RENEWAL_SECONDS, LEASE_SECONDS, EvalRunRepository
+from app.repositories.eval_set import EvalSetRepository
 from app.repositories.project import ProjectRepository
 from app.schemas.conversation import (
     CitationPayload,
@@ -101,6 +103,7 @@ class EvalRunner:
         self.pairs = EvalPairRepository(session)
         self.results = EvalResultRepository(session)
         self.projects = ProjectRepository(session)
+        self.sets = EvalSetRepository(session)
 
     async def run(
         self, *, target_id: uuid.UUID, job_id: uuid.UUID, worker_id: str, attempt: int = 0
@@ -129,6 +132,12 @@ class EvalRunner:
         project_id = project.id
         generation = project.active_generation
         set_id = run.set_id
+        eval_set = await self.sets.get(set_id)
+        # The set's language, never the requester's: a run must not depend on who
+        # pressed the button (spec §4.3).
+        reply_language = (
+            parse_language(eval_set.language) if eval_set is not None else None
+        ) or Language.EN
         answerer = self._answerer(project)
 
         run.prompt_version = ANSWER_PROMPT_VERSION
@@ -162,6 +171,7 @@ class EvalRunner:
                             generation=generation,
                             attempt=attempt,
                             run_id=run_id,
+                            reply_language=reply_language,
                         )
                         for pair in chunk
                     ]
@@ -258,6 +268,7 @@ class EvalRunner:
         generation: int,
         attempt: int,
         run_id: uuid.UUID,
+        reply_language: Language,
     ) -> EvalResult:
         """One pair: drain the answer, then grade it.
 
@@ -279,6 +290,7 @@ class EvalRunner:
                 project_id=project_id,
                 generation=generation,
                 message_id=result_id,
+                reply_language=reply_language,
             ):
                 if isinstance(event, CitationsEvent):
                     citations = list(event.citations)

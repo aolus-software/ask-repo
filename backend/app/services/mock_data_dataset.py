@@ -24,6 +24,7 @@ from app.core import access
 from app.core.audit import AuditEntry, AuditEventType, AuditRecorder
 from app.core.errors import AppError, ErrorCode
 from app.core.feedback import FeedbackTarget
+from app.core.language import Language, parse_language
 from app.core.middleware import AuthenticatedUser
 from app.core.permissions import Permission
 from app.live.events import mock_data_event
@@ -367,6 +368,7 @@ class MockDataDatasetService:
             dataset_id=dataset.id,
             project_id=project.id,
             generation=project.active_generation,
+            reply_language=parse_language(project.content_language) or Language.EN,
             collection=project.embedding_collection or "",
             question=payload.question,
             history=[
@@ -441,6 +443,9 @@ class MockDataTurnContext:
     dataset_id: uuid.UUID
     project_id: uuid.UUID
     generation: int
+    # the project's `content_language`: the reply and its proposal are shared documents
+    # (spec §4.3)
+    reply_language: Language
     collection: str
     question: str
     history: builtins.list[Turn]
@@ -478,6 +483,7 @@ async def stream_mock_data_turn(
         existing_records=context.existing_records,
         change_set_id=context.change_set_id,
         module_name=context.module_name,
+        reply_language=context.reply_language,
     )
     iterator = events.__aiter__()
     pending: asyncio.Task[StreamEvent] | None = None

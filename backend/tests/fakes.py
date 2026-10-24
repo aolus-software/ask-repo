@@ -371,6 +371,7 @@ class FakeAnswerer:
         existing_items: list[ExistingItem] | None = None,
         change_set_id: uuid.UUID | None = None,
         module_name: str = "",
+        reply_language: Language = Language.EN,
     ) -> AsyncGenerator[StreamEvent]:
         """Yield the scripted events, then hang forever if `hang` was requested.
 
