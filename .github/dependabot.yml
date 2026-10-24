@@ -1,0 +1,29 @@
+# Security alerts open their own PRs immediately; these schedules cover routine version bumps.
+# Minor and patch updates are grouped per ecosystem so a week's churn arrives as one PR.
+version: 2
+updates:
+  - package-ecosystem: uv
+    directory: /backend
+    schedule:
+      interval: weekly
+    groups:
+      backend-minor-and-patch:
+        update-types: [minor, patch]
+
+  - package-ecosystem: bun
+    directory: /frontend
+    schedule:
+      interval: weekly
+    groups:
+      frontend-minor-and-patch:
+        update-types: [minor, patch]
+
+  - package-ecosystem: docker
+    directory: /infra
+    schedule:
+      interval: weekly
+
+  - package-ecosystem: docker-compose
+    directory: /infra
+    schedule:
+      interval: weekly
