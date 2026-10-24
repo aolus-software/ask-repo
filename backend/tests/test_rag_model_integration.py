@@ -516,15 +516,21 @@ async def test_the_judge_accepts_the_reference_and_rejects_a_wrong_location(
     assert isinstance(other, JudgeVerdict) and other.verdict == "wrong", other
 
 
-NON_ENGLISH_QUESTIONS = [
-    ("Di mana validate_repo_url dipanggil?", Language.ID),
-    ("validate_repo_url은 어디에서 호출되나요?", Language.KO),
+NON_ENGLISH_SEARCH_QUESTIONS = [
+    "Di mana validate_repo_url dipanggil?",
+    "validate_repo_url은 어디에서 호출되나요?",
+]
+
+# Answerable from SPANS (mirrors the English question about resolve_project_scope).
+NON_ENGLISH_ANSWERABLE = [
+    ("Apa yang dikembalikan resolve_project_scope di fase 1?", Language.ID),
+    ("resolve_project_scope는 1단계에서 무엇을 반환하나요?", Language.KO),
 ]
 
 
-@pytest.mark.parametrize(("question", "language"), NON_ENGLISH_QUESTIONS)
+@pytest.mark.parametrize("question", NON_ENGLISH_SEARCH_QUESTIONS)
 async def test_a_non_english_question_searches_in_english_and_keeps_the_identifier(
-    settings: Settings, question: str, language: Language
+    settings: Settings, question: str
 ) -> None:
     """Retrieval embeds the search query against English-leaning code, so the rewrite
     must be English while the identifier survives exactly as typed."""
@@ -538,7 +544,7 @@ async def test_a_non_english_question_searches_in_english_and_keeps_the_identifi
     assert classification.search_query.isascii(), classification.search_query
 
 
-@pytest.mark.parametrize(("question", "language"), NON_ENGLISH_QUESTIONS)
+@pytest.mark.parametrize(("question", "language"), NON_ENGLISH_ANSWERABLE)
 async def test_a_non_english_answer_still_cites(
     settings: Settings, question: str, language: Language
 ) -> None:
