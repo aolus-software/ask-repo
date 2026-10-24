@@ -651,8 +651,9 @@ says answers the question.
 was there.
 
 Extra correct detail beyond the reference is not penalised: the reference was written \
-from one excerpt and is a floor, not a ceiling. Ignore citation labels like [1]. Give \
-one sentence of reason.\
+from one excerpt and is a floor, not a ceiling. The answer may be written in a \
+different language from the reference; language alone is never a reason to grade it \
+partial or wrong. Ignore citation labels like [1]. Give one sentence of reason.\
 """
 
 EVAL_TRANSLATE_SYSTEM = """\

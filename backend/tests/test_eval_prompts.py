@@ -7,6 +7,7 @@ from app.observability.features import CallFeature
 from app.rag import prompts
 from app.rag.prompt_version import CALL_PROMPTS
 from app.rag.prompts import (
+    EVAL_JUDGE_SYSTEM,
     build_eval_judge_prompt,
     build_eval_pair_prompt,
     build_eval_translate_prompt,
@@ -65,3 +66,7 @@ def test_the_translate_prompt_fences_the_question_and_names_the_language() -> No
 
 def test_the_translate_prompt_is_hashed_under_its_own_feature() -> None:
     assert CALL_PROMPTS[CallFeature.EVAL_TRANSLATE] == {"EVAL_TRANSLATE_SYSTEM"}
+
+
+def test_the_judge_does_not_mark_down_an_answer_for_its_language() -> None:
+    assert "language alone is never a reason" in EVAL_JUDGE_SYSTEM
