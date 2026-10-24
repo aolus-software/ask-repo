@@ -34,8 +34,9 @@ test, which is what makes a silent addition impossible.
 every environment except `production`, where the tag is omitted. There is no per-call
 templating for the subject: `MESSAGES` maps each `Language` and `NotificationType` to one subject
 and one body sentence, and the reset email's subject is one fixed string per language
-(`RESET_MESSAGES`). The templates' fixed chrome (button labels, footer, manage link, reset intro and expiry) comes from
-`CHROME`, a per-language `MailChrome`, and is passed to Jinja as fixed strings. A test requires
+(`RESET_MESSAGES`). The templates' fixed chrome (button labels, footer, manage link, reset intro
+and expiry) comes from `CHROME`, a per-language `MailChrome`, and is passed to Jinja as fixed
+strings. A test requires
 every `Language` × every `NotificationType` in `MESSAGES` and every `Language` in `RESET_MESSAGES`
 and `CHROME`, so a new event or language without its translations fails the test rather than the
 email. The non-English tables are machine-assisted drafts pending native-speaker review.
