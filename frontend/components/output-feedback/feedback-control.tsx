@@ -3,7 +3,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { ThumbsDown, ThumbsUp } from "lucide-react";
 import { useTranslations } from "next-intl";
-import { useState } from "react";
+import { useId, useState } from "react";
 import { toast } from "sonner";
 
 import {
@@ -12,7 +12,7 @@ import {
 } from "@/components/output-feedback/reason-labels";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Label } from "@/components/ui/label";
+import { Field, FieldError, FieldLabel } from "@/components/ui/field";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Textarea } from "@/components/ui/textarea";
 import { apiFetch } from "@/lib/api/client";
@@ -105,6 +105,7 @@ export function FeedbackControl({
     initial?.reasonCodes ?? [],
   );
   const [note, setNote] = useState(initial?.note ?? "");
+  const noteId = useId();
 
   const path = endpoints.feedback.vote(targetType, targetId);
 
@@ -139,6 +140,22 @@ export function FeedbackControl({
     mutation.mutate(next);
   }
 
+  /** Seeds the form from the vote as it stands now, so a close without sending, a
+   * removed vote or a failed save never leaves the last attempt's ticks behind. */
+  function openPopover() {
+    const down = vote?.rating === "down" ? vote : null;
+    setReasons(down?.reasonCodes ?? []);
+    setNote(down?.note ?? "");
+    mutation.reset();
+    setOpen(true);
+  }
+
+  function onOpenChange(next: boolean) {
+    // A down vote's trigger click withdraws it (`onThumb`); it never opens the form.
+    if (next && vote?.rating !== "down") openPopover();
+    else if (!next) setOpen(false);
+  }
+
   function onThumb(rating: FeedbackRating) {
     if (vote?.rating === rating) {
       submit(null);
@@ -149,7 +166,7 @@ export function FeedbackControl({
       submit({ rating: "up", reasonCodes: [], note: null });
       return;
     }
-    setOpen(true);
+    openPopover();
   }
 
   function toggleReason(code: FeedbackReasonCode, checked: boolean) {
@@ -158,9 +175,13 @@ export function FeedbackControl({
     );
   }
 
+  /** The popover stays up until the save lands, so a failure can be shown beside the
+   * form that caused it instead of only in a toast. */
   function sendDown() {
-    submit({ rating: "down", reasonCodes: reasons, note: note.trim() || null });
-    setOpen(false);
+    mutation.mutate(
+      { rating: "down", reasonCodes: reasons, note: note.trim() || null },
+      { onSuccess: () => setOpen(false) },
+    );
   }
 
   return (
@@ -176,7 +197,7 @@ export function FeedbackControl({
       >
         <ThumbsUp className={cn("size-4", vote?.rating === "up" && "fill-current")} />
       </Button>
-      <Popover open={open} onOpenChange={setOpen}>
+      <Popover open={open} onOpenChange={onOpenChange}>
         <PopoverTrigger
           render={
             <Button
@@ -205,28 +226,41 @@ export function FeedbackControl({
           <p className="text-sm font-medium">{t("whatWentWrong")}</p>
           <div className="space-y-2">
             {reasonsFor(targetType).map((code) => (
-              <Label key={code} className="flex items-center gap-2 font-normal">
+              <Field key={code} orientation="horizontal">
                 <Checkbox
+                  id={`${noteId}-${code}`}
                   checked={reasons.includes(code)}
                   onCheckedChange={(checked) => toggleReason(code, checked === true)}
                 />
-                {t(`reasons.${code}`)}
-              </Label>
+                <FieldLabel htmlFor={`${noteId}-${code}`} className="font-normal">
+                  {t(`reasons.${code}`)}
+                </FieldLabel>
+              </Field>
             ))}
           </div>
-          <Textarea
-            aria-label={t("noteLabel")}
-            placeholder={t("notePlaceholder")}
-            maxLength={NOTE_MAX_LENGTH}
-            value={note}
-            onChange={(event) => setNote(event.target.value)}
-          />
+          <Field>
+            <FieldLabel htmlFor={noteId} className="sr-only">
+              {t("noteLabel")}
+            </FieldLabel>
+            <Textarea
+              id={noteId}
+              placeholder={t("notePlaceholder")}
+              maxLength={NOTE_MAX_LENGTH}
+              value={note}
+              onChange={(event) => setNote(event.target.value)}
+            />
+          </Field>
           <p className="text-muted-foreground text-xs">{t("noteDisclosure")}</p>
           <p className="text-muted-foreground text-xs">
             {note.length}/{NOTE_MAX_LENGTH}
           </p>
+          {mutation.isError ? <FieldError>{t("saveFailed")}</FieldError> : null}
           <div className="flex justify-end">
-            <Button size="sm" disabled={reasons.length === 0} onClick={sendDown}>
+            <Button
+              size="sm"
+              disabled={reasons.length === 0 || mutation.isPending}
+              onClick={sendDown}
+            >
               {t("send")}
             </Button>
           </div>

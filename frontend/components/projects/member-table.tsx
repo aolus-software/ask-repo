@@ -174,7 +174,7 @@ export function MemberTable({
   // to the person who opened this tab to check exactly that
   // (`docs/audit-finding-solved-logs.md` §U7.4).
   if (query.isError) {
-    return <ListError error={query.error} onRetry={() => query.refetch()} />;
+    return <ListError padded error={query.error} onRetry={() => query.refetch()} />;
   }
 
   if (!query.isLoading && members.length === 0) {

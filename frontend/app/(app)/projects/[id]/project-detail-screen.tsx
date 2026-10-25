@@ -200,6 +200,7 @@ export function ProjectDetailScreen({ id }: { id: string }) {
               <EvalSetTable
                 projectId={project.id}
                 canDelete={can(project, PERMISSION.EVAL_RUN)}
+                permissions={project.permissions}
               />
             </Card>
           </TabsContent>

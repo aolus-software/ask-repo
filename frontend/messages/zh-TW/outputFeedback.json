@@ -58,6 +58,9 @@
     "filterByReason": "依原因篩選",
     "up": "正評",
     "down": "負評",
+    "projectChip": "專案：{value}",
+    "promptVersionChip": "提示版本：{value}",
+    "removeFilter": "移除篩選：{label}",
     "fromDate": "起始日期",
     "toDate": "結束日期"
   }

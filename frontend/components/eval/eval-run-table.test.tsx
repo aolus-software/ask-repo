@@ -40,6 +40,21 @@ describe("EvalRunTable", () => {
     expect(onSelect).toHaveBeenCalledWith("r1");
   });
 
+  it("renders a pagination footer and reports the page asked for", async () => {
+    const onPageChange = vi.fn();
+    render(
+      <EvalRunTable
+        runs={[RUN]}
+        onSelect={vi.fn()}
+        pagination={{ page: 1, totalPages: 2, totalCount: 101, onPageChange }}
+      />,
+    );
+
+    expect(screen.getByText("Page 1 of 2 · 101 total")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "Next" }));
+    expect(onPageChange).toHaveBeenCalledWith(2);
+  });
+
   it("opens the run from the keyboard with Space", async () => {
     const onSelect = vi.fn();
     render(<EvalRunTable runs={[RUN]} onSelect={onSelect} />);

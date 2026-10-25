@@ -25,9 +25,10 @@ import { usePhaseLabel } from "@/hooks/use-phase-label";
 import type {
   CitationPayload,
   FinishReason,
+  MockDataChangeSetEventPayload,
   MockDataMessageResponse,
 } from "@/lib/api/types";
-import { consumeMockDataStream } from "@/lib/mock-data/stream";
+import { consumeRefinementStream } from "@/lib/refinement/stream";
 import { keys } from "@/lib/query/keys";
 
 interface TurnState {
@@ -144,25 +145,29 @@ export function MockDataChatPanel({
           queryKey: keys.mockDataMessages.forModule(moduleId),
         });
 
-        const result = await consumeMockDataStream(response, {
-          onPhase: (phase) => {
-            current = { ...current, phase };
-            setTurn(current);
+        const result = await consumeRefinementStream<MockDataChangeSetEventPayload>(
+          response,
+          "mockDataChangeSet",
+          {
+            onPhase: (phase) => {
+              current = { ...current, phase };
+              setTurn(current);
+            },
+            onCitations: (citations) => {
+              current = { ...current, citations };
+              setTurn(current);
+            },
+            onToken: (text) => {
+              current = { ...current, text: current.text + text };
+              scheduleFlush();
+            },
+            onChangeSet: () => {
+              void queryClient.invalidateQueries({
+                queryKey: keys.mockData.detail(moduleId),
+              });
+            },
           },
-          onCitations: (citations) => {
-            current = { ...current, citations };
-            setTurn(current);
-          },
-          onToken: (text) => {
-            current = { ...current, text: current.text + text };
-            scheduleFlush();
-          },
-          onChangeSet: () => {
-            void queryClient.invalidateQueries({
-              queryKey: keys.mockData.detail(moduleId),
-            });
-          },
-        });
+        );
 
         if (result.error) {
           current = {

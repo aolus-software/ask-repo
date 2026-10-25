@@ -41,7 +41,7 @@ export function AuditScreen() {
     { extraParams: EXTRA_PARAMS },
   );
   const listParams = params as AuditEventListParams;
-  const query = useAuditEvents(listParams);
+  const query = useAuditEvents(listParams, { enabled: user.isAdmin });
   const events = query.data?.items ?? [];
 
   // The route body is wrapped in its gate. Hiding the nav item is not gating the

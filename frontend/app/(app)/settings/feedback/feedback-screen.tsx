@@ -9,6 +9,7 @@ import { ListError } from "@/components/feedback/list-error";
 import { ListToolbar } from "@/components/layout/list-toolbar";
 import { PageHeader } from "@/components/layout/page-header";
 import { PaginationFooter } from "@/components/layout/pagination-footer";
+import { ActiveFilterChips } from "@/components/output-feedback/active-filter-chips";
 import { FeedbackFilters } from "@/components/output-feedback/feedback-filters";
 import {
   FeedbackSummary,
@@ -47,9 +48,12 @@ export function FeedbackScreen() {
     { extraParams: EXTRA_PARAMS },
   );
   const listParams = params as FeedbackListParams;
-  const list = useFeedbackList(listParams);
-  const summary = useFeedbackSummary(listParams);
+  const list = useFeedbackList(listParams, { enabled: user.isAdmin });
+  const summary = useFeedbackSummary(listParams, { enabled: user.isAdmin });
   const rows = list.data?.items ?? [];
+  const projectName = rows.find(
+    (row) => row.projectId === listParams.projectId,
+  )?.projectName;
   const filtered = EXTRA_PARAMS.some((key) => Boolean(listParams[key]));
 
   if (!user.isAdmin) return <Forbidden message={t("forbidden")} />;
@@ -69,6 +73,12 @@ export function FeedbackScreen() {
             }}
           />
         }
+      />
+
+      <ActiveFilterChips
+        filters={listParams}
+        projectName={projectName}
+        onRemove={(key) => setParam(key, undefined)}
       />
 
       {summary.isError ? (

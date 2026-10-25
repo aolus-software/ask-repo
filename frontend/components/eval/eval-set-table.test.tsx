@@ -1,5 +1,6 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { EvalSetTable } from "@/components/eval/eval-set-table";
@@ -127,5 +128,64 @@ describe("EvalSetTable", () => {
 
     const link = await screen.findByRole("link", { name: "Auth questions" });
     expect(link).toHaveAttribute("href", "/projects/p1/eval/s1");
+  });
+});
+
+describe("EvalSetTable pagination", () => {
+  it("pages with page and limit only, and shows the footer past one page", async () => {
+    const fetchMock = vi.fn(async (url: string) => {
+      const next = String(url).includes("page=2");
+      return Response.json({
+        items: [
+          makeSet({
+            id: next ? "s2" : "s1",
+            name: next ? "Second page" : "First page",
+          }),
+        ],
+        page: next ? 2 : 1,
+        limit: 100,
+        totalCount: 101,
+        totalPages: 2,
+      });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    renderTable();
+
+    expect(await screen.findByText("First page")).toBeInTheDocument();
+    expect(screen.getByText("Page 1 of 2 · 101 total")).toBeInTheDocument();
+    const first = new URL(String(fetchMock.mock.calls[0][0]), "http://x");
+    expect([...first.searchParams.keys()].sort()).toEqual(["limit", "page"]);
+
+    await userEvent.click(screen.getByRole("button", { name: "Next" }));
+
+    expect(await screen.findByText("Second page")).toBeInTheDocument();
+    expect(screen.getByText("Page 2 of 2 · 101 total")).toBeInTheDocument();
+  });
+
+  it("shows no footer for a single page", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => Response.json(page([makeSet()]))),
+    );
+    renderTable();
+
+    await screen.findByText("Auth questions");
+    expect(screen.queryByRole("button", { name: "Next" })).toBeNull();
+  });
+
+  it("offers Generate in the empty state for a caller who may run evals", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => Response.json(page([]))),
+    );
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={client}>
+        <EvalSetTable projectId="p1" permissions={["eval.run"]} />
+      </QueryClientProvider>,
+    );
+
+    expect(await screen.findByText("No eval sets yet")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /generate/i })).toBeInTheDocument();
   });
 });

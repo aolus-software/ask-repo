@@ -28,7 +28,7 @@ export function AuditEventScreen({ id }: { id: string }) {
   const auditEventLabel = useAuditEventLabel();
   const formatRelative = useFormatRelative();
   const user = useSession();
-  const query = useAuditEvent(id);
+  const query = useAuditEvent(id, { enabled: user.isAdmin });
 
   // The route body is wrapped in its gate. Hiding the nav item is not gating the
   // route — an operator can type the URL (navigation.md §6). This mirrors the

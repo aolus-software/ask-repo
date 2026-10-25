@@ -7,6 +7,7 @@ import { notificationHref, notificationTitle } from "@/lib/notifications";
 import type { NotificationSummary } from "@/lib/api/types";
 import { cn } from "@/lib/utils";
 import { useFormatRelative } from "@/hooks/use-format-date";
+import { formatAbsolute } from "@/lib/dates";
 
 type Props = {
   notifications: NotificationSummary[];
@@ -54,7 +55,10 @@ export function NotificationList({ notifications, onRead, emptyMessage }: Props)
                 </span>
                 {unread ? <span className="sr-only">{t("unread")}</span> : null}
               </span>
-              <span className="text-muted-foreground text-xs">
+              <span
+                className="text-muted-foreground text-xs"
+                title={formatAbsolute(n.createdAt)}
+              >
                 {formatRelative(n.createdAt)}
               </span>
             </Link>

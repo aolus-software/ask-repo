@@ -172,7 +172,7 @@ function renderScreen() {
 afterEach(() => vi.unstubAllGlobals());
 
 describe("EvalSetScreen", () => {
-  it("shows not-found and fetches no eval data without eval.read", async () => {
+  it("shows forbidden, not not-found, and fetches no eval data without eval.read", async () => {
     const fetchMock = stubApi([]);
     renderScreen();
 
@@ -181,7 +181,8 @@ describe("EvalSetScreen", () => {
         fetchMock.mock.calls.some(([u]) => String(u).endsWith("/projects/p1")),
       ).toBe(true),
     );
-    await screen.findByText(/not found|does not exist/i);
+    await screen.findByText("You do not have access to this");
+    expect(screen.queryByText(/not found|does not exist/i)).toBeNull();
     expect(fetchMock.mock.calls.some(([u]) => String(u).includes("/eval-"))).toBe(
       false,
     );
