@@ -15,9 +15,17 @@ deliberately — do not fork a second style.
 | **2–4 inputs**, all simple (text, select, single password) | `FormDialog` |
 | **5+ inputs**, OR any checkbox picker, OR a repeatable/unbounded list | `FormPage` on its own route |
 | A single destructive confirmation, no inputs | `ConfirmDialog` |
+| **One control and a Save button** in a settings card (an inline-save section) | neither — a card on the screen that owns the setting |
 
 A checkbox picker counts as "many" on its own, whatever the field count, because it has no fixed
 height. A repeatable list counts too.
+
+An inline-save settings section is a legitimate fourth surface: one control and its own Save button
+inside a card, as in `components/profile/language-section.tsx` and
+`components/projects/content-language-section.tsx`. It saves one preference in place, so a dialog
+or a page would only add a hop. It still follows §4 and §8 (backend-owned validation, toast on
+success, stay put on error); it is not a shell, so a second control means moving it to a
+`FormDialog`.
 
 Applied to the screens the PRD describes:
 
@@ -25,8 +33,8 @@ Applied to the screens the PRD describes:
 | --- | --- | --- |
 | Create user (admin) | name, email, password, isAdmin | dialog |
 | Reset a user's password | new password | dialog |
-| Change own password (forced first login) | current, new | dialog |
-| Create project | repoUrl, branch, pat | dialog |
+| Change own password (forced first login, and the profile's Password section) | current, new | `FormPage` |
+| Create project | repoUrl, branch, pat, contentLanguage | dialog |
 | Confirm project delete | none | `ConfirmDialog` |
 | Confirm project reindex | none | `ConfirmDialog` |
 | Generate mock data | count | inline control beside the module's Generate button — one field, no dialog or page |

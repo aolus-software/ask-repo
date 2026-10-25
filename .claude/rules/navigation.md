@@ -43,18 +43,24 @@ parent row and whose panel holds `SidebarMenuSub` child links.
 - A group whose children are all unreachable is **hidden entirely**. A group that opens onto
   nothing is broken UI.
 
-## 4. Gate nav items in the config, not the component
+## 4. Two axes of authority: the nav gates on `is_admin`, screens gate on per-project permissions
 
-A `NavItem` carries an optional `adminOnly` flag. Phase 1 has exactly one axis of authority —
-`is_admin` — so that is a boolean, not a permission string. Do not invent a permission system in
-the frontend ahead of the backend having one.
+A `NavItem` carries an optional `adminOnly` flag, and that is the only thing the nav config
+gates on: a destination is reachable either by everyone who is signed in or by administrators
+alone. Whether a member may *do* something to one project is a different question, decided by
+that project's role, and it never reaches `lib/nav.ts`.
 
-While the profile request is pending the sidebar renders placeholder rows, **never a filtered
-list**. Showing a short menu that then grows is the visible form of a permission flash.
+That second axis lives in `lib/can.ts`. The server sends the caller's effective permission set
+on each project response (`ProjectResponse.permissions`), and `can(subject, PERMISSION.X)` asks
+whether a string is in it. The client never reconstructs what a role means, so a custom role an
+administrator creates works with no frontend release. A screen uses `can` to hide or disable a
+control; hiding is cosmetic and `require_permission` on the backend is the control.
 
-> **Phase 2 will add per-project access** (`docs/PRD.md` §2.1). When it does, `adminOnly` becomes
-> a richer predicate in this same config, and no component changes. Keep the gate declarative for
-> that reason.
+The user is resolved on the server before the shell renders (`app/(app)/layout.tsx` fetches
+`/auth/me` and hands it to `AppShell`), so the sidebar's `useSession()` is never pending.
+**Never render a filtered list before the user is known** — a short menu that then grows is the
+visible form of a permission flash. Do not add a placeholder skeleton for a loading state that
+this layout makes impossible.
 
 ## 5. Breadcrumbs: separator is a sibling, never a child
 
@@ -80,24 +86,32 @@ assertion. Wrap each pair in a `Fragment` and emit the separator beside the item
 
 A read-only resource has a list and a detail and nothing else.
 
-The shape AskRepo is heading for:
+The routes under `frontend/app/(app)/`:
 
 ```
 /                       dashboard
 /projects               list + create dialog
-/projects/[id]          detail: status, stats, reindex, delete
+/projects/[id]          detail: status, stats, reindex, delete; Members and Eval tabs
+/projects/[id]/eval/[setId]  one eval set
 /ask                    Dev Knowledge — project picker + conversation
 /ask/[conversationId]   a conversation (private to the operator)
 /checklist              QA Checklist modules (shared)
 /checklist/export       export a project's checklist and mock data (a FormPage)
-/checklist/[moduleId]   the checklist grid, chat and review panel
+/checklist/[moduleId]   the checklist grid, chat and review panel; Mock Data tab
+/notifications          the bell's list (breadcrumb-only, §8)
+/profile                the account page (breadcrumb-only, §8)
 /settings               index route — redirects to its first reachable child
 /settings/users         admin only
 /settings/roles         admin only — the role list
 /settings/roles/[id]    admin only — one role's permission matrix
 /settings/audit         admin only — the audit trail
 /settings/audit/[eventId]  admin only — one recorded event
+/settings/feedback      admin only — votes and notes on model output
+/settings/notifications redirects to /profile#notifications (§8)
 ```
+
+The signed-out routes under `app/(auth)/` are `/login`, `/forgot-password`, `/reset-password`
+and `/change-password`.
 
 Notes that bite:
 

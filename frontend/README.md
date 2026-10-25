@@ -20,11 +20,17 @@ carries a **Members** tab — grant, change role, revoke — as a tab, not a rou
 verdicts and answers, and a comparison of two runs on the pairs both answered.
 Notifications add `/notifications` (a paginated list, filterable by project/type/unread) — the
 bell itself lives in the app shell's navbar, not a route. `/profile`, opened from the account
-menu, carries six sections — account, answer style (three radio dials shaping your own Ask
-answers), sessions (with a per-session sign-out), activity (the caller's own audit-trail
+menu, carries seven sections — account, answer style (three radio dials shaping your own Ask
+answers), language (a radio group that saves with `PUT /me/language` and sets the
+`askrepo_locale` cookie), sessions (with a per-session sign-out), activity (the caller's own audit-trail
 rows), notifications (per-event in-app and email switches; the email switch is enabled only
 when `MAIL_ENABLED` is true on the instance), and password — and
 `/settings/notifications` now only redirects to `/profile#notifications`.
+
+Model output carries a vote. `FeedbackControl` (`components/output-feedback/`) puts a thumbs-up
+and a thumbs-down under an Ask answer, a refinement-chat reply and each change set; thumbs-down
+asks for reasons and an optional note. Administrators read the votes at `/settings/feedback` — a
+summary and a filterable table, with no voter and only the day of each vote.
 
 **Controls are hidden from what the server said, never from a client-side rule.** Each project
 response carries the caller's own `role` and effective `permissions`, and the UI hides what
@@ -106,7 +112,8 @@ frontend/
 │   ├── globals.css        # Tailwind entry + theme tokens (only file with raw hex)
 │   ├── manifest.ts        # web app manifest — served at /manifest.webmanifest
 │   ├── favicon.ico icon.png apple-icon.png   # copies of ../assets/favicon/
-│   ├── (auth)/            # shell-less: /login, /change-password
+│   ├── (auth)/            # shell-less: /login, /forgot-password, /reset-password,
+│   │                      #   /change-password
 │   ├── (app)/             # the shell: dashboard, projects (/projects, /projects/[id],
 │   │                      #   /projects/[id]/eval/[setId]),
 │   │                      #   ask, checklist (/checklist, /checklist/export,
@@ -114,32 +121,46 @@ frontend/
 │   │                      #   notifications (/notifications), profile (/profile),
 │   │                      #   settings (/settings/users, /settings/roles, /settings/roles/[id],
 │   │                      #     /settings/audit, /settings/audit/[eventId],
+│   │                      #     /settings/feedback,
 │   │                      #     /settings/notifications — redirects to /profile#notifications)
 │   └── api/
 │       ├── [...path]/     # the API forwarding route the browser talks to
-│       └── auth/          # login, refresh, logout, locale — the cookie writers,
-│                          #   plus the four public password routes
+│       └── auth/          # login, refresh, logout, locale — the cookie writers —
+│                          #   plus the public forwards: password-policy and
+│                          #   password-reset/{availability,request,confirm}
 ├── components/
 │   ├── ui/                # shadcn, CLI-managed
-│   ├── layout/ form/ feedback/
-│   └── auth/ projects/ ask/ checklist/ mock-data/ eval/ roles/ users/ notifications/ profile/
+│   ├── layout/ form/ feedback/ live/
+│   └── auth/ projects/ ask/ checklist/ mock-data/ change-sets/ eval/ roles/ users/ audit/
+│       notifications/ output-feedback/ profile/
 │       #   auth/ holds the signed-out language selector
-│       #   projects/ also holds the Members tab: member-table, add-member-dialog
+│       #   projects/ also holds the Members tab: member-table, add-member-dialog,
+│       #     and the content-language section
+│       #   change-sets/ holds the operation list the checklist and mock-data panels share
 │       #   eval/ holds the set table, generate dialog, set screen, pair and run tables,
 │       #     the run sheet and the two-run comparison
 │       #   roles/ holds the role table, create dialog, permission matrix, role badge
+│       #   audit/ holds the audit table, filters and event detail
+│       #   live/ holds the provider for the `GET /events` stream
 │       #   notifications/ holds the bell, the popover list, and the deep-link mapper's UI
+│       #   output-feedback/ holds the vote control and the admin feedback screen's
+│       #     table, summary and filters
 │       #   profile/ holds the seven sections: account, answer style, language,
 │       #     sessions, activity, notifications (reuses notifications/preferences-screen),
 │       #     password
 ├── hooks/                 # one file per resource
 ├── lib/
 │   ├── api/               # types, endpoints, errors, both fetch clients
-│   ├── auth/              # cookie names, single-flight refresh, the locale cookie
+│   ├── auth/              # cookie names, single-flight refresh, the locale cookie,
+│   │                      #   forwarded headers, the public forward
 │   ├── i18n/              # the language list, error text by code, catalogue parity test
 │   ├── ask/               # SSE parser, pending-question carrier
+│   ├── checklist/         # change-set operations, path helpers, the refinement stream
+│   ├── mock-data/         # the mock-data refinement stream
+│   ├── live/              # reconnect backoff, event-to-query invalidation
+│   ├── query/             # the query client, keys and provider
 │   ├── eval-compare.ts    # two runs compared on the pairs both answered
-│   └── query/ nav.ts status.ts dates.ts can.ts
+│   └── nav.ts nav-child.ts settings-nav.ts can.ts status.ts dates.ts notifications.ts …
 ├── public/                # logo.png + the two android-chrome sizes the manifest names
 └── .env.example
 ```
