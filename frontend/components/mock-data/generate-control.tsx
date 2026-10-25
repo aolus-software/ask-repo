@@ -22,9 +22,12 @@ const COUNT_OPTIONS = [5, 10, 25, 50] as const;
 export function GenerateMockDataControl({
   moduleId,
   blockedBecause,
+  disabled = false,
 }: {
   moduleId: string;
   blockedBecause: string | null;
+  /** Disables the control without a reason, e.g. while permissions are not yet known. */
+  disabled?: boolean;
 }) {
   const t = useTranslations("mockData.generateControl");
   const errorText = useErrorText();
@@ -33,7 +36,7 @@ export function GenerateMockDataControl({
 
   const button = (
     <Button
-      disabled={generate.isPending || blockedBecause !== null}
+      disabled={generate.isPending || blockedBecause !== null || disabled}
       onClick={() =>
         generate.mutate(count, {
           onSuccess: () => toast.success(t("started")),

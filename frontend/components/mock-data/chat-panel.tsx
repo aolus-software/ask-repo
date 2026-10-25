@@ -9,9 +9,11 @@ import { Answer } from "@/components/ask/answer";
 import { AssistantTurn } from "@/components/ask/assistant-turn";
 import { Composer } from "@/components/ask/composer";
 import { GroundingNotice } from "@/components/ask/grounding-notice";
+import { EndedEarlyNote } from "@/components/ask/ended-early-note";
 import { InterruptedNote } from "@/components/ask/interrupted-note";
 import { MessageList } from "@/components/ask/message-list";
 import { Sources } from "@/components/ask/sources";
+import { TryAgainButton } from "@/components/ask/try-again-button";
 import { EmptyState } from "@/components/feedback/empty-state";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -20,7 +22,11 @@ import { type ApiError, apiErrorFromEvent, isApiError } from "@/lib/api/errors";
 import { useErrorText } from "@/lib/i18n/error-text";
 import { endpoints } from "@/lib/api/endpoints";
 import { usePhaseLabel } from "@/hooks/use-phase-label";
-import type { CitationPayload, MockDataMessageResponse } from "@/lib/api/types";
+import type {
+  CitationPayload,
+  FinishReason,
+  MockDataMessageResponse,
+} from "@/lib/api/types";
 import { consumeMockDataStream } from "@/lib/mock-data/stream";
 import { keys } from "@/lib/query/keys";
 
@@ -36,6 +42,8 @@ interface TurnState {
    * quiet note the Ask screen uses, never the destructive `Alert` a real `error`
    * gets (`docs/audit-finding-solved-logs.md` §U8.6). */
   terminal: "done" | "error" | "interrupted" | null;
+  /** The terminator's `finishReason`; null until one arrives (and for a dropped stream). */
+  finishReason: FinishReason | null;
   /** Null for a failure that carried no API error; the panel then says the reply stopped. */
   error: ApiError | null;
   reconciled: boolean;
@@ -50,6 +58,7 @@ function initialTurnState(): TurnState {
     text: "",
     isStreaming: true,
     terminal: null,
+    finishReason: null,
     error: null,
     reconciled: false,
   };
@@ -76,7 +85,8 @@ export function MockDataChatPanel({
    * Mirrors the backend's `mockdata.edit` gate; it does not replace it. The chat
    * itself stays visible and readable to everyone -- only sending is gated.
    */
-  canSend: boolean;
+  /** `null` while the project's permissions are not known: disabled, no reason given. */
+  canSend: boolean | null;
 }) {
   const t = useTranslations("mockData.chatPanel");
   const phaseLabel = usePhaseLabel();
@@ -100,9 +110,11 @@ export function MockDataChatPanel({
   const [turn, setTurn] = useState<TurnState | null>(null);
   const [preflightError, setPreflightError] = useState<unknown>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const lastQuestionRef = useRef("");
 
   const send = useCallback(
     async (question: string) => {
+      lastQuestionRef.current = question;
       const controller = new AbortController();
       abortRef.current?.abort();
       abortRef.current = controller;
@@ -157,6 +169,7 @@ export function MockDataChatPanel({
             ...current,
             isStreaming: false,
             terminal: "error",
+            finishReason: result.finishReason,
             error: apiErrorFromEvent(result.error),
           };
         } else if (result.done) {
@@ -164,6 +177,7 @@ export function MockDataChatPanel({
             ...current,
             isStreaming: false,
             terminal: "done",
+            finishReason: result.finishReason,
             citedIndexes: result.done.citedIndexes,
             groundingWarnings: result.done.groundingWarnings ?? [],
           };
@@ -204,21 +218,22 @@ export function MockDataChatPanel({
 
   const isStreaming = turn?.isStreaming ?? false;
   const composerDisabled =
-    isStreaming || hasPendingChangeSet || isGenerating || !canSend;
+    isStreaming || hasPendingChangeSet || isGenerating || canSend !== true;
   // A generation holds this dataset's lease; refining it by chat while that run is
   // in flight is refused server-side with a 409 (`MockDataDatasetService.prepare_turn`)
   // because writing `review` over a `generating` row would blind the reconcile sweep
   // to a worker that later dies. The composer must not let a user type a paragraph
   // only to have it rejected.
-  const composerPlaceholder = !canSend
-    ? t("placeholderNoPermission")
-    : isGenerating
-      ? t("placeholderGenerating")
-      : hasPendingChangeSet
-        ? t("placeholderPending")
-        : isStreaming
-          ? t("placeholderAnswering")
-          : t("placeholderDefault");
+  const composerPlaceholder =
+    canSend === false
+      ? t("placeholderNoPermission")
+      : isGenerating
+        ? t("placeholderGenerating")
+        : hasPendingChangeSet
+          ? t("placeholderPending")
+          : isStreaming
+            ? t("placeholderAnswering")
+            : t("placeholderDefault");
 
   return (
     <div className="space-y-6">
@@ -268,6 +283,8 @@ export function MockDataChatPanel({
             <InterruptedNote />
           ) : null}
 
+          {!turn.reconciled ? <EndedEarlyNote reason={turn.finishReason} /> : null}
+
           {turn.terminal === "error" ? (
             <Alert variant="destructive" className="mt-4">
               <AlertTitle>{t("replyStoppedTitle")}</AlertTitle>
@@ -275,6 +292,16 @@ export function MockDataChatPanel({
                 {turn.error ? errorText(turn.error) : t("replyStopped")}
               </AlertDescription>
             </Alert>
+          ) : null}
+
+          {turn.finishReason === "timeout" ? (
+            <TryAgainButton
+              disabled={composerDisabled}
+              onClick={() => {
+                setPreflightError(null);
+                void send(lastQuestionRef.current);
+              }}
+            />
           ) : null}
         </AssistantTurn>
       ) : null}

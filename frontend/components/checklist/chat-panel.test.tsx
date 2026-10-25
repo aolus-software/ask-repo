@@ -22,7 +22,7 @@ function sseResponse(frames: string[]): Response {
   } as Response;
 }
 
-function renderPanel() {
+function renderPanel(canSend: boolean | null = true) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={client}>
@@ -30,7 +30,7 @@ function renderPanel() {
         moduleId="m1"
         hasPendingChangeSet={false}
         isGenerating={false}
-        canSend
+        canSend={canSend}
       />
     </QueryClientProvider>,
   );
@@ -104,5 +104,92 @@ describe("ChatPanel terminal states", () => {
     expect(
       screen.queryByText("The connection dropped. What arrived above is kept."),
     ).toBeNull();
+  });
+});
+
+describe("finishReason handling", () => {
+  afterEach(() => vi.clearAllMocks());
+
+  it("shows the ended-early note for a timeout and resends the last question on Try again", async () => {
+    apiFetch.mockImplementation(() => new Promise(() => {}));
+    apiFetchRaw.mockImplementation(async () =>
+      sseResponse([
+        'event: token\ndata: {"text":"partial"}\n\n',
+        'event: done\ndata: {"messageId":"m1","model":"x","finishReason":"timeout","citedIndexes":[],"groundingWarnings":[]}\n\n',
+      ]),
+    );
+    renderPanel();
+
+    await ask("why did it time out?");
+
+    expect(
+      await screen.findByText("This answer ended early (timeout)."),
+    ).toBeInTheDocument();
+    fireEvent.click(await screen.findByRole("button", { name: "Try again" }));
+
+    await waitFor(() => expect(apiFetchRaw).toHaveBeenCalledTimes(2));
+    expect(apiFetchRaw).toHaveBeenLastCalledWith(
+      expect.stringContaining("/checklist-modules/m1/messages"),
+      expect.objectContaining({
+        body: JSON.stringify({ question: "why did it time out?" }),
+      }),
+    );
+  });
+
+  it("offers Try again on a timeout error terminator", async () => {
+    apiFetch.mockResolvedValue([]);
+    apiFetchRaw.mockResolvedValue(
+      sseResponse([
+        'event: error\ndata: {"messageId":"m1","code":"LLM_UNAVAILABLE","message":"Too slow.","finishReason":"timeout"}\n\n',
+      ]),
+    );
+    renderPanel();
+
+    await ask("slow one");
+
+    expect(
+      await screen.findByRole("button", { name: "Try again" }),
+    ).toBeInTheDocument();
+  });
+
+  it("shows neither the note nor Try again for a normal finish", async () => {
+    apiFetch.mockImplementation(() => new Promise(() => {}));
+    apiFetchRaw.mockResolvedValue(
+      sseResponse([
+        'event: token\ndata: {"text":"ok"}\n\n',
+        'event: done\ndata: {"messageId":"m1","model":"x","finishReason":"stop","citedIndexes":[],"groundingWarnings":[]}\n\n',
+      ]),
+    );
+    renderPanel();
+
+    await ask("fine");
+
+    await waitFor(() => expect(apiFetchRaw).toHaveBeenCalled());
+    expect(screen.queryByRole("button", { name: "Try again" })).toBeNull();
+    expect(screen.queryByText(/ended early/i)).toBeNull();
+  });
+});
+
+describe("composer permission wording", () => {
+  afterEach(() => vi.clearAllMocks());
+
+  it("blocks sending with no permission text while permissions are not yet known", () => {
+    apiFetch.mockResolvedValue([]);
+    renderPanel(null);
+
+    const box = screen.getByLabelText(/your question/i);
+    fireEvent.change(box, { target: { value: "typed" } });
+    expect(screen.getByRole("button", { name: /^ask$/i })).toBeDisabled();
+    expect(box.getAttribute("placeholder") ?? "").not.toMatch(/permission/i);
+  });
+
+  it("names the missing permission once permissions are known to lack it", () => {
+    apiFetch.mockResolvedValue([]);
+    renderPanel(false);
+
+    const box = screen.getByLabelText(/your question/i);
+    fireEvent.change(box, { target: { value: "typed" } });
+    expect(screen.getByRole("button", { name: /^ask$/i })).toBeDisabled();
+    expect(box.getAttribute("placeholder")).toMatch(/do not have permission/i);
   });
 });
