@@ -1,5 +1,7 @@
 import { Suspense } from "react";
 
+import { Skeleton } from "@/components/ui/skeleton";
+
 import { ChecklistScreen } from "./checklist-screen";
 
 /**
@@ -9,7 +11,15 @@ import { ChecklistScreen } from "./checklist-screen";
  */
 export default function ChecklistPage() {
   return (
-    <Suspense fallback={null}>
+    <Suspense
+      fallback={
+        <div className="mx-auto w-full max-w-7xl space-y-4">
+          <Skeleton className="h-8 w-64" />
+          <Skeleton className="h-8 w-full" />
+          <Skeleton className="h-64 w-full" />
+        </div>
+      }
+    >
       <ChecklistScreen />
     </Suspense>
   );

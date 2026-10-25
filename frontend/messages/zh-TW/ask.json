@@ -22,9 +22,17 @@
     "grading": "檢查搜尋結果中…",
     "generating": "撰寫回答中…"
   },
-  "stream": { "noStream": "伺服器未傳送回答串流。", "failed": "回答失敗。" },
-  "composer": { "questionLabel": "你的問題", "ask": "提問" },
-  "answer": { "copyCode": "複製程式碼" },
+  "stream": {
+    "noStream": "伺服器未傳送回答串流。",
+    "failed": "回答失敗。"
+  },
+  "composer": {
+    "questionLabel": "你的問題",
+    "ask": "提問"
+  },
+  "answer": {
+    "copyCode": "複製程式碼"
+  },
   "groundingWarnings": {
     "no_context": "此專案中找不到相關內容，因此未根據其程式碼產生回答。",
     "uncited_answer": "此回答未引用所提供的任何片段，請謹慎看待。",
@@ -44,9 +52,13 @@
     "searchProjects": "搜尋專案",
     "label": "專案",
     "loading": "載入中…",
-    "noMatch": "沒有符合的專案。"
+    "noMatch": "沒有符合的專案。",
+    "couldNotLoad": "無法載入專案。"
   },
-  "sources": { "title": "來源（{count}）", "lines": "第 {start}–{end} 行" },
+  "sources": {
+    "title": "來源（{count}）",
+    "lines": "第 {start}–{end} 行"
+  },
   "preflight": {
     "couldNotAnswer": "無法回答該問題",
     "genericError": "發生錯誤。",

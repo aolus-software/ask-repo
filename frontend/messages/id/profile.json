@@ -2,6 +2,7 @@
   "language": {
     "intro": "Bahasa setiap layar dan email. Jawaban mengikuti bahasa yang Anda gunakan saat bertanya.",
     "browserDefault": "Bawaan peramban",
+    "groupAria": "Bahasa antarmuka",
     "save": "Simpan bahasa",
     "saved": "Bahasa disimpan"
   },

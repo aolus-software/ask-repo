@@ -69,7 +69,11 @@ export function ProjectPicker({
       />
       <ComboboxContent>
         <ComboboxEmpty>
-          {query.isLoading ? t("projectPicker.loading") : t("projectPicker.noMatch")}
+          {query.isLoading
+            ? t("projectPicker.loading")
+            : query.isError
+              ? t("projectPicker.couldNotLoad")
+              : t("projectPicker.noMatch")}
         </ComboboxEmpty>
         <ComboboxList>
           {(project: ProjectResponse) => (

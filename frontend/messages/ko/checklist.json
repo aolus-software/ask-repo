@@ -53,20 +53,29 @@
     },
     "reviewChanges": "변경 사항 검토"
   },
-  "kinds": { "positive": "긍정", "negative": "부정" },
+  "kinds": {
+    "positive": "긍정",
+    "negative": "부정"
+  },
   "itemFilters": {
     "featurePlaceholder": "기능별 필터",
     "featureAria": "기능별 필터",
     "allStatuses": "모든 상태",
     "allKinds": "모든 유형",
     "allSources": "모든 출처",
+    "statusAria": "상태별 필터",
+    "kindAria": "유형별 필터",
+    "sourceAria": "출처별 필터",
     "statuses": {
       "untested": "테스트 안 함",
       "pass": "통과",
       "fail": "실패",
       "blocked": "차단됨"
     },
-    "sources": { "generated": "생성됨", "manual": "수동" }
+    "sources": {
+      "generated": "생성됨",
+      "manual": "수동"
+    }
   },
   "rowActions": {
     "generationInProgress": "이미 생성이 진행 중입니다",
@@ -187,7 +196,9 @@
     "replyStoppedTitle": "답변이 중단되었습니다",
     "sendErrorTitle": "메시지를 보내지 못했습니다"
   },
-  "refinementDrawer": { "resize": "서랍 크기 조절" },
+  "refinementDrawer": {
+    "resize": "서랍 크기 조절"
+  },
   "screen": {
     "title": "QA 체크리스트",
     "description": "인덱싱된 저장소의 모듈에 대해 생성된 테스트 계획입니다.",
@@ -206,7 +217,10 @@
     "notFound": "해당 체크리스트 모듈이 존재하지 않거나 삭제되었습니다.",
     "generationRunning": "이 모듈의 생성이 이미 진행 중입니다.",
     "noGeneratePermission": "이 체크리스트를 생성할 권한이 없습니다.",
-    "tabs": { "testPlan": "테스트 계획", "mockData": "목 데이터" },
+    "tabs": {
+      "testPlan": "테스트 계획",
+      "mockData": "목 데이터"
+    },
     "description": "<path>{sourcePath}</path>에서 열거되었습니다. {appName}이(가) 인덱싱한 파일만 포함됩니다.",
     "generate": "생성",
     "generationStarted": "생성을 시작했습니다",
@@ -243,6 +257,7 @@
     "projectAria": "프로젝트",
     "loading": "불러오는 중…",
     "noProjectMatches": "일치하는 프로젝트가 없습니다.",
+    "projectCap": "이름순으로 처음 {count}개의 프로젝트를 표시합니다.",
     "chooseProject": "프로젝트를 선택하세요.",
     "include": "포함",
     "testChecklist": "테스트 체크리스트",

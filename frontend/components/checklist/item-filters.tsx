@@ -68,7 +68,7 @@ export function ItemFilters({
             })
           }
         >
-          <SelectTrigger className="w-full">
+          <SelectTrigger className="w-full" aria-label={t("itemFilters.statusAria")}>
             {/* Base UI renders the raw selected value, not the item's label, so
                 without this the trigger reads "any" or "pass" instead of the
                 wording in the menu. */}
@@ -102,7 +102,7 @@ export function ItemFilters({
             })
           }
         >
-          <SelectTrigger className="w-full">
+          <SelectTrigger className="w-full" aria-label={t("itemFilters.kindAria")}>
             <SelectValue>
               {(value: string) =>
                 value === ANY
@@ -132,7 +132,7 @@ export function ItemFilters({
             })
           }
         >
-          <SelectTrigger className="w-full">
+          <SelectTrigger className="w-full" aria-label={t("itemFilters.sourceAria")}>
             {/* Base UI renders the raw selected value, not the item's label, so
                 without this the trigger reads "any" or "pass" instead of the
                 wording in the menu. */}
