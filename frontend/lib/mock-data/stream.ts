@@ -3,6 +3,7 @@ import type {
   CitationPayload,
   DoneEventPayload,
   ErrorEventPayload,
+  FinishReason,
   MockDataChangeSetEventPayload,
   StatusEventPayload,
 } from "@/lib/api/types";
@@ -20,6 +21,8 @@ export interface MockDataTurnResult {
   changeSet: MockDataChangeSetEventPayload | null;
   done: DoneEventPayload | null;
   error: ErrorEventPayload | null;
+  /** The terminator's `finishReason`, whichever of `done` or `error` arrived; null when neither did. */
+  finishReason: FinishReason | null;
 }
 
 /**
@@ -36,6 +39,7 @@ export async function consumeMockDataStream(
     changeSet: null,
     done: null,
     error: null,
+    finishReason: null,
   };
   if (!response.body) return result;
 
@@ -61,9 +65,11 @@ export async function consumeMockDataStream(
         break;
       case "done":
         result.done = event.data as DoneEventPayload;
+        result.finishReason = result.done.finishReason;
         break;
       case "error":
         result.error = event.data as ErrorEventPayload;
+        result.finishReason = result.error.finishReason;
         break;
       default:
         break;

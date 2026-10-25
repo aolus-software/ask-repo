@@ -62,13 +62,16 @@ export function ModuleScreen({ moduleId }: { moduleId: string }) {
   // error. Every permission check on this screen -- checklist and mock data alike --
   // reads off this one fetch, since both tabs belong to the same project.
   const project = useProject(checklistModule?.projectId ?? "");
-  const canGenerate = project.data ? can(project.data, PERMISSION.GENERATE_RUN) : false;
+  // Three states, not two: `null` is "not known yet" (loading, or the request
+  // failed). It disables a control but never explains itself as a missing permission
+  // -- only a loaded project can say that (§U8.14).
+  const canGenerate = project.data ? can(project.data, PERMISSION.GENERATE_RUN) : null;
   const canApplyChangeSet = project.data
     ? can(project.data, PERMISSION.CHANGESET_APPLY)
     : false;
   const canEditMockData = project.data
     ? can(project.data, PERMISSION.MOCKDATA_EDIT)
-    : false;
+    : null;
   const pendingChangeSetId = checklistModule?.pendingChangeSetId ?? null;
   // Only fetched when there is something to review: the audit trail is not on screen
   // otherwise, and a module in `ready` should not pay for the request.
@@ -115,9 +118,11 @@ export function ModuleScreen({ moduleId }: { moduleId: string }) {
       ? t("mockDataGenerationRunning")
       : mockDataPendingChangeSetId
         ? t("applyOrDiscardFirst")
-        : !canEditMockData
+        : canEditMockData === false
           ? t("noMockDataPermission")
           : null;
+  const mockDataGenerateDisabled =
+    mockDataGenerateBlockedBecause !== null || canEditMockData !== true;
 
   if (query.isLoading) {
     return (
@@ -145,12 +150,19 @@ export function ModuleScreen({ moduleId }: { moduleId: string }) {
     ? t("generationRunning")
     : pendingChangeSetId
       ? t("applyOrDiscardFirst")
-      : !canGenerate
+      : canGenerate === false
         ? t("noGeneratePermission")
         : null;
+  const generateDisabled = generateBlockedBecause !== null || canGenerate !== true;
 
   return (
     <div className="mx-auto w-full max-w-7xl space-y-6">
+      {/* The project carries the caller's permissions. If it failed, say so rather
+          than leaving every gated control to claim a missing permission (§U8.14). */}
+      {project.isError ? (
+        <ListError error={project.error} onRetry={() => project.refetch()} />
+      ) : null}
+
       <Tabs defaultValue="checklist">
         <TabsList>
           <TabsTrigger value="checklist">{t("tabs.testPlan")}</TabsTrigger>
@@ -195,7 +207,7 @@ export function ModuleScreen({ moduleId }: { moduleId: string }) {
                   </Tooltip>
                 ) : (
                   <Button
-                    disabled={generate.isPending}
+                    disabled={generate.isPending || generateDisabled}
                     onClick={() =>
                       generate.mutate(undefined, {
                         onSuccess: () => toast.success(t("generationStarted")),
@@ -341,6 +353,7 @@ export function ModuleScreen({ moduleId }: { moduleId: string }) {
               <GenerateMockDataControl
                 moduleId={moduleId}
                 blockedBecause={mockDataGenerateBlockedBecause}
+                disabled={mockDataGenerateDisabled}
               />
 
               {pendingMockDataChangeSet ? (
@@ -359,7 +372,7 @@ export function ModuleScreen({ moduleId }: { moduleId: string }) {
                     changeSet={pendingMockDataChangeSet}
                     moduleId={moduleId}
                     records={mockData.data?.records ?? []}
-                    canApply={canEditMockData}
+                    canApply={canEditMockData === true}
                   />
                 </RefinementDrawer>
               ) : mockDataPendingChangeSetId && mockDataChangeSets.isLoading ? (
@@ -431,7 +444,7 @@ export function ModuleScreen({ moduleId }: { moduleId: string }) {
             <RecordsTable
               moduleId={moduleId}
               records={mockData.data?.records ?? []}
-              canEdit={canEditMockData}
+              canEdit={canEditMockData === true}
               isGenerating={mockData.data?.status === "generating"}
             />
           )}

@@ -13,12 +13,12 @@ import { GroundingNotice } from "@/components/ask/grounding-notice";
 import { InterruptedNote } from "@/components/ask/interrupted-note";
 import { MessageList } from "@/components/ask/message-list";
 import { Sources } from "@/components/ask/sources";
+import { TryAgainButton } from "@/components/ask/try-again-button";
 import { DetailError } from "@/components/feedback/detail-error";
 import { NotFound } from "@/components/feedback/not-found";
 import { ProjectStatusBadge } from "@/components/feedback/status-badge";
 import { PageHeader } from "@/components/layout/page-header";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useAskStream } from "@/hooks/use-ask-stream";
 import { useConversation } from "@/hooks/use-conversations";
@@ -175,14 +175,7 @@ export function ConversationScreen({ conversationId }: { conversationId: string 
           ) : null}
 
           {state.finishReason === "timeout" ? (
-            <Button
-              variant="outline"
-              size="sm"
-              className="mt-2"
-              onClick={() => void handleAsk(lastQuestion)}
-            >
-              {t("conversation.tryAgain")}
-            </Button>
+            <TryAgainButton onClick={() => void handleAsk(lastQuestion)} />
           ) : null}
         </AssistantTurn>
       ) : null}

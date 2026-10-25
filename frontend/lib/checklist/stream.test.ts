@@ -83,3 +83,44 @@ describe("consumeChecklistStream", () => {
     expect(result.done).not.toBeNull();
   });
 });
+
+describe("consumeChecklistStream finishReason", () => {
+  it("keeps the finishReason of a done terminator", async () => {
+    const result = await consumeChecklistStream(
+      streamOf([
+        'event: done\ndata: {"messageId":"m1","model":"x","finishReason":"timeout","citedIndexes":[],"groundingWarnings":[]}\n\n',
+      ]),
+      {
+        onCitations: vi.fn(),
+        onToken: vi.fn(),
+        onChangeSet: vi.fn(),
+      },
+    );
+
+    expect(result.finishReason).toBe("timeout");
+  });
+
+  it("keeps the finishReason of an error terminator", async () => {
+    const result = await consumeChecklistStream(
+      streamOf([
+        'event: error\ndata: {"messageId":"m1","code":"LLM_UNAVAILABLE","message":"Too slow.","finishReason":"timeout"}\n\n',
+      ]),
+      {
+        onCitations: vi.fn(),
+        onToken: vi.fn(),
+        onChangeSet: vi.fn(),
+      },
+    );
+
+    expect(result.finishReason).toBe("timeout");
+  });
+
+  it("is null when the stream ends with no terminator", async () => {
+    const result = await consumeChecklistStream(
+      streamOf(['event: token\ndata: {"text":"partial"}\n\n']),
+      { onCitations: vi.fn(), onToken: vi.fn(), onChangeSet: vi.fn() },
+    );
+
+    expect(result.finishReason).toBeNull();
+  });
+});
