@@ -51,7 +51,7 @@
     },
     "excludeLabel": "Exclude: {question}",
     "referenceAnswer": "Reference answer",
-    "saveFailed": "That did not save. Try again"
+    "saveFailed": "That did not save. Try again."
   },
   "runTable": {
     "generatingTitle": "Generating questions…",

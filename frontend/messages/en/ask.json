@@ -61,7 +61,7 @@
   },
   "preflight": {
     "couldNotAnswer": "That question could not be answered",
-    "genericError": "Something went wrong.",
+    "genericError": "Something went wrong",
     "needsReindexTitle": "This project needs re-indexing",
     "needsReindexBody": "It was indexed with a different embedding model, so its stored vectors cannot be searched with the one this instance runs now. Re-index it and questions will work again.",
     "reindexNow": "Re-index now",

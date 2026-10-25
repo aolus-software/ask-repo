@@ -22,7 +22,7 @@
   "delete": {
     "title": "要刪除 {name} 嗎？",
     "description": "此操作無法復原。仍在任何專案中持有此角色的人，必須先改為其他角色。",
-    "confirm": "刪除",
+    "confirm": "刪除角色",
     "done": "已刪除角色"
   },
   "create": {

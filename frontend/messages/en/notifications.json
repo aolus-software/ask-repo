@@ -7,7 +7,7 @@
   "bellLabel": "Notifications ({count} unread)",
   "overflow": "99+",
   "empty": "Nothing to catch up on.",
-  "markReadFailed": "Couldn't mark notifications read",
+  "markReadFailed": "Could not mark notifications read",
   "untitled": "Untitled",
   "emptyState": {
     "noMatchTitle": "No notifications match",

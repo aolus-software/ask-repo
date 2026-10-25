@@ -1,8 +1,8 @@
 {
   "recordsTable": {
     "deleteAria": "레코드 삭제",
-    "deleteTitle": "이 레코드를 삭제하시겠습니까?",
-    "deleteDescription": "이 작업은 되돌릴 수 없습니다.",
+    "deleteTitle": "레코드 {name}을(를) 삭제하시겠습니까?",
+    "deleteDescription": "이 레코드만 삭제되며 데이터셋의 나머지는 그대로 유지됩니다. 이 작업은 되돌릴 수 없습니다.",
     "delete": "삭제",
     "deleted": "레코드를 삭제했습니다",
     "generatingTitle": "목 데이터를 생성하는 중…",
@@ -26,7 +26,7 @@
     "skipped": "{count, plural, other {제안된 변경 #개}}가 참조하던 레코드가 더 이상 존재하지 않아 건너뛰었습니다.",
     "discard": "폐기",
     "applySelected": "선택 항목 적용",
-    "discardTitle": "제안된 변경 사항 폐기",
+    "discardTitle": "제안된 변경 사항을 폐기하시겠습니까?",
     "discardDescription": "이 제안을 폐기하시겠습니까? 목 데이터 세트에는 아무것도 기록되지 않습니다."
   },
   "chatPanel": {

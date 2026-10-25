@@ -28,7 +28,7 @@
   "delete": {
     "title": "Delete {name}?",
     "description": "This cannot be undone. Anyone still holding it on a project must be moved to another role first.",
-    "confirm": "Delete",
+    "confirm": "Delete role",
     "done": "Role deleted"
   },
   "create": {

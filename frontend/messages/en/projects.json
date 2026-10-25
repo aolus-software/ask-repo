@@ -116,7 +116,7 @@
     "revokeLabel": "Revoke {name}'s access",
     "revokeDialog": {
       "title": "Revoke {name}'s access?",
-      "description": "They lose access to this project immediately.",
+      "description": "{name} loses access to this project immediately. Their conversations and recorded results stay, and you can add them back later.",
       "confirm": "Revoke access",
       "revoked": "Access revoked"
     }

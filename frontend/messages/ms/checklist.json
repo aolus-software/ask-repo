@@ -178,7 +178,7 @@
     "skipped": "{count, plural, other {# perubahan yang dicadangkan}} dilangkau kerana kes ujian yang dirujuknya tidak lagi wujud.",
     "discard": "Buang",
     "applySelected": "Laksanakan yang dipilih",
-    "discardTitle": "Buang perubahan yang dicadangkan",
+    "discardTitle": "Buang perubahan yang dicadangkan?",
     "discardDescription": "Buang cadangan ini? Tiada apa-apa akan ditulis ke dalam senarai semak."
   },
   "chatPanel": {

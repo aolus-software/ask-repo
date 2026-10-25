@@ -116,7 +116,7 @@
     "revokeLabel": "Cabut akses {name}",
     "revokeDialog": {
       "title": "Cabut akses {name}?",
-      "description": "Mereka langsung kehilangan akses ke proyek ini.",
+      "description": "{name} langsung kehilangan akses ke proyek ini. Percakapan dan hasil yang dicatat tetap ada, dan Anda dapat menambahkannya kembali nanti.",
       "confirm": "Cabut akses",
       "revoked": "Akses dicabut"
     }

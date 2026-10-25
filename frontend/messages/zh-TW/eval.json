@@ -51,7 +51,7 @@
     },
     "excludeLabel": "排除：{question}",
     "referenceAnswer": "參考答案",
-    "saveFailed": "未能儲存。請再試一次"
+    "saveFailed": "未能儲存。請再試一次。"
   },
   "runTable": {
     "generatingTitle": "正在產生問題…",

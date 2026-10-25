@@ -1,8 +1,8 @@
 {
   "recordsTable": {
     "deleteAria": "刪除記錄",
-    "deleteTitle": "要刪除此記錄嗎？",
-    "deleteDescription": "此操作無法復原。",
+    "deleteTitle": "要刪除記錄 {name} 嗎？",
+    "deleteDescription": "只會刪除此記錄，資料集的其餘部分會保留。此操作無法復原。",
     "delete": "刪除",
     "deleted": "已刪除記錄",
     "generatingTitle": "正在產生模擬資料…",
@@ -26,7 +26,7 @@
     "skipped": "{count, plural, other {# 項建議的變更}}因其參照的記錄已不存在而被略過。",
     "discard": "捨棄",
     "applySelected": "套用所選項目",
-    "discardTitle": "捨棄建議的變更",
+    "discardTitle": "要捨棄建議的變更嗎？",
     "discardDescription": "要捨棄這些提議嗎？不會有任何內容寫入模擬資料集。"
   },
   "chatPanel": {

@@ -69,7 +69,7 @@ describe("FeedbackScreen", () => {
 
     renderScreen();
 
-    expect(screen.getByText("Internal server error.")).toBeInTheDocument();
+    expect(screen.getByText(/Something went wrong on our side/)).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: /try again/i }));
     expect(refetchSummary).toHaveBeenCalledTimes(1);

@@ -77,7 +77,9 @@ describe("PreferencesScreen", () => {
     await toggleFirstRow();
     fireEvent.click(screen.getByRole("button", { name: /save preferences/i }));
 
-    expect(await screen.findByText("Internal server error.")).toBeInTheDocument();
+    expect(
+      await screen.findByText(/Something went wrong on our side/),
+    ).toBeInTheDocument();
     expect(toastSuccess).not.toHaveBeenCalled();
     expect(toastError).not.toHaveBeenCalled();
   });

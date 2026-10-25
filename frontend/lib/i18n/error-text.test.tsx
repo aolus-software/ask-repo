@@ -9,7 +9,7 @@ describe("useErrorText", () => {
     const { result } = renderHook(() => useErrorText());
     expect(
       result.current(new ApiError(404, "PROJECT_NOT_FOUND", "raw backend text")),
-    ).toBe("Project not found.");
+    ).toBe("Project not found. It may have been deleted; refresh the list.");
   });
 
   it("falls back to the backend message for a code with no entry", () => {

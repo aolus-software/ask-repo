@@ -1,8 +1,8 @@
 {
   "recordsTable": {
     "deleteAria": "Delete record",
-    "deleteTitle": "Delete this record?",
-    "deleteDescription": "This cannot be undone.",
+    "deleteTitle": "Delete record {name}?",
+    "deleteDescription": "Only this record is deleted; the rest of the dataset stays. This cannot be undone.",
     "delete": "Delete",
     "deleted": "Record deleted",
     "generatingTitle": "Generating mock data…",
@@ -30,7 +30,7 @@
     "skipped": "{count, plural, one {# proposed change was} other {# proposed changes were}} skipped because the record they referred to no longer exists.",
     "discard": "Discard",
     "applySelected": "Apply selected",
-    "discardTitle": "Discard proposed changes",
+    "discardTitle": "Discard proposed changes?",
     "discardDescription": "Discard these proposals? Nothing will be written to the mock dataset."
   },
   "chatPanel": {

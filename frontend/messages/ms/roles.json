@@ -28,7 +28,7 @@
   "delete": {
     "title": "Padam {name}?",
     "description": "Ini tidak boleh dibatalkan. Sesiapa yang masih memegangnya pada sesebuah projek mesti dipindahkan ke peranan lain terlebih dahulu.",
-    "confirm": "Padam",
+    "confirm": "Padam peranan",
     "done": "Peranan dipadam"
   },
   "create": {

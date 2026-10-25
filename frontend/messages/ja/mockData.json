@@ -1,8 +1,8 @@
 {
   "recordsTable": {
     "deleteAria": "レコードを削除",
-    "deleteTitle": "このレコードを削除しますか？",
-    "deleteDescription": "この操作は元に戻せません。",
+    "deleteTitle": "レコード {name} を削除しますか？",
+    "deleteDescription": "削除されるのはこのレコードだけで、データセットの残りはそのまま残ります。この操作は元に戻せません。",
     "delete": "削除",
     "deleted": "レコードを削除しました",
     "generatingTitle": "モックデータを生成中…",
@@ -30,7 +30,7 @@
     "skipped": "{count, plural, other {参照先のレコードが存在しないため、# 件の変更案をスキップしました。}}",
     "discard": "破棄",
     "applySelected": "選択した変更を適用",
-    "discardTitle": "変更案を破棄",
+    "discardTitle": "変更案を破棄しますか？",
     "discardDescription": "これらの提案を破棄しますか？モックデータセットには何も書き込まれません。"
   },
   "chatPanel": {

@@ -1,8 +1,8 @@
 {
   "recordsTable": {
     "deleteAria": "Padam rekod",
-    "deleteTitle": "Padam rekod ini?",
-    "deleteDescription": "Ini tidak boleh dibatalkan.",
+    "deleteTitle": "Padam rekod {name}?",
+    "deleteDescription": "Hanya rekod ini yang dipadam; selebihnya dalam set data kekal. Ini tidak boleh dibatalkan.",
     "delete": "Padam",
     "deleted": "Rekod dipadam",
     "generatingTitle": "Menjana data olok-olok…",
@@ -30,7 +30,7 @@
     "skipped": "{count, plural, other {# perubahan yang dicadangkan}} dilangkau kerana rekod yang dirujuknya tidak lagi wujud.",
     "discard": "Buang",
     "applySelected": "Laksanakan yang dipilih",
-    "discardTitle": "Buang perubahan yang dicadangkan",
+    "discardTitle": "Buang perubahan yang dicadangkan?",
     "discardDescription": "Buang cadangan ini? Tiada apa-apa akan ditulis ke dalam set data olok-olok."
   },
   "chatPanel": {

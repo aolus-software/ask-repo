@@ -61,7 +61,7 @@
   },
   "preflight": {
     "couldNotAnswer": "無法回答該問題",
-    "genericError": "發生錯誤。",
+    "genericError": "發生錯誤",
     "needsReindexTitle": "此專案需要重新索引",
     "needsReindexBody": "此專案是以另一個嵌入模型建立索引的，因此其已儲存的向量無法以本實例目前使用的模型搜尋。請重新索引，之後便可提問。",
     "reindexNow": "立即重新索引",

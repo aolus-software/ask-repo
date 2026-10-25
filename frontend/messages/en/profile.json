@@ -80,7 +80,7 @@
   },
   "password": {
     "resetSent": "If mail can reach you, a reset link is on its way",
-    "resetFailed": "Couldn't send a reset link. Try again.",
+    "resetFailed": "Could not send a reset link. Try again.",
     "changed": "Password changed",
     "changedDescription": "Your other sessions were signed out",
     "formTitle": "Change password",

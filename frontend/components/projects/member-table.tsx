@@ -133,7 +133,7 @@ function RevokeAction({
         open={confirming}
         onOpenChange={setConfirming}
         title={t("revokeDialog.title", { name: member.name })}
-        description={t("revokeDialog.description")}
+        description={t("revokeDialog.description", { name: member.name })}
         confirmLabel={t("revokeDialog.confirm")}
         isPending={mutation.isPending}
         // 409 LAST_OWNER names no field, so it renders as this dialog's banner — the

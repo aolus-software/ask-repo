@@ -61,7 +61,7 @@
   },
   "preflight": {
     "couldNotAnswer": "Soalan itu tidak dapat dijawab",
-    "genericError": "Sesuatu telah berlaku.",
+    "genericError": "Sesuatu telah berlaku",
     "needsReindexTitle": "Projek ini perlu diindeks semula",
     "needsReindexBody": "Ia diindeks dengan model benam yang berbeza, jadi vektor yang disimpan tidak dapat dicari dengan model yang dijalankan oleh instans ini sekarang. Indeks semula dan soalan akan berfungsi kembali.",
     "reindexNow": "Indeks semula sekarang",

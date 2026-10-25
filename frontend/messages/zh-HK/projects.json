@@ -116,7 +116,7 @@
     "revokeLabel": "撤銷 {name} 的存取權限",
     "revokeDialog": {
       "title": "撤銷 {name} 的存取權限？",
-      "description": "他們會立即失去此專案的存取權限。",
+      "description": "{name} 會立即失去此專案的存取權限。對話和已記錄的結果會保留，你日後可以再加入此成員。",
       "confirm": "撤銷存取權限",
       "revoked": "已撤銷存取權限"
     }
