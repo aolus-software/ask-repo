@@ -27,7 +27,7 @@ from langchain_core.language_models import BaseChatModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import Settings
-from app.core.language import Language, parse_language
+from app.core.language import Language, language_or_default
 from app.core.notifications import NotificationType
 from app.eval.model_output import JudgeVerdict
 from app.eval.notifications import announce_run
@@ -135,9 +135,7 @@ class EvalRunner:
         eval_set = await self.sets.get(set_id)
         # The set's language, never the requester's: a run must not depend on who
         # pressed the button (spec §4.3).
-        reply_language = (
-            parse_language(eval_set.language) if eval_set is not None else None
-        ) or Language.EN
+        reply_language = language_or_default(eval_set.language if eval_set is not None else None)
         answerer = self._answerer(project)
 
         self._stamp_provenance(run, project)

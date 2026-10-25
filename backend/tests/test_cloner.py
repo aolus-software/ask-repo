@@ -28,6 +28,27 @@ def test_git_is_pinned_to_the_validated_address() -> None:
     assert "http.curloptResolve=github.com:443:140.82.121.4" in command
 
 
+def test_every_validated_address_is_pinned_in_one_entry() -> None:
+    """libcurl tries a comma-separated list in order; IPv6 goes in unbracketed."""
+    validated = ValidatedRepoUrl(
+        url="https://github.com/acme/repo.git",
+        host="github.com",
+        port=443,
+        pinned_ip="2606:50c0:8000::154",
+        pinned_ips=("2606:50c0:8000::154", "140.82.121.4"),
+    )
+    command = build_git_command(validated, branch="main", destination=Path("/tmp/x"))
+    entries = [part for part in command if part.startswith("http.curloptResolve=")]
+    assert entries == ["http.curloptResolve=github.com:443:2606:50c0:8000::154,140.82.121.4"]
+
+
+def test_only_the_pinned_addresses_reach_the_command() -> None:
+    """Nothing but what the validator returned is ever handed to the clone command."""
+    command = build_git_command(VALIDATED, branch="main", destination=Path("/tmp/x"))
+    entries = [part for part in command if part.startswith("http.curloptResolve=")]
+    assert entries == ["http.curloptResolve=github.com:443:140.82.121.4"]
+
+
 def test_redirects_are_disabled() -> None:
     """A redirect to an internal host would resolve unpinned."""
     command = build_git_command(VALIDATED, branch="main", destination=Path("/tmp/x"))

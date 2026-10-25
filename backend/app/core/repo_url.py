@@ -44,14 +44,24 @@ class RepoUrlRejected(Exception):
 class ValidatedRepoUrl:
     """A URL cleared for cloning, plus the address it was cleared against.
 
-    `pinned_ip` is the whole point: the cloner must use this address rather than
-    resolving the host again, or the validation above it means nothing.
+    The pin is the whole point: the cloner must use these addresses rather than
+    resolving the host again, or the validation above it means nothing. `pinned_ips` is
+    every address the host resolved to, each of which passed `_is_public`; it is what the
+    cloner pins, so a clone can fall back to the next record without ever connecting to an
+    address that was not checked. `pinned_ip` is the first of them. A value built by hand
+    with only `pinned_ip` pins just that one.
     """
 
     url: str
     host: str
     port: int
     pinned_ip: str
+    pinned_ips: tuple[str, ...] = ()
+
+    @property
+    def pins(self) -> tuple[str, ...]:
+        """The addresses to pin, in resolver order: always non-empty, always checked ones."""
+        return self.pinned_ips or (self.pinned_ip,)
 
 
 def _is_public(address: str) -> bool:
@@ -127,4 +137,7 @@ async def validate_repo_url(
                 f"Host {host!r} resolves to a private or reserved address and cannot be cloned."
             )
 
-    return ValidatedRepoUrl(url=url, host=host, port=port, pinned_ip=addresses[0])
+    # Only now, after every record passed, are they pinned. A duplicate record is dropped;
+    # nothing is added, reordered into a different family, or substituted.
+    pinned = tuple(dict.fromkeys(addresses))
+    return ValidatedRepoUrl(url=url, host=host, port=port, pinned_ip=pinned[0], pinned_ips=pinned)
