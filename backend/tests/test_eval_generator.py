@@ -16,6 +16,7 @@ from app.eval import generator as generator_module
 from app.eval.generator import NO_PAIRS_ERROR, EvalSetGenerator
 from app.eval.model_output import GeneratedPair
 from app.ingestion.chunker import Chunk
+from app.ingestion.errors import RetryableIngestionError
 from app.ingestion.vector_store import InMemoryVectorStore
 from app.models.eval import EvalSet, EvalSetStatus
 from app.models.notification import Notification, NotificationEvent
@@ -328,3 +329,25 @@ async def test_a_generation_that_lost_its_lease_announces_nothing(
     )
 
     assert await _announced(db_session, NotificationType.EVAL_SET_READY) == []
+
+
+async def test_a_lost_lease_stops_the_generation_loop_early(
+    db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(generator_module, "LEASE_RENEWAL_SECONDS", 0.01)
+
+    async def lost(self: EvalSetRepository, **kwargs: Any) -> bool:
+        return False
+
+    monkeypatch.setattr(EvalSetRepository, "renew_lease", lost)
+    paths = [f"d{index}/f.py" for index in range(8)]
+    eval_set, store, job = await _setup(db_session, paths, count=8)
+    chat = _SequencedModel([_pair(index) for index in range(8)], delay=0.05)
+
+    with pytest.raises(RetryableIngestionError):
+        await _run(_generator(db_session, store, chat), eval_set, job)
+
+    # Stopped after the heartbeat died, not after all eight model calls.
+    assert len(chat._steps) >= 4
+    pairs = await EvalPairRepository(db_session).list_for_set(eval_set.id, include_excluded=True)
+    assert pairs == []

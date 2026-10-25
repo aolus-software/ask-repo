@@ -201,7 +201,7 @@ checklist failed, and one lease does not block the other.
 | --- | --- |
 | `eval_sets` | A frozen set of synthetic pairs for a project or one `source_path`: `requested_count` (10, 25 or 50), `mix`, `status`, the lease, `pair_count` and the `indexed_generation` it was generated from, plus `language` (a `Language` tag, `'en'` for a natively generated set) and `source_set_id` (the English set it translates, `NULL` when generated natively). A partial unique index allows one live translation per source and language |
 | `eval_pairs` | One `question` and `reference_answer` grounded in one chunk, with `source_file`, its line range, `question_type` (`explain` or `locate`), `position`, and `excluded_at`, plus `source_pair_id` (the source pair a translated pair translates) and `exclusion_reason` (`translation_unfaithful` when the system excluded it; `NULL` for a hand exclusion) |
-| `eval_runs` | One pass of a set through the answer graph: `status`, the lease, the tallies (`pairs_answered`, `hits`, `correct`, `partial`, `wrong`, `errors`) and the stamp — `prompt_version` (the answer graph's), `judge_prompt_version` (the judge's), `chat_provider`, `chat_model`, `judge_model`, `embedding_model`, `project_generation` |
+| `eval_runs` | One pass of a set through the answer graph: `status`, the lease, the tallies (`pairs_answered`, `hits`, `correct`, `partial`, `wrong`, `errors`) and the stamp — `prompt_version` (the answer graph's), `judge_prompt_version` (the judge's), `chat_provider`, `chat_model`, `judge_model`, `embedding_model`, `project_generation`. The stamp is written once, when empty: a resumed run compares it and fails rather than overwrite it, and `started_at` is set by the first claim only. A run that fails keeps the tallies and `finished_at` of the results it committed. |
 | `eval_results` | One row per pair per run: `retrieval_hit`, `verdict` (`correct` / `partial` / `wrong` / `error`), `judge_reason`, the `answer` as streamed, `grounding_warnings` and `retrieval_attempts` |
 
 A translated set copies its source's `source_path`, `requested_count`, `mix` and `indexed_generation`, reads no index of its own, and is exactly as stale as its source.
@@ -380,7 +380,7 @@ operation** — and the vector delete runs *before* the commit, so if Qdrant ref
 stays visible rather than becoming a soft-deleted project whose content is still queryable.
 
 Deleting a project also sweeps its conversations, checklist, mock data and eval sets, pairs, runs and results. Not scoped by owner:
-a project has members, so the conversations belong to several people and all of them go. Deactivating a user sweeps the other axis: every conversation they own, across every project, in the deactivation's own transaction (`docs/PRD.md` §4.0). Deleting an eval set soft-deletes its pairs, runs and results in the same transaction, and is refused with `409 EVAL_RUN_IN_PROGRESS` while a run is live.
+a project has members, so the conversations belong to several people and all of them go. Deactivating a user sweeps the other axis: every conversation they own, across every project, in the deactivation's own transaction (`docs/PRD.md` §4.0). Deleting an eval set soft-deletes its pairs, runs and results in the same transaction, and is refused with `409 EVAL_RUN_IN_PROGRESS` while a run is live and with `409 EVAL_SET_GENERATING` while the set itself, or a live translation of it, is still generating.
 
 ### 2. The lease is the deduplication boundary
 

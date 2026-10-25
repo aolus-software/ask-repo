@@ -41,6 +41,7 @@
   "EVAL_SET_NOT_READY": "Set penilaian ini belum sedia untuk dijalankan.",
   "EVAL_RUN_IN_PROGRESS": "Larian penilaian sedang berjalan. Tunggu sehingga selesai, kemudian cuba lagi.",
   "EVAL_TRANSLATION_EXISTS": "Set ini sudah mempunyai terjemahan ke bahasa itu. Padamkannya dahulu untuk membuat yang baharu.",
+  "EVAL_SET_GENERATING": "Set penilaian ini masih dijana, atau terjemahannya masih dijana. Tunggu sehingga selesai, kemudian cuba lagi.",
   "INSUFFICIENT_ROLE": "Peranan anda pada projek ini tidak membenarkannya.",
   "SYSTEM_ROLE_IMMUTABLE": "viewer, editor dan owner ialah peranan terbina dalam dan tidak boleh diubah.",
   "ROLE_NOT_FOUND": "Peranan tidak ditemui.",

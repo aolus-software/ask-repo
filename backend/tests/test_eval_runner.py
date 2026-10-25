@@ -7,7 +7,7 @@ from typing import Any, cast
 
 import pytest
 from langchain_core.language_models import BaseChatModel
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import Settings
@@ -471,3 +471,86 @@ async def test_the_runner_passes_the_sets_language_as_the_reply_language(
     await _run(_runner(db_session, setup, _chat("correct")), setup)
 
     assert seen == [Language.ID]
+
+
+async def test_a_run_soft_deleted_mid_loop_commits_no_further_results(
+    db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(runner_module, "RESULT_BATCH", 1)
+    setup = await _setup(db_session, pairs=3)
+    original = EvalRunner._answer_and_judge
+    calls = 0
+
+    async def deleting(self: EvalRunner, *args: Any, **kwargs: Any) -> EvalResult:
+        nonlocal calls
+        calls += 1
+        if calls == 2:
+            # The first batch has committed; now the run is deleted under the worker.
+            await db_session.execute(
+                update(EvalRun).where(EvalRun.id == setup.run_id).values(deleted_at=func.now())
+            )
+            await db_session.commit()
+        return await original(self, *args, **kwargs)
+
+    monkeypatch.setattr(EvalRunner, "_answer_and_judge", deleting)
+
+    with pytest.raises(RetryableIngestionError):
+        await _run(_runner(db_session, setup, _chat("correct", "correct", "correct")), setup)
+
+    assert calls == 2
+    db_session.expire_all()
+    committed = (
+        await db_session.scalars(select(EvalResult).where(EvalResult.run_id == setup.run_id))
+    ).all()
+    assert len(committed) == 1
+
+
+async def test_a_resume_with_an_identical_stamp_proceeds_and_keeps_started_at(
+    db_session: AsyncSession,
+) -> None:
+    setup = await _setup(db_session, pairs=2)
+    await _run(_runner(db_session, setup, _chat("correct")), setup)
+    first = await _reload(db_session, setup.run_id)
+    stamped_at, stamp = first.started_at, first.prompt_version
+    assert stamped_at is not None
+    # Re-open the run, as a sweep re-publish after a lapsed lease would.
+    first.status = EvalRunStatus.RUNNING.value
+    first.lease_owner = None
+    first.lease_expires_at = None
+    first.last_job_id = None
+    await db_session.commit()
+    again = uuid.uuid4()
+    assert await EvalRunRepository(db_session).claim(
+        run_id=setup.run_id, job_id=again, worker_id="w", lease_seconds=300
+    )
+    await db_session.commit()
+    setup.job = again
+
+    await _run(_runner(db_session, setup, _chat()), setup)
+
+    run = await _reload(db_session, setup.run_id)
+    assert run.status == EvalRunStatus.DONE.value
+    assert run.started_at == stamped_at
+    assert run.prompt_version == stamp
+
+
+async def test_a_resume_on_a_different_chat_model_fails_and_keeps_the_stamp(
+    db_session: AsyncSession,
+) -> None:
+    setup = await _setup(db_session, pairs=1)
+    run = await _reload(db_session, setup.run_id)
+    run.prompt_version = ANSWER_PROMPT_VERSION
+    run.judge_prompt_version = JUDGE_PROMPT_VERSION
+    run.chat_provider = Settings().chat_provider
+    run.chat_model = "some-other-model"
+    run.judge_model = "some-other-model"
+    run.embedding_model = "fake"
+    run.project_generation = 0
+    await db_session.commit()
+
+    with pytest.raises(TerminalIngestionError, match="chat_model"):
+        await _run(_runner(db_session, setup, _chat("correct")), setup)
+
+    after = await _reload(db_session, setup.run_id)
+    assert after.chat_model == "some-other-model"
+    assert await _results(db_session, setup.run_id) == []

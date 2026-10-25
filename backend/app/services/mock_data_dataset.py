@@ -156,6 +156,20 @@ class MockDataDatasetService:
         stage_live_event(self.session, mock_data_event(dataset.checklist_module_id, project.id))
         await self.session.commit()
 
+        # After the commit and before the publish, like `ProjectService.reindex`: a
+        # failed publish must not leave the request off the trail (audit finding §8.6).
+        await self._recorder.record(
+            AuditEntry(
+                event_type=AuditEventType.MOCK_DATA_GENERATION_REQUESTED,
+                actor_user_id=actor.id,
+                actor_email=actor.email,
+                target_type="mock_data_dataset",
+                target_id=dataset.id,
+                target_label=module.name,
+                project_id=project.id,
+                context={"indexedGeneration": project.active_generation},
+            )
+        )
         await queue.enqueue_mock_data(
             MockDataJobMessage(
                 dataset_id=dataset.id,
@@ -171,18 +185,6 @@ class MockDataDatasetService:
             dataset.id,
             module_id,
             job_id,
-        )
-        await self._recorder.record(
-            AuditEntry(
-                event_type=AuditEventType.MOCK_DATA_GENERATION_REQUESTED,
-                actor_user_id=actor.id,
-                actor_email=actor.email,
-                target_type="mock_data_dataset",
-                target_id=dataset.id,
-                target_label=module.name,
-                project_id=project.id,
-                context={"indexedGeneration": project.active_generation},
-            )
         )
         records = await self.records.list_for_module(module_id)
         # No pending change set to report: the check above already refused this call
