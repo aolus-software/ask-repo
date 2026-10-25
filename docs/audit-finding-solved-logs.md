@@ -3636,6 +3636,110 @@ candidates are a `font-mono` identifier column (`feedback-table.tsx:76`,
 `feedback-summary.tsx:117`) and a wrapped free-text column (`max-w-xs whitespace-pre-wrap`,
 `feedback-table.tsx:73`). **Fix:** add the control, a drawer-width rule, and those column rules.
 
+### §U8.13 "Try again" after a timeout exists on Ask only — 🟡 hygiene — ✅ RESOLVED 2026-10-25
+
+> Fixed together with §U8.16. Both refinement chats keep `finishReason` and show the same Try again as Ask on `timeout`, resending the last instruction. The note and the button are shared components (`components/ask/ended-early-note.tsx`, `components/ask/try-again-button.tsx`), used by Ask, the stored message list and both chats. On `fix/ui-states-a11y-2026-10-25`.
+>
+> Original finding follows.
+
+**Where:** `app/(app)/ask/[conversationId]/conversation-screen.tsx:163-172`;
+`components/checklist/chat-panel.tsx`, `components/mock-data/chat-panel.tsx` (no `finishReason` in
+their turn state); `lib/checklist/stream.ts:32`
+
+**What this is.** All three streaming surfaces share one backend and one terminator contract, and
+every terminator carries a `finishReason`.
+
+**Why this can happen.** Ask keeps `finishReason` and offers "Try again" on `timeout`. The two
+refinement chats drop it, though their streams carry it, so a timeout there offers nothing.
+
+**What it costs.** The same failure gives a one-click recovery on one screen, and on the other two
+the user has to retype.
+
+**What we should do.** Keep `finishReason` in both chats' turn state and render the same retry.
+One hour.
+
+### §U8.14 The chat composers say "no permission" while the project is still loading — 🟡 hygiene — ✅ RESOLVED 2026-10-25
+
+> Fixed. `canGenerate`, `canEditMockData` and both chats' `canSend` are `boolean | null`, with `null` meaning not yet known: controls are disabled with no reason given until the project loads, the permission message shows only when the permission is known to be missing, and a failed project request shows `ListError` with a retry. The same `!canGenerate` shape in `components/checklist/module-row-actions.tsx` was not in this finding and was left as it is. `module-screen.tsx` has no screen-level test; the chat panels' tests cover both states. On `fix/ui-states-a11y-2026-10-25`.
+>
+> Original finding follows.
+
+**Where:** `app/(app)/checklist/[moduleId]/module-screen.tsx:59-65`, `:112-113`, `:142-143`, `:243`,
+`:379`; `components/checklist/chat-panel.tsx:244-245`; `components/mock-data/chat-panel.tsx:207-208`
+
+**What this is.** The module screen decides who may generate or refine from the project's
+permissions.
+
+**Why this can happen.** Before the project loads (or if it fails), the permission flags are
+`false`. Both composers' placeholders then read "You do not have permission to refine…", and the
+Generate tooltips say the same.
+
+**What it costs.** Every user is briefly told they lack a permission they have. If the project
+request fails, they are told it permanently, which hides the real error.
+
+**What we should do.** Treat "not yet known" as disabled with no reason given, and show the
+project error where there is one. Half an hour.
+
+### §U7.16 A thumbs vote briefly reverts after a remount — 🟡 hygiene — ✅ RESOLVED 2026-10-25
+
+> Fixed. A saved vote is written into the cached reads that carry `myFeedback` for its target type (`setQueriesData` over the conversation, refinement-message or change-set prefix, matched by id), so a remount within the stale time seeds from the vote. No refetch. A test remounts the control from the cache. On `fix/ui-states-a11y-2026-10-25`.
+>
+> Original finding follows.
+
+**Where:** `components/output-feedback/feedback-control.tsx:68-82`, `:84-88`; `lib/query/client.ts:18`
+
+> **Narrowed 2026-10-17.** First filed as "saved choices briefly revert after a save or a vote".
+> The save half does not reproduce: `answer-style-section.tsx:108-113` clears its draft only after
+> the refetch lands, because TanStack awaits the hook's `invalidateQueries` first. Only the vote
+> half is confirmed.
+
+**What this is.** A vote's state comes from `myFeedback` on the message or change-set read, which
+is cached.
+
+**Why this can happen.** Casting a vote never writes back to that cache. When the control remounts
+(navigating back to a conversation, or a chat list re-rendering from cache within its 30-second
+stale time), it re-seeds from the stale cached value. The vote shows as un-cast until the refetch
+lands.
+
+**What it costs.** A user who just voted sees their vote disappear and may vote again.
+
+**What we should do.** On success, update `myFeedback` in the cached message or change set with
+`setQueryData`, or invalidate it. Half an hour.
+
+### §U1.4 White text on three status colours, and three status text colours, fall below contrast guidance — 🟡 hygiene — ✅ RESOLVED 2026-10-25
+
+> Fixed, by owner decision (2026-10-25): the Fexend hues stay, and every light-mode status `-foreground` is the dark ink `#0f172a` (success 8.05, warning 8.31, danger 4.69, info 7.55). New `success-text` `#008236`, `warning-text` `#bb4d00` and `danger-text` `#c10007` tokens, which clear 4.5:1 on both card and page and reuse the status colour in dark mode, replace every plain `text-success`/`-warning`/`-danger` outside `components/ui/`. `docs/design.md` records the ratios. Not covered: the generated components' `text-destructive` (3.81 on `card`), which `docs/design.md` names as still open. On `fix/ui-states-a11y-2026-10-25`.
+>
+> Original finding follows.
+
+**Where:** `app/globals.css:36-43` (light-mode `--success`, `--danger`, `--info` and their
+`-foreground`); `components/feedback/status-badge.tsx:11`, `:13`, `:15`;
+`components/users/user-role-badge.tsx:11`; `text-warning`/`text-success`/`text-danger` at
+`components/eval/eval-run-sheet.tsx:68`, `components/checklist/item-grid.tsx:204`,
+`components/checklist/change-set-panel.tsx:186`, `components/form/password-field.tsx:88`, `:111`
+
+**What this is.** Status badges (Ready, Failed, Indexing…) are small coloured pills, and a few
+places colour a line of text to signal a state. Web Content Accessibility Guidelines (WCAG)
+contrast asks for at least 4.5:1 between small text and its background, so that people with
+reduced vision can read it.
+
+**Why this can happen.** In light mode, the status colours are bright mid-tones with white text on
+top. Measured ratios: success badge 2.22, info badge 2.37, danger badge 3.81. The warning badge
+uses dark text and passes, at 8.31. Used as text colour on a card, warning is 2.15, success 2.22
+and danger 3.81, and each is lower again on the page background. All of these are `text-xs` or
+`text-sm`, so 4.5:1 applies.
+
+**What it costs.** Status pills, the single most-read signal on the list screens, are hard to read
+in light mode for anyone with reduced contrast sensitivity, and in bright light for everyone.
+`docs/design.md:41` claims AA (the 4.5:1 level) only for `muted-foreground`, so nothing promised
+otherwise. But nothing warns against it either.
+
+**What we should do.** Darken the light-mode `--success`, `--info` and `--danger` until white
+reaches 4.5:1, or switch their `-foreground` to the dark ink the warning badge already uses. Add
+separate darker `*-text` tokens for coloured text. Record the ratios in `docs/design.md`. Roughly
+half a day, most of it checking the results look right.
+
+
 
 
 
@@ -3873,6 +3977,76 @@ These are decisions 1 and 3 above:
 
 **Fix:** write both down. While in `language-section.tsx`, give its `RadioGroup` an `aria-label`,
 because it relies on the surrounding tab heading.
+
+### §U8.16 The refinement chats drop `finishReason`, so a cut-off reply looks complete — 🟡 hygiene — ✅ RESOLVED 2026-10-25
+
+> Fixed together with §U8.13. `lib/checklist/stream.ts` and `lib/mock-data/stream.ts` keep `finishReason` from whichever terminator arrived, and both chats render the same ended-early note as Ask for a non-`stop` finish, so a cut-off reply reads the same live and after a reload. On `fix/ui-states-a11y-2026-10-25`.
+>
+> Original finding follows.
+
+**Evidence:** CONFIRMED.
+
+**Where:** `lib/checklist/stream.ts`, `lib/mock-data/stream.ts`; the `TurnState` in
+`components/checklist/chat-panel.tsx:~27` and `components/mock-data/chat-panel.tsx:~27`; compare
+`hooks/use-ask-stream.ts:29`, `:80`, `:91`
+
+**What this is.** Every stream ends with a `finishReason` (`.claude/rules/rag.md`). A reply cut off
+by the length limit or a timeout should say so.
+
+**Why this can happen.** Ask keeps the reason. The two refinement chats parse the `done` event and
+discard it. Live, a reply cut off at the length limit looks complete. After a reload,
+`message-list.tsx` adds "This answer ended early", so the same reply reads two ways. This extends the
+open §U8.13.
+
+**What we should do.** Carry `finishReason` into both chats' turn state and render the same note as
+Ask. Fix it together with §U8.13. One hour.
+
+### §U6.16 The signed-out language picker ignores its own failure — 🟡 hygiene — ✅ RESOLVED 2026-10-25
+
+> Fixed. `components/auth/locale-select.tsx` toasts `errors.generic` and does not refresh on a refused request or a network error. Tests cover both. On `fix/ui-states-a11y-2026-10-25`.
+>
+> Original finding follows.
+
+**Evidence:** CONFIRMED.
+
+**Where:** `components/auth/locale-select.tsx:24-32`
+
+**What this is.** On the login, forgot-password and reset-password pages, a visitor can switch
+language. The picker posts to `/api/auth/locale` and refreshes the page.
+
+**Why this can happen.** The response is never checked and there is no `try`. A failure refreshes
+the page in the old language. A network error becomes an unhandled promise rejection.
+
+**What it costs.** The language does not change, and nothing says why.
+
+**What we should do.** On `!res.ok` or a throw, show `toast.error` with the generic message. No
+success toast is needed, because the page re-renders in the new language. Fifteen minutes.
+
+### §U6.20 Every dialog's Close button is announced in English — 🟡 hygiene — ✅ RESOLVED 2026-10-25
+
+> Fixed. The dialog and sheet close buttons read `common.close` through `useTranslations`. `.claude/rules/design-system.md` §1 records this as the one sanctioned edit to generated `components/ui/` code, and each file carries a comment pointing there. On `fix/ui-states-a11y-2026-10-25`.
+>
+> Original finding follows.
+
+**Evidence:** CONFIRMED.
+
+**Where:** `components/ui/dialog.tsx:75`, `components/ui/sheet.tsx:75` (`<span className="sr-only">Close</span>`);
+`eslint.config.mjs:24` (the no-literal-string rule skips `components/ui/`)
+
+**What this is.** Every string a user reads, a screen reader's included, must come from
+`messages/` (CLAUDE.md → Frontend). The lint rule skips `components/ui/` because it holds
+CLI-generated shadcn code.
+
+**Why this can happen.** The generated dialog and sheet close buttons carry a hard-coded English
+label. That exemption is right for styling checks. Here it lets one English word through on every
+dialog and sheet in the app.
+
+**What it costs.** A Japanese screen-reader user hears "Close" in English in every dialog.
+
+**What we should do.** Give the two wrappers a translated `closeLabel`, or call `useTranslations`
+inside them. Note it in `design-system.md` §1 as the one sanctioned edit to generated code. Half an
+hour.
+
 
 
 ## See also

@@ -36,6 +36,20 @@ client can have received it, so it is recorded under Changed and allowed in a `M
   instead of doing nothing visible.
 - **Accessibility.** The checklist's status, kind and source filters and the profile's language
   choice have accessible names, and the Ask composer and the module path field show a focus ring.
+  Every dialog's and drawer's close button is announced in the interface language, not in
+  English.
+- **Status colours are readable in light mode.** The success, info and danger badges now carry
+  dark text instead of white (which read at 2.2–3.8:1), and text coloured by a status uses darker
+  shades that reach at least 4.5:1 on cards and on the page.
+- **A cut-off reply in a refinement chat says so.** The checklist and mock-data chats now show
+  the same "ended early" note as Ask when a reply stops short, and a **Try again** after a
+  timeout that resends the last instruction.
+- **The module screen no longer says "no permission" while it loads.** Generate and the chat
+  composers stay disabled without a reason until the project's permissions are known, and a
+  failed project load shows the error with a retry instead of a permanent permission message.
+- **A thumbs vote no longer briefly disappears** when its answer or change set is shown again.
+- **A failed language switch on the sign-in pages shows an error** instead of reloading the page
+  in the old language.
 
 ## [2.4.1] — 2026-10-25
 
