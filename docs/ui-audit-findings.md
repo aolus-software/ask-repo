@@ -41,11 +41,9 @@ Every finding from the first three sweeps has been fixed and is in
 
 | # | Finding | Severity | Raised |
 | --- | --- | --- | --- |
-| §U3.5 | `/settings/feedback` says "No feedback yet" when filters exclude everything | 🟡 | 2026-10-04 |
 | §U3.6 | `/settings/feedback` applies URL-only filters the screen cannot show or clear | 🟡 | 2026-10-04 |
 | §U3.7 | Eval tables have no pagination and stop at 100 rows | 🟡 | 2026-10-04 |
 | §U4.7 | The "Negative" test-case badge is coloured at two call sites | 🟡 | 2026-10-04 |
-| §U5.9 | The generate-eval-set dialog: two unassociated labels and a silent blank name | 🟡 | 2026-10-04 |
 | §U5.10 | The eval sizes 10/25/50 restate a backend rule without saying so | 🟡 | 2026-10-04 |
 | §U5.11 | The thumbs-down popover keeps stale reasons and sits outside the form contract | 🟡 | 2026-10-04 |
 | §U7.15 | The eval sets empty state has no action, and `ListError` sits flush in two cards | 🟡 | 2026-10-04 |
@@ -55,15 +53,10 @@ Every finding from the first three sweeps has been fixed and is in
 | §U9.7 | Admin screens request data before their admin gate | 🟡 | 2026-10-04 |
 | §U10.13 | Identifiers on the eval screens are in the body face | 🟡 | 2026-10-04 |
 | §U10.14 | Off-scale spacing and a `text-[10px]` badge | 🟡 | 2026-10-04 |
-| §U11.6 | Excluded pairs and pressed thumbs are signalled by colour alone | 🟡 | 2026-10-04 |
-| §U11.7 | Eval run rows are clickable without a visible or accessible control | 🟡 | 2026-10-04 |
-| §U11.8 | The compare selects and the date filters lose their visible labels | 🟡 | 2026-10-04 |
 | §U1.5 | The web manifest repeats two theme colours as raw hex | 🟡 | 2026-10-24 |
 | §U3.8 | Notification timestamps have no absolute time on hover | 🟡 | 2026-10-24 |
 | §U3.9 | The feedback table's date is a raw `YYYY-MM-DD` in every language | 🟡 | 2026-10-24 |
 | §U4.8 | Five more states pick their colour at the call site | 🟡 | 2026-10-24 |
-| §U5.12 | Three more labels are not tied to their control | 🟡 | 2026-10-24 |
-| §U5.13 | Three fields have no inline error to show a rejection | 🟡 | 2026-10-24 |
 | §U5.14 | The translate dialog restates the backend's "English sources only" rule | 🟡 | 2026-10-24 |
 | §U6.17 | Single-sentence messages end in a full stop, and four small copy splits | 🟡 | 2026-10-24 |
 | §U6.18 | The not-found, in-progress and server error messages say what happened, not what to do | 🟡 | 2026-10-24 |
@@ -390,22 +383,6 @@ Every finding this sweep raised here (§U1.4) was resolved on 2026-10-25 and is 
 
 ## U3 The list skeleton
 
-### §U3.5 `/settings/feedback` says "No feedback yet" when filters exclude everything — 🟡 hygiene
-
-**Where:** `app/(app)/settings/feedback/feedback-screen.tsx:89-94`
-
-**What this is.** The admin feedback screen lists votes and can be filtered by feature, vote,
-reason and date.
-
-**Why this can happen.** Whenever the result is empty, the screen renders the same "No feedback yet"
-empty state, whether or not a filter is active.
-
-**What it costs.** An administrator who filters to a narrow window is told nobody has ever voted,
-which is false.
-
-**What we should do.** Branch on whether any filter is set, the way the audit screen does: "No
-feedback matches these filters", with a clear-filters action. Half an hour.
-
 ### §U3.6 `/settings/feedback` applies URL-only filters the screen cannot show or clear — 🟡 hygiene
 
 **Where:** `app/(app)/settings/feedback/feedback-screen.tsx:23-31`, `:33-38` (`changedKey`);
@@ -461,24 +438,6 @@ other. Both also inherit §U1.4's low contrast.
 `StatusBadge`. Half an hour.
 
 ## U5 Forms
-
-### §U5.9 The generate-eval-set dialog has two unassociated labels and a silent blank name — 🟡 hygiene
-
-**Where:** `components/eval/generate-eval-set-dialog.tsx:139`, `:146`, `:160`, `:165`, `:72`
-
-**What this is.** `.claude/rules/forms.md` requires every control to have an `id` and its label an
-`htmlFor`, so that clicking the label focuses the control and screen readers announce it. Required
-fields show an error when empty.
-
-**Why this can happen.** The "Questions" and "Mix" labels have no `htmlFor`, and their selects have
-no `id`. Submitting with a blank name hits `if (!values.name.trim()) return;`, which simply does
-nothing: no error, no required marker.
-
-**What it costs.** A user presses Generate and nothing happens, with no explanation. Screen-reader
-users hear two unlabelled dropdowns.
-
-**What we should do.** Add `id`/`htmlFor` to both selects, mark Name required, and show a field
-error on a blank name. Half an hour.
 
 ### §U5.10 The eval sizes 10/25/50 restate a backend rule without saying so — 🟡 hygiene
 
@@ -637,47 +596,9 @@ count badge. Half an hour.
 
 ## U11 Icons and accessibility
 
-### §U11.6 Excluded pairs and pressed thumbs are signalled by colour alone — 🟡 hygiene
+Every finding this sweep raised here (§U11.6–§U11.8) was resolved on 2026-10-25 and is in
+[`audit-finding-solved-logs.md`](audit-finding-solved-logs.md).
 
-**Where:** `components/eval/eval-pair-table.tsx:52`; `components/output-feedback/feedback-control.tsx:124-125`, `:138-139`
-
-**What this is.** A state shown only by colour cannot be seen by colour-blind users, or in a
-greyscale screenshot.
-
-**Why this can happen.** An excluded pair is shown only by dimming its row's text. A pressed thumb
-differs from an unpressed one only by colour, with the same icon. Screen readers are covered,
-because the thumbs carry `aria-pressed` and the exclude switch is a labelled control. The gap is
-for sighted users.
-
-**What we should do.** Fill the pressed thumb icon, and add an "Excluded" badge on the row.
-Half an hour.
-
-### §U11.7 Eval run rows are clickable without a visible or accessible control — 🟡 hygiene
-
-**Where:** `components/eval/eval-run-table.tsx:48-56`; compare `components/eval/eval-pair-table.tsx:57-61`
-
-**Why this can happen.** The whole run row has `onClick`, `tabIndex={0}` and an Enter handler, with
-no button, link, role or accessible name, and Space does nothing. The only cue is the pointer
-cursor. The pair table beside it uses a real `<button aria-expanded>`.
-
-**What it costs.** Screen-reader users hear a row of cells with no hint it opens anything.
-Keyboard users get half the expected keys.
-
-**What we should do.** Put a real button (for example on the run's name or an "Open" control) in
-the row, as the pair table does. Half an hour.
-
-### §U11.8 The compare selects and the date filters lose their visible labels — 🟡 hygiene
-
-**Where:** `components/eval/eval-set-screen.tsx:151-176`; `components/output-feedback/feedback-filters.tsx:127-152`;
-`components/audit/audit-filters.tsx:138-161`; `.claude/rules/forms.md:66-67`
-
-**Why this can happen.** These controls carry only an `aria-label`. The compare selects show "Base
-run" or "Head run" as a placeholder, and once a run is chosen that text is replaced by the run's
-name, so nothing on screen says which side is which. The date inputs have no visible label at all.
-The feedback screen's feature, vote and reason selects are in the same state.
-
-**What we should do.** Give each a visible `FieldLabel` with `htmlFor`, which `forms.md` requires.
-One hour.
 
 ## U12 Documentation drift
 
@@ -845,46 +766,6 @@ a pending change set or an operation kind has nothing to copy, so it can choose 
 `lib/status.ts`, and route these sites through it, together with §U4.7. One hour.
 
 ## U5 Forms
-
-### §U5.12 Three more labels are not tied to their control — 🟡 hygiene
-
-**Evidence:** CONFIRMED.
-
-**Where:**
-- `app/(app)/checklist/export/export-screen.tsx:154`, `:166`: the project combobox.
-- `components/checklist/create-module-dialog.tsx:108`.
-- `components/eval/translate-eval-set-dialog.tsx:86`: the language select.
-
-**What this is.** `.claude/rules/forms.md` requires every control to have an `id` and its
-`FieldLabel` a matching `htmlFor`. Tests and screen readers both find controls by label.
-
-**Why this can happen.** These three `FieldLabel`s have no `htmlFor`, and their controls carry only
-an `aria-label`. This is the same shape as the open §U5.9, and two of the three are new.
-
-**What it costs.** Clicking the label does nothing. A screen reader reads the `aria-label`, which
-can drift from the visible text.
-
-**What we should do.** Give each control an `id` and each label its `htmlFor`. Fifteen minutes.
-
-### §U5.13 Three fields have no inline error to show a rejection — 🟡 hygiene
-
-**Evidence:** CONFIRMED. The trigger needs the backend to reject a value the frontend sends. Today
-that happens only if the two language lists drift, and a test exists to stop that.
-
-**Where:** `components/projects/create-project-dialog.tsx:115-127` (`contentLanguage`; compare `:67-69`);
-`components/eval/generate-eval-set-dialog.tsx` (`count`, `mix`); `components/form/form-error.tsx:13`
-
-**What this is.** Under the one-error-surface rule (`.claude/rules/forms.md`), a `422` that names a
-field shows inline under that field. The form-level banner appears only when no field was named.
-
-**Why this can happen.** These three fields never ask for their field error. So a `422` naming only
-`contentLanguage`, `count` or `mix` hides the banner, because a field was named, and shows nothing
-inline, because nobody asked.
-
-**What it costs.** The dialog stays open, the button re-enables, and nothing says why.
-
-**What we should do.** Add `fieldErrorText(mutation.error, …)` and a `FieldError` to each. Fifteen
-minutes.
 
 ### §U5.14 The translate dialog restates the backend's "English sources only" rule — 🟡 hygiene
 
