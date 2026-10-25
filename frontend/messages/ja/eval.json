@@ -65,7 +65,8 @@
       "status": "ステータス",
       "results": "結果",
       "model": "モデル"
-    }
+    },
+    "openRun": "{when}の実行を開く"
   },
   "runSheet": {
     "title": "実行結果",
@@ -97,13 +98,12 @@
     "submit": "生成",
     "started": "生成を開始しました",
     "nameLabel": "名前",
+    "nameRequired": "名前を入力してください。",
     "namePlaceholder": "例: 認証に関する質問",
     "pathLabel": "パス",
     "pathHelp": "プロジェクト全体を対象にする場合は空欄のまま、対象にするフォルダーやファイルを選ぶ場合は指定してください。",
     "questionsLabel": "質問数",
-    "countAria": "質問の数",
-    "mixLabel": "構成",
-    "mixAria": "質問の構成"
+    "mixLabel": "構成"
   },
   "translateDialog": {
     "title": "{name} を翻訳",
@@ -111,7 +111,6 @@
     "submit": "翻訳",
     "started": "翻訳を開始しました",
     "languageLabel": "言語",
-    "languageAria": "翻訳先の言語",
     "alreadyTranslated": "{language}（翻訳済み）"
   },
   "screen": {

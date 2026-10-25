@@ -54,6 +54,7 @@ export function GenerateEvalSetDialog({
   const fieldErrorText = useFieldErrorText();
   const [open, setOpen] = useState(false);
   const [values, setValues] = useState(EMPTY);
+  const [nameBlank, setNameBlank] = useState(false);
   const mutation = useGenerateEvalSet(projectId);
 
   if (!can({ permissions }, PERMISSION.EVAL_RUN)) return null;
@@ -62,17 +63,27 @@ export function GenerateEvalSetDialog({
     isApiError(mutation.error) && mutation.error.code === "MODULE_PATH_NOT_INDEXED"
       ? errorText(mutation.error)
       : undefined;
-  const nameError = fieldErrorText(mutation.error, "name");
+  const nameError =
+    (nameBlank ? t("nameRequired") : undefined) ??
+    fieldErrorText(mutation.error, "name");
+  const countError = fieldErrorText(mutation.error, "count");
+  const mixError = fieldErrorText(mutation.error, "mix");
   const pathError = pathNotIndexed ?? fieldErrorText(mutation.error, "sourcePath");
 
   function handleOpenChange(next: boolean) {
     setOpen(next);
-    if (!next) mutation.reset();
+    if (!next) {
+      mutation.reset();
+      setNameBlank(false);
+    }
   }
 
   function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!values.name.trim()) return;
+    if (!values.name.trim()) {
+      setNameBlank(true);
+      return;
+    }
 
     mutation.mutate(
       {
@@ -85,6 +96,7 @@ export function GenerateEvalSetDialog({
         onSuccess: () => {
           toast.success(t("started"));
           setValues(EMPTY);
+          setNameBlank(false);
           setOpen(false);
         },
       },
@@ -115,7 +127,10 @@ export function GenerateEvalSetDialog({
             id="eval-name"
             placeholder={t("namePlaceholder")}
             value={values.name}
-            onChange={(event) => setValues({ ...values, name: event.target.value })}
+            onChange={(event) => {
+              setNameBlank(false);
+              setValues({ ...values, name: event.target.value });
+            }}
             aria-invalid={Boolean(nameError)}
           />
           {nameError ? <FieldError>{nameError}</FieldError> : null}
@@ -135,14 +150,18 @@ export function GenerateEvalSetDialog({
         </Field>
 
         <Field>
-          <FieldLabel>{t("questionsLabel")}</FieldLabel>
+          <FieldLabel htmlFor="eval-count">{t("questionsLabel")}</FieldLabel>
           <Select
             value={String(values.count)}
             onValueChange={(value) =>
               setValues({ ...values, count: Number(value) as EvalCount })
             }
           >
-            <SelectTrigger className="w-full" aria-label={t("countAria")}>
+            <SelectTrigger
+              id="eval-count"
+              className="w-full"
+              aria-invalid={Boolean(countError)}
+            >
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -153,15 +172,20 @@ export function GenerateEvalSetDialog({
               ))}
             </SelectContent>
           </Select>
+          {countError ? <FieldError>{countError}</FieldError> : null}
         </Field>
 
         <Field>
-          <FieldLabel>{t("mixLabel")}</FieldLabel>
+          <FieldLabel htmlFor="eval-mix">{t("mixLabel")}</FieldLabel>
           <Select
             value={values.mix}
             onValueChange={(value) => setValues({ ...values, mix: value as EvalMix })}
           >
-            <SelectTrigger className="w-full" aria-label={t("mixAria")}>
+            <SelectTrigger
+              id="eval-mix"
+              className="w-full"
+              aria-invalid={Boolean(mixError)}
+            >
               <SelectValue>{(value: string) => tMix(value as EvalMix)}</SelectValue>
             </SelectTrigger>
             <SelectContent>
@@ -172,6 +196,7 @@ export function GenerateEvalSetDialog({
               ))}
             </SelectContent>
           </Select>
+          {mixError ? <FieldError>{mixError}</FieldError> : null}
         </Field>
       </FormDialog>
     </>

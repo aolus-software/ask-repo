@@ -105,7 +105,7 @@ export function CreateModuleDialog({
       onSubmit={handleSubmit}
     >
       <Field>
-        <FieldLabel>
+        <FieldLabel htmlFor="module-project">
           {t("project")} <span className="text-danger-text">*</span>
         </FieldLabel>
         <Combobox
@@ -119,7 +119,7 @@ export function CreateModuleDialog({
           <ComboboxInput
             className="w-full"
             placeholder={query.isLoading ? t("loadingProjects") : t("searchProjects")}
-            aria-label={t("projectAria")}
+            id="module-project"
           />
           <ComboboxContent>
             <ComboboxEmpty>

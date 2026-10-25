@@ -65,7 +65,8 @@
       "status": "상태",
       "results": "결과",
       "model": "모델"
-    }
+    },
+    "openRun": "{when}의 실행 열기"
   },
   "runSheet": {
     "title": "실행 결과",
@@ -97,13 +98,12 @@
     "submit": "생성",
     "started": "생성을 시작했습니다",
     "nameLabel": "이름",
+    "nameRequired": "이름을 입력하세요.",
     "namePlaceholder": "예: 인증 관련 질문",
     "pathLabel": "경로",
     "pathHelp": "프로젝트 전체를 대상으로 하려면 비워 두거나, 포함할 폴더나 파일을 선택하세요.",
     "questionsLabel": "질문",
-    "countAria": "질문 수",
-    "mixLabel": "구성",
-    "mixAria": "질문 구성"
+    "mixLabel": "구성"
   },
   "translateDialog": {
     "title": "{name} 번역",
@@ -111,7 +111,6 @@
     "submit": "번역",
     "started": "번역을 시작했습니다",
     "languageLabel": "언어",
-    "languageAria": "대상 언어",
     "alreadyTranslated": "{language} (번역됨)"
   },
   "screen": {

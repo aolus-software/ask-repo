@@ -66,6 +66,7 @@ export function CreateProjectDialog({
 
   const branchError = fieldErrorText(mutation.error, "branch");
   const patError = fieldErrorText(mutation.error, "pat");
+  const contentLanguageError = fieldErrorText(mutation.error, "contentLanguage");
   const repoUrlError = urlError ?? fieldErrorText(mutation.error, "repoUrl");
 
   return (
@@ -125,6 +126,7 @@ export function CreateProjectDialog({
         <FieldDescription>
           {t("projects.createDialog.contentLanguageHint")}
         </FieldDescription>
+        {contentLanguageError ? <FieldError>{contentLanguageError}</FieldError> : null}
       </Field>
 
       <Field>

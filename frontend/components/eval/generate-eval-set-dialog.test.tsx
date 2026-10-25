@@ -34,6 +34,32 @@ describe("GenerateEvalSetDialog", () => {
     expect(screen.queryByRole("button", { name: /generate eval set/i })).toBeNull();
   });
 
+  it("shows a translated field error, and posts nothing, for a blank name", async () => {
+    const fetchMock = pathsOrPost(() => Response.json({ id: "s1" }, { status: 202 }));
+    vi.stubGlobal("fetch", fetchMock);
+    renderDialog();
+
+    fireEvent.click(screen.getByRole("button", { name: /generate eval set/i }));
+    await screen.findByLabelText(/^name/i);
+    fireEvent.click(screen.getByRole("button", { name: /^generate$/i }));
+
+    expect(await screen.findByText("Enter a name.")).toBeInTheDocument();
+    expect(fetchMock.mock.calls.some(([, init]) => init?.method === "POST")).toBe(
+      false,
+    );
+  });
+
+  it("ties the Questions and Mix labels to their selects", async () => {
+    vi.stubGlobal(
+      "fetch",
+      pathsOrPost(() => Response.json({})),
+    );
+    renderDialog();
+    fireEvent.click(screen.getByRole("button", { name: /generate eval set/i }));
+    expect(await screen.findByLabelText("Questions")).toBeInTheDocument();
+    expect(screen.getByLabelText("Mix")).toBeInTheDocument();
+  });
+
   it("submits the defaults: whole project, 25 questions, balanced", async () => {
     const fetchMock = pathsOrPost(() => Response.json({ id: "s1" }, { status: 202 }));
     vi.stubGlobal("fetch", fetchMock);

@@ -65,7 +65,8 @@
       "status": "狀態",
       "results": "結果",
       "model": "模型"
-    }
+    },
+    "openRun": "開啟 {when} 的執行"
   },
   "runSheet": {
     "title": "執行結果",
@@ -97,13 +98,12 @@
     "submit": "產生",
     "started": "已開始產生",
     "nameLabel": "名稱",
+    "nameRequired": "請輸入名稱。",
     "namePlaceholder": "例如：驗證相關問題",
     "pathLabel": "路徑",
     "pathHelp": "留空代表整個專案，或選擇要涵蓋的資料夾或檔案。",
     "questionsLabel": "問題數",
-    "countAria": "問題數量",
-    "mixLabel": "組合",
-    "mixAria": "問題組合"
+    "mixLabel": "組合"
   },
   "translateDialog": {
     "title": "翻譯 {name}",
@@ -111,7 +111,6 @@
     "submit": "翻譯",
     "started": "已開始翻譯",
     "languageLabel": "語言",
-    "languageAria": "目標語言",
     "alreadyTranslated": "{language}（已翻譯）"
   },
   "screen": {
