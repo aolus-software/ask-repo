@@ -108,6 +108,9 @@ client can have received it, so it is recorded under Changed and allowed in a `M
 - **One eval set whose language a later release no longer ships no longer breaks every list it
   appears in** with a `500`; it reads as English, as projects already did.
 - **A timed-out or cancelled clone no longer leaves its `git` process running.**
+- **A repository host with several addresses clones if any of them answers.** The clone pinned
+  only the first address it validated, so a dual-stack host whose first address was unreachable
+  failed. Every address is still checked before any is pinned, exactly as before.
 - **The eval tables paginate** instead of stopping at 100 rows, and an empty eval set list offers
   to generate one.
 - **The feedback screen shows every filter it applies.** A project or prompt-version filter that
