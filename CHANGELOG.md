@@ -13,6 +13,8 @@ client can have received it, so it is recorded under Changed and allowed in a `M
 
 ## [Unreleased]
 
+## [2.4.1] — 2026-10-25
+
 ### Security
 
 - **Next.js 16.3.8 → 16.4.2** (and `eslint-config-next` to match), closing two critical
@@ -955,7 +957,8 @@ None of these is a defect. Each is a documented, deliberate scope decision:
 
 ---
 
-[Unreleased]: https://github.com/aolus-software/ask-repo/compare/v2.4.0...HEAD
+[Unreleased]: https://github.com/aolus-software/ask-repo/compare/v2.4.1...HEAD
+[2.4.1]: https://github.com/aolus-software/ask-repo/compare/v2.4.0...v2.4.1
 [2.4.0]: https://github.com/aolus-software/ask-repo/compare/v2.3.0...v2.4.0
 [2.3.0]: https://github.com/aolus-software/ask-repo/compare/v2.2.0...v2.3.0
 [2.2.0]: https://github.com/aolus-software/ask-repo/compare/v2.1.0...v2.2.0
