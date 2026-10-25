@@ -20,8 +20,6 @@ from app.core.language import Language
 from app.models.mock_data import MockDataRecord
 from app.services.export_labels import EXPORT_LABELS
 
-NO_DATA_LABEL = EXPORT_LABELS[Language.EN].no_data
-
 MAX_SHEET_TITLE = 31
 _ILLEGAL_SHEET_CHARS = re.compile(r"[\\/*?:\[\]]")
 

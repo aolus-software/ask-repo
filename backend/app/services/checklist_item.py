@@ -45,7 +45,7 @@ from app.schemas.checklist import (
     ChecklistResultsClearResponse,
 )
 from app.schemas.pagination import PaginatedResponse
-from app.services.checklist_export import build_workbook
+from app.services.checklist_export import build_workbook, filter_audit_details, require_within_cap
 
 DEFAULT_SORT = "position"
 
@@ -307,12 +307,9 @@ class ChecklistItemService:
             kind=query.kind.value if query.kind else None,
             search=query.search,
         )
-        if len(rows) > cap:
-            raise AppError(
-                status.HTTP_409_CONFLICT,
-                ErrorCode.EXPORT_TOO_LARGE,
-                f"That filter matches more than {cap} rows. Narrow it and try again.",
-            )
+        require_within_cap(
+            len(rows), cap, f"That filter matches more than {cap} rows. Narrow it and try again."
+        )
         # A filter can span projects, and a document spanning projects has no single
         # owner whose language could decide it: one shared language is used, else English.
         language = shared_language(
@@ -326,27 +323,16 @@ class ChecklistItemService:
         )
         # An export changes nothing, and is audited anyway: it is the one action
         # that takes a private repository's derived content out of the instance.
-        # `filter` carries the query's filters, matching `clear_results` -- never
-        # the rows themselves, which would put generated test content in the trail.
-        # `feature` is picked from generated content in the UI, so -- like
-        # `expectedResult` -- it stays out; `featureFilterApplied` says a feature
-        # filter narrowed the export without naming which one. `search` stays: it is
-        # the caller's own query intent, not a fact about the repository.
-        filter_details: dict[str, str] = {}
-        if query.project_id is not None:
-            filter_details["projectId"] = str(query.project_id)
-        if query.module_id is not None:
-            filter_details["moduleId"] = str(query.module_id)
-        if query.feature is not None:
-            filter_details["featureFilterApplied"] = "true"
-        if query.status is not None:
-            filter_details["status"] = query.status.value
-        if query.source is not None:
-            filter_details["source"] = query.source.value
-        if query.kind is not None:
-            filter_details["kind"] = query.kind.value
-        if query.search is not None:
-            filter_details["search"] = query.search
+        # `filter` carries the query's filters, matching `clear_results`.
+        filter_details = filter_audit_details(
+            project_id=query.project_id,
+            module_id=query.module_id,
+            feature=query.feature,
+            status=query.status,
+            source=query.source,
+            kind=query.kind,
+            search=query.search,
+        )
 
         # The filter may narrow by module rather than project directly, so fall back
         # to what the matched rows actually belong to -- but only when every matched

@@ -30,7 +30,7 @@ from app.ingestion.vector_store import build_store_factory
 from app.queue.protocol import MockDataQueue
 from app.rag.answerer import Answerer
 from app.rag.retriever import CodeRetriever
-from app.schemas.errors import ERROR_RESPONSES
+from app.schemas.errors import ERROR_RESPONSES, download_response
 from app.schemas.mock_data import (
     MockDataChangeSetResponse,
     MockDataDatasetDetailResponse,
@@ -204,7 +204,10 @@ async def refine_mock_data(
     response_class=Response,
     status_code=status.HTTP_200_OK,
     summary="Export a module's mock data as JSON",
-    responses={code: ERROR_RESPONSES[code] for code in (401, 403, 404, 409, 422)},
+    responses={
+        **download_response(JSON_MEDIA_TYPE),
+        **{code: ERROR_RESPONSES[code] for code in (401, 403, 404, 409, 422)},
+    },
 )
 async def export_mock_data_json(
     module_id: uuid.UUID, current_user: CurrentUser, service: MockDataDatasetServiceDep
@@ -222,7 +225,10 @@ async def export_mock_data_json(
     response_class=Response,
     status_code=status.HTTP_200_OK,
     summary="Export a module's mock data as a spreadsheet",
-    responses={code: ERROR_RESPONSES[code] for code in (401, 403, 404, 409, 422)},
+    responses={
+        **download_response(XLSX_MEDIA_TYPE),
+        **{code: ERROR_RESPONSES[code] for code in (401, 403, 404, 409, 422)},
+    },
 )
 async def export_mock_data_xlsx(
     module_id: uuid.UUID, current_user: CurrentUser, service: MockDataDatasetServiceDep

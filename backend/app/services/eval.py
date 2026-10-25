@@ -24,6 +24,7 @@ from app.core.middleware import AuthenticatedUser
 from app.core.permissions import Permission
 from app.live.events import eval_run_event, eval_set_event
 from app.live.staging import stage_live_event
+from app.models.checklist import MAX_MODULE_NAME_CHARS
 from app.models.eval import EvalPair, EvalResult, EvalRun, EvalRunStatus, EvalSet, EvalSetStatus
 from app.models.project import Project
 from app.queue.protocol import EvalQueue
@@ -34,7 +35,6 @@ from app.repositories.eval_run import EvalRunRepository
 from app.repositories.eval_set import EvalSetRepository
 from app.repositories.project import ProjectRepository
 from app.schemas.eval import (
-    NAME_MAX_LENGTH,
     EvalPairExclude,
     EvalPairRead,
     EvalResultRead,
@@ -44,9 +44,10 @@ from app.schemas.eval import (
     EvalSetDetail,
     EvalSetSummary,
 )
-from app.schemas.pagination import ListQuery, PaginatedResponse
+from app.schemas.pagination import PageQuery, PaginatedResponse
 from app.services.index_guards import require_indexed, require_path_indexed, require_stable_index
 from app.services.indexed_path import IndexedPathReader
+from app.services.path_tree import normalise_source_path
 
 
 class EvalService:
@@ -142,14 +143,15 @@ class EvalService:
         """A natively generated English set."""
         if payload.name is None or payload.count is None or payload.mix is None:
             raise AssertionError("EvalSetCreate validated a generation body without its fields")
-        if payload.source_path:
-            await require_path_indexed(self.indexed_paths, project, payload.source_path)
+        source_path = normalise_source_path(payload.source_path or "")
+        if source_path:
+            await require_path_indexed(self.indexed_paths, project, source_path)
         return await self.sets.add(
             EvalSet(
                 id=uuid.uuid4(),
                 project_id=project.id,
-                name=payload.name.strip(),
-                source_path=payload.source_path or None,
+                name=payload.name,
+                source_path=source_path or None,
                 requested_count=payload.count,
                 mix=payload.mix.value,
                 language=Language.EN.value,
@@ -190,7 +192,7 @@ class EvalService:
             EvalSet(
                 id=uuid.uuid4(),
                 project_id=project.id,
-                name=source.name[: NAME_MAX_LENGTH - len(suffix)] + suffix,
+                name=source.name[: MAX_MODULE_NAME_CHARS - len(suffix)] + suffix,
                 source_path=source.source_path,
                 requested_count=source.requested_count,
                 mix=source.mix,
@@ -222,7 +224,7 @@ class EvalService:
         )
 
     async def list_sets(
-        self, project_id: uuid.UUID, query: ListQuery, *, actor: AuthenticatedUser
+        self, project_id: uuid.UUID, query: PageQuery, *, actor: AuthenticatedUser
     ) -> PaginatedResponse[EvalSetSummary]:
         """A page of a project's sets, each with its newest run."""
         project = await access.require_readable_project(self.projects, project_id, actor)
@@ -422,7 +424,7 @@ class EvalService:
         return summary
 
     async def list_runs(
-        self, set_id: uuid.UUID, query: ListQuery, *, actor: AuthenticatedUser
+        self, set_id: uuid.UUID, query: PageQuery, *, actor: AuthenticatedUser
     ) -> PaginatedResponse[EvalRunSummary]:
         """A page of a set's runs, newest first."""
         eval_set, _ = await self._load_set(set_id, actor, Permission.EVAL_READ)

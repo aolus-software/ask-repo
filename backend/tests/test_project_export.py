@@ -24,7 +24,7 @@ from app.models.project import Project
 from app.models.user import User
 from app.schemas.project_export import ProjectExportPart, ProjectExportQuery
 from app.services.export_labels import EXPORT_LABELS
-from app.services.mock_data_export import NO_DATA_LABEL, sheet_title
+from app.services.mock_data_export import sheet_title
 from app.services.project_export import ProjectExportService
 from tests.conftest import AuditRows, GrantMembership
 from tests.factories import (
@@ -194,7 +194,7 @@ async def test_the_mock_data_part_lists_every_module_on_a_cover_sheet(
         ("Module", "Records", "Stale", "Sheet"),
         ("Auth", 1, "no", "Auth"),
         ("Billing", 1, "yes", "Billing"),
-        ("Search", 0, None, NO_DATA_LABEL),
+        ("Search", 0, None, EXPORT_LABELS[Language.EN].no_data),
     ]
     # Each module keeps its own columns rather than one union across the project.
     # Compared as a mapping: `jsonb` does not keep the order keys were written in.

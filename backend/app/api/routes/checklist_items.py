@@ -24,7 +24,7 @@ from app.schemas.checklist import (
     ChecklistResultsClearRequest,
     ChecklistResultsClearResponse,
 )
-from app.schemas.errors import ERROR_RESPONSES
+from app.schemas.errors import ERROR_RESPONSES, download_response
 from app.schemas.pagination import PaginatedResponse
 from app.services.checklist_item import ChecklistItemService
 
@@ -68,7 +68,10 @@ async def list_checklist_items(
     response_class=Response,
     status_code=status.HTTP_200_OK,
     summary="Export the filtered checklist as a spreadsheet",
-    responses={code: ERROR_RESPONSES[code] for code in (400, 401, 403, 409, 422)},
+    responses={
+        **download_response(XLSX_MEDIA_TYPE),
+        **{code: ERROR_RESPONSES[code] for code in (400, 401, 403, 409, 422)},
+    },
 )
 async def export_checklist(
     current_user: CurrentUser,

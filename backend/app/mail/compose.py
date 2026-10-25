@@ -312,7 +312,6 @@ RESET_MESSAGES: dict[Language, str] = {
     Language.ZH_TW: "重設您的密碼",
     Language.KO: "비밀번호를 재설정하세요",
 }
-RESET_MESSAGE = RESET_MESSAGES[Language.EN]
 
 # The words around the sentence, per language. `reset_expiry` carries the one allowed
 # placeholder, `{minutes}`. Machine-assisted drafts, like the tables above.
