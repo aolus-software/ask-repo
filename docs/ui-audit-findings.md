@@ -62,9 +62,6 @@ Every finding from the first three sweeps has been fixed and is in
 | §U11.6 | Excluded pairs and pressed thumbs are signalled by colour alone | 🟡 | 2026-10-04 |
 | §U11.7 | Eval run rows are clickable without a visible or accessible control | 🟡 | 2026-10-04 |
 | §U11.8 | The compare selects and the date filters lose their visible labels | 🟡 | 2026-10-04 |
-| §U12.6 | `navigation.md` §4 and §6 are stale | 📄 | 2026-10-04 |
-| §U12.7 | `frontend/README.md`'s layout is stale | 📄 | 2026-10-04 |
-| §U12.8 | `design.md` lacks the feedback control, the drawer width, and two column rules (column rules SUSPECT) | 📄 | 2026-10-04 |
 | §U1.5 | The web manifest repeats two theme colours as raw hex | 🟡 | 2026-10-24 |
 | §U3.8 | Notification timestamps have no absolute time on hover | 🟡 | 2026-10-24 |
 | §U3.9 | The feedback table's date is a raw `YYYY-MM-DD` in every language | 🟡 | 2026-10-24 |
@@ -72,16 +69,12 @@ Every finding from the first three sweeps has been fixed and is in
 | §U5.12 | Three more labels are not tied to their control | 🟡 | 2026-10-24 |
 | §U5.13 | Three fields have no inline error to show a rejection | 🟡 | 2026-10-24 |
 | §U5.14 | The translate dialog restates the backend's "English sources only" rule | 🟡 | 2026-10-24 |
-| §U6.15 | "Re-index now" on the Ask screen fails silently | 🔴 | 2026-10-24 |
 | §U6.16 | The signed-out language picker ignores its own failure | 🟡 | 2026-10-24 |
 | §U6.17 | Single-sentence messages end in a full stop, and four small copy splits | 🟡 | 2026-10-24 |
 | §U6.18 | The not-found, in-progress and server error messages say what happened, not what to do | 🟡 | 2026-10-24 |
 | §U6.19 | Three destructive confirmations do not say what is lost | 🟡 | 2026-10-24 |
 | §U6.20 | Every dialog's Close button is announced in English | 🟡 | 2026-10-24 |
-| §U7.17 | `/checklist/export` shows a failed load as "nothing to export" | 🔴 | 2026-10-24 |
-| §U7.18 | The Ask project picker shows a failed load as "no match" | 🔴 | 2026-10-24 |
 | §U7.19 | Notification preferences load with no skeleton | 🟡 | 2026-10-24 |
-| §U8.15 | Pressing Enter to pick an IME candidate sends a half-typed question | 🔴 | 2026-10-24 |
 | §U8.16 | The refinement chats drop `finishReason`, so a cut-off reply looks complete | 🟡 | 2026-10-24 |
 | §U8.17 | The "thinking" label is looked up two ways | 🟡 | 2026-10-24 |
 | §U8.18 | The two refinement chats' stream readers and panels are near-verbatim copies | 🟡 | 2026-10-24 |
@@ -89,14 +82,6 @@ Every finding from the first three sweeps has been fixed and is in
 | §U10.16 | A small-caps "eyebrow" style outside the type scale | 🟡 | 2026-10-24 |
 | §U10.17 | The module list shows its source path in the body face | 🟡 | 2026-10-24 |
 | §U10.18 | A long module name in the export picker may be cut with no way to read it (SUSPECT) | 🟡 | 2026-10-24 |
-| §U11.9 | Three checklist filters have no name at all | 🟠 | 2026-10-24 |
-| §U11.10 | The Ask composer and the path picker show no focus ring | 🟠 | 2026-10-24 |
-| §U12.9 | `frontend/README.md` says the profile has six sections in one place and seven in another | 📄 | 2026-10-24 |
-| §U12.10 | `docs/design.md` has no row for the language pickers | 📄 | 2026-10-24 |
-| §U12.11 | `navigation.md` §4 describes placeholder rows that no longer exist | 📄 | 2026-10-24 |
-| §U12.12 | The dialog-or-page table in `forms.md` is stale | 📄 | 2026-10-24 |
-| §U12.13 | `docs/design.md` says `size-5` for an icon in a button; the app uses `size-4` | 📄 | 2026-10-24 |
-| §U12.14 | Two decisions from this sweep are not written down yet | 📄 | 2026-10-24 |
 
 ## Top priorities (2026-10-24)
 
@@ -786,41 +771,9 @@ One hour.
 
 ## U12 Documentation drift
 
-### §U12.6 `navigation.md` §4 and §6 are stale — 📄 doc
+Every finding this sweep raised here (§U12.6–§U12.8) was resolved on 2026-10-25 and is in
+[`audit-finding-solved-logs.md`](audit-finding-solved-logs.md).
 
-**Where:** `.claude/rules/navigation.md:48-57`, `:83-99`; `lib/nav-child.ts:14`; `docs/PRD.md:34`
-
-§4 still says "Phase 1 has exactly one axis of authority — `is_admin`… Do not invent a permission
-system" and that "Phase 2 will add per-project access". Phase 2.1's per-project roles shipped long
-ago, along with `lib/can.ts`. `lib/nav-child.ts:14` repeats the sentence. §6's "shape AskRepo is
-heading for" route list omits `/projects/[id]/eval/[setId]`, `/settings/feedback`, `/notifications`,
-`/profile` and the `/settings/notifications` redirect, all of which exist. **Fix:** rewrite §4
-around `lib/can.ts`, list the real routes in §6 in the present tense, and fix the comment.
-
-### §U12.7 `frontend/README.md`'s layout is stale — 📄 doc
-
-**Where:** `frontend/README.md:6-26`, `:98-137`
-
-The `(auth)/` line lists only `/login` and `/change-password` (the tree also has
-`forgot-password` and `reset-password`). Settings omits `/settings/feedback`. `components/` omits
-`audit/`, `change-sets/`, `live/` and `output-feedback/`. `lib/` omits `checklist/`, `live/`,
-`mock-data/` and eight files. `app/api/` omits `auth/password-policy` and `auth/password-reset`.
-The prose never mentions the feedback screen or the vote control. **Fix:** regenerate the layout
-block from the tree.
-
-### §U12.8 `design.md` lacks the feedback control, the drawer widths, and two column rules — 📄 doc
-
-**Where:** `docs/design.md:148-152` (inventory: `sheet` with no widths), `:178-179` (column rules),
-`:208` (the Feedback section, which covers loading and mutations only);
-`components/output-feedback/feedback-control.tsx`; sheet widths at
-`components/eval/eval-run-sheet.tsx:35`, `components/checklist/refinement-drawer.tsx:180-190`,
-`components/ask/conversation-rail.tsx:425`; `components/output-feedback/feedback-table.tsx:73`, `:76`
-
-`design.md` never describes the thumbs control, and three sheets use three different widths with
-no rule. The two column rules are SUSPECT: the original row did not name them. The likely
-candidates are a `font-mono` identifier column (`feedback-table.tsx:76`,
-`feedback-summary.tsx:117`) and a wrapped free-text column (`max-w-xs whitespace-pre-wrap`,
-`feedback-table.tsx:73`). **Fix:** add the control, a drawer-width rule, and those column rules.
 
 ## Verified correct in this sweep (2026-10-04, re-checked 2026-10-17)
 
@@ -1044,28 +997,6 @@ carry a `translatable` flag. Half an hour.
 
 ## U6 Feedback and copy
 
-### §U6.15 "Re-index now" on the Ask screen fails silently — 🔴 bug
-
-**Evidence:** CONFIRMED.
-
-**Where:** `app/(app)/ask/[conversationId]/preflight-error.tsx:55-67`;
-`hooks/use-project-mutations.ts:33-40`; compare `components/projects/project-row-actions.tsx:128-148`
-
-**What this is.** Ask cannot answer when a project's index is stale or built with another embedding
-model. Its pre-flight error offers a **Re-index now** button. A toast confirms that the re-index
-started, or that one is already running.
-
-**Why this can happen.** The `mutate` call has an `onSuccess` and no `onError`. The hook has no
-error handler of its own, and the component never renders `reindex.error`. A `403`, a `404`, a vector
-store that is down, or a dropped connection re-enables the button and shows nothing. The same
-mutation on the project row is safe, because its `ConfirmDialog` renders the error.
-
-**What it costs.** A user who lacks the reindex permission, or hits an outage, clicks and waits for
-an index that is never coming. Nothing tells them to ask someone else or try later.
-
-**What we should do.** Add `onError: (e) => toast.error(errorText(e))`. `errorText` is already in
-scope. Five minutes.
-
 ### §U6.16 The signed-out language picker ignores its own failure — 🟡 hygiene
 
 **Evidence:** CONFIRMED.
@@ -1176,48 +1107,6 @@ hour.
 
 ## U7 Loading, empty and error
 
-### §U7.17 `/checklist/export` shows a failed load as "nothing to export" — 🔴 bug
-
-**Evidence:** CONFIRMED.
-
-**Where:** `app/(app)/checklist/export/export-screen.tsx:64-82` (neither query's `isError` is read),
-`~172` (`noProjectMatches`), `~232` (`noModules`); `app/(app)/checklist/export/page.tsx:8`
-
-**What this is.** The new export screen lets a user choose a project, then the modules to export.
-Every data surface must tell a failed load from an empty one, with `ListError` or an `Alert` on
-failure (`docs/design.md` → Feedback).
-
-**Why this can happen.** The screen reads `projects.data` and `modules.data` and never their error.
-If the projects request fails, the picker says "No projects match". If the modules request fails, it
-says the project has no modules. A `?projectId=` the user may not read makes the project vanish
-silently.
-
-**What it costs.** During an outage, a user is told their project has no modules to export. That is
-false, and nothing offers a retry. Two smaller issues on the same screen:
-- The 100-project cap has no notice, unlike the module cap.
-- The page's `Suspense` fallback is `null`, so it is blank until it hydrates. `checklist/page.tsx:12`
-  does the same.
-
-**What we should do.** Branch both queries on `isError` to `ListError` with retry. Add a cap notice,
-and use a skeleton fallback. One hour.
-
-### §U7.18 The Ask project picker shows a failed load as "no match" — 🔴 bug
-
-**Evidence:** CONFIRMED.
-
-**Where:** `components/ask/project-picker.tsx:~42-72`; compare `components/ask/conversation-rail.tsx:206-210`
-
-**What this is.** Starting a conversation means choosing a project in this picker.
-
-**Why this can happen.** The picker checks only `isLoading`. On failure it falls through to "No
-project matches". The conversation rail beside it reads the same query and does show "Could not
-load projects".
-
-**What it costs.** The user is told they have no project to ask about, which is false. They cannot
-start a conversation, and nothing suggests retrying.
-
-**What we should do.** Branch on `isError` the way the rail does. Fifteen minutes.
-
 ### §U7.19 Notification preferences load with no skeleton — 🟡 hygiene
 
 **Evidence:** CONFIRMED.
@@ -1233,30 +1122,6 @@ then the rows pop in.
 **What we should do.** Render `TableSkeleton` while loading. Fifteen minutes.
 
 ## U8 The streaming surfaces
-
-### §U8.15 Pressing Enter to pick an IME candidate sends a half-typed question — 🔴 bug
-
-**Evidence:** CONFIRMED by reading the code; not reproduced in a browser.
-
-**Where:** `components/ask/composer.tsx:43-48`. Searching `app`, `components`, `hooks` and `lib` for
-`isComposing` or `keyCode` finds nothing.
-
-**What this is.** Ask, the checklist refinement chat and the mock-data refinement chat share one
-composer. Enter sends and Shift+Enter breaks the line. Since #68 the interface ships in Japanese,
-Korean and two Chinese locales, whose users type through an input method editor (IME). In an IME,
-Enter confirms the highlighted candidate.
-
-**Why this can happen.** The handler checks only `event.key === "Enter" && !event.shiftKey`. When the
-user presses Enter to confirm a candidate, Chrome fires that keydown with `isComposing` true, and
-Safari fires it with `keyCode` 229. The composer treats it as "send".
-
-**What it costs.** A Japanese, Korean or Chinese user's question is sent half-typed, mid-word, on all
-three surfaces. The composer clears, and the model answers a fragment. Every answer then costs a
-retype and a wasted model call. That makes the composer close to unusable in the four languages the
-release just added.
-
-**What we should do.** Return early when `event.nativeEvent.isComposing || event.keyCode === 229`.
-Add a Vitest case for both. Fifteen minutes.
 
 ### §U8.16 The refinement chats drop `finishReason`, so a cut-off reply looks complete — 🟡 hygiene
 
@@ -1355,104 +1220,15 @@ identical. **Fix:** add `title={module.name}`, or let the label wrap. Five minut
 
 ## U11 Icons and accessibility
 
-### §U11.9 Three checklist filters have no name at all — 🟠 inconsistency
+Every finding this sweep raised here (§U11.9–§U11.10) was resolved on 2026-10-25 and is in
+[`audit-finding-solved-logs.md`](audit-finding-solved-logs.md).
 
-**Evidence:** CONFIRMED.
-
-**Where:** `components/checklist/item-filters.tsx:71` (status), `:105` (kind), `:135` (source); compare
-`:57`
-
-**What this is.** The module grid's filter row has four controls. Only the feature search has an
-`aria-label`. The status, kind and source selects have no visible label and no accessible name.
-
-**Why this can happen.** The Sweep 2026-09-19 notes say "the four filter controls carry
-`aria-label`s". That was not true then either, so no later sweep looked again.
-
-**What it costs.** A screen reader announces only the selected value ("pass", "All kinds"), never
-what is being filtered. Sighted users get no label either. This is worse than §U11.8, where at least
-an `aria-label` exists.
-
-**What we should do.** Add translated `aria-label`s now. Settle visible labels together with
-§U11.8. Fifteen minutes. The 2026-09-19 note is corrected by this finding.
-
-### §U11.10 The Ask composer and the path picker show no focus ring — 🟠 inconsistency
-
-**Evidence:** CONFIRMED.
-
-**Where:** `components/ask/composer.tsx:38` (`border-0 shadow-none focus-visible:ring-0`, inside a
-`<form>` at `:30` with no `focus-within:` ring); `components/checklist/path-picker.tsx:85`
-(`outline-none` inside a plain bordered `div`)
-
-**What this is.** Every interactive element shows a visible focus ring, so a keyboard user can see
-where they are.
-
-**Why this can happen.** Both inputs remove their own ring so their wrapper can look like the input.
-Neither wrapper puts a ring back with `focus-within:`. The refinement drawer's handle does the same
-thing correctly (`refinement-drawer.tsx:232`).
-
-**What it costs.** Tabbing into the most-used input in the app, Ask's composer, shows no sign that
-it has focus. The same is true of the module path field.
-
-**What we should do.** Give both wrappers the same `focus-within:` ring the generated `Input` uses on
-`focus-visible`, so the wrapper lights up when its input has focus. Fifteen minutes.
 
 ## U12 Documentation drift
 
-### §U12.9 `frontend/README.md` says the profile has six sections in one place and seven in another — 📄 doc
+Every finding this sweep raised here (§U12.9–§U12.14) was resolved on 2026-10-25 and is in
+[`audit-finding-solved-logs.md`](audit-finding-solved-logs.md).
 
-**Where:** `frontend/README.md` (prose, about lines 27-30, versus the layout block);
-`components/profile/profile-screen.tsx:62-69`
-
-The prose lists six sections and omits Language. The layout block, like the code, has seven.
-**Fix:** say seven, and name the language section and `PUT /me/language`.
-
-### §U12.10 `docs/design.md` has no row for the language pickers — 📄 doc
-
-**Where:** `docs/design.md:160-189`; `components/auth/locale-select.tsx:12`,
-`components/profile/language-section.tsx:13`
-
-The inventory lists Answer style's radio group by surface, but not the signed-out `select` or the
-profile's radio group. Both primitives are already installed. **Fix:** add one row for each.
-
-### §U12.11 `navigation.md` §4 describes placeholder rows that no longer exist — 📄 doc
-
-**Where:** `.claude/rules/navigation.md` §4; `components/layout/app-sidebar.tsx:99-103`;
-`app/(app)/layout.tsx:11`
-
-The rule says the sidebar renders placeholder rows while the profile loads. The user is now resolved
-on the server before the shell renders, so there is no pending state and no placeholder branch.
-**Fix:** restate the rule as "resolved server-side; never render a filtered list before the user is
-known". Fix it together with §U12.6.
-
-### §U12.12 The dialog-or-page table in `forms.md` is stale — 📄 doc
-
-**Where:** `.claude/rules/forms.md:28-29`. Code: `components/projects/create-project-dialog.tsx`,
-`app/(auth)/change-password/change-password-screen.tsx:56`, `components/profile/password-section.tsx:69`
-
-Create project now has four inputs, with `contentLanguage` added. It is still a dialog, so the
-verdict holds. "Change own password (forced first login)" is listed as a dialog but is built as a
-`FormPage` in both places. **Fix:** update both rows.
-
-### §U12.13 `docs/design.md` says `size-5` for an icon in a button; the app uses `size-4` — 📄 doc
-
-**Where:** `docs/design.md:230`. Code: about 20 icon-only buttons, such as `notification-bell.tsx:34`
-and the row-action menus, versus `theme-toggle.tsx:33-34`
-
-The owner decided on 2026-10-24 that `size-4` inside an icon button is intended. **Fix:** change the
-doc. "`size-5`" stays for a standalone icon that is not in a button.
-
-### §U12.14 Two decisions from this sweep are not written down yet — 📄 doc
-
-**Where:** `docs/design.md` → Feedback; `.claude/rules/forms.md` §1
-
-These are decisions 1 and 3 above:
-- Multi-sentence copy keeps its full stops.
-- An inline-save settings section (one control and a Save button in a card, as in
-  `components/profile/language-section.tsx` and `components/projects/content-language-section.tsx`)
-  is a legitimate fourth form surface.
-
-**Fix:** write both down. While in `language-section.tsx`, give its `RadioGroup` an `aria-label`,
-because it relies on the surrounding tab heading.
 
 ## Verified correct in this sweep (2026-10-24)
 

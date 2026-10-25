@@ -13,6 +13,30 @@ client can have received it, so it is recorded under Changed and allowed in a `M
 
 ## [Unreleased]
 
+### Changed
+
+- **A failed embedding or vector-store call no longer puts the provider's or Qdrant's own error
+  text on the project screen.** `Project.error` now names the exception class, plus the HTTP
+  status for a Qdrant `4xx`, and the full text stays in the worker log. This covers the
+  embedders, the vector store and the scroll step of checklist, mock-data and eval set
+  generation. An operator diagnosing a width mismatch reads Qdrant's reason in the log rather
+  than on the screen.
+
+### Fixed
+
+- **Japanese, Korean and Chinese users can type a question.** Pressing Enter to confirm an input
+  method candidate sent the half-typed question on Ask and in both refinement chats; the
+  composer now ignores Enter while a composition is in progress.
+- **A failed load is no longer shown as an empty list.** `/checklist/export` showed a failed
+  project or module load as "no projects match" or "no modules", and the Ask project picker as
+  "No project matches"; both now show the error with a retry. The export screen also says when
+  it is showing only the first 100 projects, and shows a skeleton instead of a blank page while
+  it loads.
+- **"Re-index now" on the Ask screen reports a failure** (a missing permission, an outage)
+  instead of doing nothing visible.
+- **Accessibility.** The checklist's status, kind and source filters and the profile's language
+  choice have accessible names, and the Ask composer and the module path field show a focus ring.
+
 ## [2.4.1] — 2026-10-25
 
 ### Security
