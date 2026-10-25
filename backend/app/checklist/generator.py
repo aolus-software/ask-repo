@@ -22,7 +22,6 @@ from app.checklist.source import ModuleFile, ModuleSource, rebuild_files
 from app.config import Settings
 from app.core.language import Language, parse_language
 from app.core.notifications import NotificationType
-from app.db.session import get_sessionmaker
 from app.ingestion.errors import RetryableIngestionError, TerminalIngestionError
 from app.ingestion.vector_store import VectorStoreFactory
 from app.models.checklist import (
@@ -32,6 +31,7 @@ from app.models.checklist import (
     ChecklistModuleStatus,
 )
 from app.observability.features import CallFeature, call_config
+from app.queue.heartbeat import lease_heartbeat, renew_until_lost
 from app.rag.errors import TerminalChatError, classify_chat_error
 from app.rag.prompts import (
     ExistingItem,
@@ -129,8 +129,10 @@ class ChecklistGenerator:
             "attempt": attempt,
         }
 
-        renewal = asyncio.create_task(self._renew(module_id=module_id, worker_id=worker_id))
-        try:
+        async with lease_heartbeat(
+            self._renew(module_id=module_id, worker_id=worker_id),
+            subject=f"checklist module {module_id}",
+        ):
             source = await self._read_source(
                 # Verbatim from the row, never recomputed from current settings: the
                 # width is probed at worker startup, and a project indexed before a
@@ -155,8 +157,6 @@ class ChecklistGenerator:
                 module_name=module.name, source=source, existing=existing, language=language
             )
             operations = self._to_operations(proposal, source=source)
-        finally:
-            await self._stop_renewal(renewal, module_id=module_id)
 
         summary = self._summarise(
             operations, source=source, max_files=self.settings.checklist_max_files_per_job
@@ -217,41 +217,16 @@ class ChecklistGenerator:
         """Hold the lease for the length of the run.
 
         A generation over a large module runs for minutes and the lease is five, so
-        this is what makes the two numbers compatible -- the same arrangement
-        `IngestionPipeline._renew_lease` uses.
-
-        Each tick uses its own short-lived session, never the one the generation is
-        running on: an `AsyncSession` is not safe for concurrent use, and two
-        coroutines interleaving on one connection fail with an `InterfaceError` or,
-        worse, a mis-scoped transaction.
+        this is what makes the two numbers compatible. The loop and its own-session
+        rule are `app/queue/heartbeat.py`'s.
         """
-        while True:
-            await asyncio.sleep(LEASE_RENEWAL_SECONDS)
-            async with get_sessionmaker()() as session:
-                held = await ChecklistModuleRepository(session).renew_lease(
-                    module_id=module_id, worker_id=worker_id, lease_seconds=LEASE_SECONDS
-                )
-                await session.commit()
-            if not held:
-                logger.warning("lost the lease on checklist module %s mid-run", module_id)
-                return
-
-    async def _stop_renewal(self, renewal: asyncio.Task[None], *, module_id: uuid.UUID) -> None:
-        """Cancel the heartbeat and collect it, so nothing fails silently.
-
-        Matches `IngestionPipeline._stop`: a bare `.cancel()` with no `await` leaves
-        any non-`CancelledError` failure -- including one from the heartbeat's own
-        `get_sessionmaker()` teardown -- unretrieved, and it surfaces later as an
-        unrelated "Task exception was never retrieved" warning instead of here, where
-        it is at least attributable to this module's run.
-        """
-        renewal.cancel()
-        try:
-            await renewal
-        except asyncio.CancelledError:
-            pass
-        except Exception:
-            logger.warning("lease renewal for checklist module %s failed", module_id, exc_info=True)
+        await renew_until_lost(
+            lambda session: ChecklistModuleRepository(session).renew_lease(
+                module_id=module_id, worker_id=worker_id, lease_seconds=LEASE_SECONDS
+            ),
+            interval_seconds=LEASE_RENEWAL_SECONDS,
+            subject=f"checklist module {module_id}",
+        )
 
     async def _read_source(
         self,

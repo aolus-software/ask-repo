@@ -1,7 +1,8 @@
 """Queries over `eval_runs`, including the run lease.
 
 The lease statements are the shared ones in `app/repositories/lease.py`; each method
-here passes this table's status vocabulary and stages its own live event. Unscoped by `ProjectScope`: access is decided in
+here passes this table's status vocabulary and stages its own live event.
+Unscoped by `ProjectScope`: access is decided in
 `app/core/access.py`, and these methods filter only by ids they are handed.
 """
 
