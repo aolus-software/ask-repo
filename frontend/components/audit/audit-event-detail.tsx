@@ -25,10 +25,8 @@ import { auditOutcomeLabelKey } from "@/lib/status";
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <div className="flex flex-col gap-1.5">
-      <dt className="text-muted-foreground text-xs font-medium tracking-wide uppercase">
-        {label}
-      </dt>
+    <div className="flex flex-col gap-1">
+      <dt className="text-muted-foreground text-sm">{label}</dt>
       <dd className="text-sm">{children}</dd>
     </div>
   );
@@ -123,9 +121,7 @@ export function AuditEventCurrent({ event }: { event: AuditEventResponse }) {
     value === null ? t("unknown") : value ? t("yes") : t("no");
   return (
     <>
-      <h2 className="text-muted-foreground mb-3 text-xs font-medium tracking-wide uppercase">
-        {t("asOfNow")}
-      </h2>
+      <h2 className="text-muted-foreground mb-3 text-sm">{t("asOfNow")}</h2>
       <dl className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <Field label={t("actorStillActive")}>
           {tristate(event.current.actorStillActive)}

@@ -49,7 +49,11 @@ import { useErrorText, useFieldErrorText } from "@/lib/i18n/error-text";
 import type { ChecklistItemKind, ChecklistItemResponse } from "@/lib/api/types";
 import { PERMISSION, can } from "@/lib/can";
 import { groupByFeature } from "@/lib/checklist/operations";
-import { checklistItemResultLabelKey, checklistItemResultTone } from "@/lib/status";
+import {
+  checklistItemResultLabelKey,
+  checklistItemResultTone,
+  testCaseKindTone,
+} from "@/lib/status";
 
 const COLUMN_COUNT = 6;
 
@@ -210,12 +214,11 @@ export function ItemGrid({
                             a signal -- the question this answers is "does this
                             feature have failure coverage at all?". */}
                           {item.kind === "negative" ? (
-                            <Badge
-                              variant="outline"
-                              className="text-warning-text border-warning/60 w-fit text-xs font-normal"
-                            >
-                              {t("kinds.negative")}
-                            </Badge>
+                            <StatusBadge
+                              tone={testCaseKindTone(item.kind)}
+                              label={t("kinds.negative")}
+                              className="w-fit text-xs font-normal"
+                            />
                           ) : null}
                           {item.source === "manual" ? (
                             <Badge

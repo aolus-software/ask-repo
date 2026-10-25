@@ -92,6 +92,13 @@ and the conversation rail directly on `bg-background`.
 verdict — maps to `success` / `warning` / `danger`, never to a hand-picked green. That mapping lives in one place so a badge, a row, and a detail
 header cannot disagree.
 
+The one place is `lib/status.ts`. Besides the status domains it holds a tone for a test case's kind
+(`testCaseKindTone`), for a change-set operation (`changeSetOperationTone`: add is `success`, change
+is `neutral`, remove is `danger`), for a change set waiting for review (`pendingChangeSetTone`) and
+for an eval advisory (`evalAdvisoryTone`). A tone renders as a filled badge through `StatusBadge`,
+or as running text through `toneTextClass(tone)`, the inline twin for a heading or a count. A
+component never writes `text-warning-text` or `text-danger-text` for a state.
+
 ## Typography
 
 **Lexend** for everything (`font-sans`, wired in `app/layout.tsx` via `next/font/google`).
@@ -106,6 +113,11 @@ header cannot disagree.
 | Label, table header | `text-sm font-medium` |
 | Helper, timestamp | `text-xs text-muted-foreground` |
 | Code, SHA, path | `font-mono text-sm` |
+
+There is no small-caps "eyebrow" style: no `uppercase`, no `tracking-wide`. A caption above a value
+in a definition list, or a heading above a block, uses the muted label (`text-sm text-muted-foreground`).
+Tracked capitals do nothing to Japanese, Korean or Chinese, so the same label would look like a
+different element in those languages.
 
 Never set a font family in a component. Never use `font-bold` — `font-semibold` is the heaviest
 weight in the system.
@@ -174,6 +186,9 @@ inside a card is `space-y-4`; between cards, `gap-6`.
 | Button group | `gap-2` |
 | Page section gap | `gap-6` |
 | Input with a leading icon | `pl-9` — the one value off the scale. It clears a `left-3 size-4` icon (0.75rem + 1rem) plus a 0.5rem gap to the text, which no on-scale value does. Used by `ListToolbar`'s search box and the conversation rail's search |
+| Input with a trailing icon button | `pe-10` — an exception beside `pl-9`, for the same reason: it clears the `size-4` show/hide button in `PasswordInput` plus its padding, which no on-scale value does |
+| Profile section rail | `lg:top-24 lg:w-48` — dimensions rather than spacing steps. `top-24` is the `h-16` navbar plus a `p-8` gap, so the sticky rail stops below the navbar, and `w-48` is a fixed rail width |
+| Notification count badge | `text-[10px]` on the bell's count. It is outside the type scale on purpose: the badge is a 1rem circle (`min-w-4`) that has to hold two digits, and `text-xs` (0.75rem) does not fit. Its offset is on the scale (`-top-1 -right-1`) |
 
 ## Component inventory
 

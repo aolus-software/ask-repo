@@ -19,6 +19,12 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { ModuleRowActions } from "@/components/checklist/module-row-actions";
 import type { ChecklistModuleResponse } from "@/lib/api/types";
 import { formatAbsolute } from "@/lib/dates";
+import {
+  checklistItemResultTone,
+  pendingChangeSetTone,
+  toneTextClass,
+} from "@/lib/status";
+import { cn } from "@/lib/utils";
 import { useFormatRelative } from "@/hooks/use-format-date";
 
 /** Column order is fixed by `docs/design.md`: identity, status, timestamps, actions. */
@@ -58,7 +64,7 @@ export function ModuleTable({
                   <Link href={`/checklist/${module.id}`} className="hover:text-primary">
                     {module.name}
                   </Link>
-                  <div className="text-muted-foreground text-sm">
+                  <div className="text-muted-foreground font-mono text-sm">
                     {module.sourcePath}
                   </div>
                 </TableCell>
@@ -81,7 +87,10 @@ export function ModuleTable({
                         pending without the module's own status having moved to
                         `review`. */}
                     {module.pendingChangeSetId ? (
-                      <StatusBadge tone="warning" label={t("reviewChanges")} />
+                      <StatusBadge
+                        tone={pendingChangeSetTone()}
+                        label={t("reviewChanges")}
+                      />
                     ) : null}
                   </div>
                 </TableCell>
@@ -91,7 +100,12 @@ export function ModuleTable({
                   {module.status === "failed" && module.error ? (
                     <Tooltip>
                       <TooltipTrigger>
-                        <div className="text-danger-text cursor-help truncate">
+                        <div
+                          className={cn(
+                            toneTextClass(checklistItemResultTone("fail")),
+                            "cursor-help truncate",
+                          )}
+                        >
                           {module.failCount}
                         </div>
                       </TooltipTrigger>

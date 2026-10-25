@@ -119,7 +119,7 @@ export function EvalRunTable({
                   errors: run.errors,
                 })}
               </TableCell>
-              <TableCell className="text-muted-foreground text-sm">
+              <TableCell className="text-muted-foreground font-mono text-sm">
                 {run.chatModel ?? "—"}
               </TableCell>
             </TableRow>

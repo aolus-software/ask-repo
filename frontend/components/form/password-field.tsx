@@ -97,7 +97,7 @@ export function PasswordField({
             <li
               key={check.id}
               className={cn(
-                "flex items-center gap-1.5 text-xs",
+                "flex items-center gap-2 text-xs",
                 check.passed ? "text-success-text" : "text-muted-foreground",
               )}
             >

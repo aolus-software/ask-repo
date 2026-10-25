@@ -4,7 +4,7 @@ import { Play, Trash2 } from "lucide-react";
 import { useTranslations } from "next-intl";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { Fragment, type ReactNode, useState } from "react";
 
 import { DeleteEvalSetDialog } from "@/components/eval/delete-eval-set-dialog";
 import { EvalCompare } from "@/components/eval/eval-compare";
@@ -120,16 +120,26 @@ export function EvalSetScreen({
     (pair) => pair.excluded && pair.exclusionReason === "translation_unfaithful",
   ).length;
   const running = runs.some((run) => run.status === "running");
-  const description = [
-    set.sourcePath ?? tTally("wholeProject"),
+  const descriptionParts: ReactNode[] = [
+    set.sourcePath ? (
+      <span key="source" className="font-mono">
+        {set.sourcePath}
+      </span>
+    ) : (
+      tTally("wholeProject")
+    ),
     ENDONYMS[set.language],
     t("pairCount", { count: set.pairCount }),
     set.indexedGeneration !== null
       ? t("generatedFrom", { generation: set.indexedGeneration })
       : null,
-  ]
-    .filter(Boolean)
-    .join(" · ");
+  ].filter(Boolean);
+  const description = descriptionParts.map((part, index) => (
+    <Fragment key={index}>
+      {index > 0 ? " · " : null}
+      {part}
+    </Fragment>
+  ));
 
   // Runs arrive newest first, so the oldest is run 1. The number tells apart two
   // runs started in the same second.

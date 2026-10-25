@@ -20,7 +20,9 @@ export default function manifest(): MetadataRoute.Manifest {
     description: "Ask questions about a codebase and get grounded, cited answers.",
     start_url: "/",
     display: "standalone",
+    // Mirrors `--primary` in the `:root` block of `app/globals.css`.
     theme_color: "#615fff",
+    // Mirrors `--background` in the same block.
     background_color: "#f1f5f9",
     icons: [
       { src: "/android-chrome-192x192.png", sizes: "192x192", type: "image/png" },

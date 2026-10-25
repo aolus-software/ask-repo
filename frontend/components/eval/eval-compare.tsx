@@ -72,7 +72,9 @@ export function EvalCompare({
           {comparison.flips.map((flip) => (
             <li key={flip.pairId} className="flex flex-wrap items-center gap-3 p-3">
               <span className="min-w-0 flex-1 text-sm">
-                {questions.get(flip.pairId) ?? flip.pairId}
+                {questions.get(flip.pairId) ?? (
+                  <span className="font-mono">{flip.pairId}</span>
+                )}
               </span>
               {flip.hit ? (
                 <span className="text-sm">

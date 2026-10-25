@@ -59,7 +59,7 @@ export function Answer({ content }: { content: string }) {
             className ? (
               <code className={className}>{children}</code>
             ) : (
-              <code className="bg-muted rounded px-1 py-0.5 font-mono text-sm">
+              <code className="bg-muted rounded px-1 py-1 font-mono text-sm">
                 {children}
               </code>
             ),

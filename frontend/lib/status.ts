@@ -3,6 +3,7 @@ import type {
   EvalRunStatus,
   EvalVerdict,
   EvalSetStatus,
+  ChecklistItemKind,
   ChecklistItemStatus,
   ChecklistModuleStatus,
   ProjectStatus,
@@ -150,4 +151,66 @@ export function evalVerdictLabelKey(
   verdict: EvalVerdict,
 ): `evalVerdict.${EvalVerdict}` {
   return `evalVerdict.${verdict}`;
+}
+
+/**
+ * A test case's kind. Only negatives are badged (`components/checklist/item-grid.tsx`),
+ * so `positive` is `neutral`, the tone of "nothing to flag" (`docs/audit-findings.md` §U4.7).
+ */
+const TEST_CASE_KIND_TONES: Record<ChecklistItemKind, StatusTone> = {
+  positive: "neutral",
+  negative: "warning",
+};
+
+export function testCaseKindTone(kind: ChecklistItemKind): StatusTone {
+  return TEST_CASE_KIND_TONES[kind];
+}
+
+/**
+ * The three operations of a pending change set. An addition is the good news, a
+ * removal is the one that destroys something, and a change is neither.
+ */
+export type ChangeSetOperationKind = "add" | "update" | "remove";
+
+const CHANGE_SET_OPERATION_TONES: Record<ChangeSetOperationKind, StatusTone> = {
+  add: "success",
+  update: "neutral",
+  remove: "danger",
+};
+
+export function changeSetOperationTone(op: ChangeSetOperationKind): StatusTone {
+  return CHANGE_SET_OPERATION_TONES[op];
+}
+
+/**
+ * A change set that is waiting for a human. It is not finished, which is why it
+ * shares `warning` with the module's own `review` status.
+ */
+export function pendingChangeSetTone(): StatusTone {
+  return "warning";
+}
+
+/**
+ * An advisory on an eval pair or result (an unfaithful translation, a grounding
+ * warning): worth reading, not a failure.
+ */
+export function evalAdvisoryTone(): StatusTone {
+  return "warning";
+}
+
+/**
+ * The same tones as running text, for a heading or a count that is not a badge.
+ * `StatusBadge` owns the filled form; this is its inline twin, so neither is picked
+ * at a call site.
+ */
+const TONE_TEXT_CLASSES: Record<StatusTone, string> = {
+  success: "text-success-text",
+  warning: "text-warning-text",
+  danger: "text-danger-text",
+  neutral: "text-muted-foreground",
+  info: "text-primary",
+};
+
+export function toneTextClass(tone: StatusTone): string {
+  return TONE_TEXT_CLASSES[tone];
 }

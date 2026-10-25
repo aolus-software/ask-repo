@@ -34,7 +34,7 @@ export function NotificationBell() {
       >
         <Bell className="size-4" />
         {unread > 0 && (
-          <span className="bg-primary text-primary-foreground absolute -top-0.5 -right-0.5 flex min-w-4 items-center justify-center rounded-full px-1 text-[10px] font-medium">
+          <span className="bg-primary text-primary-foreground absolute -top-1 -right-1 flex min-w-4 items-center justify-center rounded-full px-1 text-[10px] font-medium">
             {unread > 99 ? t("overflow") : unread}
           </span>
         )}

@@ -18,6 +18,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useEvalRun } from "@/hooks/use-eval";
 import type { EvalPair } from "@/lib/api/types";
 import { formatAbsolute } from "@/lib/dates";
+import { evalAdvisoryTone, toneTextClass } from "@/lib/status";
+import { cn } from "@/lib/utils";
 
 /** One run's per-pair results: the question, what the assistant said, and how it was judged. */
 export function EvalRunSheet({
@@ -71,7 +73,9 @@ export function EvalRunSheet({
                 </span>
               </div>
               <p className="text-sm font-medium">
-                {questions.get(result.pairId) ?? result.pairId}
+                {questions.get(result.pairId) ?? (
+                  <span className="font-mono">{result.pairId}</span>
+                )}
               </p>
               <Answer content={result.answer} />
               {result.judgeReason ? (
@@ -80,7 +84,7 @@ export function EvalRunSheet({
                 </p>
               ) : null}
               {result.groundingWarnings.length > 0 ? (
-                <p className="text-warning-text text-xs">
+                <p className={cn(toneTextClass(evalAdvisoryTone()), "text-xs")}>
                   {t("warnings", { warnings: result.groundingWarnings.join(", ") })}
                 </p>
               ) : null}
