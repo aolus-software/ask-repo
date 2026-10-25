@@ -28,9 +28,6 @@ from app.repositories.base import BaseRepository
 # and the generator (which renews) cannot drift apart on the number.
 LEASE_SECONDS = 300
 LEASE_RENEWAL_SECONDS = 60
-# How long a module may sit in `generating` with a dead lease before the sweep
-# re-enqueues it.
-STRANDED_AFTER_SECONDS = 120
 
 
 class ChecklistModuleRepository(BaseRepository[ChecklistModule]):

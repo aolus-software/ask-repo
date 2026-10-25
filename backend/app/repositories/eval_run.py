@@ -20,7 +20,6 @@ from app.repositories.base import BaseRepository
 
 LEASE_SECONDS = 300
 LEASE_RENEWAL_SECONDS = 60
-STRANDED_AFTER_SECONDS = 120
 
 
 class EvalRunRepository(BaseRepository[EvalRun]):

@@ -25,7 +25,6 @@ from app.repositories.base import BaseRepository
 
 LEASE_SECONDS = 300
 LEASE_RENEWAL_SECONDS = 60
-STRANDED_AFTER_SECONDS = 120
 
 
 def _dataset_project_id() -> ScalarSelect[uuid.UUID]:
