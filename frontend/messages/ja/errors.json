@@ -41,6 +41,7 @@
   "EVAL_SET_NOT_READY": "この評価セットはまだ実行できる状態ではありません。",
   "EVAL_RUN_IN_PROGRESS": "評価の実行はすでに進行中です。完了してから、もう一度お試しください。",
   "EVAL_TRANSLATION_EXISTS": "このセットには、その言語への翻訳がすでにあります。新しく作成するには、先に削除してください。",
+  "EVAL_SET_GENERATING": "この評価セット、またはその翻訳がまだ生成中です。完了してから、もう一度お試しください。",
   "INSUFFICIENT_ROLE": "このプロジェクトでのあなたのロールでは、その操作は許可されていません。",
   "SYSTEM_ROLE_IMMUTABLE": "viewer、editor、owner は組み込みのため変更できません。",
   "ROLE_NOT_FOUND": "ロールが見つかりません。",

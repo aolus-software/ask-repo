@@ -53,6 +53,18 @@ class EvalSetRepository(BaseRepository[EvalSet]):
         )
         return result.scalars().first()
 
+    async def generating_translation_of(self, source_set_id: uuid.UUID) -> EvalSet | None:
+        """A live translation of the source whose own generation is still running, if any."""
+        result = await self.session.execute(
+            self.active_select()
+            .where(
+                EvalSet.source_set_id == source_set_id,
+                EvalSet.status == EvalSetStatus.GENERATING.value,
+            )
+            .limit(1)
+        )
+        return result.scalars().first()
+
     async def list_for_project(
         self, project_id: uuid.UUID, *, limit: int, offset: int
     ) -> tuple[list[EvalSet], int]:
