@@ -15,6 +15,7 @@ import time
 import uuid
 from collections.abc import Callable
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from typing import Protocol
 
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -35,6 +36,7 @@ from app.queue.topics import (
     eval_retries_exhausted,
 )
 from app.rag.errors import RetryableChatError, TerminalChatError
+from app.repositories.eval_result import EvalResultRepository
 from app.repositories.eval_run import EvalRunRepository
 from app.repositories.eval_set import LEASE_SECONDS, EvalSetRepository
 
@@ -148,13 +150,21 @@ class _RunLease:
     async def fail(
         self, *, target_id: uuid.UUID, job_id: uuid.UUID, worker_id: str, reason: str
     ) -> bool:
-        """Release the run `failed`."""
+        """Release the run `failed`, with the tallies of the results it did commit.
+
+        A run that answered 30 of 50 pairs keeps those 30 rows, so its summary says 30
+        and its duration can be computed (audit finding §8.3). Uncommitted results were
+        rolled back before this, so the rows counted are exactly the ones a reader sees.
+        """
+        tallies = await EvalResultRepository(self.repository.session).tally_for_run(target_id)
         return await self.repository.release(
             run_id=target_id,
             job_id=job_id,
             worker_id=worker_id,
             status=EvalRunStatus.FAILED,
             error=reason,
+            finished_at=datetime.now(UTC),
+            **tallies,
         )
 
     async def announce_failure(self, *, target_id: uuid.UUID, mail_enabled: bool) -> None:

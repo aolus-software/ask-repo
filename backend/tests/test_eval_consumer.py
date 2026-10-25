@@ -10,7 +10,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.notifications import NotificationType
 from app.ingestion.errors import TerminalIngestionError
-from app.models.eval import EvalRun, EvalRunStatus, EvalSet, EvalSetStatus
+from app.models.eval import (
+    EvalPair,
+    EvalResult,
+    EvalRun,
+    EvalRunStatus,
+    EvalSet,
+    EvalSetStatus,
+    EvalVerdict,
+)
 from app.models.notification import Notification, NotificationEvent
 from app.queue.consumer import JobOutcome
 from app.queue.eval import EvalRunners, handle_eval_message
@@ -327,3 +335,61 @@ async def test_a_failure_that_will_be_retried_announces_nothing(
     await _handle(db_session, _message("run", run.id), runner=_Stub(raises=ValueError("bug")))
 
     assert await _announced(db_session) == []
+
+
+async def test_a_run_that_commits_results_then_fails_reports_their_tallies(
+    db_session: AsyncSession,
+) -> None:
+    row = await _run(db_session)
+    run_id, set_id = row.id, row.set_id
+    verdicts = [EvalVerdict.CORRECT, EvalVerdict.WRONG, EvalVerdict.PARTIAL, EvalVerdict.ERROR]
+
+    class _Partial:
+        async def run(
+            self, *, target_id: uuid.UUID, job_id: uuid.UUID, worker_id: str, attempt: int = 0
+        ) -> None:
+            for index, verdict in enumerate(verdicts):
+                pair = EvalPair(
+                    id=uuid.uuid4(),
+                    set_id=set_id,
+                    position=index,
+                    question_type="explain",
+                    question="q",
+                    reference_answer="r",
+                    source_file="a.py",
+                    start_line=1,
+                    end_line=2,
+                )
+                db_session.add(pair)
+                await db_session.flush()
+                db_session.add(
+                    EvalResult(
+                        id=uuid.uuid4(),
+                        run_id=run_id,
+                        pair_id=pair.id,
+                        retrieval_hit=index < 3,
+                        verdict=verdict.value,
+                        answer="a",
+                    )
+                )
+            await db_session.commit()
+            raise TerminalIngestionError("boom")
+
+    runners = EvalRunners(build_generator=lambda _: _Stub(), build_runner=lambda _: _Partial())
+    await handle_eval_message(
+        _message("run", run_id),
+        runners=runners,
+        session=db_session,
+        producer=InMemoryIngestionQueue(),
+        worker_id="me",
+        max_attempts=3,
+        mail_enabled=False,
+    )
+
+    db_session.expire_all()
+    failed = await db_session.get(EvalRun, run_id)
+    assert failed is not None
+    assert failed.status == EvalRunStatus.FAILED.value
+    assert failed.finished_at is not None
+    assert (failed.pairs_answered, failed.hits) == (4, 3)
+    assert (failed.correct, failed.partial, failed.wrong, failed.errors) == (1, 1, 1, 1)
