@@ -124,7 +124,7 @@ class MeService:
             limit=query.limit,
             offset=(query.page - 1) * query.limit,
             actor_user_id=user.id,
-            visible_project_ids=None if scope.unrestricted else scope.ids,
+            visible_scope=scope,
         )
         items = [
             ActivityEntry(

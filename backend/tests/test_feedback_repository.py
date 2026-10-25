@@ -7,6 +7,7 @@ import pytest
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.access import ProjectScope
 from app.core.feedback import FeedbackFeature, FeedbackRating, FeedbackTarget
 from app.models.feedback import Feedback
 from app.models.project import Project
@@ -200,7 +201,7 @@ async def test_page_joins_the_project_name_and_filters(db_session: AsyncSession)
     await create_feedback(db_session, user_id=user.id, project_id=beta.id)
 
     rows, total = await FeedbackRepository(db_session).page(
-        limit=10, offset=0, filters={"project_ids": frozenset({alpha.id})}
+        limit=10, offset=0, filters={"scope": ProjectScope.of({alpha.id})}
     )
 
     assert total == 1
