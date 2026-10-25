@@ -55,6 +55,26 @@ describe("EvalPairTable unfaithful marker", () => {
   });
 });
 
+describe("EvalPairTable excluded badge", () => {
+  it("shows an Excluded badge on an excluded pair, not only a dimmed row", () => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={client}>
+        <EvalPairTable
+          setId="s1"
+          pairs={[
+            { ...PAIR, id: "a", excluded: true },
+            { ...PAIR, id: "b", question: "Kept?" },
+          ]}
+          canRun={false}
+        />
+      </QueryClientProvider>,
+    );
+    // The column header "Excluded" only exists with canRun, so this is the one badge.
+    expect(screen.getAllByText("Excluded")).toHaveLength(1);
+  });
+});
+
 describe("EvalPairTable", () => {
   it("shows the exclude switch only with eval.run", () => {
     renderTable(false);

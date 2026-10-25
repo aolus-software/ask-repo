@@ -19,7 +19,7 @@ import type { EvalRunSummary, EvalSetStatus } from "@/lib/api/types";
 import { formatAbsolute } from "@/lib/dates";
 import { useFormatRelative } from "@/hooks/use-format-date";
 
-/** Runs of one set, newest first. A row opens the run's results. */
+/** Runs of one set, newest first. The start time is a button that opens the run's results. */
 export function EvalRunTable({
   runs,
   onSelect,
@@ -93,17 +93,18 @@ export function EvalRunTable({
         </TableHeader>
         <TableBody>
           {runs.map((run) => (
-            <TableRow
-              key={run.id}
-              className="cursor-pointer"
-              tabIndex={0}
-              onClick={() => onSelect(run.id)}
-              onKeyDown={(event) => {
-                if (event.key === "Enter") onSelect(run.id);
-              }}
-            >
+            <TableRow key={run.id}>
               <TableCell title={formatAbsolute(run.createdAt)}>
-                {formatRelative(run.createdAt)}
+                <button
+                  type="button"
+                  className="hover:text-primary text-left underline-offset-4 hover:underline"
+                  aria-label={t("runTable.openRun", {
+                    when: formatRelative(run.createdAt),
+                  })}
+                  onClick={() => onSelect(run.id)}
+                >
+                  {formatRelative(run.createdAt)}
+                </button>
               </TableCell>
               <TableCell>
                 <EvalStatusBadge status={run.status} />

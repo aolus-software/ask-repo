@@ -98,7 +98,12 @@ export function EvalPairTable({
                     </button>
                   </TableCell>
                   <TableCell>
-                    <Badge variant="outline">{tType(pair.questionType)}</Badge>
+                    <div className="flex flex-wrap items-center gap-1">
+                      <Badge variant="outline">{tType(pair.questionType)}</Badge>
+                      {pair.excluded ? (
+                        <Badge variant="secondary">{t("columns.excluded")}</Badge>
+                      ) : null}
+                    </div>
                   </TableCell>
                   <TableCell className="text-muted-foreground font-mono text-sm">
                     {pair.sourceFile}:{pair.startLine}-{pair.endLine}
