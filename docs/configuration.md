@@ -77,10 +77,11 @@ Two more that nothing enforces but you still want:
 
 ### Server
 
+The bind address and port are not settings: they are the `--host` and `--port` of the
+`uvicorn` command (`Makefile`, `infra/backend.Dockerfile`, `infra/backend.prod.Dockerfile`).
+
 | Variable | Default | What it does |
 | --- | --- | --- |
-| `HOST` | `0.0.0.0` | Bind address |
-| `PORT` | `8000` | Bind port |
 | `CORS_ORIGINS` | `["http://localhost:3000"]` | **JSON array.** Browser origins allowed to call the API |
 
 `CORSMiddleware` is registered *outside* `AuthContextMiddleware` on purpose, so the
