@@ -73,7 +73,7 @@ export function PasswordField({
   return (
     <Field>
       <FieldLabel htmlFor={id}>
-        {label} <span className="text-danger">*</span>
+        {label} <span className="text-danger-text">*</span>
       </FieldLabel>
 
       <PasswordInput
@@ -98,7 +98,7 @@ export function PasswordField({
               key={check.id}
               className={cn(
                 "flex items-center gap-1.5 text-xs",
-                check.passed ? "text-success" : "text-muted-foreground",
+                check.passed ? "text-success-text" : "text-muted-foreground",
               )}
             >
               {check.passed ? (
@@ -120,7 +120,9 @@ export function PasswordField({
         </FieldError>
       ) : showValid ? (
         // Not "valid" — the wordlist check still happens server-side.
-        <FieldDescription className="text-success">{t("looksGood")}</FieldDescription>
+        <FieldDescription className="text-success-text">
+          {t("looksGood")}
+        </FieldDescription>
       ) : (
         <FieldDescription>{t("hint")}</FieldDescription>
       )}

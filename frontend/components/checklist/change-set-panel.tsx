@@ -187,7 +187,7 @@ export function ChangeSetPanel({
               {operation.kind === "negative" ? (
                 <Badge
                   variant="outline"
-                  className="text-warning border-warning/60 text-xs font-normal"
+                  className="text-warning-text border-warning/60 text-xs font-normal"
                 >
                   {negativeLabel}
                 </Badge>

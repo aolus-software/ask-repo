@@ -35,7 +35,7 @@ export function ChangePasswordFields({
     <>
       <Field>
         <FieldLabel htmlFor="currentPassword">
-          {t("current")} <span className="text-danger">*</span>
+          {t("current")} <span className="text-danger-text">*</span>
         </FieldLabel>
         <PasswordInput
           id="currentPassword"

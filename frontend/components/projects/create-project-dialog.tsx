@@ -83,7 +83,8 @@ export function CreateProjectDialog({
     >
       <Field>
         <FieldLabel htmlFor="repoUrl">
-          {t("projects.createDialog.repoUrl")} <span className="text-danger">*</span>
+          {t("projects.createDialog.repoUrl")}{" "}
+          <span className="text-danger-text">*</span>
         </FieldLabel>
         <Input
           id="repoUrl"

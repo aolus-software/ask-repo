@@ -90,7 +90,7 @@ export function EvalPairTable({
                       <span>
                         {pair.question}
                         {pair.exclusionReason === "translation_unfaithful" ? (
-                          <span className="text-warning mt-1 block text-xs">
+                          <span className="text-warning-text mt-1 block text-xs">
                             {unfaithfulLabel}
                           </span>
                         ) : null}

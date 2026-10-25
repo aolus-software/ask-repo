@@ -46,7 +46,7 @@ export function CenteredMessage({
         <Icon
           className={cn(
             "size-8",
-            tone === "danger" ? "text-danger" : "text-muted-foreground",
+            tone === "danger" ? "text-danger-text" : "text-muted-foreground",
           )}
         />
       ) : null}

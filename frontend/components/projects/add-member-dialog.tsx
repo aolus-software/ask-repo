@@ -103,7 +103,7 @@ export function AddMemberDialog({
     >
       <Field>
         <FieldLabel htmlFor="add-member-user">
-          {t("user")} <span className="text-danger">*</span>
+          {t("user")} <span className="text-danger-text">*</span>
         </FieldLabel>
         <Combobox
           items={candidates}
@@ -137,7 +137,7 @@ export function AddMemberDialog({
 
       <Field>
         <FieldLabel htmlFor="add-member-role">
-          {t("role")} <span className="text-danger">*</span>
+          {t("role")} <span className="text-danger-text">*</span>
         </FieldLabel>
         <Select
           value={role}

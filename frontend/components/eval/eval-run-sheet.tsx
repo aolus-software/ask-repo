@@ -80,7 +80,7 @@ export function EvalRunSheet({
                 </p>
               ) : null}
               {result.groundingWarnings.length > 0 ? (
-                <p className="text-warning text-xs">
+                <p className="text-warning-text text-xs">
                   {t("warnings", { warnings: result.groundingWarnings.join(", ") })}
                 </p>
               ) : null}

@@ -158,7 +158,7 @@ export function ExportScreen() {
     >
       <Field>
         <FieldLabel>
-          {t("project")} <span className="text-danger">*</span>
+          {t("project")} <span className="text-danger-text">*</span>
         </FieldLabel>
         <Combobox
           items={exportable}
