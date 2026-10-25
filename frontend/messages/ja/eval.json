@@ -51,7 +51,7 @@
     },
     "excludeLabel": "除外: {question}",
     "referenceAnswer": "参照回答",
-    "saveFailed": "保存できませんでした。もう一度お試しください"
+    "saveFailed": "保存できませんでした。もう一度お試しください。"
   },
   "runTable": {
     "generatingTitle": "質問を生成中…",

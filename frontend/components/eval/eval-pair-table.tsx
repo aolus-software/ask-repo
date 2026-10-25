@@ -21,6 +21,7 @@ import { useSetPairExcluded } from "@/hooks/use-eval";
 import { useErrorText } from "@/lib/i18n/error-text";
 import { isApiError } from "@/lib/api/errors";
 import type { EvalPair } from "@/lib/api/types";
+import { evalAdvisoryTone, toneTextClass } from "@/lib/status";
 import { cn } from "@/lib/utils";
 
 /** A set's questions. The reference answer expands in place; excluding is `eval.run` only. */
@@ -83,14 +84,19 @@ export function EvalPairTable({
                       onClick={() => setOpen(expanded ? null : pair.id)}
                     >
                       {expanded ? (
-                        <ChevronDown className="mt-0.5 size-4 shrink-0" />
+                        <ChevronDown className="mt-1 size-4 shrink-0" />
                       ) : (
-                        <ChevronRight className="mt-0.5 size-4 shrink-0" />
+                        <ChevronRight className="mt-1 size-4 shrink-0" />
                       )}
                       <span>
                         {pair.question}
                         {pair.exclusionReason === "translation_unfaithful" ? (
-                          <span className="text-warning-text mt-1 block text-xs">
+                          <span
+                            className={cn(
+                              toneTextClass(evalAdvisoryTone()),
+                              "mt-1 block text-xs",
+                            )}
+                          >
                             {unfaithfulLabel}
                           </span>
                         ) : null}
@@ -139,7 +145,7 @@ export function EvalPairTable({
                       {/* Inset under the question text (chevron + gap) and capped at a
                           readable line length; a full-width paragraph is hard to follow. */}
                       <div className="border-primary bg-card ml-6 max-w-prose rounded-md border-l-2 px-4 py-3">
-                        <p className="text-muted-foreground mb-1.5 text-xs font-medium tracking-wide uppercase">
+                        <p className="text-muted-foreground mb-2 text-sm">
                           {t("referenceAnswer")}
                         </p>
                         <Answer content={pair.referenceAnswer} />

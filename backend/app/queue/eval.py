@@ -11,7 +11,6 @@ never its message and never a traceback.
 """
 
 import logging
-import time
 import uuid
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -27,6 +26,7 @@ from app.ingestion.errors import RetryableIngestionError, TerminalIngestionError
 from app.models.eval import EvalRunStatus, EvalSetStatus
 from app.queue.consumer import JobOutcome as JobOutcome
 from app.queue.consumer import PausingConsumer
+from app.queue.job_failure import defer_for_retry, record_failure, route_failure
 from app.queue.producer import ensure_topics
 from app.queue.protocol import TopicProducer
 from app.queue.topics import (
@@ -304,15 +304,19 @@ async def _defer(
     session: AsyncSession,
     max_attempts: int,
 ) -> None:
-    """Hand back a job that ended but is coming back, until its retry is due."""
-    _, delay_seconds = eval_next_destination(attempt=message.attempt, max_attempts=max_attempts)
-    await session.rollback()
-    if await lease.defer(
-        target_id=message.target_id, worker_id=worker_id, hold_seconds=delay_seconds
-    ):
-        await session.commit()
-    else:
-        await session.rollback()
+    """Hand back a job that ended but is coming back, until its retry is due.
+
+    Announces nothing: a retry that is coming back is not a failure yet.
+    """
+    await defer_for_retry(
+        session=session,
+        defer=lambda hold_seconds: lease.defer(
+            target_id=message.target_id, worker_id=worker_id, hold_seconds=hold_seconds
+        ),
+        next_destination=eval_next_destination,
+        attempt=message.attempt,
+        max_attempts=max_attempts,
+    )
 
 
 async def _fail(
@@ -328,33 +332,39 @@ async def _fail(
 
     Only a failure that is recorded announces itself: a lease this worker no longer
     holds belongs to a run that may still finish, and a retry that is coming back
-    (`_defer`) announces nothing.
+    (`_defer`) announces nothing. The session is rolled back first, unlike the checklist
+    and mock-data consumers, so an uncommitted batch cannot ride into the failure's commit.
     """
-    await session.rollback()
-    if await lease.fail(
-        target_id=message.target_id, job_id=message.job_id, worker_id=worker_id, reason=reason
-    ):
-        # Before the commit, like every fan-out: the `failed` status and the
-        # notification of it are one transaction.
-        await lease.announce_failure(target_id=message.target_id, mail_enabled=mail_enabled)
-        await session.commit()
-    else:
-        await session.rollback()
+    await record_failure(
+        session=session,
+        release=lambda: lease.fail(
+            target_id=message.target_id,
+            job_id=message.job_id,
+            worker_id=worker_id,
+            reason=reason,
+        ),
+        announce=lambda: lease.announce_failure(
+            target_id=message.target_id, mail_enabled=mail_enabled
+        ),
+        rollback_first=True,
+    )
 
 
 async def _route_failure(
     message: EvalJobMessage, *, producer: TopicProducer, max_attempts: int
 ) -> None:
     """Send the job onward: a delay rung, or the eval dead-letter topic."""
-    topic, delay_seconds = eval_next_destination(attempt=message.attempt, max_attempts=max_attempts)
-    await producer.produce_to(
-        topic,
-        EvalJobMessage(
+    await route_failure(
+        producer=producer,
+        attempt=message.attempt,
+        max_attempts=max_attempts,
+        next_destination=eval_next_destination,
+        build_message=lambda job_id, attempt, not_before_ms: EvalJobMessage(
             kind=message.kind,
             target_id=message.target_id,
-            job_id=uuid.uuid4(),
-            attempt=message.attempt + 1,
-            not_before_ms=int(time.time() * 1000) + delay_seconds * 1000,
+            job_id=job_id,
+            attempt=attempt,
+            not_before_ms=not_before_ms,
             original_topic=message.original_topic,
         ),
     )

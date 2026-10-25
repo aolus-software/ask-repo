@@ -37,11 +37,14 @@ def build_git_command(validated: ValidatedRepoUrl, *, branch: str, destination: 
     """
     return [
         "git",
-        # Pin git to the address Task 3 validated. Without this git resolves the
+        # Pin git to the addresses Task 3 validated. Without this git resolves the
         # host itself, and an attacker controlling DNS returns a public address
         # for the check and a private one here.
         "-c",
-        f"http.curloptResolve={validated.host}:{validated.port}:{validated.pinned_ip}",
+        # libcurl takes a comma-separated address list (since 7.59) and tries them in
+        # order, so a dual-stack host whose first record is unreachable still clones.
+        # An IPv6 literal goes in unbracketed, which libcurl accepts.
+        f"http.curloptResolve={validated.host}:{validated.port}:{','.join(validated.pins)}",
         # curl follows redirects, and a redirect to another host resolves unpinned.
         # The cost is that renamed repositories need their canonical URL.
         "-c",
@@ -219,10 +222,18 @@ async def clone(
     try:
         _, stderr_bytes = await asyncio.wait_for(process.communicate(), timeout=timeout_seconds)
     except TimeoutError as error:
-        process.kill()
         raise TerminalIngestionError(f"Cloning timed out after {timeout_seconds}s.") from error
     finally:
         watcher.cancel()
+        # A timeout or a cancelled worker must not leave the clone process writing
+        # into a directory the pipeline is about to remove. Kill it if it is still
+        # running, then reap it. The wait is shielded: when this task is being
+        # cancelled, an unshielded `await` raises again immediately and the process
+        # would never be reaped.
+        if process.returncode is None:
+            with contextlib.suppress(ProcessLookupError):
+                process.kill()
+            await asyncio.shield(process.wait())
         # Wait for the watcher to actually stop before touching `state`. Without
         # this, a slow watcher iteration could still be mid-check — reading disk,
         # about to set the flag — when we read it a line below.

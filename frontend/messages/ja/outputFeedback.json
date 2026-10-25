@@ -58,6 +58,9 @@
     "filterByReason": "理由で絞り込む",
     "up": "高評価",
     "down": "低評価",
+    "projectChip": "プロジェクト: {value}",
+    "promptVersionChip": "プロンプトバージョン: {value}",
+    "removeFilter": "フィルターを削除: {label}",
     "fromDate": "開始日",
     "toDate": "終了日"
   }

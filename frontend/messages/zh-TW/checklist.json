@@ -178,7 +178,7 @@
     "skipped": "{count, plural, other {# 項建議的變更}}因其參照的測試案例已不存在而被略過。",
     "discard": "捨棄",
     "applySelected": "套用所選項目",
-    "discardTitle": "捨棄建議的變更",
+    "discardTitle": "要捨棄建議的變更嗎？",
     "discardDescription": "要捨棄這些提議嗎？不會有任何內容寫入檢查清單。"
   },
   "chatPanel": {

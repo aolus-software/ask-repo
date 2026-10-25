@@ -8,17 +8,18 @@ a person reads it and works through it.
 """
 
 import uuid
+from enum import StrEnum
 from io import BytesIO
 
+from fastapi import status
 from openpyxl import Workbook
 from openpyxl.styles import Alignment, Font
 from openpyxl.utils import get_column_letter
 
+from app.core.errors import AppError, ErrorCode
 from app.core.language import Language
 from app.models.checklist import ChecklistItem
 from app.services.export_labels import EXPORT_LABELS
-
-SHEET_TITLE = EXPORT_LABELS[Language.EN].checklist_sheet
 
 # Column header, and the width it gets. The prose columns are wide and wrap.
 COLUMNS: tuple[tuple[str, int], ...] = (
@@ -50,6 +51,51 @@ def _citations(item: ChecklistItem) -> str:
         f"{citation.get('file_path')}:{citation.get('start_line')}-{citation.get('end_line')}"
         for citation in item.citations or []
     )
+
+
+def require_within_cap(row_count: int, cap: int, message: str) -> None:
+    """Refuse an export that matched more than `cap` rows, with `409 EXPORT_TOO_LARGE`.
+
+    Callers fetch `cap + 1` rows so that exceeding the cap is detectable. The wording is
+    the caller's: a per-module export and a multi-module one offer different advice.
+    """
+    if row_count > cap:
+        raise AppError(status.HTTP_409_CONFLICT, ErrorCode.EXPORT_TOO_LARGE, message)
+
+
+def filter_audit_details(
+    *,
+    project_id: uuid.UUID | None = None,
+    module_id: uuid.UUID | None = None,
+    feature: str | None = None,
+    status: StrEnum | None = None,
+    source: StrEnum | None = None,
+    kind: StrEnum | None = None,
+    search: str | None = None,
+) -> dict[str, str]:
+    """The `filter` block of a checklist export's audit event: the query's filters only.
+
+    Never the rows, which would put generated test content in the trail. `feature` is
+    picked from generated content in the UI, so, like `expectedResult`, it stays out:
+    `featureFilterApplied` says a feature filter narrowed the export without naming it.
+    `search` stays: it is the caller's own query intent, not a fact about the repository.
+    """
+    details: dict[str, str] = {}
+    if project_id is not None:
+        details["projectId"] = str(project_id)
+    if module_id is not None:
+        details["moduleId"] = str(module_id)
+    if feature is not None:
+        details["featureFilterApplied"] = "true"
+    if status is not None:
+        details["status"] = status.value
+    if source is not None:
+        details["source"] = source.value
+    if kind is not None:
+        details["kind"] = kind.value
+    if search is not None:
+        details["search"] = search
+    return details
 
 
 def build_workbook(

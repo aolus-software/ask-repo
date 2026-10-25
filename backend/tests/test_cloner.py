@@ -2,6 +2,7 @@
 specific hole named in docs/PRD.md §9."""
 
 import asyncio
+import os
 import subprocess
 from pathlib import Path
 from typing import Any
@@ -25,6 +26,27 @@ def test_git_is_pinned_to_the_validated_address() -> None:
     """Without this, git resolves the host again and DNS rebinding defeats Task 3."""
     command = build_git_command(VALIDATED, branch="main", destination=Path("/tmp/x"))
     assert "http.curloptResolve=github.com:443:140.82.121.4" in command
+
+
+def test_every_validated_address_is_pinned_in_one_entry() -> None:
+    """libcurl tries a comma-separated list in order; IPv6 goes in unbracketed."""
+    validated = ValidatedRepoUrl(
+        url="https://github.com/acme/repo.git",
+        host="github.com",
+        port=443,
+        pinned_ip="2606:50c0:8000::154",
+        pinned_ips=("2606:50c0:8000::154", "140.82.121.4"),
+    )
+    command = build_git_command(validated, branch="main", destination=Path("/tmp/x"))
+    entries = [part for part in command if part.startswith("http.curloptResolve=")]
+    assert entries == ["http.curloptResolve=github.com:443:2606:50c0:8000::154,140.82.121.4"]
+
+
+def test_only_the_pinned_addresses_reach_the_command() -> None:
+    """Nothing but what the validator returned is ever handed to the clone command."""
+    command = build_git_command(VALIDATED, branch="main", destination=Path("/tmp/x"))
+    entries = [part for part in command if part.startswith("http.curloptResolve=")]
+    assert entries == ["http.curloptResolve=github.com:443:140.82.121.4"]
 
 
 def test_redirects_are_disabled() -> None:
@@ -327,3 +349,80 @@ async def test_the_watchdog_kills_a_clone_that_outgrows_the_cap_mid_flight(
 
     assert state.killed_for_size is True
     assert process.killed is True
+
+
+async def _process_is_alive(pid: int) -> bool:
+    """Whether `pid` still names a live process (a reaped one raises)."""
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    return True
+
+
+async def test_a_timed_out_clone_kills_and_reaps_its_process(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A clone that outlives its timeout must not leave its process running."""
+    started: list[asyncio.subprocess.Process] = []
+    real_exec = asyncio.create_subprocess_exec
+
+    async def hang(*args: str, **kwargs: Any) -> asyncio.subprocess.Process:
+        process = await real_exec("sleep", "60", **kwargs)
+        started.append(process)
+        return process
+
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", hang)
+    remote = ValidatedRepoUrl(
+        url="https://example.com/r.git", host="example.com", port=443, pinned_ip="1.2.3.4"
+    )
+
+    with pytest.raises(TerminalIngestionError, match="timed out"):
+        await clone(
+            remote,
+            branch="main",
+            destination=tmp_path / "clone",
+            pat=None,
+            timeout_seconds=0.2,  # type: ignore[arg-type]  # a fraction keeps the test fast
+            max_bytes=100_000_000,
+        )
+
+    assert started[0].returncode is not None
+    assert not await _process_is_alive(started[0].pid)
+
+
+async def test_a_cancelled_clone_kills_and_reaps_its_process(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Cancelling the worker mid-clone must still stop and reap the process."""
+    started: list[asyncio.subprocess.Process] = []
+    real_exec = asyncio.create_subprocess_exec
+
+    async def hang(*args: str, **kwargs: Any) -> asyncio.subprocess.Process:
+        process = await real_exec("sleep", "60", **kwargs)
+        started.append(process)
+        return process
+
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", hang)
+    remote = ValidatedRepoUrl(
+        url="https://example.com/r.git", host="example.com", port=443, pinned_ip="1.2.3.4"
+    )
+
+    task = asyncio.create_task(
+        clone(
+            remote,
+            branch="main",
+            destination=tmp_path / "clone",
+            pat=None,
+            timeout_seconds=60,
+            max_bytes=100_000_000,
+        )
+    )
+    while not started:
+        await asyncio.sleep(0.01)
+    await asyncio.sleep(0.05)
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+
+    assert not await _process_is_alive(started[0].pid)

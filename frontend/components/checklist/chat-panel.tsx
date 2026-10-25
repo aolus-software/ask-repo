@@ -23,11 +23,12 @@ import { useErrorText } from "@/lib/i18n/error-text";
 import { endpoints } from "@/lib/api/endpoints";
 import { usePhaseLabel } from "@/hooks/use-phase-label";
 import type {
+  ChangeSetEventPayload,
   ChecklistMessageResponse,
   CitationPayload,
   FinishReason,
 } from "@/lib/api/types";
-import { consumeChecklistStream } from "@/lib/checklist/stream";
+import { consumeRefinementStream } from "@/lib/refinement/stream";
 import { keys } from "@/lib/query/keys";
 
 interface TurnState {
@@ -174,28 +175,32 @@ export function ChatPanel({
           queryKey: keys.checklistMessages.forModule(moduleId),
         });
 
-        const result = await consumeChecklistStream(response, {
-          onPhase: (phase) => {
-            current = { ...current, phase };
-            setTurn(current);
+        const result = await consumeRefinementStream<ChangeSetEventPayload>(
+          response,
+          "changeSet",
+          {
+            onPhase: (phase) => {
+              current = { ...current, phase };
+              setTurn(current);
+            },
+            onCitations: (citations) => {
+              current = { ...current, citations };
+              setTurn(current);
+            },
+            onToken: (text) => {
+              current = { ...current, text: current.text + text };
+              scheduleFlush();
+            },
+            onChangeSet: () => {
+              // The banner that follows is the module detail query's business --
+              // this panel never renders the diff itself (`ChangeSetPanel` owns
+              // that, and two diff renderers would drift).
+              void queryClient.invalidateQueries({
+                queryKey: keys.checklistModules.detail(moduleId),
+              });
+            },
           },
-          onCitations: (citations) => {
-            current = { ...current, citations };
-            setTurn(current);
-          },
-          onToken: (text) => {
-            current = { ...current, text: current.text + text };
-            scheduleFlush();
-          },
-          onChangeSet: () => {
-            // The banner that follows is the module detail query's business --
-            // this panel never renders the diff itself (`ChangeSetPanel` owns
-            // that, and two diff renderers would drift).
-            void queryClient.invalidateQueries({
-              queryKey: keys.checklistModules.detail(moduleId),
-            });
-          },
-        });
+        );
 
         if (result.error) {
           current = {

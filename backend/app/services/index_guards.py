@@ -8,22 +8,10 @@ first three.
 from fastapi import status
 
 from app.core.errors import AppError, ErrorCode
-from app.models.project import Project, ProjectStatus
+from app.core.indexed import require_indexed
+from app.models.project import Project
 from app.services import path_tree
 from app.services.indexed_path import IndexedPathReader
-
-
-def require_indexed(project: Project) -> None:
-    """There has to be an index to enumerate.
-
-    No embedding-model check, deliberately -- a scroll reads payloads, never vectors.
-    """
-    if project.status != ProjectStatus.READY.value or not project.embedding_collection:
-        raise AppError(
-            status.HTTP_409_CONFLICT,
-            ErrorCode.PROJECT_NOT_READY,
-            "This project is not indexed yet. Wait for indexing to finish.",
-        )
 
 
 def require_stable_index(project: Project) -> None:
@@ -81,3 +69,6 @@ async def require_path_indexed(
                 "Pick a path from the repository tree."
             ),
         )
+
+
+__all__ = ["require_indexed", "require_path_indexed", "require_stable_index"]

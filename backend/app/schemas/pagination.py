@@ -13,15 +13,25 @@ from app.schemas.base import ApiModel
 MAX_PAGE_SIZE = 100
 
 
-class ListQuery(ApiModel):
-    """Pagination, search, and sort for any list route.
+class PageQuery(ApiModel):
+    """Page and limit only, for a list whose order is fixed.
 
-    Inherits `ApiModel`, so `sort_direction` arrives on the wire as `sortDirection`.
+    A route that ignores `sort` and `search` takes this rather than `ListQuery`, so
+    `/docs` does not advertise parameters that do nothing. An unknown query parameter is
+    still ignored, so a client that sends one is not refused.
     """
 
     page: int = Field(default=1, ge=1)
     # Capped so a caller cannot ask for the whole table in one request.
     limit: int = Field(default=25, ge=1, le=MAX_PAGE_SIZE)
+
+
+class ListQuery(PageQuery):
+    """Pagination, search, and sort for any list route.
+
+    Inherits `ApiModel`, so `sort_direction` arrives on the wire as `sortDirection`.
+    """
+
     search: str | None = None
     sort: str | None = None
     sort_direction: Literal["asc", "desc"] = "desc"

@@ -1,26 +1,26 @@
 """Queries over `eval_sets`, including the generation lease.
 
-A near-copy of `MockDataDatasetRepository`'s lease logic, for the reasons that
-repository's docstring gives. Unscoped by `ProjectScope`: access is decided in
+The lease statements are the shared ones in `app/repositories/lease.py`; each method
+here passes this table's status vocabulary and stages its own live event.
+Unscoped by `ProjectScope`: access is decided in
 `app/core/access.py`, and these methods filter only by ids they are handed.
 """
 
 import uuid
 from collections.abc import Sequence
-from datetime import UTC, datetime, timedelta
 from typing import Any, cast
 
-from sqlalchemy import func, or_, select, update
+from sqlalchemy import func, select, update
 from sqlalchemy.engine import CursorResult
 
 from app.live.events import eval_set_event
 from app.live.staging import stage_live_event
 from app.models.eval import EvalSet, EvalSetStatus
+from app.repositories import lease
 from app.repositories.base import BaseRepository
 
-LEASE_SECONDS = 300
-LEASE_RENEWAL_SECONDS = 60
-STRANDED_AFTER_SECONDS = 120
+LEASE_RENEWAL_SECONDS = lease.LEASE_RENEWAL_SECONDS
+LEASE_SECONDS = lease.LEASE_SECONDS
 
 
 class EvalSetRepository(BaseRepository[EvalSet]):
@@ -80,29 +80,19 @@ class EvalSetRepository(BaseRepository[EvalSet]):
         self, *, set_id: uuid.UUID, job_id: uuid.UUID, worker_id: str, lease_seconds: int
     ) -> bool:
         """Take ownership of a set's generation. True if we won it."""
-        now = datetime.now(UTC)
-        result = await self.session.execute(
-            update(EvalSet)
-            .where(
-                EvalSet.id == set_id,
-                EvalSet.deleted_at.is_(None),
-                # A sweep-published copy carries a fresh job id, so `last_job_id` cannot
-                # refuse it; a finished row must refuse on status instead.
-                EvalSet.status == EvalSetStatus.GENERATING.value,
-                EvalSet.last_job_id.is_distinct_from(job_id),
-                or_(EvalSet.lease_expires_at.is_(None), EvalSet.lease_expires_at < now),
-            )
-            .values(
-                lease_owner=worker_id,
-                lease_expires_at=now + timedelta(seconds=lease_seconds),
-                last_job_id=job_id,
-                status=EvalSetStatus.GENERATING.value,
-                error=None,
-                updated_at=now,
-            )
-            .returning(EvalSet.project_id)
+        row = await lease.claim_lease(
+            self.session,
+            EvalSet,
+            row_id=set_id,
+            job_id=job_id,
+            worker_id=worker_id,
+            lease_seconds=lease_seconds,
+            # A sweep-published copy carries a fresh job id, so `last_job_id` cannot
+            # refuse it; a finished row must refuse on status instead.
+            extra_where=(EvalSet.status == EvalSetStatus.GENERATING.value,),
+            extra_values={"status": EvalSetStatus.GENERATING.value, "error": None},
+            returning=(EvalSet.project_id,),
         )
-        row = result.one_or_none()
         if row is None:
             return False
         stage_live_event(self.session, eval_set_event(set_id, row[0]))
@@ -110,17 +100,14 @@ class EvalSetRepository(BaseRepository[EvalSet]):
 
     async def renew_lease(self, *, set_id: uuid.UUID, worker_id: str, lease_seconds: int) -> bool:
         """Extend our own lease. False means we lost it and must abandon the job."""
-        now = datetime.now(UTC)
-        result = await self.session.execute(
-            update(EvalSet)
-            .where(
-                EvalSet.id == set_id,
-                EvalSet.deleted_at.is_(None),
-                EvalSet.lease_owner == worker_id,
-            )
-            .values(lease_expires_at=now + timedelta(seconds=lease_seconds), updated_at=now)
+        return await lease.renew_lease(
+            self.session,
+            EvalSet,
+            row_id=set_id,
+            worker_id=worker_id,
+            lease_seconds=lease_seconds,
+            skip_deleted=True,
         )
-        return cast(CursorResult[Any], result).rowcount == 1
 
     async def release(
         self,
@@ -133,26 +120,17 @@ class EvalSetRepository(BaseRepository[EvalSet]):
         **fields: object,
     ) -> bool:
         """Finish a generation: write the outcome and drop the lease. True if we held it."""
-        now = datetime.now(UTC)
-        result = await self.session.execute(
-            update(EvalSet)
-            .where(
-                EvalSet.id == set_id,
-                EvalSet.deleted_at.is_(None),
-                EvalSet.lease_owner == worker_id,
-            )
-            .values(
-                status=status.value,
-                error=error,
-                lease_owner=None,
-                lease_expires_at=None,
-                last_job_id=job_id,
-                updated_at=now,
-                **fields,
-            )
-            .returning(EvalSet.project_id)
+        row = await lease.release_lease(
+            self.session,
+            EvalSet,
+            row_id=set_id,
+            job_id=job_id,
+            worker_id=worker_id,
+            status=status.value,
+            error=error,
+            fields=fields,
+            returning=(EvalSet.project_id,),
         )
-        row = result.one_or_none()
         if row is None:
             return False
         stage_live_event(self.session, eval_set_event(set_id, row[0]))
@@ -165,20 +143,13 @@ class EvalSetRepository(BaseRepository[EvalSet]):
         `generating` before its claim, so status says nothing about whether a worker
         holds it, and stamping `updated_at` stops the sweep re-publishing it forever.
         """
-        now = datetime.now(UTC)
-        cutoff = now - timedelta(seconds=older_than_seconds)
-        result = await self.session.execute(
-            update(EvalSet)
-            .where(
-                EvalSet.deleted_at.is_(None),
-                EvalSet.status == EvalSetStatus.GENERATING.value,
-                EvalSet.updated_at < cutoff,
-                or_(EvalSet.lease_expires_at.is_(None), EvalSet.lease_expires_at < now),
-            )
-            .values(updated_at=now)
-            .returning(EvalSet.id, EvalSet.project_id)
+        rows = await lease.claim_stranded_rows(
+            self.session,
+            EvalSet,
+            working_status=EvalSetStatus.GENERATING.value,
+            older_than_seconds=older_than_seconds,
+            returning=(EvalSet.id, EvalSet.project_id),
         )
-        rows = result.all()
         for set_id, project_id in rows:
             stage_live_event(self.session, eval_set_event(set_id, project_id))
         return [row[0] for row in rows]
@@ -190,18 +161,14 @@ class EvalSetRepository(BaseRepository[EvalSet]):
         `MockDataDatasetRepository.defer` gives: a lease-less `generating` row is what
         the sweep reads as abandoned.
         """
-        now = datetime.now(UTC)
-        result = await self.session.execute(
-            update(EvalSet)
-            .where(
-                EvalSet.id == set_id,
-                EvalSet.deleted_at.is_(None),
-                EvalSet.lease_owner == worker_id,
-            )
-            .values(lease_expires_at=now + timedelta(seconds=hold_seconds), updated_at=now)
-            .returning(EvalSet.project_id)
+        row = await lease.defer_lease(
+            self.session,
+            EvalSet,
+            row_id=set_id,
+            worker_id=worker_id,
+            hold_seconds=hold_seconds,
+            returning=(EvalSet.project_id,),
         )
-        row = result.one_or_none()
         if row is None:
             return False
         stage_live_event(self.session, eval_set_event(set_id, row[0]))

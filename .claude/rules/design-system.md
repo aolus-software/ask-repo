@@ -119,8 +119,10 @@ or leaves a gap at the bottom.
 
 `1, 2, 3, 4, 6, 8, 12` only. An arbitrary `p-5` or `gap-7` in one component is how a layout
 starts looking hand-tuned. The per-context table in `docs/design.md` → Spacing is the default;
-deviate only with a reason worth a comment. The one recorded exception is `pl-9` on an input with a
-leading icon, and its reason is in that table.
+deviate only with a reason worth a comment. The recorded exceptions — `pl-9` and `pe-10` for an
+input's leading icon and trailing button, the profile rail's `lg:top-24 lg:w-48`, and the bell's
+`text-[10px]` count — each have their reason in that table. A new one is added there, with its
+reason, or it is not an exception.
 
 ## 11. A `<Table>` always sits inside a `Card`
 

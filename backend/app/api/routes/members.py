@@ -11,6 +11,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, status
 
 from app.api.deps import AuditRecorderDep, CurrentUser, SessionDep, SettingsDep
+from app.schemas.errors import ERROR_RESPONSES
 from app.schemas.membership import MemberCreateRequest, MemberResponse, MemberUpdateRequest
 from app.services.membership import MembershipService
 
@@ -26,7 +27,13 @@ def _service(
 ServiceDep = Annotated[MembershipService, Depends(_service)]
 
 
-@router.get("/{project_id}/members", response_model=list[MemberResponse])
+@router.get(
+    "/{project_id}/members",
+    response_model=list[MemberResponse],
+    status_code=status.HTTP_200_OK,
+    summary="List a project's members",
+    responses={code: ERROR_RESPONSES[code] for code in (401, 403, 404, 422)},
+)
 async def list_members(
     project_id: uuid.UUID, current_user: CurrentUser, service: ServiceDep
 ) -> Sequence[MemberResponse]:
@@ -38,6 +45,8 @@ async def list_members(
     "/{project_id}/members",
     response_model=MemberResponse,
     status_code=status.HTTP_201_CREATED,
+    summary="Grant a user a role on a project",
+    responses={code: ERROR_RESPONSES[code] for code in (401, 403, 404, 409, 422)},
 )
 async def add_member(
     project_id: uuid.UUID,
@@ -49,7 +58,13 @@ async def add_member(
     return await service.grant(project_id, payload, actor=current_user)
 
 
-@router.patch("/{project_id}/members/{user_id}", response_model=MemberResponse)
+@router.patch(
+    "/{project_id}/members/{user_id}",
+    response_model=MemberResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Change a member's role",
+    responses={code: ERROR_RESPONSES[code] for code in (401, 403, 404, 409, 422)},
+)
 async def change_member_role(
     project_id: uuid.UUID,
     user_id: uuid.UUID,
@@ -61,7 +76,12 @@ async def change_member_role(
     return await service.change_role(project_id, user_id, payload, actor=current_user)
 
 
-@router.delete("/{project_id}/members/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete(
+    "/{project_id}/members/{user_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Revoke a member's access to a project",
+    responses={code: ERROR_RESPONSES[code] for code in (401, 403, 404, 409, 422)},
+)
 async def remove_member(
     project_id: uuid.UUID,
     user_id: uuid.UUID,

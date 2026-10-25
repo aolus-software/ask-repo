@@ -23,7 +23,7 @@ from app.schemas.eval import (
     EvalSetDetail,
     EvalSetSummary,
 )
-from app.schemas.pagination import ListQuery, PaginatedResponse
+from app.schemas.pagination import PageQuery, PaginatedResponse
 from app.services.eval import EvalService
 from app.services.indexed_path import IndexedPathReader
 
@@ -58,7 +58,15 @@ EvalQueueDep = Annotated[EvalQueue, Depends(get_eval_queue)]
     response_model=EvalSetSummary,
     status_code=status.HTTP_202_ACCEPTED,
     summary="Generate an eval set",
-    responses={code: ERROR_RESPONSES[code] for code in (400, 401, 403, 404, 409, 422)},
+    description=(
+        "One endpoint, two body shapes. Generate: `name`, `count` and `mix` are required, "
+        "`sourcePath` is optional, and `sourceSetId` and `language` must be absent. "
+        "Translate: `sourceSetId` and `language` (not `en`) are required and nothing else "
+        "may be sent. Every field is optional in the schema because both shapes share one "
+        "model, so a body that matches neither answers `422`, and that shape error is keyed "
+        'as `fields["request"]` rather than by a field name.'
+    ),
+    responses={code: ERROR_RESPONSES[code] for code in (400, 401, 403, 404, 409, 422, 503)},
 )
 async def create_eval_set(
     project_id: uuid.UUID,
@@ -82,7 +90,7 @@ async def list_eval_sets(
     project_id: uuid.UUID,
     current_user: CurrentUser,
     service: EvalServiceDep,
-    query: Annotated[ListQuery, Query()],
+    query: Annotated[PageQuery, Query()],
 ) -> PaginatedResponse[EvalSetSummary]:
     """A page of sets, newest first, each with its latest run."""
     return await service.list_sets(project_id, query, actor=current_user)
@@ -93,7 +101,7 @@ async def list_eval_sets(
     response_model=EvalSetDetail,
     status_code=status.HTTP_200_OK,
     summary="Get one eval set and its pairs",
-    responses={code: ERROR_RESPONSES[code] for code in (401, 403, 404)},
+    responses={code: ERROR_RESPONSES[code] for code in (401, 403, 404, 422)},
 )
 async def get_eval_set(
     set_id: uuid.UUID, current_user: CurrentUser, service: EvalServiceDep
@@ -106,7 +114,7 @@ async def get_eval_set(
     "/eval-sets/{set_id}",
     status_code=status.HTTP_204_NO_CONTENT,
     summary="Delete an eval set",
-    responses={code: ERROR_RESPONSES[code] for code in (401, 403, 404, 409)},
+    responses={code: ERROR_RESPONSES[code] for code in (401, 403, 404, 409, 422)},
 )
 async def delete_eval_set(
     set_id: uuid.UUID, current_user: CurrentUser, service: EvalServiceDep
@@ -138,7 +146,7 @@ async def set_pair_excluded(
     response_model=EvalRunSummary,
     status_code=status.HTTP_202_ACCEPTED,
     summary="Run an eval set",
-    responses={code: ERROR_RESPONSES[code] for code in (401, 403, 404, 409)},
+    responses={code: ERROR_RESPONSES[code] for code in (401, 403, 404, 409, 422)},
 )
 async def start_eval_run(
     set_id: uuid.UUID,
@@ -161,7 +169,7 @@ async def list_eval_runs(
     set_id: uuid.UUID,
     current_user: CurrentUser,
     service: EvalServiceDep,
-    query: Annotated[ListQuery, Query()],
+    query: Annotated[PageQuery, Query()],
 ) -> PaginatedResponse[EvalRunSummary]:
     """A page of runs, newest first."""
     return await service.list_runs(set_id, query, actor=current_user)
@@ -172,7 +180,7 @@ async def list_eval_runs(
     response_model=EvalRunDetail,
     status_code=status.HTTP_200_OK,
     summary="Get one eval run and its results",
-    responses={code: ERROR_RESPONSES[code] for code in (401, 403, 404)},
+    responses={code: ERROR_RESPONSES[code] for code in (401, 403, 404, 422)},
 )
 async def get_eval_run(
     run_id: uuid.UUID, current_user: CurrentUser, service: EvalServiceDep

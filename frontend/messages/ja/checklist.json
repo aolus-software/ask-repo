@@ -178,7 +178,7 @@
     "skipped": "{count, plural, other {参照先のテストケースが存在しないため、# 件の変更案をスキップしました。}}",
     "discard": "破棄",
     "applySelected": "選択した変更を適用",
-    "discardTitle": "変更案を破棄",
+    "discardTitle": "変更案を破棄しますか？",
     "discardDescription": "これらの提案を破棄しますか？チェックリストには何も書き込まれません。"
   },
   "chatPanel": {

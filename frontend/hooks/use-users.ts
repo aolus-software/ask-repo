@@ -7,8 +7,12 @@ import { endpoints, listQueryString } from "@/lib/api/endpoints";
 import type { ListParams, PaginatedResponse, UserResponse } from "@/lib/api/types";
 import { keys } from "@/lib/query/keys";
 
-export function useUsers(params: ListParams) {
+export function useUsers(
+  params: ListParams,
+  { enabled = true }: { enabled?: boolean } = {},
+) {
   return useQuery({
+    enabled,
     queryKey: keys.users.list(params),
     queryFn: () =>
       apiFetch<PaginatedResponse<UserResponse>>(

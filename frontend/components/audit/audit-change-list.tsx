@@ -88,10 +88,8 @@ export function AuditChangeList({ changed }: { changed: Record<string, AuditChan
   return (
     <dl className="divide-border divide-y">
       {entries.map(([field, { before, after }]) => (
-        <div key={field} className="flex flex-col gap-1.5 py-2.5 first:pt-0 last:pb-0">
-          <dt className="text-muted-foreground text-xs font-medium tracking-wide uppercase">
-            {fieldLabel(field)}
-          </dt>
+        <div key={field} className="flex flex-col gap-1 py-3 first:pt-0 last:pb-0">
+          <dt className="text-muted-foreground text-sm">{fieldLabel(field)}</dt>
           <dd className="flex flex-wrap items-center gap-2 text-sm">
             <AuditValue value={before} />
             <ArrowRight className="text-muted-foreground size-4 shrink-0" />

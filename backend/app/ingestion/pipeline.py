@@ -21,7 +21,6 @@ from app.config import Settings
 from app.core.crypto import SecretBox, scrub
 from app.core.notifications import NotificationType
 from app.core.repo_url import RepoUrlRejected, ValidatedRepoUrl, validate_repo_url
-from app.db.session import get_sessionmaker
 from app.ingestion.chunker import Chunk, Chunker, embedding_text
 from app.ingestion.cloner import CloneResult, clone
 from app.ingestion.embedder import Embedder
@@ -29,6 +28,7 @@ from app.ingestion.errors import RetryableIngestionError, TerminalIngestionError
 from app.ingestion.vector_store import VectorStore
 from app.ingestion.walker import walk
 from app.models.project import MAX_RECORDED_ERROR_CHARS, ProjectStatus
+from app.queue.heartbeat import renew_until_lost, stop_heartbeat
 from app.repositories.project import (
     LEASE_RENEWAL_SECONDS,
     LEASE_SECONDS,
@@ -220,7 +220,7 @@ class IngestionPipeline:
             await self.session.commit()
             raise
         finally:
-            await self._stop(heartbeat, project_id)
+            await stop_heartbeat(heartbeat, subject=f"project {project_id}")
             # docs/PRD.md §4.1: the working copy goes whether we succeeded or failed
             # terminally. /data/repos is scratch space.
             shutil.rmtree(cleanup_path, ignore_errors=True)
@@ -336,32 +336,13 @@ class IngestionPipeline:
 
         This is what lets the expiry be five minutes rather than thirty: a slow but
         healthy index keeps extending, while a crashed worker releases its project for
-        reclaim quickly (spec §4.2).
-
-        Each tick uses its own short-lived session, never the one the job is running
-        on: an `AsyncSession` is not safe for concurrent use, and two coroutines
-        interleaving on one connection fail with an `InterfaceError` or, worse, a
-        mis-scoped transaction.
+        reclaim quickly (spec §4.2). The loop and its own-session rule are
+        `app/queue/heartbeat.py`'s.
         """
-        while True:
-            await asyncio.sleep(LEASE_RENEWAL_SECONDS)
-            async with get_sessionmaker()() as session:
-                held = await ProjectRepository(session).renew_lease(
-                    project_id=project_id, worker_id=worker_id, lease_seconds=LEASE_SECONDS
-                )
-                await session.commit()
-            if not held:
-                logger.warning("lost the lease on project %s; stopping renewal", project_id)
-                return
-
-    async def _stop(self, heartbeat: asyncio.Task[None], project_id: uuid.UUID) -> None:
-        """Cancel the heartbeat and collect it, so nothing fails silently."""
-        heartbeat.cancel()
-        try:
-            await heartbeat
-        except asyncio.CancelledError:
-            pass
-        except Exception:
-            # The job's outcome is already decided; a failed renewal cannot change it,
-            # but it must not disappear either.
-            logger.warning("lease renewal for project %s failed", project_id, exc_info=True)
+        await renew_until_lost(
+            lambda session: ProjectRepository(session).renew_lease(
+                project_id=project_id, worker_id=worker_id, lease_seconds=LEASE_SECONDS
+            ),
+            interval_seconds=LEASE_RENEWAL_SECONDS,
+            subject=f"project {project_id}",
+        )

@@ -51,7 +51,7 @@
     },
     "excludeLabel": "제외: {question}",
     "referenceAnswer": "참조 답변",
-    "saveFailed": "저장되지 않았습니다. 다시 시도하세요"
+    "saveFailed": "저장되지 않았습니다. 다시 시도하세요."
   },
   "runTable": {
     "generatingTitle": "질문을 생성하는 중…",

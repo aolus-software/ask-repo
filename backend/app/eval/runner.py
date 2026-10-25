@@ -27,9 +27,8 @@ from langchain_core.language_models import BaseChatModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import Settings
-from app.core.language import Language, parse_language
+from app.core.language import Language, language_or_default
 from app.core.notifications import NotificationType
-from app.db.session import get_sessionmaker
 from app.eval.model_output import JudgeVerdict
 from app.eval.notifications import announce_run
 from app.ingestion.embedder import Embedder
@@ -38,6 +37,7 @@ from app.ingestion.vector_store import VectorStoreFactory
 from app.models.eval import EvalResult, EvalRun, EvalRunStatus, EvalVerdict
 from app.models.project import Project
 from app.observability.features import CallFeature, call_config
+from app.queue.heartbeat import lease_heartbeat, renew_until_lost
 from app.rag.answerer import Answerer
 from app.rag.errors import classify_chat_error
 from app.rag.prompt_version import ANSWER_PROMPT_VERSION, JUDGE_PROMPT_VERSION
@@ -135,9 +135,7 @@ class EvalRunner:
         eval_set = await self.sets.get(set_id)
         # The set's language, never the requester's: a run must not depend on who
         # pressed the button (spec §4.3).
-        reply_language = (
-            parse_language(eval_set.language) if eval_set is not None else None
-        ) or Language.EN
+        reply_language = language_or_default(eval_set.language if eval_set is not None else None)
         answerer = self._answerer(project)
 
         self._stamp_provenance(run, project)
@@ -151,38 +149,38 @@ class EvalRunner:
         ]
         width = self.settings.eval_answer_concurrency
 
-        renewal = asyncio.create_task(self._renew(run_id=run_id, worker_id=worker_id))
-        try:
-            unsaved = 0
-            for start in range(0, len(pending), width):
-                chunk = pending[start : start + width]
-                finished = await self._gather(
-                    [
-                        self._answer_and_judge(
-                            answerer,
-                            pair,
-                            project_id=project_id,
-                            generation=generation,
-                            attempt=attempt,
-                            run_id=run_id,
-                            reply_language=reply_language,
-                        )
-                        for pair in chunk
-                    ]
-                )
-                self.session.add_all(finished)
-                unsaved += len(finished)
-                if unsaved >= RESULT_BATCH:
-                    await self._require_live_lease(renewal, run_id, worker_id)
-                    await self.session.commit()
-                    unsaved = 0
-            self._require_lease(renewal, run_id)
-        except Exception:
-            # Uncommitted results are dropped: a redelivery re-answers them.
-            await self.session.rollback()
-            raise
-        finally:
-            await self._stop_renewal(renewal, run_id=run_id)
+        async with lease_heartbeat(
+            self._renew(run_id=run_id, worker_id=worker_id), subject=f"eval run {run_id}"
+        ) as renewal:
+            try:
+                unsaved = 0
+                for start in range(0, len(pending), width):
+                    chunk = pending[start : start + width]
+                    finished = await self._gather(
+                        [
+                            self._answer_and_judge(
+                                answerer,
+                                pair,
+                                project_id=project_id,
+                                generation=generation,
+                                attempt=attempt,
+                                run_id=run_id,
+                                reply_language=reply_language,
+                            )
+                            for pair in chunk
+                        ]
+                    )
+                    self.session.add_all(finished)
+                    unsaved += len(finished)
+                    if unsaved >= RESULT_BATCH:
+                        await self._require_live_lease(renewal, run_id, worker_id)
+                        await self.session.commit()
+                        unsaved = 0
+                self._require_lease(renewal, run_id)
+            except Exception:
+                # Uncommitted results are dropped: a redelivery re-answers them.
+                await self.session.rollback()
+                raise
 
         await self.session.flush()
         rows = await self.results.list_for_run(run_id)
@@ -391,31 +389,14 @@ class EvalRunner:
             return EvalVerdict.ERROR, None
 
     async def _renew(self, *, run_id: uuid.UUID, worker_id: str) -> None:
-        """Hold the lease for the length of the run. Mirrors `EvalSetGenerator._renew`.
-
-        Returns when the lease is lost; `_require_lease` reads that as the task being
-        done.
-        """
-        while True:
-            await asyncio.sleep(LEASE_RENEWAL_SECONDS)
-            async with get_sessionmaker()() as session:
-                held = await EvalRunRepository(session).renew_lease(
-                    run_id=run_id, worker_id=worker_id, lease_seconds=LEASE_SECONDS
-                )
-                await session.commit()
-            if not held:
-                logger.warning("lost the lease on eval run %s mid-run", run_id)
-                return
-
-    async def _stop_renewal(self, renewal: "asyncio.Task[None]", *, run_id: uuid.UUID) -> None:
-        """Cancel the heartbeat and collect it."""
-        renewal.cancel()
-        try:
-            await renewal
-        except asyncio.CancelledError:
-            pass
-        except Exception:
-            logger.warning("lease renewal for eval run %s failed", run_id, exc_info=True)
+        """Hold the lease for the length of the run. Mirrors `EvalSetGenerator._renew`."""
+        await renew_until_lost(
+            lambda session: EvalRunRepository(session).renew_lease(
+                run_id=run_id, worker_id=worker_id, lease_seconds=LEASE_SECONDS
+            ),
+            interval_seconds=LEASE_RENEWAL_SECONDS,
+            subject=f"eval run {run_id}",
+        )
 
 
 def _count(rows: list[EvalResult], verdict: EvalVerdict) -> int:

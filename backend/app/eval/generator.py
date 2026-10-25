@@ -27,7 +27,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import Settings
 from app.core.language import Language
 from app.core.notifications import NotificationType
-from app.db.session import get_sessionmaker
 from app.eval.model_output import GeneratedPair, TranslatedQuestion
 from app.eval.notifications import announce_set
 from app.eval.sampling import SampledChunk, assign_types, names_its_file, sample_chunks
@@ -43,6 +42,7 @@ from app.models.eval import (
     EvalSetStatus,
 )
 from app.observability.features import CallFeature, call_config
+from app.queue.heartbeat import lease_heartbeat, renew_until_lost
 from app.rag.errors import classify_chat_error
 from app.rag.prompts import build_eval_pair_prompt
 from app.repositories.eval_pair import EvalPairRepository
@@ -101,8 +101,9 @@ class EvalSetGenerator:
             "attempt": attempt,
         }
 
-        renewal = asyncio.create_task(self._renew(set_id=set_id, worker_id=worker_id))
-        try:
+        async with lease_heartbeat(
+            self._renew(set_id=set_id, worker_id=worker_id), subject=f"eval set {set_id}"
+        ) as renewal:
             if eval_set.source_set_id is not None:
                 pairs = await self._translate(eval_set, scope, renewal)
                 usable = any(pair.exclusion_reason is None for pair in pairs)
@@ -116,8 +117,6 @@ class EvalSetGenerator:
                 )
                 usable = bool(pairs)
                 failure = NO_PAIRS_ERROR
-        finally:
-            await self._stop_renewal(renewal, set_id=set_id)
 
         if usable:
             await self.pairs.add_many(pairs)
@@ -252,26 +251,13 @@ class EvalSetGenerator:
 
     async def _renew(self, *, set_id: uuid.UUID, worker_id: str) -> None:
         """Hold the lease for the length of the run. Mirrors `MockDataGenerator._renew`."""
-        while True:
-            await asyncio.sleep(LEASE_RENEWAL_SECONDS)
-            async with get_sessionmaker()() as session:
-                held = await EvalSetRepository(session).renew_lease(
-                    set_id=set_id, worker_id=worker_id, lease_seconds=LEASE_SECONDS
-                )
-                await session.commit()
-            if not held:
-                logger.warning("lost the lease on eval set %s mid-run", set_id)
-                return
-
-    async def _stop_renewal(self, renewal: asyncio.Task[None], *, set_id: uuid.UUID) -> None:
-        """Cancel the heartbeat and collect it."""
-        renewal.cancel()
-        try:
-            await renewal
-        except asyncio.CancelledError:
-            pass
-        except Exception:
-            logger.warning("lease renewal for eval set %s failed", set_id, exc_info=True)
+        await renew_until_lost(
+            lambda session: EvalSetRepository(session).renew_lease(
+                set_id=set_id, worker_id=worker_id, lease_seconds=LEASE_SECONDS
+            ),
+            interval_seconds=LEASE_RENEWAL_SECONDS,
+            subject=f"eval set {set_id}",
+        )
 
     async def _scroll(
         self, *, collection: str, project_id: uuid.UUID, generation: int, path_prefix: str

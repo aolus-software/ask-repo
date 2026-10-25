@@ -20,8 +20,8 @@ export function RolesScreen() {
   const t = useTranslations("roles");
   const user = useSession();
   const [creating, setCreating] = useState(false);
-  const rolesQuery = useRoles();
-  const catalogQuery = usePermissionCatalog();
+  const rolesQuery = useRoles({ enabled: user.isAdmin });
+  const catalogQuery = usePermissionCatalog({ enabled: user.isAdmin });
 
   const roles = rolesQuery.data ?? [];
   const totalPermissions =

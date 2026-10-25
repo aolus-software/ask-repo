@@ -178,7 +178,7 @@
     "skipped": "{count, plural, other {제안된 변경 #개}}가 참조하던 테스트 케이스가 더 이상 존재하지 않아 건너뛰었습니다.",
     "discard": "폐기",
     "applySelected": "선택 항목 적용",
-    "discardTitle": "제안된 변경 사항 폐기",
+    "discardTitle": "제안된 변경 사항을 폐기하시겠습니까?",
     "discardDescription": "이 제안을 폐기하시겠습니까? 체크리스트에는 아무것도 기록되지 않습니다."
   },
   "chatPanel": {

@@ -626,8 +626,9 @@ async def test_the_refusal_makes_no_model_call_at_all() -> None:
     assertion needs to establish -- the node has no reference to any model object
     and so cannot possibly invoke one.
     """
+    from app.core.language import Language
     from app.rag.graph.nodes import build_refuse
-    from app.rag.grounding import OUT_OF_SCOPE_ANSWER
+    from app.rag.grounding import OUT_OF_SCOPE_ANSWERS
     from app.schemas.conversation import CitationsEvent, TokenEvent
 
     events, final = await run_node(build_refuse(), base_state(intent=Intent.OUT_OF_SCOPE))
@@ -637,8 +638,8 @@ async def test_the_refusal_makes_no_model_call_at_all() -> None:
     first_token = next(i for i, e in enumerate(events) if isinstance(e, TokenEvent))
     citations_index = next(i for i, e in enumerate(events) if isinstance(e, CitationsEvent))
 
-    assert tokens == OUT_OF_SCOPE_ANSWER
-    assert final["answer"] == OUT_OF_SCOPE_ANSWER
+    assert tokens == OUT_OF_SCOPE_ANSWERS[Language.EN]
+    assert final["answer"] == OUT_OF_SCOPE_ANSWERS[Language.EN]
     assert len(citations) == 1
     assert citations[0].citations == []
     assert citations_index < first_token
@@ -840,7 +841,8 @@ async def test_a_conversational_question_never_retrieves() -> None:
 
 
 async def test_an_out_of_scope_question_makes_exactly_one_model_call() -> None:
-    from app.rag.grounding import OUT_OF_SCOPE_ANSWER
+    from app.core.language import Language
+    from app.rag.grounding import OUT_OF_SCOPE_ANSWERS
     from tests.fakes import ScriptedChatModel
     from tests.test_answerer import RecordingRetriever
 
@@ -852,7 +854,7 @@ async def test_an_out_of_scope_question_makes_exactly_one_model_call() -> None:
     _, final = await drain(graph_for(model, retriever), base_state(question="capital of France"))
 
     assert retriever.queries == []
-    assert final["answer"] == OUT_OF_SCOPE_ANSWER
+    assert final["answer"] == OUT_OF_SCOPE_ANSWERS[Language.EN]
 
 
 @pytest.mark.asyncio

@@ -116,7 +116,7 @@
     "revokeLabel": "Batalkan akses {name}",
     "revokeDialog": {
       "title": "Batalkan akses {name}?",
-      "description": "Mereka kehilangan akses kepada projek ini serta-merta.",
+      "description": "{name} kehilangan akses kepada projek ini serta-merta. Perbualan dan hasil yang direkodkan kekal, dan anda boleh menambahnya semula kemudian.",
       "confirm": "Batalkan akses",
       "revoked": "Akses dibatalkan"
     }

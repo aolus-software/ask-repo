@@ -61,7 +61,7 @@
   },
   "preflight": {
     "couldNotAnswer": "이 질문에 답변할 수 없었습니다",
-    "genericError": "문제가 발생했습니다.",
+    "genericError": "문제가 발생했습니다",
     "needsReindexTitle": "이 프로젝트는 다시 인덱싱해야 합니다",
     "needsReindexBody": "다른 임베딩 모델로 인덱싱되어, 저장된 벡터를 이 인스턴스가 현재 사용하는 모델로 검색할 수 없습니다. 다시 인덱싱하면 질문을 다시 사용할 수 있습니다.",
     "reindexNow": "지금 다시 인덱싱",

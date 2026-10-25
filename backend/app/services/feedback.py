@@ -287,7 +287,7 @@ class FeedbackService:
         if query.project_id is not None:
             scope = scope.narrowed_to({query.project_id})
         return {
-            "project_ids": None if scope.unrestricted else scope.ids,
+            "scope": scope,
             "feature": query.feature.value if query.feature else None,
             "rating": query.rating.value if query.rating else None,
             "reason_code": query.reason_code.value if query.reason_code else None,

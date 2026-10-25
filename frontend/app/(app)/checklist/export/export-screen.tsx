@@ -261,7 +261,10 @@ export function ExportScreen() {
                           toggleModule(module.id, checked === true)
                         }
                       />
-                      <FieldLabel htmlFor={`module-${module.id}`} className="truncate">
+                      <FieldLabel
+                        htmlFor={`module-${module.id}`}
+                        className="min-w-0 break-words"
+                      >
                         {module.name}
                       </FieldLabel>
                     </Field>

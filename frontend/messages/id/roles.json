@@ -28,7 +28,7 @@
   "delete": {
     "title": "Hapus {name}?",
     "description": "Ini tidak dapat dibatalkan. Siapa pun yang masih memegangnya pada sebuah proyek harus dipindahkan ke peran lain terlebih dahulu.",
-    "confirm": "Hapus",
+    "confirm": "Hapus peran",
     "done": "Peran dihapus"
   },
   "create": {

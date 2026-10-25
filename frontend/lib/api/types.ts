@@ -698,6 +698,7 @@ export type EvalRunStatus = "running" | "done" | "failed";
 export type EvalMix = "balanced" | "explain" | "locate";
 export type EvalQuestionType = "explain" | "locate";
 export type EvalVerdict = "correct" | "partial" | "wrong" | "error";
+/** Mirrors `EvalSetCreate.count: Literal[10, 25, 50]` in `backend/app/schemas/eval.py`. */
 export type EvalCount = 10 | 25 | 50;
 export type EvalExclusionReason = "translation_unfaithful";
 

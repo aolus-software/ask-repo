@@ -133,7 +133,7 @@ wired in yet**, even though all four datastores are now read elsewhere in the ap
 | `PUT` | `/me/answer-style` | access token | Replace all three dials (every key required, `null` clears one); shapes your own Ask answers only. Audited as `user.answer_style.updated` |
 | `GET` | `/me/language` | access token | Your interface language: a BCP-47 tag (`en`, `id`, `ja`, `ms`, `zh-HK`, `zh-TW`, `ko`), or `null` for no preference |
 | `PUT` | `/me/language` | access token | Set it; `null` clears the choice and the interface follows the browser. `422` for a code not shipped. Audited as `user.language.updated` when it changes |
-| `GET` | `/me/activity` | access token | Your own audit events, newest first, paginated |
+| `GET` | `/me/activity` | access token | Your own audit events, newest first. `page`/`limit` only |
 
 ### Users
 
@@ -143,7 +143,7 @@ wired in yet**, even though all four datastores are now read elsewhere in the ap
 | `GET` | `/users/{id}` | any user | One account |
 | `POST` | `/users` | admin | Provision an account |
 | `PATCH` | `/users/{id}` | admin | Update name or admin flag |
-| `DELETE` | `/users/{id}` | admin | Deactivate, revoking sessions. `409 LAST_OWNER` if it would leave any project with no live owner — the body names the blocking projects |
+| `DELETE` | `/users/{id}` | admin | Deactivate, revoking sessions. `409 LAST_OWNER` if it would leave any project with no live owner — the body names the blocking projects; `409 LAST_ADMIN` if it would remove the last administrator — a plain `{code, message}` body |
 | `POST` | `/users/{id}/reset-password` | admin | Set a temporary password |
 
 `DELETE /users/{id}` is the one route in the codebase whose error body is wider than
@@ -321,9 +321,9 @@ what was expected.
 | Method | Path | Auth | Description |
 | --- | --- | --- | --- |
 | `GET` | `/checklist-modules` | any member | List modules for projects you are a member of, paginated |
-| `POST` | `/checklist-modules` | `module.create` | Name a module and point it at a path in the indexed repository. `400 MODULE_PATH_NOT_INDEXED` if the path matches nothing |
+| `POST` | `/checklist-modules` | `module.create` | Name a module and point it at a path in the indexed repository. `400 MODULE_PATH_NOT_INDEXED` if the path matches nothing, `409 PROJECT_NOT_READY`, `503 VECTOR_STORE_UNAVAILABLE` if the index cannot be read. A whitespace-only name is `422`; the path is trimmed of whitespace and surrounding slashes |
 | `GET` | `/checklist-modules/{id}` | any member | One module with its test cases, grouped by feature |
-| `PATCH` | `/checklist-modules/{id}` | `module.edit` | Rename or re-point the module |
+| `PATCH` | `/checklist-modules/{id}` | `module.edit` | Rename or re-point the module. A re-point answers `400 MODULE_PATH_NOT_INDEXED`, `409 PROJECT_NOT_READY` or `503 VECTOR_STORE_UNAVAILABLE` like create |
 | `DELETE` | `/checklist-modules/{id}` | `module.delete` | Soft-delete the module, its items, its change sets, and its chat |
 | `POST` | `/checklist-modules/{id}/generate` | `generate.run` | Publish a generation job; returns the module in `generating` status. `409 PROJECT_NOT_READY` while the project is being re-indexed |
 | `GET` | `/checklist-modules/{id}/change-sets` | any member | List the module's proposed change sets, newest first |
@@ -400,13 +400,13 @@ the answer path. Every route resolves its project through `access.py`: a non-mem
 
 | Method | Path | Auth | Description |
 | --- | --- | --- | --- |
-| `POST` | `/projects/{id}/eval-sets` | `eval.run` | Request a set of 10, 25 or 50 pairs with a `balanced`, `explain` or `locate` mix, optionally under a `sourcePath`; returns the set in `generating` status (`202`). `409 PROJECT_NOT_READY` while the project is not indexed or is being re-indexed, `400 MODULE_PATH_NOT_INDEXED` if the path matches nothing. Or send `{sourceSetId, language}` to translate a ready English set of this project into another language. The set is copied pair for pair, and the response is `202`. `422` (on `sourceSetId`, field type `eval_source_invalid`) if the source is not a ready, natively generated English set here; `409 EVAL_TRANSLATION_EXISTS` if a live translation into that language exists |
-| `GET` | `/projects/{id}/eval-sets` | `eval.read` | List the project's sets, newest first, each with its latest run's tally |
+| `POST` | `/projects/{id}/eval-sets` | `eval.run` | Request a set of 10, 25 or 50 pairs with a `balanced`, `explain` or `locate` mix, optionally under a `sourcePath`; returns the set in `generating` status (`202`). `409 PROJECT_NOT_READY` while the project is not indexed or is being re-indexed, `400 MODULE_PATH_NOT_INDEXED` if the path matches nothing, `503 VECTOR_STORE_UNAVAILABLE` if the index cannot be read. Both body shapes share one model, so a body matching neither answers `422` keyed as `fields["request"]`. Or send `{sourceSetId, language}` to translate a ready English set of this project into another language. The set is copied pair for pair, and the response is `202`. `422` (on `sourceSetId`, field type `eval_source_invalid`) if the source is not a ready, natively generated English set here; `409 EVAL_TRANSLATION_EXISTS` if a live translation into that language exists |
+| `GET` | `/projects/{id}/eval-sets` | `eval.read` | List the project's sets, newest first, each with its latest run's tally. `page`/`limit` only: the order is fixed, so there is no `sort` or `search` |
 | `GET` | `/eval-sets/{id}` | `eval.read` | One set with its pairs. `404 EVAL_SET_NOT_FOUND` |
 | `DELETE` | `/eval-sets/{id}` | `eval.run` | Soft-delete the set, its pairs, runs and results. `409 EVAL_RUN_IN_PROGRESS` while a run is live, `409 EVAL_SET_GENERATING` while the set, or a live translation of it, is generating |
 | `PUT` | `/eval-pairs/{id}/excluded` | `eval.run` | Exclude a pair from future runs, or include it again; a pair is excluded, never edited |
 | `POST` | `/eval-sets/{id}/runs` | `eval.run` | Answer and judge every included pair; returns the run in `running` status (`202`). `409 EVAL_SET_NOT_READY` (still generating, or every pair excluded), `409 EVAL_RUN_IN_PROGRESS`, `409 PROJECT_NOT_READY`, `409 EMBEDDING_MODEL_CHANGED` |
-| `GET` | `/eval-sets/{id}/runs` | `eval.read` | List the set's runs, newest first |
+| `GET` | `/eval-sets/{id}/runs` | `eval.read` | List the set's runs, newest first. `page`/`limit` only |
 | `GET` | `/eval-runs/{id}` | `eval.read` | One run with its per-pair results: the answer, the verdict and the judge's reason. `404 EVAL_RUN_NOT_FOUND` |
 
 A set is `generating` → `ready` / `failed` and a run is `running` → `done` / `failed`; there is no
@@ -478,7 +478,7 @@ voter. No route here records an audit event — exemption 7 in `.claude/rules/au
 | `PUT` | `/feedback/{targetType}/{targetId}` | any user | Record or revise the caller's own vote. Body: `rating` (`up`/`down`), `reasonCodes` (required, non-empty, for `down`), optional `note` (≤500 chars). `200 FeedbackRead`. `404 FEEDBACK_TARGET_NOT_FOUND` for a missing target, a user-role message, someone else's conversation, or a module outside scope. `400 FEEDBACK_REASON_NOT_APPLICABLE` for a reason code that does not apply to this target type. `422` for an unknown code, a `down` with no code, or a note over 500 characters |
 | `DELETE` | `/feedback/{targetType}/{targetId}` | any user | Withdraw the caller's own vote. `204`, idempotent — withdrawing a vote that does not exist is also `204` |
 | `GET` | `/feedback/summary` | admin | Counts by `feature` × `rating`, by reason code, and by `feature` × `promptVersion` (versions are per feature). Filters: `projectId`, `feature`, `rating`, `reasonCode`, `promptVersion`, `createdFrom`/`createdTo` (UTC calendar days, `YYYY-MM-DD`, both inclusive; a time of day is `422`, because a sub-day window would recover a vote's time) |
-| `GET` | `/feedback` | admin | A page of individual votes with their notes, newest first, same filters as the summary. Carries no user field of any kind, and `createdOn` is a bare UTC day — no time, no `updatedAt` — since a second-precision timestamp could be matched against the audit trail's `conversation.created` row to identify the voter |
+| `GET` | `/feedback` | admin | A page of individual votes with their notes, newest first, same filters as the summary, plus `page`/`limit` (no `sort` or `search`: the order is fixed, by UTC day and then id). Carries no user field of any kind, and `createdOn` is a bare UTC day — no time, no `updatedAt` — since a second-precision timestamp could be matched against the audit trail's `conversation.created` row to identify the voter |
 
 ## Layout
 
@@ -546,7 +546,8 @@ backend/
 │   │   ├── protocol.py   # IngestionQueue + TopicProducer + the in-memory double
 │   │   ├── producer.py   # KafkaIngestionQueue + ensure_topics
 │   │   ├── consumer.py   # handle_message, the routing ladder, the polling loop
-│   │   └── retry.py      # holds a delayed message until it is due, then re-queues it
+│   │   ├── retry.py      # holds a delayed message until it is due, then re-queues it
+│   │   └── heartbeat.py  # the lease-renewal task every long job runs beside its work
 │   ├── rag/               # one answer, stage by stage
 │   │   ├── retriever.py  # embed query → filtered search → merge adjacent → typed spans
 │   │   ├── chat.py       # Ollama / OpenAI chat models behind build_chat_model
@@ -566,7 +567,7 @@ backend/
 │   ├── worker.py          # the worker entrypoint: four consumers + retry ladders + mail loop + sweep
 │   ├── models/            # SQLAlchemy models: User, RefreshToken, Project, Conversation,
 │   │                      #   Message, Role, RolePermission, ProjectMembership, ...
-│   ├── repositories/      # the only layer that issues `select`
+│   ├── repositories/      # the only layer that issues `select`; lease.py holds the shared lease statements
 │   ├── schemas/           # 18 modules, all on ApiModel (base.py — the snake_case → camelCase boundary)
 │   └── services/          # 21 services plus path_tree.py and index_guards.py
 └── tests/

@@ -121,3 +121,32 @@ async def test_rejects_when_the_host_does_not_resolve() -> None:
         await validate_repo_url(
             "https://github.com/acme/repo.git", allowlist=ALLOWLIST, resolve=_fails
         )
+
+
+async def test_every_checked_address_is_pinned_in_resolver_order() -> None:
+    """A host with an IPv6 and an IPv4 record pins both, so one unreachable family is not fatal."""
+    result = await validate_repo_url(
+        "https://github.com/acme/repo.git",
+        allowlist=ALLOWLIST,
+        resolve=resolver("2606:50c0:8000::154", "140.82.121.4", "140.82.121.4"),
+    )
+    assert result.pinned_ips == ("2606:50c0:8000::154", "140.82.121.4")
+    assert result.pinned_ip == "2606:50c0:8000::154"
+
+
+@pytest.mark.parametrize(
+    "addresses",
+    [
+        ("140.82.121.4", "10.0.0.5"),
+        ("10.0.0.5", "140.82.121.4"),
+        ("2606:50c0:8000::154", "::1"),
+        ("2606:50c0:8000::154", "fe80::1"),
+        ("140.82.121.4", "169.254.169.254"),
+    ],
+)
+async def test_a_private_record_among_public_ones_pins_nothing(addresses: tuple[str, ...]) -> None:
+    """The whole answer is rejected, so no address -- checked or not -- is ever pinned."""
+    with pytest.raises(RepoUrlRejected, match="private or reserved"):
+        await validate_repo_url(
+            "https://github.com/acme/repo.git", allowlist=ALLOWLIST, resolve=resolver(*addresses)
+        )

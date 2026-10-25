@@ -5,32 +5,29 @@ Every read is scoped by a `ProjectScope` the caller obtained from
 service so no caller can forget it -- `docs/PRD.md` 7's phase-2 criterion is that read
 scoping lives in exactly one function and is confirmed by grep.
 
-The claim is a near-copy of `ProjectRepository.claim` rather than a shared helper: the
-two rows carry different status vocabularies and different outcome columns, and a
-premature abstraction over them would hide the day they stop agreeing.
+The lease statements (claim, renew, release, defer, the stranded sweep) are the shared
+ones in `app/repositories/lease.py`; each method here passes this table's status vocabulary
+and outcome columns, then stages its own live event.
 """
 
 import uuid
 from collections.abc import Sequence
-from datetime import UTC, datetime, timedelta
 from typing import Any, cast
 
-from sqlalchemy import Select, func, or_, select, update
+from sqlalchemy import Select, func, select, update
 from sqlalchemy.engine import CursorResult
 
 from app.core.access import ProjectScope
 from app.live.events import checklist_module_event
 from app.live.staging import stage_live_event
 from app.models.checklist import ChecklistModule, ChecklistModuleStatus
+from app.repositories import lease
 from app.repositories.base import BaseRepository
 
-# Declared beside the queries that grant and renew it, so the consumer (which claims)
-# and the generator (which renews) cannot drift apart on the number.
-LEASE_SECONDS = 300
-LEASE_RENEWAL_SECONDS = 60
-# How long a module may sit in `generating` with a dead lease before the sweep
-# re-enqueues it.
-STRANDED_AFTER_SECONDS = 120
+# The lease constants live with the shared lease statements, and are re-exported so the
+# consumer (which claims) and the generator (which renews) import them from here.
+LEASE_RENEWAL_SECONDS = lease.LEASE_RENEWAL_SECONDS
+LEASE_SECONDS = lease.LEASE_SECONDS
 
 
 class ChecklistModuleRepository(BaseRepository[ChecklistModule]):
@@ -125,47 +122,33 @@ class ChecklistModuleRepository(BaseRepository[ChecklistModule]):
         fresh request -- without it, a redelivered message starts an unwanted second
         generation the moment the first cleared its lease.
         """
-        now = datetime.now(UTC)
-        result = await self.session.execute(
-            update(ChecklistModule)
-            .where(
-                ChecklistModule.id == module_id,
-                ChecklistModule.deleted_at.is_(None),
-                ChecklistModule.last_job_id.is_distinct_from(job_id),
-                or_(
-                    ChecklistModule.lease_expires_at.is_(None),
-                    ChecklistModule.lease_expires_at < now,
-                ),
-            )
-            .values(
-                lease_owner=worker_id,
-                lease_expires_at=now + timedelta(seconds=lease_seconds),
-                last_job_id=job_id,
-                status=ChecklistModuleStatus.GENERATING.value,
-                error=None,
-                # Bulk UPDATE: `onupdate` does not fire on this path
-                # (.claude/rules/persistence.md).
-                updated_at=now,
-            )
-            .returning(ChecklistModule.project_id)
+        row = await lease.claim_lease(
+            self.session,
+            ChecklistModule,
+            row_id=module_id,
+            job_id=job_id,
+            worker_id=worker_id,
+            lease_seconds=lease_seconds,
+            extra_values={"status": ChecklistModuleStatus.GENERATING.value, "error": None},
+            returning=(ChecklistModule.project_id,),
         )
-        project_id = result.scalar_one_or_none()
-        if project_id is None:
+        if row is None:
             return False
-        stage_live_event(self.session, checklist_module_event(module_id, project_id))
+        stage_live_event(self.session, checklist_module_event(module_id, row[0]))
         return True
 
     async def renew_lease(
         self, *, module_id: uuid.UUID, worker_id: str, lease_seconds: int
     ) -> bool:
         """Extend our own lease. False means we lost it and must abandon the job."""
-        now = datetime.now(UTC)
-        result = await self.session.execute(
-            update(ChecklistModule)
-            .where(ChecklistModule.id == module_id, ChecklistModule.lease_owner == worker_id)
-            .values(lease_expires_at=now + timedelta(seconds=lease_seconds), updated_at=now)
+        return await lease.renew_lease(
+            self.session,
+            ChecklistModule,
+            row_id=module_id,
+            worker_id=worker_id,
+            lease_seconds=lease_seconds,
+            skip_deleted=False,
         )
-        return cast(CursorResult[Any], result).rowcount == 1
 
     async def release(
         self,
@@ -185,29 +168,20 @@ class ChecklistModuleRepository(BaseRepository[ChecklistModule]):
         outcome. The `rowcount` is a return value, never discarded: `False` means this
         run lost the right to record itself.
         """
-        now = datetime.now(UTC)
-        result = await self.session.execute(
-            update(ChecklistModule)
-            .where(
-                ChecklistModule.id == module_id,
-                ChecklistModule.deleted_at.is_(None),
-                ChecklistModule.lease_owner == worker_id,
-            )
-            .values(
-                status=status.value,
-                error=error,
-                lease_owner=None,
-                lease_expires_at=None,
-                last_job_id=job_id,
-                updated_at=now,
-                **fields,
-            )
-            .returning(ChecklistModule.project_id)
+        row = await lease.release_lease(
+            self.session,
+            ChecklistModule,
+            row_id=module_id,
+            job_id=job_id,
+            worker_id=worker_id,
+            status=status.value,
+            error=error,
+            fields=fields,
+            returning=(ChecklistModule.project_id,),
         )
-        project_id = result.scalar_one_or_none()
-        if project_id is None:
+        if row is None:
             return False
-        stage_live_event(self.session, checklist_module_event(module_id, project_id))
+        stage_live_event(self.session, checklist_module_event(module_id, row[0]))
         return True
 
     async def mark_in_review(self, module_id: uuid.UUID) -> None:
@@ -247,25 +221,13 @@ class ChecklistModuleRepository(BaseRepository[ChecklistModule]):
         loop -- one full generation per tick, forever, for as long as the module sits
         in `generating` with nobody on it.
         """
-        cutoff = datetime.now(UTC) - timedelta(seconds=generating_older_than_seconds)
-        now = datetime.now(UTC)
-        result = await self.session.execute(
-            update(ChecklistModule)
-            .where(
-                ChecklistModule.deleted_at.is_(None),
-                ChecklistModule.status == ChecklistModuleStatus.GENERATING.value,
-                ChecklistModule.updated_at < cutoff,
-                or_(
-                    ChecklistModule.lease_expires_at.is_(None),
-                    ChecklistModule.lease_expires_at < now,
-                ),
-            )
-            # Bulk UPDATE: `onupdate` does not fire on this path
-            # (.claude/rules/persistence.md).
-            .values(updated_at=now)
-            .returning(ChecklistModule.id, ChecklistModule.project_id)
+        rows = await lease.claim_stranded_rows(
+            self.session,
+            ChecklistModule,
+            working_status=ChecklistModuleStatus.GENERATING.value,
+            older_than_seconds=generating_older_than_seconds,
+            returning=(ChecklistModule.id, ChecklistModule.project_id),
         )
-        rows = result.all()
         for module_id, project_id in rows:
             stage_live_event(self.session, checklist_module_event(module_id, project_id))
         return [row[0] for row in rows]
@@ -300,21 +262,17 @@ class ChecklistModuleRepository(BaseRepository[ChecklistModule]):
         Guarded on `lease_owner` like `release`: a run that lost its lease has no right
         to write to the row.
         """
-        now = datetime.now(UTC)
-        result = await self.session.execute(
-            update(ChecklistModule)
-            .where(
-                ChecklistModule.id == module_id,
-                ChecklistModule.deleted_at.is_(None),
-                ChecklistModule.lease_owner == worker_id,
-            )
-            .values(lease_expires_at=now + timedelta(seconds=hold_seconds), updated_at=now)
-            .returning(ChecklistModule.project_id)
+        row = await lease.defer_lease(
+            self.session,
+            ChecklistModule,
+            row_id=module_id,
+            worker_id=worker_id,
+            hold_seconds=hold_seconds,
+            returning=(ChecklistModule.project_id,),
         )
-        project_id = result.scalar_one_or_none()
-        if project_id is None:
+        if row is None:
             return False
-        stage_live_event(self.session, checklist_module_event(module_id, project_id))
+        stage_live_event(self.session, checklist_module_event(module_id, row[0]))
         return True
 
     async def soft_delete_for_project(self, project_id: uuid.UUID) -> int:

@@ -69,7 +69,7 @@ describe("FeedbackScreen", () => {
 
     renderScreen();
 
-    expect(screen.getByText("Internal server error.")).toBeInTheDocument();
+    expect(screen.getByText(/Something went wrong on our side/)).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: /try again/i }));
     expect(refetchSummary).toHaveBeenCalledTimes(1);
@@ -97,6 +97,80 @@ describe("FeedbackScreen", () => {
     expect(container.querySelectorAll('[data-slot="skeleton"]').length).toBeGreaterThan(
       0,
     );
+  });
+
+  describe("URL-only filters", () => {
+    const row = {
+      id: "f1",
+      projectId: "abcdef12-0000-0000-0000-000000000000",
+      projectName: "Billing API",
+      targetType: "message",
+      feature: "ask",
+      rating: "down",
+      reasonCodes: [],
+      note: null,
+      promptVersion: "v3",
+      createdOn: "2026-10-24",
+      traceUrl: null,
+    };
+
+    function stubList(items: unknown[]) {
+      useFeedbackListMock.mockReturnValue({
+        data: { items, page: 1, limit: 25, totalCount: items.length, totalPages: 1 },
+        isLoading: false,
+        isError: false,
+        error: null,
+        refetch: vi.fn(),
+      });
+      useFeedbackSummaryMock.mockReturnValue({
+        data: undefined,
+        isLoading: false,
+        isError: false,
+        error: null,
+        refetch: vi.fn(),
+      });
+    }
+
+    it("shows a chip for each, using the project's name when a row gives it", () => {
+      searchState.value = `projectId=${row.projectId}&promptVersion=v3`;
+      stubList([row]);
+      renderScreen();
+
+      expect(screen.getByText("Project: Billing API")).toBeInTheDocument();
+      expect(screen.getByText("Prompt version: v3")).toBeInTheDocument();
+    });
+
+    it("falls back to a short id before any row has loaded", () => {
+      searchState.value = `projectId=${row.projectId}`;
+      stubList([]);
+      renderScreen();
+
+      expect(screen.getByText("Project: abcdef12")).toBeInTheDocument();
+    });
+
+    it("removes only the chip's own filter", () => {
+      searchState.value = `projectId=${row.projectId}&promptVersion=v3`;
+      replaceMock.mockClear();
+      stubList([row]);
+      renderScreen();
+
+      fireEvent.click(
+        screen.getByRole("button", { name: "Remove filter: Prompt version: v3" }),
+      );
+
+      expect(replaceMock).toHaveBeenCalledWith(
+        `/settings/feedback?projectId=${row.projectId}`,
+        { scroll: false },
+      );
+    });
+
+    it("shows no chips without those filters", () => {
+      searchState.value = "";
+      stubList([row]);
+      renderScreen();
+
+      expect(screen.queryByRole("button", { name: /remove filter/i })).toBeNull();
+    });
   });
 
   describe("when the list is empty", () => {

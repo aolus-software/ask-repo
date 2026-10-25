@@ -178,7 +178,7 @@
     "skipped": "{count, plural, one {# proposed change was} other {# proposed changes were}} skipped because the test case they referred to no longer exists.",
     "discard": "Discard",
     "applySelected": "Apply selected",
-    "discardTitle": "Discard proposed changes",
+    "discardTitle": "Discard proposed changes?",
     "discardDescription": "Discard these proposals? Nothing will be written to the checklist."
   },
   "chatPanel": {

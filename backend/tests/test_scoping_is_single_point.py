@@ -131,6 +131,27 @@ def test_nothing_outside_access_reads_a_live_events_recipients() -> None:
     assert offenders == [], f".recipients read outside the allowlist: {offenders}"
 
 
+# Repositories receive a `ProjectScope` and apply it in their WHERE; nothing else may read
+# its `ids`. A service that unpacks the scope into a raw id list hands the repository a
+# second, unlabelled copy of the access decision, which this grep cannot otherwise see.
+ALLOWED_SCOPE_IDS_READERS = {ACCESS}
+
+
+def test_nothing_outside_access_and_repositories_reads_scope_ids() -> None:
+    """`scope.ids` is read only by `app/core/access.py` and by repositories applying a
+    `ProjectScope` they were handed (`docs/PRD.md` section 7)."""
+    repositories = APP / "repositories"
+    offenders = [
+        path.relative_to(APP)
+        for path in _python_files()
+        if path not in ALLOWED_SCOPE_IDS_READERS
+        and repositories not in path.parents
+        and re.search(r"\bscope\.ids\b", path.read_text(encoding="utf-8"))
+    ]
+
+    assert offenders == [], f"scope.ids read outside access.py and repositories: {offenders}"
+
+
 def test_no_module_compares_created_by_to_an_actor() -> None:
     """`created_by` is attribution. After Phase 2.1 it gates nothing — the six inline
     gates it used to drive are now `require_permission` calls.

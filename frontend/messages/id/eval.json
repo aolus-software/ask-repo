@@ -51,7 +51,7 @@
     },
     "excludeLabel": "Kecualikan: {question}",
     "referenceAnswer": "Jawaban acuan",
-    "saveFailed": "Itu tidak tersimpan. Coba lagi"
+    "saveFailed": "Itu tidak tersimpan. Coba lagi."
   },
   "runTable": {
     "generatingTitle": "Membuat pertanyaan…",

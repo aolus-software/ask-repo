@@ -178,7 +178,7 @@
     "skipped": "{count, plural, other {# perubahan yang diusulkan}} dilewati karena kasus uji yang dirujuknya sudah tidak ada.",
     "discard": "Buang",
     "applySelected": "Terapkan yang dipilih",
-    "discardTitle": "Buang perubahan yang diusulkan",
+    "discardTitle": "Buang perubahan yang diusulkan?",
     "discardDescription": "Buang usulan ini? Tidak ada yang akan ditulis ke daftar periksa."
   },
   "chatPanel": {

@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.language import Language
 from app.models.checklist import ChecklistItemStatus
 from app.models.project import Project
-from app.services.checklist_export import COLUMNS, SHEET_TITLE, build_workbook
+from app.services.checklist_export import COLUMNS, build_workbook
 from app.services.export_labels import EXPORT_LABELS
 from tests.factories import create_checklist_item, create_checklist_module
 
@@ -41,7 +41,7 @@ async def test_columns_and_order_match_the_grid(db_session: AsyncSession) -> Non
     )
 
     sheet = load_workbook(BytesIO(content)).worksheets[0]
-    assert sheet.title == SHEET_TITLE
+    assert sheet.title == EXPORT_LABELS[Language.EN].checklist_sheet
     assert [cell.value for cell in sheet[1]] == [header for header, _ in COLUMNS]
     assert sheet.cell(row=2, column=1).value == "Auth"
     assert sheet.cell(row=2, column=3).value == "first"

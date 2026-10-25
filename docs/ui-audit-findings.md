@@ -35,61 +35,12 @@ excluded from every token, `dark:`, arbitrary-value and spacing check below.
 
 ## Open findings
 
-Every finding from the first three sweeps has been fixed and is in
-[`audit-finding-solved-logs.md`](audit-finding-solved-logs.md). Everything below was raised on
-2026-10-04 or 2026-10-24 and is still open; what was fixed on 2026-10-17 is in the log.
+No finding is open. Every finding from every sweep has been fixed and is in
+[`audit-finding-solved-logs.md`](audit-finding-solved-logs.md), under the sweep that raised it; the
+last open ones were fixed on 2026-10-25. A new sweep adds its rows to this table.
 
 | # | Finding | Severity | Raised |
 | --- | --- | --- | --- |
-| §U3.6 | `/settings/feedback` applies URL-only filters the screen cannot show or clear | 🟡 | 2026-10-04 |
-| §U3.7 | Eval tables have no pagination and stop at 100 rows | 🟡 | 2026-10-04 |
-| §U4.7 | The "Negative" test-case badge is coloured at two call sites | 🟡 | 2026-10-04 |
-| §U5.10 | The eval sizes 10/25/50 restate a backend rule without saying so | 🟡 | 2026-10-04 |
-| §U5.11 | The thumbs-down popover keeps stale reasons and sits outside the form contract | 🟡 | 2026-10-04 |
-| §U7.15 | The eval sets empty state has no action, and `ListError` sits flush in two cards | 🟡 | 2026-10-04 |
-| §U8.10 | A stray separator in the mock-data change-set card | 🟡 | 2026-10-04 |
-| §U8.11 | A stored interrupted answer is worded differently from the live one | 🟡 | 2026-10-04 |
-| §U9.5 | The eval set route answers a missing permission with `NotFound`, not `Forbidden` | 🟡 | 2026-10-04 |
-| §U9.7 | Admin screens request data before their admin gate | 🟡 | 2026-10-04 |
-| §U10.13 | Identifiers on the eval screens are in the body face | 🟡 | 2026-10-04 |
-| §U10.14 | Off-scale spacing and a `text-[10px]` badge | 🟡 | 2026-10-04 |
-| §U1.5 | The web manifest repeats two theme colours as raw hex | 🟡 | 2026-10-24 |
-| §U3.8 | Notification timestamps have no absolute time on hover | 🟡 | 2026-10-24 |
-| §U3.9 | The feedback table's date is a raw `YYYY-MM-DD` in every language | 🟡 | 2026-10-24 |
-| §U4.8 | Five more states pick their colour at the call site | 🟡 | 2026-10-24 |
-| §U5.14 | The translate dialog restates the backend's "English sources only" rule | 🟡 | 2026-10-24 |
-| §U6.17 | Single-sentence messages end in a full stop, and four small copy splits | 🟡 | 2026-10-24 |
-| §U6.18 | The not-found, in-progress and server error messages say what happened, not what to do | 🟡 | 2026-10-24 |
-| §U6.19 | Three destructive confirmations do not say what is lost | 🟡 | 2026-10-24 |
-| §U7.19 | Notification preferences load with no skeleton | 🟡 | 2026-10-24 |
-| §U8.17 | The "thinking" label is looked up two ways | 🟡 | 2026-10-24 |
-| §U8.18 | The two refinement chats' stream readers and panels are near-verbatim copies | 🟡 | 2026-10-24 |
-| §U10.15 | Two new off-scale spacings | 🟡 | 2026-10-24 |
-| §U10.16 | A small-caps "eyebrow" style outside the type scale | 🟡 | 2026-10-24 |
-| §U10.17 | The module list shows its source path in the body face | 🟡 | 2026-10-24 |
-| §U10.18 | A long module name in the export picker may be cut with no way to read it (SUSPECT) | 🟡 | 2026-10-24 |
-
-## Top priorities (2026-10-24)
-
-1. **Japanese, Korean and Chinese users cannot type a question reliably** (§U8.15). Pressing Enter
-   to pick a character sends the half-typed question, on Ask and both refinement chats. This shipped
-   with the languages it breaks, and the fix is one line.
-2. **Three screens report an outage as "nothing here"** (§U7.17, §U7.18, §U6.15). The new export
-   screen says a project has no modules, and the Ask picker says there is no matching project, when
-   in fact the request failed. "Re-index now" on Ask does nothing visible when it fails.
-3. **Keyboard and screen-reader gaps** (§U11.9, §U11.10, §U5.12, §U6.20, plus the open §U5.9 and
-   §U11.6–§U11.8). Three checklist filters have no name at all. Ask's composer shows no focus ring.
-   Every dialog's Close button is announced in English.
-4. **Contrast in light mode** (§U1.4). White text on the success, info and danger badges is 2.2–3.8
-   to 1, against a 4.5 target.
-5. **Small false or missing states**:
-   - §U8.14: the chats say "no permission" while the project loads.
-   - §U8.16 and §U8.13: a cut-off reply looks complete in the refinement chats.
-   - §U7.16: a vote briefly reverts.
-   - §U3.5 and §U3.6: the feedback screen's filter states.
-   - §U6.16: the signed-out language picker.
-6. **Copy** (§U6.17–§U6.19), **hygiene** (§U1.5, §U3.8, §U3.9, §U4.7, §U4.8, §U5.13, §U5.14,
-   §U7.19, §U8.17, §U8.18, §U10.13–§U10.18), and **documentation** (§U12.6–§U12.14).
 
 ---
 
@@ -383,96 +334,21 @@ Every finding this sweep raised here (§U1.4) was resolved on 2026-10-25 and is 
 
 ## U3 The list skeleton
 
-### §U3.6 `/settings/feedback` applies URL-only filters the screen cannot show or clear — 🟡 hygiene
+Every finding still open here (§U3.6–§U3.7) was resolved on 2026-10-25; all of them are in
+[`audit-finding-solved-logs.md`](audit-finding-solved-logs.md).
 
-**Where:** `app/(app)/settings/feedback/feedback-screen.tsx:23-31`, `:33-38` (`changedKey`);
-`hooks/use-feedback.ts:32`, `:36`; `components/output-feedback/feedback-filters.tsx:34-150`
-
-**What this is.** Filters on this screen live in the URL so a filtered view can be shared.
-
-**Why this can happen.** The screen reads `projectId` and `promptVersion` from the URL and sends
-them to the API, but the filter row has controls only for feature, vote, reason, from and to. A
-link that carries `?projectId=…` filters the list with nothing on screen saying so, and no control
-can remove it.
-
-**What it costs.** An administrator opens a shared link, sees a fraction of the feedback, and has
-no visible reason or way back except editing the URL by hand.
-
-**What we should do.** Either render a control (or at least a removable chip) for each filter the
-URL can carry, or stop reading the two the screen cannot show. One to two hours.
-
-### §U3.7 Eval tables have no pagination and stop at 100 rows — 🟡 hygiene
-
-**Where:** `hooks/use-eval.ts:29-32` (sets), `:62-65` (runs); `backend/app/schemas/pagination.py:13`
-(`MAX_PAGE_SIZE = 100`)
-
-**What this is.** Every other list in the app has a pagination footer (`docs/design.md` → Lists).
-
-**Why this can happen.** The eval set list and the run list each fetch one page with `?limit=100`,
-which is the backend's maximum. No eval component reads `totalCount` or renders a pager. Pair
-lists are not affected, since a set has at most 50 pairs.
-
-**What it costs.** The 101st eval set on a project, or the 101st run of a set, silently never
-appears. That is unlikely soon, but invisible when it happens.
-
-**What we should do.** Use `PaginationFooter` on both tables, as the project and checklist lists do.
-One to two hours.
 
 ## U4 Status and semantic colour
 
-### §U4.7 The "Negative" test-case badge is coloured at two call sites — 🟡 hygiene
+Every finding still open here (§U4.7) was resolved on 2026-10-25; all of them are in
+[`audit-finding-solved-logs.md`](audit-finding-solved-logs.md).
 
-**Where:** `components/checklist/item-grid.tsx:201-207`, `components/checklist/change-set-panel.tsx:183-189`
-
-**What this is.** `.claude/rules/design-system.md` §5 says a status maps to its colour in one
-module and renders through `StatusBadge`. A checklist test case can be marked "Negative" (a test
-that expects a failure).
-
-**Why this can happen.** Both places build the badge by hand with the same `text-warning
-border-warning/60` classes, instead of using one shared mapping.
-
-**What it costs.** Nothing yet, as the two copies match. The next change to one will not reach the
-other. Both also inherit §U1.4's low contrast.
-
-**What we should do.** Give the test-case kind a tone in one module and render both through
-`StatusBadge`. Half an hour.
 
 ## U5 Forms
 
-### §U5.10 The eval sizes 10/25/50 restate a backend rule without saying so — 🟡 hygiene
+Every finding still open here (§U5.10–§U5.11) was resolved on 2026-10-25; all of them are in
+[`audit-finding-solved-logs.md`](audit-finding-solved-logs.md).
 
-**Where:** `components/eval/generate-eval-set-dialog.tsx:24`, `lib/api/types.ts:673`;
-`backend/app/schemas/eval.py:24`; `docs/PRD.md` §2.1 Phase 2.6
-
-**What this is.** `forms.md` says the client must not restate a backend rule. The backend accepts
-only 10, 25 or 50 questions.
-
-**Why this can happen.** The dialog hard-codes `[10, 25, 50]` and the type mirrors it, with no
-comment linking either to the backend.
-
-**What it costs.** Nothing while the numbers agree. If the backend's options change, the dialog
-offers a choice that fails with a `422`.
-
-**What we should do.** At minimum, comment both sites as mirroring `schemas/eval.py`. Better, serve
-the options from the API. Minutes for the comment.
-
-### §U5.11 The thumbs-down popover keeps stale reasons and sits outside the form contract — 🟡 hygiene
-
-**Where:** `components/output-feedback/feedback-control.tsx:61-64`, `:84-88`, `:98`, `:78-81`, `:154-183`
-
-**What this is.** Thumbs-down opens a small popover where a user picks reasons and may add a note.
-
-**Why this can happen.** The reasons and note are seeded once, and later re-seeding only updates
-the vote. So closing without sending, removing a vote, or a failed save all leave the old ticks and
-text in place the next time it opens. The popover also uses a raw `Label`/`Textarea` rather than
-`Field`/`FieldLabel`/`FieldError`. Its textarea has an `aria-label` but no `id`. A failed save only
-toasts. The character limit and counter restate a backend limit.
-
-**What it costs.** A user who changed their mind sees reasons they did not mean to send pre-ticked,
-and can send them by accident.
-
-**What we should do.** Reset reasons and note whenever the popover opens on a fresh vote, and
-compose it from the form shells. One to two hours.
 
 ## U6 Feedback and copy
 
@@ -481,118 +357,27 @@ Every finding this sweep raised here (§U6.12–§U6.14) was resolved on 2026-10
 
 ## U7 Loading, empty and error
 
-### §U7.15 The eval sets empty state has no action, and `ListError` sits flush in two cards — 🟡 hygiene
+Every finding still open here (§U7.15) was resolved on 2026-10-25; all of them are in
+[`audit-finding-solved-logs.md`](audit-finding-solved-logs.md).
 
-**Where:** `components/eval/eval-set-table.tsx:33-43`; `app/(app)/projects/[id]/project-detail-screen.tsx:162-164`,
-`:183`, `:188-190`; `components/members/member-table.tsx:166`; `components/feedback/list-error.tsx:18`
-
-**What this is.** `docs/design.md` says an empty state carries the primary action. List errors sit
-inside the list's card.
-
-**Why this can happen.** The eval empty state has no `action`; the only Generate control is in the
-tab header. On both the Eval and Members tabs, `ListError` renders inside a `Card className="p-0"`,
-and `ListError` has no padding of its own, so the alert touches the card's edges.
-
-**What it costs.** Cosmetic, plus a small extra step for a first-time user.
-
-**What we should do.** Pass the generate dialog trigger as the empty state's action, and give
-`ListError` padding when it is inside a zero-padding card. Half an hour.
 
 ## U8 The streaming surfaces
 
-### §U8.10 A stray separator in the mock-data change-set card — 🟡 hygiene
+Every finding still open here (§U8.10–§U8.11) was resolved on 2026-10-25; all of them are in
+[`audit-finding-solved-logs.md`](audit-finding-solved-logs.md).
 
-**Where:** `components/mock-data/change-set-panel.tsx:181-182`; `components/form/form-error.tsx:10`;
-compare `components/checklist/change-set-panel.tsx:247`
-
-**Why this can happen.** A `<Separator />` renders unconditionally above `FormError`, which renders
-nothing when there is no error. The result is a dangling rule at the bottom of the card. The
-checklist twin has no such separator.
-
-**What we should do.** Remove it, or render it only with the error. Minutes.
-
-### §U8.11 A stored interrupted answer is worded differently from the live one — 🟡 hygiene
-
-**Where:** `components/ask/message-list.tsx:72-78`; `components/ask/interrupted-note.ts:9-10`;
-`components/ask/interrupted-note.tsx:4-8`
-
-**What this is.** When a stream drops mid-answer, the partial answer is kept and a note says so.
-
-**Why this can happen.** The live note reads "The connection dropped. What arrived above is kept."
-After reload, the stored message reads "This answer was interrupted. What arrived is kept." The
-`interrupted-note` comment claims one shared sentence across surfaces, which is untrue for the
-stored copy.
-
-**What it costs.** The same event is described two ways on either side of a reload.
-
-**What we should do.** Use `INTERRUPTED_MESSAGE` in `message-list.tsx` too. Minutes.
 
 ## U9 Navigation and route gating
 
-### §U9.5 The eval set route answers a missing permission with `NotFound`, not `Forbidden` — 🟡 hygiene
+Every finding still open here (§U9.5–§U9.7) was resolved on 2026-10-25; all of them are in
+[`audit-finding-solved-logs.md`](audit-finding-solved-logs.md).
 
-**Where:** `components/eval/eval-set-screen.tsx:60`; `backend/app/core/access.py:99-100`; compare
-`app/(app)/settings/feedback/feedback-screen.tsx:53`, `app/(app)/settings/roles/[id]/role-matrix-screen.tsx:64`
-
-**What this is.** `CLAUDE.md` ("`403` vs `404` is a security decision"): a member who can see a
-project but lacks a permission gets *forbidden*, because *not found* would contradict the screen
-they just came from.
-
-**Why this can happen.** The project has loaded, which proves the user is a member, but the screen
-answers a missing `eval.read` with `NotFound`.
-
-**What it costs.** A viewer following a link is told an eval set does not exist when it does.
-
-**What we should do.** Render `Forbidden` there. Minutes.
-
-### §U9.7 Admin screens request data before their admin gate — 🟡 hygiene
-
-**Where:** `app/(app)/settings/users/users-screen.tsx:30` then `:37`; `settings/audit/audit-screen.tsx:42`
-then `:48`; `settings/audit/[eventId]/audit-event-screen.tsx:26` then `:31`;
-`settings/roles/roles-screen.tsx:21-22` then `:35`; `settings/roles/[id]/role-matrix-screen.tsx:29-31`
-then `:50`; `settings/feedback/feedback-screen.tsx:47-48` then `:51`; `hooks/use-roles.ts:17`
-
-**What this is.** Admin screens render `Forbidden` for a non-admin. The backend is the real
-control, and it answers `403`.
-
-**Why this can happen.** React hooks must run before any early return, so each screen fires its
-data request before checking `isAdmin`. Only `useRoles` takes an `enabled` option, and no screen
-passes it.
-
-**What it costs.** A non-admin who types an admin URL sends a request that is refused. No data
-leaks, because the backend gates it. It is wasted traffic and a `403` in the console.
-
-**What we should do.** Give each admin hook an `enabled` option and pass `user.isAdmin`. One hour.
 
 ## U10 Layout, spacing, typography
 
-### §U10.13 Identifiers on the eval screens are in the body face — 🟡 hygiene
+Every finding still open here (§U10.13–§U10.14) was resolved on 2026-10-25; all of them are in
+[`audit-finding-solved-logs.md`](audit-finding-solved-logs.md).
 
-**Where:** `components/eval/eval-set-screen.tsx:79` (`sourcePath` in the header description);
-`components/eval/eval-run-table.tsx:69` (`chatModel`); `components/eval/eval-run-sheet.tsx:59`,
-`components/eval/eval-compare.tsx:53` (raw `pairId` fallback)
-
-**What this is.** `docs/design.md:80`, `:90`: paths and identifiers use `font-mono text-sm`. The
-eval Path and Source columns already do.
-
-**Why this can happen.** These four places render a path, a model id and a pair id in the body
-font.
-
-**What we should do.** Wrap each in `font-mono`. Minutes.
-
-### §U10.14 Off-scale spacing and a `text-[10px]` badge — 🟡 hygiene
-
-**Where:** `components/notifications/notification-bell.tsx:35` (`text-[10px]`, `-top-0.5 -right-0.5`);
-`gap-1.5` at `components/form/password-field.tsx:87`, `components/roles/role-badge.tsx:10`,
-`components/audit/audit-event-detail.tsx:25`, `components/audit/audit-change-list.tsx:92`; `py-2.5` at
-`audit-change-list.tsx:92`; `mb-1.5` at `components/eval/eval-pair-table.tsx:98`; `mt-0.5` at
-`eval-pair-table.tsx:64`, `:66`; `py-0.5` at `components/ask/answer.tsx:60`
-
-**What this is.** `docs/design.md:121`: spacing uses steps 1, 2, 3, 4, 6, 8 and 12 only. Type comes
-from the seven-row scale.
-
-**What we should do.** Snap each to the nearest step, or document an exception for the bell's
-count badge. Half an hour.
 
 ## U11 Icons and accessibility
 
@@ -685,272 +470,51 @@ These have moved:
 
 ## U1 Tokens and theme
 
-### §U1.5 The web manifest repeats two theme colours as raw hex — 🟡 hygiene
+Every finding still open here (§U1.5) was resolved on 2026-10-25; all of them are in
+[`audit-finding-solved-logs.md`](audit-finding-solved-logs.md).
 
-**Evidence:** CONFIRMED.
-
-**Where:** `app/manifest.ts:23-24`; `app/globals.css:14-15`
-
-**What this is.** `globals.css` is meant to be the only file with a raw hex colour. Every component
-names a token instead.
-
-**Why this can happen.** A web manifest is JSON served to the browser and cannot read a CSS
-variable. So `theme_color` and `background_color` copy `#615fff` and `#f1f5f9` by hand.
-
-**What it costs.** If the primary or background token changes, the installed-app chrome keeps the
-old colour, and nothing points at the copy.
-
-**What we should do.** Add a comment naming the two tokens it mirrors, and list the manifest as the
-one allowed exception in `.claude/rules/design-system.md`. Five minutes.
 
 ## U3 The list skeleton
 
-### §U3.8 Notification timestamps have no absolute time on hover — 🟡 hygiene
+Every finding still open here (§U3.8–§U3.9) was resolved on 2026-10-25; all of them are in
+[`audit-finding-solved-logs.md`](audit-finding-solved-logs.md).
 
-**Evidence:** CONFIRMED.
-
-**Where:** `components/notifications/notification-list.tsx:56-58`
-
-**What this is.** Every list shows relative time ("3 hours ago") with the exact time as its `title`,
-through `formatRelative`/`formatAbsolute` (`docs/design.md` → Lists).
-
-**Why this can happen.** The notification row renders `formatRelative` alone, and this one list is
-used on `/notifications` and in the bell.
-
-**What it costs.** On these screens alone, hovering a time shows nothing.
-
-**What we should do.** Add `title={formatAbsolute(n.createdAt)}`. Five minutes.
-
-### §U3.9 The feedback table's date is a raw `YYYY-MM-DD` in every language — 🟡 hygiene
-
-**Evidence:** CONFIRMED.
-
-**Where:** `components/output-feedback/feedback-table.tsx:~51-53`; `lib/api/types.ts:126`
-
-**What this is.** Admins see the day of a vote and never its time. That is deliberate
-(`.claude/rules/feedback.md` rule 2), so a relative "3 hours ago" is not possible here.
-
-**Why this can happen.** `formatDay` prints the ISO string as-is. Every other date in the app is
-formatted for the active locale.
-
-**What it costs.** A Japanese or Korean admin sees `2026-10-24` while every other date on screen is
-localised. The column also looks unlike its neighbours without saying why.
-
-**What we should do.** Format the day with the active locale (date only, no time). Note the date-only
-exception in `docs/design.md` → Lists. Fifteen minutes.
 
 ## U4 Status and semantic colour
 
-### §U4.8 Five more states pick their colour at the call site — 🟡 hygiene
+Every finding still open here (§U4.8) was resolved on 2026-10-25; all of them are in
+[`audit-finding-solved-logs.md`](audit-finding-solved-logs.md).
 
-**Evidence:** CONFIRMED.
-
-**Where:**
-- `components/checklist/module-table.tsx:84`: `tone="warning"` for "Review changes".
-- `components/checklist/module-table.tsx:94`: `text-danger` on the fail count.
-- `components/change-sets/operation-groups.tsx:66`, `:82`: add, change and remove headings.
-- `components/eval/eval-pair-table.tsx:93`: `text-warning` for "unfaithful translation".
-- `components/eval/eval-run-sheet.tsx:83`: `text-warning` for grounding warnings.
-
-**What this is.** `.claude/rules/design-system.md` §5 says every status maps to a tone in exactly one
-module, `lib/status.ts`. Project, module, item result, audit outcome, eval status and eval verdict
-all do.
-
-**Why this can happen.** These five have no mapping, so each call site chose its own colour. Four
-are new since `df7594e`, and they are the same family as the open §U4.7.
-
-**What it costs.** Nothing is false today, because each choice is sensible. The next screen to show
-a pending change set or an operation kind has nothing to copy, so it can choose differently.
-
-**What we should do.** Add `changeSetOperationTone` and a pending-change-set tone to
-`lib/status.ts`, and route these sites through it, together with §U4.7. One hour.
 
 ## U5 Forms
 
-### §U5.14 The translate dialog restates the backend's "English sources only" rule — 🟡 hygiene
+Every finding still open here (§U5.14) was resolved on 2026-10-25; all of them are in
+[`audit-finding-solved-logs.md`](audit-finding-solved-logs.md).
 
-**Evidence:** CONFIRMED.
-
-**Where:** `components/eval/translate-eval-set-dialog.tsx:19` (`TARGETS = LANGUAGES.filter(l => l !== "en")`);
-`components/eval/eval-set-screen.tsx:192`
-
-**What this is.** `.claude/rules/forms.md` limits client checks to required fields and shape. The
-backend owns its rules.
-
-**Why this can happen.** The dialog hard-codes that only English sets are translated, and only into
-the other six languages. The screen hard-codes when the Translate button appears.
-
-**What it costs.** If the backend widens the rule, the button stays hidden and the user never
-learns. That is the same cost as §U5.10.
-
-**What we should do.** Say so in a comment that names the backend rule. Better, have the set read
-carry a `translatable` flag. Half an hour.
 
 ## U6 Feedback and copy
 
-### §U6.17 Single-sentence messages end in a full stop, and four small copy splits — 🟡 hygiene
+Every finding still open here (§U6.17–§U6.19) was resolved on 2026-10-25; all of them are in
+[`audit-finding-solved-logs.md`](audit-finding-solved-logs.md).
 
-**Evidence:** CONFIRMED.
-
-**Where:**
-- `messages/en/ask.json:63` (`preflight.genericError` "Something went wrong.").
-- `messages/en/errors.json`: the single-sentence entries, such as `VALIDATION_ERROR` (line 3),
-  `INTERNAL_ERROR` (line 4) and the "… not found." group.
-- Contractions: `messages/en/notifications.json:10`, `messages/en/profile.json:82`.
-- Discard titles: `messages/en/checklist.json:179`, `messages/en/mockData.json:33`.
-- Possibly unused: `messages/en/eval.json:37-38` (`titleNamed` beside `title`).
-
-**What this is.** `docs/design.md` → Feedback says feedback copy has no trailing period. The owner
-decided on 2026-10-24 that copy of two or more sentences keeps its stops (§U12.14), so only
-single-sentence copy is in scope here.
-
-**Why this can happen.** The single-sentence strings above end in a period, and they reach toasts
-through `toast.error(errorText(e))` at nine call sites. Around them are four smaller splits:
-- "Couldn't" in two strings, where the rest of the catalogue writes "could not".
-- Both "Discard proposed changes" confirm titles have no "?", unlike every other confirm title.
-- `titleNamed` and `title` sit side by side, and one is probably unused.
-- "That did not save. Try again" (`messages/en/eval.json:54`) is the one multi-sentence string with
-  no final stop.
-
-**What it costs.** Toasts read as assembled by different hands. It is cosmetic.
-
-**What we should do.** Drop the period from single-sentence entries, write "could not", add the
-question marks, and remove whichever title key is unused. One hour, including all seven locales.
-
-### §U6.18 The not-found, in-progress and server error messages say what happened, not what to do — 🟡 hygiene
-
-**Evidence:** CONFIRMED.
-
-**Where:** `messages/en/errors.json`:
-- `VALIDATION_ERROR` (line 3), `INTERNAL_ERROR` (line 4), `INVALID_TOKEN` (line 5),
-  `ADMIN_REQUIRED` (line 11).
-- Every `*_NOT_FOUND` entry: users, projects, conversations, sessions, modules, items, both kinds
-  of change set, records, eval sets and runs, roles, audit events, notifications, feedback targets.
-- `EVAL_SET_NOT_READY` and both `*_GENERATION_IN_PROGRESS` entries.
-
-**What this is.** `docs/design.md` → Feedback asks error copy to say what to do next. The frontend
-picks a message by the backend's error code, and every one of the backend's 56 codes has an entry.
-
-**Why this can happen.** These entries state the condition only: "Project not found.", "Internal
-server error.", "Request validation failed.". A user who reaches one from a stale tab is left with a
-dead end. `INTERNAL_ERROR` also reads as a developer's message.
-
-**What we should do.** Add the next step to each. For not-found, that is "It may have been deleted;
-refresh the list". For in-progress, "Wait for it to finish". For `INTERNAL_ERROR`, "Something went
-wrong on our side. Try again, and tell an administrator if it keeps happening". One to two hours
-across seven locales.
-
-### §U6.19 Three destructive confirmations do not say what is lost — 🟡 hygiene
-
-**Evidence:** CONFIRMED.
-
-**Where:** `messages/en/mockData.json:4-5` (delete a record); `messages/en/projects.json:116-121`
-(remove a member); `messages/en/roles.json:29-31` (delete a role)
-
-**What this is.** A destructive confirmation names what is destroyed and what goes with it. Project,
-module, test case, eval set and clear-results all do.
-
-**Why this can happen.** Deleting a record says only "This cannot be undone." Removing a member
-says they lose access, but not that their conversations and recorded results stay, or that they can
-be added back. Deleting a role uses a bare "Delete" button, where every other dialog names its
-object ("Delete project").
-
-**What we should do.** Name the record, say what survives a removal, and write "Delete role". Half
-an hour.
 
 ## U7 Loading, empty and error
 
-### §U7.19 Notification preferences load with no skeleton — 🟡 hygiene
+Every finding still open here (§U7.19) was resolved on 2026-10-25; all of them are in
+[`audit-finding-solved-logs.md`](audit-finding-solved-logs.md).
 
-**Evidence:** CONFIRMED.
-
-**Where:** `components/notifications/preferences-screen.tsx:~56-95`
-
-**What this is.** A loading list shows skeleton rows shaped like the settled layout, so nothing jumps
-(`docs/design.md` → Lists). The profile's Language and Answer style sections do.
-
-**Why this can happen.** While loading, the preferences table renders its header with zero rows,
-then the rows pop in.
-
-**What we should do.** Render `TableSkeleton` while loading. Fifteen minutes.
 
 ## U8 The streaming surfaces
 
-### §U8.17 The "thinking" label is looked up two ways — 🟡 hygiene
+Every finding still open here (§U8.17–§U8.18) was resolved on 2026-10-25; all of them are in
+[`audit-finding-solved-logs.md`](audit-finding-solved-logs.md).
 
-**Evidence:** CONFIRMED.
-
-**Where:** `app/(app)/ask/[conversationId]/conversation-screen.tsx:~125`; `hooks/use-phase-label.ts`
-
-Both chats use `usePhaseLabel`, whose comment says it exists so all three surfaces say the same
-thing. Ask inlines its own `t.has("phases.…")` lookup. The output is identical today, and the next
-change to one will not reach the other. **Fix:** use the hook on Ask. Five minutes.
-
-### §U8.18 The two refinement chats' stream readers and panels are near-verbatim copies — 🟡 hygiene
-
-**Evidence:** CONFIRMED.
-
-**Where:** `lib/checklist/stream.ts` vs `lib/mock-data/stream.ts`;
-`components/checklist/chat-panel.tsx` vs `components/mock-data/chat-panel.tsx`
-
-The two stream readers differ only in the change-set event's name. The two panels differ only in
-copy, query keys and endpoints. `components/mock-data/chat-panel.tsx` says the copy is deliberate.
-The cost is that §U8.13 and §U8.16 each have to be fixed twice. **Fix:** one reader parameterised by
-the event name. The panels can stay separate. One hour.
 
 ## U10 Layout, spacing, typography
 
-### §U10.15 Two new off-scale spacings — 🟡 hygiene
+Every finding still open here (§U10.15–§U10.18) was resolved on 2026-10-25; all of them are in
+[`audit-finding-solved-logs.md`](audit-finding-solved-logs.md).
 
-**Evidence:** CONFIRMED.
-
-**Where:** `components/profile/profile-screen.tsx:91` (`lg:top-24`, `lg:w-48`);
-`components/form/password-input.tsx:35` (`pe-10`)
-
-Spacing comes from the steps 1, 2, 3, 4, 6, 8 and 12 (`docs/design.md:147`). The only documented
-exception is `pl-9` (`:158`). These two are new since `df7594e`. The rest of §U10.14's set is
-unchanged. **Fix:** move them onto the scale, or document them beside `pl-9`. Fifteen minutes.
-
-### §U10.16 A small-caps "eyebrow" style outside the type scale — 🟡 hygiene
-
-**Evidence:** CONFIRMED.
-
-**Where:** `components/audit/audit-change-list.tsx:92`; `components/audit/audit-event-detail.tsx:29`,
-`:126`; `components/eval/eval-pair-table.tsx:137`
-
-**What this is.** `docs/design.md:84-90` defines seven type styles, and a section title is
-`text-xl font-semibold` (`:108-109`).
-
-**Why this can happen.** Four places use `text-xs font-medium tracking-wide uppercase`, which is not
-in the scale. One of them is an `<h2>` (`audit-event-detail.tsx:126`).
-
-**What it costs.** In English these labels are tracked capitals. `uppercase` does nothing to
-Japanese, Korean or Chinese text, so the same label looks like a different element in those
-languages.
-
-**What we should do.** Either add the eyebrow as an eighth scale row, or use the muted `text-sm`
-label style. Fifteen minutes.
-
-### §U10.17 The module list shows its source path in the body face — 🟡 hygiene
-
-**Evidence:** CONFIRMED.
-
-**Where:** `components/checklist/module-table.tsx:61-63`. Related: `app/(app)/checklist/[moduleId]/module-screen.tsx:337`
-(SUSPECT, because the catalogue string would need a `<path>` tag)
-
-File paths are `font-mono text-sm` everywhere (`docs/design.md:80`, `:90`). The project, eval and
-path-picker screens now follow it, and this column does not. **Fix:** add `font-mono`. Five
-minutes.
-
-### §U10.18 A long module name in the export picker may be cut with no way to read it — 🟡 hygiene
-
-**Evidence:** SUSPECT. Unverified: whether the label is width-limited. Rendering a module with an
-80-character name settles it.
-
-**Where:** `app/(app)/checklist/export/export-screen.tsx:247` (`FieldLabel … className="truncate"`)
-
-The label truncates and has no `title`. Two modules whose names share a long prefix would then look
-identical. **Fix:** add `title={module.name}`, or let the label wrap. Five minutes.
 
 ## U11 Icons and accessibility
 

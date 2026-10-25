@@ -4,7 +4,7 @@ import { Play, Trash2 } from "lucide-react";
 import { useTranslations } from "next-intl";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { Fragment, type ReactNode, useState } from "react";
 
 import { DeleteEvalSetDialog } from "@/components/eval/delete-eval-set-dialog";
 import { EvalCompare } from "@/components/eval/eval-compare";
@@ -15,6 +15,7 @@ import { EvalStatusBadge } from "@/components/eval/eval-status-badge";
 import { TranslateEvalSetDialog } from "@/components/eval/translate-eval-set-dialog";
 import { DetailError } from "@/components/feedback/detail-error";
 import { JobFailureAlert } from "@/components/feedback/job-failure-alert";
+import { Forbidden } from "@/components/feedback/forbidden";
 import { NotFound } from "@/components/feedback/not-found";
 import { useBreadcrumbLabel } from "@/components/layout/breadcrumb-labels";
 import { FilterField } from "@/components/layout/filter-field";
@@ -61,7 +62,8 @@ export function EvalSetScreen({
     ? can(projectQuery.data, PERMISSION.EVAL_READ)
     : false;
   const setQuery = useEvalSet(setId, mayRead);
-  const runsQuery = useEvalRuns(setId, mayRead);
+  const [runsPage, setRunsPage] = useState(1);
+  const runsQuery = useEvalRuns(setId, mayRead, runsPage);
   const sourceSetId = setQuery.data?.sourceSetId ?? null;
   const sourceQuery = useEvalSet(sourceSetId ?? "", mayRead && Boolean(sourceSetId));
   const projectSets = useEvalSets(projectId, mayRead);
@@ -98,7 +100,7 @@ export function EvalSetScreen({
       />
     );
   }
-  if (projectQuery.data && !mayRead) return <NotFound />;
+  if (projectQuery.data && !mayRead) return <Forbidden />;
   if (setQuery.error) {
     return (
       <DetailError
@@ -120,16 +122,26 @@ export function EvalSetScreen({
     (pair) => pair.excluded && pair.exclusionReason === "translation_unfaithful",
   ).length;
   const running = runs.some((run) => run.status === "running");
-  const description = [
-    set.sourcePath ?? tTally("wholeProject"),
+  const descriptionParts: ReactNode[] = [
+    set.sourcePath ? (
+      <span key="source" className="font-mono">
+        {set.sourcePath}
+      </span>
+    ) : (
+      tTally("wholeProject")
+    ),
     ENDONYMS[set.language],
     t("pairCount", { count: set.pairCount }),
     set.indexedGeneration !== null
       ? t("generatedFrom", { generation: set.indexedGeneration })
       : null,
-  ]
-    .filter(Boolean)
-    .join(" · ");
+  ].filter(Boolean);
+  const description = descriptionParts.map((part, index) => (
+    <Fragment key={index}>
+      {index > 0 ? " · " : null}
+      {part}
+    </Fragment>
+  ));
 
   // Runs arrive newest first, so the oldest is run 1. The number tells apart two
   // runs started in the same second.
@@ -190,6 +202,8 @@ export function EvalSetScreen({
         action={
           canRun ? (
             <div className="flex items-center gap-2">
+              {/* Mirrors the backend's "English sources only" rule: see
+                  `translate-eval-set-dialog.tsx`. */}
               {set.language === "en" && !set.sourceSetId && set.status === "ready" ? (
                 <TranslateEvalSetDialog
                   projectId={projectId}
@@ -283,6 +297,12 @@ export function EvalSetScreen({
             error={runsQuery.error}
             onRetry={() => runsQuery.refetch()}
             setStatus={set.status}
+            pagination={{
+              page: runsQuery.data?.page ?? runsPage,
+              totalPages: runsQuery.data?.totalPages ?? 1,
+              totalCount: runsQuery.data?.totalCount ?? 0,
+              onPageChange: setRunsPage,
+            }}
           />
         </Card>
       </section>

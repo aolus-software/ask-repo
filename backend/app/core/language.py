@@ -34,6 +34,16 @@ def parse_language(value: str | None) -> Language | None:
         return None
 
 
+def language_or_default(value: str | None) -> Language:
+    """A stored language tag as a `Language`; unset or no-longer-shipped reads as English.
+
+    The one place that fallback is written. A shared document's language comes from a
+    project's `content_language`, so the fallback must not depend on which code path
+    produced it; changing it here changes it everywhere.
+    """
+    return parse_language(value) or Language.EN
+
+
 # Each language's English name. Used only to fill fixed prompt text, so a prompt never
 # carries a user-supplied language string (spec §1.1).
 LANGUAGE_NAMES: dict[Language, str] = {
@@ -116,8 +126,8 @@ def shared_language(values: Iterable[str | None]) -> Language:
     A document spanning projects -- a checklist export with no project filter -- has no
     single owner whose `content_language` could decide it.
     """
-    distinct = {parse_language(value) for value in values}
+    distinct = {language_or_default(value) for value in values}
     if len(distinct) == 1:
         (only,) = distinct
-        return only or Language.EN
+        return only
     return Language.EN

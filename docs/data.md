@@ -408,6 +408,13 @@ not a correctness boundary — two simultaneous callers both pass it. Removing t
 A worker that dies holding a lease is recovered when the lease expires: the reconcile sweep
 re-publishes it.
 
+The five tables that carry a lease (`projects`, `checklist_modules`, `mock_data_datasets`,
+`eval_sets`, `eval_runs`) share one set of statements, `app/repositories/lease.py` (claim, renew,
+release, defer and the stranded sweep), and one renewal heartbeat, `app/queue/heartbeat.py`.
+Each repository method stays a thin wrapper that passes its table's status vocabulary and stages
+its own live event; the project's `abandon` and three-branch `find_stranded`, and the eval run's
+`hold_for_commit`, are not shared.
+
 ### 3. A proposal is not a row
 
 Neither a generated checklist nor a generated mock dataset lands as rows. Both producers — the

@@ -1151,10 +1151,209 @@ has seven);
 
 **Fix:** reword to "the named exemptions" and rename `test_every_exemption_is_one_of_the_five`.
 
+### §2.2 Two services flatten the project scope into a raw id list, and the single-point grep cannot see it — 🟡 hygiene — ✅ RESOLVED 2026-10-25
+
+> Fixed. `FeedbackFilters` carries a `ProjectScope` instead of `project_ids`, and `AuditEventRepository.page` takes `visible_scope`; `scope.ids` is read only in `app/core/access.py` and `app/repositories/`, and `tests/test_scoping_is_single_point.py` now fails on a read anywhere else. On `fix/hygiene-sweep-2026-10-25`.
+>
+> Original finding follows.
+
+> **Corrected 2026-10-17.** This finding was first filed as "three reads of `scope.ids`", citing
+> `repositories/feedback.py:41`. That line reads a `project_ids` filter, not `scope.ids`. A recount
+> finds five reads outside `access.py`. Three of them are repositories applying a `ProjectScope`
+> they were handed, which is the intended pattern. The two that matter are in services. The
+> heading and blocks below are the corrected version.
+
+**Evidence:** CONFIRMED (`grep -rn "scope\.ids" backend/app`, re-run 2026-10-17).
+
+**Where:** `backend/app/services/feedback.py:260`, `backend/app/services/me.py:125` (the two service
+sites); `backend/app/repositories/project.py:84`, `checklist_module.py:58`, `checklist_item.py:42`
+(the three repository sites, which are correct); `backend/tests/test_scoping_is_single_point.py`
+
+**What this is.** `docs/PRD.md` §7 requires that which projects a user may read is decided in one
+function, `resolve_project_scope`, and a grep test enforces it. The resolver returns a
+`ProjectScope`: either unrestricted (an administrator) or a set of project ids. Repositories
+receive that object and apply it in their `WHERE` clause.
+
+**Why this can happen.** `FeedbackService` and `MeService` do not pass the `ProjectScope` down.
+Each unpacks it into a plain list (`None if scope.unrestricted else scope.ids`), and the repository
+filters on that list. The result is correct today, because both lists come straight from the
+resolver. But the repository can no longer tell a resolver-issued list from any other list of ids.
+The grep test has no pattern for `scope.ids`, so a later service that builds the list some other
+way would also pass.
+
+**What it costs.** Nothing today. It is the shape that lets read scoping leak out of `access.py`
+without any test noticing.
+
+**What we should do.** Pass the `ProjectScope` itself into `FeedbackRepository` and the activity
+query, the way the project and checklist repositories already do. Then add a grep pattern for
+`scope.ids` outside `app/core/access.py` and `app/repositories/`. About an hour.
+
+### §7.1 Four eval routes do not declare `422` — 🟡 hygiene — ✅ RESOLVED 2026-10-25
+
+> Fixed. `get_eval_set`, `delete_eval_set`, `start_eval_run` and `get_eval_run` declare `422`. On `fix/hygiene-sweep-2026-10-25`.
+>
+> Original finding follows.
+
+**Evidence:** CONFIRMED.
+
+**Where:** `backend/app/api/routes/eval.py:91-102`, `:105-116`, `:136-150`, `:170-181`;
+`backend/app/api/routes/projects.py:118`, `:184` (the siblings that declare it)
+
+**What this is.** `.claude/rules/response-api.md` (`:117-120`, `:150`) requires `422` on a route
+that takes a body or typed query parameters. The project routes go further and declare it for a
+typed UUID path parameter too, so `/docs` and generated clients describe the malformed-id case.
+
+**Why this can happen.** `get_eval_set`, `delete_eval_set`, `start_eval_run` and `get_eval_run`
+take a UUID path parameter and omit `422`, while the project routes with the same shape declare
+it. Strictly, the rule's wording does not require it for a path-only route, so this is a sibling
+inconsistency rather than a rule breach. `start_eval_run` also takes a body, and for that route
+the rule does apply.
+
+**What we should do.** Add `422` to the four `responses` blocks. Minutes.
+
+### §7.2 Eval, feedback and activity lists accept `sort`/`search` and ignore them — 🟡 hygiene — ✅ RESOLVED 2026-10-25
+
+> Fixed, by owner decision (2026-10-25): a `PageQuery` (page and limit only), which `ListQuery` now extends, serves the two eval lists, `/me/activity` and the feedback list. The feedback order stays day-then-id. The frontend never sent `sort` or `search` to these lists. On `fix/hygiene-sweep-2026-10-25`.
+>
+> Original finding follows.
+
+**Evidence:** CONFIRMED.
+
+**Where:** `backend/app/api/routes/eval.py:74-89`, `:153-167`; `backend/app/services/eval.py:136-151`,
+`:319-332`; `backend/app/api/routes/feedback.py:37-50` (takes `FeedbackListQuery`, a `ListQuery`
+subclass); `backend/app/api/routes/me.py:80-93`
+
+**What this is.** `ListQuery` carries `page`, `limit`, `sort`, `sortDirection` and `search`.
+`.claude/rules/router.md` says an unknown `sort` answers `400`, and the project, checklist and
+conversation lists do.
+
+**Why this can happen.** These routes take `ListQuery` but have a fixed order, so the service
+reads only `page` and `limit`. `?sort=bogus` answers `200`, and `?search=x` returns the whole list.
+
+**What it costs.** A client that sends a search gets an unfiltered list and no error, and the
+generated docs advertise parameters that do nothing.
+
+**What we should do.** Add a `PageQuery` (page and limit only) for fixed-order lists, or honour
+or reject the fields. One to two hours, across the four routes.
+
+### §7.3 An eval set can be created with a whitespace-only name — 🟡 hygiene — ✅ RESOLVED 2026-10-25
+
+> Fixed. A shared `ResourceName` type (`app/schemas/fields.py`) strips before the length check, on the eval set name and both checklist module name fields, so a whitespace-only name is a `422`. On `fix/hygiene-sweep-2026-10-25`.
+>
+> Original finding follows.
+
+**Evidence:** CONFIRMED.
+
+**Where:** `backend/app/schemas/eval.py:22`; `backend/app/services/eval.py:90`
+
+**Why this can happen.** `name` has `min_length=1` but no stripping, and the service strips it
+after validation. `{"name": "   "}` passes, stores `""`, and writes an empty audit `target_label`.
+
+**What we should do.** Strip in a validator before the length check. Minutes. The checklist
+module name has the same gap; fix both together.
+
+### §9.17 `HOST` and `PORT` are settings nothing reads — 🟡 hygiene — ✅ RESOLVED 2026-10-25
+
+> Fixed, by owner decision (2026-10-25): `HOST` and `PORT` are removed from `app/config.py`, `backend/.env.example` and `docs/configuration.md`, after a grep of the repository (including `infra/`) found no reader. On `fix/hygiene-sweep-2026-10-25`.
+>
+> Original finding follows.
+
+**Where:** `backend/app/config.py:28-29`; `backend/.env.example:12-13`; `docs/configuration.md:82-83`
+
+The bind address comes from the uvicorn command (`Makefile:207`,
+`infra/backend.prod.Dockerfile:68`). `grep -rnw "settings\.\(host\|port\)" backend/app` returns
+nothing, so an operator who sets `PORT=9000` changes nothing. **Fix:** delete the two fields and
+their example and doc rows, or pass them to uvicorn. Every other of the 108 settings is read.
+
+### §9.19 The "project is indexed" guard exists in three copies — 🟡 hygiene — ✅ RESOLVED 2026-10-25
+
+> Fixed. `require_indexed` lives in the leaf module `app/core/indexed.py` and is called by `access.require_answerable`, `IndexedPathReader` and `index_guards` (which re-exports it). The runner's variant raises a terminal ingestion error with its own message and stays separate. On `fix/hygiene-sweep-2026-10-25`.
+>
+> Original finding follows.
+
+**Where:** `backend/app/services/index_guards.py:16-26`, `backend/app/core/access.py:155-181`
+(`require_answerable`), `backend/app/services/indexed_path.py:200-212`; a fourth variant at
+`backend/app/eval/runner.py:116-119` (it raises `TerminalIngestionError` with its own message)
+
+Same condition, same message, three bodies (`require_answerable` adds the `EMBEDDING_MODEL_CHANGED`
+check on top of the shared condition) — although `index_guards.py`'s own docstring says it
+exists "so a fourth caller cannot drift" (commit `8f42a28`, a partial fix of §9.4). **Fix:** move
+`require_indexed` to a leaf module (importing it from `index_guards` would cycle through
+`IndexedPathReader`) and call it from all three. One hour.
+
+### §9.20 The lease and heartbeat mechanism is copied across five repositories — 🟡 hygiene — ✅ RESOLVED 2026-10-25
+
+> Fixed, by owner decision (2026-10-25). `app/repositories/lease.py` holds the lease constants and the claim, renew, release, defer and stranded-claim queries, parameterised by model and by what differs per table; `app/queue/heartbeat.py` holds one renewal loop and context manager; `app/queue/job_failure.py` holds the shared defer, fail and route-failure steps. Each repository keeps a thin method that stages its own live event, so `tests/test_live_event_sites.py` and every lease, sweep, consumer and retry test pass unedited. Deliberately not shared: the project's `abandon` and three-branch `find_stranded`, the eval run's `hold_for_commit`, `mark_in_review`, each table's extra claim gates, and whether renewal skips soft-deleted rows (a `skip_deleted` flag, because unifying it would change behaviour). On `fix/hygiene-sweep-2026-10-25`.
+>
+> Original finding follows.
+
+**Where:** `claim`/`renew_lease`/`release`/`claim_stranded`/`defer` in
+`backend/app/repositories/checklist_module.py`, `mock_data_dataset.py`, `eval_set.py`, `eval_run.py`
+(and the project's `claim`/`renew_lease`/`release`/`find_stranded`); `LEASE_SECONDS`/`LEASE_RENEWAL_SECONDS`
+repeated in all five; a renewal heartbeat in five runners — `_renew`/`_stop_renewal` in
+`checklist/generator.py:212,235`, `mockdata/generator.py:227,246`, `eval/generator.py:146,159` and
+`eval/runner.py:332,349`, and a differently named `_renew_lease` in `ingestion/pipeline.py:334`; `_defer`/`_fail`/`_route_failure` in three queue handlers
+
+A lease is how one worker claims a job so another cannot run it at the same time. `eval_set.py:3-4`
+calls itself "a near-copy" of the mock-data repository. Parameter names already diverge
+(`generating_older_than_seconds` / `older_than_seconds` / `pending_older_than_seconds`). A fix to the
+lease protocol — §8.2 is one — has to land in five places. **Fix:** a lease helper parameterised
+by table, and one heartbeat context manager. A day; do it before a sixth job kind.
+
+### §9.21 Four dead `STRANDED_AFTER_SECONDS` constants — 🟡 hygiene — ✅ RESOLVED 2026-10-25
+
+> Fixed. The four dead constants are deleted; the live value stays in `app/worker.py`. On `fix/hygiene-sweep-2026-10-25`.
+>
+> Original finding follows.
+
+**Where:** `backend/app/repositories/checklist_module.py:33`, `mock_data_dataset.py:28`,
+`eval_set.py:23`, `eval_run.py:23`
+
+Nothing imports them; the live value is `backend/app/worker.py:73`. **Fix:** delete them.
+
+### §9.22 Eval does not normalise `sourcePath` the way checklist modules do — 🟡 hygiene — ✅ RESOLVED 2026-10-25
+
+> Fixed. `normalise_source_path()` in `app/services/path_tree.py` serves checklist modules and eval sets, and eval uses the shared `MAX_SOURCE_PATH_CHARS` (512, down from 1024) and `MAX_MODULE_NAME_CHARS`. The database columns are unchanged, so no migration. On `fix/hygiene-sweep-2026-10-25`.
+>
+> Original finding follows.
+
+**Where:** `backend/app/services/eval.py:83-91`, `backend/app/eval/generator.py:95`; compare
+`backend/app/services/checklist_module.py:163`; `backend/app/services/path_tree.py:34-47`;
+`backend/app/schemas/eval.py:12`, `:23`; `backend/app/models/checklist.py:25-26`
+
+A checklist module strips whitespace and slashes from its path, so `src/` and `/src` work. Eval
+passes it raw, so the same input answers `400 MODULE_PATH_NOT_INDEXED`. Eval also caps the path at
+1024 characters where checklist uses 512, and repeats the 120-character name limit as its own
+constant. **Fix:** one shared normaliser and the shared length constants. One hour.
+
+
 
 
 
 ## Sweep 2026-10-24
+
+### Top priorities, as the sweep wrote them
+
+Every item in this list is resolved; it is kept here as the sweep's own history.
+
+The 2026-10-24 sweep found no security finding, no 🔴 bug and no 🟠 risk in the backend. Access,
+read scoping, conversation privacy, the clone's address checks and soft delete all held across
+Phase 2.7. Everything open is hygiene or documentation.
+
+1. **Error text and logs that say more than they should** (§6.1, §6.2): a provider outage can put an
+   internal URL on the project screen, and a refused reset email may log the address. Neither leaks
+   a secret.
+2. **The eval job edge cases** (§5.1, §8.3–§8.7): orphan results after a mid-run delete, a failed
+   run's empty tallies, a generator that never checks its lease, a resumed run's overwritten stamp,
+   audit-after-publish ordering, and a translation that fails for the wrong reason.
+3. **The response-contract gaps** (§7.1–§7.9), led by the membership routes (§7.4) and the
+   undeclared path error on module create (§7.5).
+4. **The duplication and dead code** (§9.17, §9.19–§9.22, §9.32–§9.34), the clone process clean-up
+   (§4.1), the scope plumbing in two services (§2.2), and the IPv6 pin question (§4.2).
+5. **The documentation** (§9.30, §9.36, §9.38): stale test and schema comments, the architecture
+   page's notification-site count, and a phase-1 docstring. §9.35 and §9.37 were fixed with the
+   v2.4.0 release cut and are in the log.
+
 
 ### §9.35 PRD §6 still says Phase 2.7 PR C is "in progress" — 📄 doc — ✅ RESOLVED 2026-10-24
 
@@ -1297,6 +1496,258 @@ snapshots, and adding "at the time" would make that explicit. Ten minutes.
 
 "In phase 1 it is unrestricted; phase 2 changes the resolver's body" — phase 2.1 shipped per-project
 access long ago. **Fix:** "The scope comes from the access resolver and nowhere else." Two minutes.
+
+### §4.1 A timed-out or cancelled clone leaves its `git` process behind — 🟡 hygiene — ✅ RESOLVED 2026-10-25
+
+> Fixed. The cloner's `finally` kills a still-running process and awaits `process.wait()` under `asyncio.shield`; two tests with a real process cover the timeout and the cancellation. On `fix/hygiene-sweep-2026-10-25`.
+>
+> Original finding follows.
+
+**Evidence:** CONFIRMED by reading the code; not reproduced.
+
+**Where:** `backend/app/ingestion/cloner.py:218-230`; the scratch directory is removed by
+`backend/app/ingestion/pipeline.py` (`shutil.rmtree`)
+
+**What this is.** Indexing a project starts by running `git clone` as a child process. The cloner
+waits for it with a 120-second timeout (`docs/PRD.md` §9) and a size watcher, so a hung or huge
+clone cannot hold its job forever.
+
+**Why this can happen.** On timeout the code calls `process.kill()` and raises at once — it never
+awaits `process.wait()`, so the dead process is not reaped until the event loop gets round to it.
+If the worker is cancelled mid-clone (a shutdown, a redeploy), the `finally` block stops only the
+size watcher: `git` is neither killed nor awaited, and keeps writing into `/data/repos` while the
+pipeline's `rmtree` removes the same directory.
+
+**What it costs.** No user sees anything. An operator may find stray `git` processes after a
+redeploy, or leftover scratch directories that the next run has to step around.
+
+**What we should do.** In the `finally`, kill the process if it is still running and await
+`process.wait()` (under `asyncio.shield`, since the task may be cancelled). Half an hour.
+
+### §4.2 The connect-time address pin uses only the first record, and may not accept IPv6 — 🟡 hygiene — ✅ RESOLVED 2026-10-25
+
+> The SUSPECT is refuted, and the first-record half is fixed. An unbracketed IPv6 literal in `http.curloptResolve` works: a local git and curl reached an `[::1]` server through it. Separately, the pin now carries every validated address (`host:port:addr1,addr2`) instead of the first, so a dual-stack host with one unreachable address still clones. The check that every resolved address is public is unchanged and runs first; a single private record still rejects the whole answer, and nothing unchecked is ever pinned. The production base image ships git 2.39.5 and libcurl 7.88.1, newer than the 7.59 that introduced the comma form (checked with `docker run python:3.13-slim-bookworm`). On `fix/hygiene-sweep-2026-10-25`.
+>
+> Original finding follows.
+
+**Evidence:** SUSPECT. Unverified: whether the deployed `git`/`curl` accepts an unbracketed IPv6
+literal in `http.curloptResolve`. Running `git -c http.curloptResolve=github.com:443:<ipv6> ls-remote
+https://github.com/…` in the production image settles it.
+
+**Where:** `backend/app/core/repo_url.py:124-130`; `backend/app/ingestion/cloner.py:44`
+
+**What this is.** To stop a repository URL from being re-resolved to a private address between the
+check and the clone, the validator checks every address the host resolves to, then pins the clone
+to one of them with curl's resolve override.
+
+**Why this can happen.** It pins `addresses[0]`. If that is an IPv6 address and curl wants it
+bracketed, the clone fails; if that one address is unreachable, the clone fails rather than trying
+the next. Either way the failure is a retryable "clone failed", never a request to an unchecked
+address — the security control holds.
+
+**What we should do.** Settle the IPv6 question first. If it bites, prefer an IPv4 record or
+bracket IPv6 literals. One hour, including a test.
+
+### §7.4 The four membership routes declare no `summary` and no error responses — 🟡 hygiene — ✅ RESOLVED 2026-10-25
+
+> Fixed. The four membership routes declare `summary`, `status_code` and `401`/`403`/`404`/`422`, plus `409` on add, change and remove. On `fix/hygiene-sweep-2026-10-25`.
+>
+> Original finding follows.
+
+**Evidence:** CONFIRMED.
+
+**Where:** `backend/app/api/routes/members.py:29`, `:37-40`, `:52`, `:64`; the raises are in
+`backend/app/services/membership.py:84`, `:87`, `:89`, `:168`, `:181`, `:216`, `:249`
+
+**What this is.** `.claude/rules/response-api.md` requires every route to declare a `summary`, a
+`status_code`, and a `responses` block listing what its service raises, so `/docs` and every
+generated client describe the real errors.
+
+**Why this can happen.** The members router never had its contract pass. Its four routes (list,
+add, change role, remove) declare none of it, and two have no `status_code`. The service raises
+`404` (`ROLE_NOT_FOUND`, `USER_NOT_FOUND`, `MEMBERSHIP_NOT_FOUND`), `409` (`MEMBERSHIP_EXISTS`,
+`LAST_OWNER`) and `403 INSUFFICIENT_ROLE`.
+
+**What it costs.** `/docs` shows these routes with only their success status, titled by function
+name. A generated client has no typed error for "this would leave the project with no owner".
+
+**What we should do.** Add `summary`, `status_code` and `responses` (401/403/404/422 on all four,
+409 on add, change and remove). Half an hour. No other router has this gap.
+
+### §7.5 The source-path check's errors are undeclared on three routes — 🟡 hygiene — ✅ RESOLVED 2026-10-25
+
+> Fixed. Module create and eval set create declare `400` and `503`; module `PATCH` declares `400`, `409` and `503`. On `fix/hygiene-sweep-2026-10-25`.
+>
+> Original finding follows.
+
+**Evidence:** CONFIRMED.
+
+**Where:** `backend/app/api/routes/checklist_modules.py:140-146` (`POST`), `:170-176` (`PATCH`);
+`backend/app/api/routes/eval.py:58-70` (`POST /projects/{id}/eval-sets`); the raises are in
+`backend/app/services/index_guards.py:15-27`, `:74-87` and `backend/app/services/indexed_path.py:143-148`
+
+**What this is.** A checklist module or an eval set can be pointed at a path in the repository.
+`require_path_indexed` refuses a path the index does not contain with
+`400 MODULE_PATH_NOT_INDEXED`, and answers `503 VECTOR_STORE_UNAVAILABLE` if the vector store cannot
+be read.
+
+**Why this can happen.** Neither module route declares `400` or `503`, the module `PATCH` also
+omits the `409 PROJECT_NOT_READY` that `require_indexed` raises, and the eval-set route omits `503`.
+
+**What it costs.** The most common error on module create — a mistyped path — is absent from
+`/docs` and from every generated client, and a vector-store outage arrives as an undocumented
+status.
+
+**What we should do.** Declare `400` and `503` on all three, and `409` on the module `PATCH`.
+Fifteen minutes.
+
+### §7.6 The `409` on `DELETE /users/{id}` is declared with a shape `LAST_ADMIN` does not have — 🟡 hygiene — ✅ RESOLVED 2026-10-25
+
+> Fixed. The `409` is declared as `LastOwnerErrorResponse | ErrorResponse`, covering `LAST_OWNER` with `projects` and `LAST_ADMIN` without; `tests/test_error_shape.py` pins both. On `fix/hygiene-sweep-2026-10-25`.
+>
+> Original finding follows.
+
+**Evidence:** CONFIRMED.
+
+**Where:** `backend/app/api/routes/users.py:96-117`; `backend/app/schemas/errors.py:40-41`;
+`backend/app/services/user.py:87-88` (`LAST_ADMIN`), `:236` (`LAST_OWNER` with `extra`)
+
+**What this is.** Deactivating a user can be refused two ways: `LAST_OWNER` (it would leave projects
+ownerless), whose body lists those projects, and `LAST_ADMIN` (it would remove the last
+administrator), whose body is the plain `{code, message}`.
+
+**Why this can happen.** The route declares `LastOwnerErrorResponse` for every `409`, and that model
+makes `projects` a required list.
+
+**What it costs.** A client generated from `/docs` that deserialises the `409` strictly fails on a
+`LAST_ADMIN` refusal — the one case where an admin most needs to read the message.
+
+**What we should do.** Make `projects` optional, or declare the two shapes as a union. Fifteen
+minutes.
+
+### §7.7 The three download routes document no body — 🟡 hygiene — ✅ RESOLVED 2026-10-25
+
+> Fixed. `download_response()` declares the `200` media types and the `Content-Disposition` header on the checklist, project and both mock-data exports (four routes; the finding counted three). On `fix/hygiene-sweep-2026-10-25`.
+>
+> Original finding follows.
+
+**Evidence:** CONFIRMED.
+
+**Where:** `backend/app/api/routes/projects.py:~166-190` (`.xlsx`/`.zip`, chosen at runtime);
+`backend/app/api/routes/checklist_items.py:73` (`.xlsx`); `backend/app/api/routes/mock_data_datasets.py:203-240`
+(`.json`/`.xlsx`)
+
+**What this is.** The export routes return a file with `response_class=Response`.
+`.claude/rules/response-api.md` treats an undeclared success body as a defect unless a reason is
+documented.
+
+**Why this can happen.** None declares a `200` content type or the `Content-Disposition` header, and
+none documents why.
+
+**What it costs.** `/docs` shows a `200` with no body; a generated client returns an untyped blob.
+
+**What we should do.** Add `responses={200: {"content": {<media type>: {}}, …}}` to each. Fifteen
+minutes.
+
+### §7.8 The eval-set create body marks every field optional — 🟡 hygiene — ✅ RESOLVED 2026-10-25
+
+> Fixed. The eval-set create route's `description` names its two body shapes and says shape errors key as `fields["request"]`. On `fix/hygiene-sweep-2026-10-25`.
+>
+> Original finding follows.
+
+**Evidence:** CONFIRMED.
+
+**Where:** `backend/app/schemas/eval.py:22-57`
+
+**What this is.** `POST /projects/{id}/eval-sets` takes one of two bodies: generate (`name`,
+`count`, `mix`, optional `sourcePath`) or translate (`sourceSetId`, `language`). A
+`model_validator` enforces "exactly one shape".
+
+**Why this can happen.** Both shapes live in one model, so every field is optional in the schema.
+The shape rule exists only in the validator and a docstring. The reason is stated — a union would
+prefix the field keys in `422` bodies — but the route's description does not say so.
+
+**What it costs.** A generated client accepts a body that always answers `422`.
+
+**What we should do.** Describe the two shapes in the route's `description` (and note that shape
+errors key as `fields["request"]`). Fifteen minutes.
+
+### §7.9 An eval set with a retired language would fail every list it appears in — 🟡 hygiene — ✅ RESOLVED 2026-10-25
+
+> Fixed, and the SUSPECT is confirmed: building `EvalSetSummary` with an unshipped language raised `ValidationError`, so one such row would make every list containing it answer `500`. A before-validator now reads it through `language_or_default`, as the project schema does. On `fix/hygiene-sweep-2026-10-25`.
+>
+> Original finding follows.
+
+**Evidence:** SUSPECT. Unverified: whether a shipped language can ever be removed —
+`backend/app/core/language.py` says members are added, never renamed. A test that loads an eval set
+row with language `xx` settles the behaviour.
+
+**Where:** `backend/app/schemas/eval.py` (`EvalSetSummary.language: Language`);
+`backend/app/services/eval.py:479`; compare `backend/app/schemas/project.py:64-70`
+
+**Why this can happen.** A project's stored language that is no longer shipped reads as English
+(`_unshipped_language_reads_as_english`). An eval set's does not: the strict enum would raise during
+serialisation and answer `500` for the whole list.
+
+**What we should do.** Reuse the project schema's tolerant validator. Fifteen minutes. See §9.33,
+which would put that fallback in one place.
+
+### §9.32 Five English-only constants survive the translated tables — 🟡 hygiene — ✅ RESOLVED 2026-10-25
+
+> Fixed. The five English-only constants are deleted and their tests read the per-language tables. On `fix/hygiene-sweep-2026-10-25`.
+>
+> Original finding follows.
+
+**Evidence:** CONFIRMED (`grep -rnw` finds each defined once in `backend/app`).
+
+**Where:** `backend/app/rag/grounding.py:87` (`NO_CONTEXT_ANSWER`), `:132` (`OUT_OF_SCOPE_ANSWER`);
+`backend/app/mail/compose.py:315` (`RESET_MESSAGE`); `backend/app/services/checklist_export.py:21`
+(`SHEET_TITLE`); `backend/app/services/mock_data_export.py:23` (`NO_DATA_LABEL`)
+
+Each is `TABLE[Language.EN]`, left behind when the table it came from was translated. Nothing in the
+application reads them; three are read only by tests (`tests/test_grounding.py`, `test_graph.py`,
+`test_checklist_export.py`, `test_project_export.py`), which therefore test the English constant
+rather than the language-picked path production takes. **Fix:** delete all five and point the
+tests at the tables. Half an hour.
+
+### §9.33 "An unset or unshipped language reads as English" is written out eight times — 🟡 hygiene — ✅ RESOLVED 2026-10-25
+
+> Fixed. `language_or_default()` in `app/core/language.py` replaces the eight copies, plus a ninth in `app/eval/runner.py`. On `fix/hygiene-sweep-2026-10-25`.
+>
+> Original finding follows.
+
+**Evidence:** CONFIRMED (`grep -rn "parse_language(.*) or Language.EN" backend/app` → 8).
+
+**Where:** `backend/app/mockdata/generator.py:136`; `backend/app/checklist/generator.py:125`;
+`backend/app/services/mock_data_dataset.py:249`, `:373`; `backend/app/services/checklist_module.py:421`;
+`backend/app/services/project_export.py:102`; `backend/app/schemas/project.py:69`;
+`backend/app/repositories/notification.py:211`
+
+The eight copies agree today. If the fallback ever changes — the obvious next step is "the viewer's
+language" — the change has to land in eight places and any one missed makes a shared document's
+language depend on which code path produced it. `shared_language` in `app/core/language.py:113`
+hides a ninth. The `"en"` server defaults in `backend/app/models/project.py:107` and
+`backend/app/models/eval.py:110` are fine (a migration cannot import the enum) but deserve a comment
+naming `Language.EN`. **Fix:** one `language_or_default()` in `app/core/language.py`. One hour.
+
+### §9.34 The single- and multi-module checklist exports duplicate their filter and cap logic — 🟡 hygiene — ✅ RESOLVED 2026-10-25
+
+> Fixed. `require_within_cap()` and `filter_audit_details()` sit beside `build_workbook` and serve both checklist exports and the mock-data cap. On `fix/hygiene-sweep-2026-10-25`.
+>
+> Original finding follows.
+
+**Evidence:** CONFIRMED.
+
+**Where:** `backend/app/services/checklist_item.py:296-372` (`ChecklistItemService.export`);
+`backend/app/services/project_export.py:140-200` (`ProjectExportService._checklist`), and its
+mock-data cap at `:~210`
+
+Both build the same `list_all(...)` arguments, raise the same `409 EXPORT_TOO_LARGE` with different
+wording ("rows" vs "test cases"), and build the same audit `filter` details. A comment at
+`project_export.py:~183` says "same envelope as the per-module export" — the comment is the only
+thing keeping them aligned. **Fix:** extract the filter-to-details mapping and the cap check beside
+`build_workbook` in `app/services/checklist_export.py`. One hour.
+
 
 
 
@@ -4064,12 +4515,280 @@ which is false.
 **What we should do.** Branch on whether any filter is set, the way the audit screen does: "No
 feedback matches these filters", with a clear-filters action. Half an hour.
 
+### §U3.6 `/settings/feedback` applies URL-only filters the screen cannot show or clear — 🟡 hygiene — ✅ RESOLVED 2026-10-25
+
+> Fixed, by owner decision (2026-10-25): a URL-only `projectId` or `promptVersion` filter renders as a removable chip (`components/output-feedback/active-filter-chips.tsx`). On `fix/hygiene-sweep-2026-10-25`.
+>
+> Original finding follows.
+
+**Where:** `app/(app)/settings/feedback/feedback-screen.tsx:23-31`, `:33-38` (`changedKey`);
+`hooks/use-feedback.ts:32`, `:36`; `components/output-feedback/feedback-filters.tsx:34-150`
+
+**What this is.** Filters on this screen live in the URL so a filtered view can be shared.
+
+**Why this can happen.** The screen reads `projectId` and `promptVersion` from the URL and sends
+them to the API, but the filter row has controls only for feature, vote, reason, from and to. A
+link that carries `?projectId=…` filters the list with nothing on screen saying so, and no control
+can remove it.
+
+**What it costs.** An administrator opens a shared link, sees a fraction of the feedback, and has
+no visible reason or way back except editing the URL by hand.
+
+**What we should do.** Either render a control (or at least a removable chip) for each filter the
+URL can carry, or stop reading the two the screen cannot show. One to two hours.
+
+### §U3.7 Eval tables have no pagination and stop at 100 rows — 🟡 hygiene — ✅ RESOLVED 2026-10-25
+
+> Fixed. Both eval tables use `PaginationFooter` with page and limit only; a page is 100 rows, the backend maximum, so the run-compare selects are not split across pages. On `fix/hygiene-sweep-2026-10-25`.
+>
+> Original finding follows.
+
+**Where:** `hooks/use-eval.ts:29-32` (sets), `:62-65` (runs); `backend/app/schemas/pagination.py:13`
+(`MAX_PAGE_SIZE = 100`)
+
+**What this is.** Every other list in the app has a pagination footer (`docs/design.md` → Lists).
+
+**Why this can happen.** The eval set list and the run list each fetch one page with `?limit=100`,
+which is the backend's maximum. No eval component reads `totalCount` or renders a pager. Pair
+lists are not affected, since a set has at most 50 pairs.
+
+**What it costs.** The 101st eval set on a project, or the 101st run of a set, silently never
+appears. That is unlikely soon, but invisible when it happens.
+
+**What we should do.** Use `PaginationFooter` on both tables, as the project and checklist lists do.
+One to two hours.
+
+### §U4.7 The "Negative" test-case badge is coloured at two call sites — 🟡 hygiene — ✅ RESOLVED 2026-10-25
+
+> Fixed together with §U4.8. `testCaseKindTone` in `lib/status.ts`; both "Negative" badges render through `StatusBadge`. On `fix/hygiene-sweep-2026-10-25`.
+>
+> Original finding follows.
+
+**Where:** `components/checklist/item-grid.tsx:201-207`, `components/checklist/change-set-panel.tsx:183-189`
+
+**What this is.** `.claude/rules/design-system.md` §5 says a status maps to its colour in one
+module and renders through `StatusBadge`. A checklist test case can be marked "Negative" (a test
+that expects a failure).
+
+**Why this can happen.** Both places build the badge by hand with the same `text-warning
+border-warning/60` classes, instead of using one shared mapping.
+
+**What it costs.** Nothing yet, as the two copies match. The next change to one will not reach the
+other. Both also inherit §U1.4's low contrast.
+
+**What we should do.** Give the test-case kind a tone in one module and render both through
+`StatusBadge`. Half an hour.
+
+### §U5.10 The eval sizes 10/25/50 restate a backend rule without saying so — 🟡 hygiene — ✅ RESOLVED 2026-10-25
+
+> Fixed. Both size sites are commented as mirroring `EvalSetCreate.count: Literal[10, 25, 50]` in `backend/app/schemas/eval.py` (there is no named constant). On `fix/hygiene-sweep-2026-10-25`.
+>
+> Original finding follows.
+
+**Where:** `components/eval/generate-eval-set-dialog.tsx:24`, `lib/api/types.ts:673`;
+`backend/app/schemas/eval.py:24`; `docs/PRD.md` §2.1 Phase 2.6
+
+**What this is.** `forms.md` says the client must not restate a backend rule. The backend accepts
+only 10, 25 or 50 questions.
+
+**Why this can happen.** The dialog hard-codes `[10, 25, 50]` and the type mirrors it, with no
+comment linking either to the backend.
+
+**What it costs.** Nothing while the numbers agree. If the backend's options change, the dialog
+offers a choice that fails with a `422`.
+
+**What we should do.** At minimum, comment both sites as mirroring `schemas/eval.py`. Better, serve
+the options from the API. Minutes for the comment.
+
+### §U5.11 The thumbs-down popover keeps stale reasons and sits outside the form contract — 🟡 hygiene — ✅ RESOLVED 2026-10-25
+
+> Fixed. The popover reseeds reasons and note from the current vote each time it opens and is composed from `Field`, `FieldLabel htmlFor` and `FieldError`. It now stays open until the save lands, so a failed save shows its error in the form as well as in a toast. On `fix/hygiene-sweep-2026-10-25`.
+>
+> Original finding follows.
+
+**Where:** `components/output-feedback/feedback-control.tsx:61-64`, `:84-88`, `:98`, `:78-81`, `:154-183`
+
+**What this is.** Thumbs-down opens a small popover where a user picks reasons and may add a note.
+
+**Why this can happen.** The reasons and note are seeded once, and later re-seeding only updates
+the vote. So closing without sending, removing a vote, or a failed save all leave the old ticks and
+text in place the next time it opens. The popover also uses a raw `Label`/`Textarea` rather than
+`Field`/`FieldLabel`/`FieldError`. Its textarea has an `aria-label` but no `id`. A failed save only
+toasts. The character limit and counter restate a backend limit.
+
+**What it costs.** A user who changed their mind sees reasons they did not mean to send pre-ticked,
+and can send them by accident.
+
+**What we should do.** Reset reasons and note whenever the popover opens on a fresh vote, and
+compose it from the form shells. One to two hours.
+
+### §U7.15 The eval sets empty state has no action, and `ListError` sits flush in two cards — 🟡 hygiene — ✅ RESOLVED 2026-10-25
+
+> Fixed. The eval sets empty state offers the generate dialog, and `ListError` takes `padded` inside a `p-0` card (the eval tables and the member table). On `fix/hygiene-sweep-2026-10-25`.
+>
+> Original finding follows.
+
+**Where:** `components/eval/eval-set-table.tsx:33-43`; `app/(app)/projects/[id]/project-detail-screen.tsx:162-164`,
+`:183`, `:188-190`; `components/members/member-table.tsx:166`; `components/feedback/list-error.tsx:18`
+
+**What this is.** `docs/design.md` says an empty state carries the primary action. List errors sit
+inside the list's card.
+
+**Why this can happen.** The eval empty state has no `action`; the only Generate control is in the
+tab header. On both the Eval and Members tabs, `ListError` renders inside a `Card className="p-0"`,
+and `ListError` has no padding of its own, so the alert touches the card's edges.
+
+**What it costs.** Cosmetic, plus a small extra step for a first-time user.
+
+**What we should do.** Pass the generate dialog trigger as the empty state's action, and give
+`ListError` padding when it is inside a zero-padding card. Half an hour.
+
+### §U8.10 A stray separator in the mock-data change-set card — 🟡 hygiene — ✅ RESOLVED 2026-10-25
+
+> Fixed. The separator is removed. On `fix/hygiene-sweep-2026-10-25`.
+>
+> Original finding follows.
+
+**Where:** `components/mock-data/change-set-panel.tsx:181-182`; `components/form/form-error.tsx:10`;
+compare `components/checklist/change-set-panel.tsx:247`
+
+**Why this can happen.** A `<Separator />` renders unconditionally above `FormError`, which renders
+nothing when there is no error. The result is a dangling rule at the bottom of the card. The
+checklist twin has no such separator.
+
+**What we should do.** Remove it, or render it only with the error. Minutes.
+
+### §U8.11 A stored interrupted answer is worded differently from the live one — 🟡 hygiene — ✅ RESOLVED 2026-10-25
+
+> Fixed. The finding's `INTERRUPTED_MESSAGE` no longer exists at this base; the stored message's disconnected branch reads the same `ask.interruptedNote` the live note shows. On `fix/hygiene-sweep-2026-10-25`.
+>
+> Original finding follows.
+
+**Where:** `components/ask/message-list.tsx:72-78`; `components/ask/interrupted-note.ts:9-10`;
+`components/ask/interrupted-note.tsx:4-8`
+
+**What this is.** When a stream drops mid-answer, the partial answer is kept and a note says so.
+
+**Why this can happen.** The live note reads "The connection dropped. What arrived above is kept."
+After reload, the stored message reads "This answer was interrupted. What arrived is kept." The
+`interrupted-note` comment claims one shared sentence across surfaces, which is untrue for the
+stored copy.
+
+**What it costs.** The same event is described two ways on either side of a reload.
+
+**What we should do.** Use `INTERRUPTED_MESSAGE` in `message-list.tsx` too. Minutes.
+
+### §U9.5 The eval set route answers a missing permission with `NotFound`, not `Forbidden` — 🟡 hygiene — ✅ RESOLVED 2026-10-25
+
+> Fixed. The eval set route renders `Forbidden` for a missing permission. On `fix/hygiene-sweep-2026-10-25`.
+>
+> Original finding follows.
+
+**Where:** `components/eval/eval-set-screen.tsx:60`; `backend/app/core/access.py:99-100`; compare
+`app/(app)/settings/feedback/feedback-screen.tsx:53`, `app/(app)/settings/roles/[id]/role-matrix-screen.tsx:64`
+
+**What this is.** `CLAUDE.md` ("`403` vs `404` is a security decision"): a member who can see a
+project but lacks a permission gets *forbidden*, because *not found* would contradict the screen
+they just came from.
+
+**Why this can happen.** The project has loaded, which proves the user is a member, but the screen
+answers a missing `eval.read` with `NotFound`.
+
+**What it costs.** A viewer following a link is told an eval set does not exist when it does.
+
+**What we should do.** Render `Forbidden` there. Minutes.
+
+### §U9.7 Admin screens request data before their admin gate — 🟡 hygiene — ✅ RESOLVED 2026-10-25
+
+> Fixed. The admin data hooks take `enabled`, and the users, audit, audit event, roles, role matrix and feedback screens pass `user.isAdmin`; a test confirms a non-admin fetches nothing. On `fix/hygiene-sweep-2026-10-25`.
+>
+> Original finding follows.
+
+**Where:** `app/(app)/settings/users/users-screen.tsx:30` then `:37`; `settings/audit/audit-screen.tsx:42`
+then `:48`; `settings/audit/[eventId]/audit-event-screen.tsx:26` then `:31`;
+`settings/roles/roles-screen.tsx:21-22` then `:35`; `settings/roles/[id]/role-matrix-screen.tsx:29-31`
+then `:50`; `settings/feedback/feedback-screen.tsx:47-48` then `:51`; `hooks/use-roles.ts:17`
+
+**What this is.** Admin screens render `Forbidden` for a non-admin. The backend is the real
+control, and it answers `403`.
+
+**Why this can happen.** React hooks must run before any early return, so each screen fires its
+data request before checking `isAdmin`. Only `useRoles` takes an `enabled` option, and no screen
+passes it.
+
+**What it costs.** A non-admin who types an admin URL sends a request that is refused. No data
+leaks, because the backend gates it. It is wasted traffic and a `403` in the console.
+
+**What we should do.** Give each admin hook an `enabled` option and pass `user.isAdmin`. One hour.
+
+### §U10.13 Identifiers on the eval screens are in the body face — 🟡 hygiene — ✅ RESOLVED 2026-10-25
+
+> Fixed. Identifiers on the eval screens (the source path, the chat model, the raw pair id fallback) are `font-mono`. On `fix/hygiene-sweep-2026-10-25`.
+>
+> Original finding follows.
+
+**Where:** `components/eval/eval-set-screen.tsx:79` (`sourcePath` in the header description);
+`components/eval/eval-run-table.tsx:69` (`chatModel`); `components/eval/eval-run-sheet.tsx:59`,
+`components/eval/eval-compare.tsx:53` (raw `pairId` fallback)
+
+**What this is.** `docs/design.md:80`, `:90`: paths and identifiers use `font-mono text-sm`. The
+eval Path and Source columns already do.
+
+**Why this can happen.** These four places render a path, a model id and a pair id in the body
+font.
+
+**What we should do.** Wrap each in `font-mono`. Minutes.
+
+### §U10.14 Off-scale spacing and a `text-[10px]` badge — 🟡 hygiene — ✅ RESOLVED 2026-10-25
+
+> Fixed together with §U10.15. Off-scale values are snapped to the scale; the bell's `text-[10px]` count, `pe-10` and the profile rail's `lg:top-24 lg:w-48` are documented as exceptions in `docs/design.md` → Spacing, and `.claude/rules/design-system.md` §10 points at them. On `fix/hygiene-sweep-2026-10-25`.
+>
+> Original finding follows.
+
+**Where:** `components/notifications/notification-bell.tsx:35` (`text-[10px]`, `-top-0.5 -right-0.5`);
+`gap-1.5` at `components/form/password-field.tsx:87`, `components/roles/role-badge.tsx:10`,
+`components/audit/audit-event-detail.tsx:25`, `components/audit/audit-change-list.tsx:92`; `py-2.5` at
+`audit-change-list.tsx:92`; `mb-1.5` at `components/eval/eval-pair-table.tsx:98`; `mt-0.5` at
+`eval-pair-table.tsx:64`, `:66`; `py-0.5` at `components/ask/answer.tsx:60`
+
+**What this is.** `docs/design.md:121`: spacing uses steps 1, 2, 3, 4, 6, 8 and 12 only. Type comes
+from the seven-row scale.
+
+**What we should do.** Snap each to the nearest step, or document an exception for the bell's
+count badge. Half an hour.
+
+
 
 
 
 
 
 ## Sweep 2026-10-24
+
+### Top priorities, as the sweep wrote them
+
+Every item in this list is resolved; it is kept here as the sweep's own history.
+
+1. **Japanese, Korean and Chinese users cannot type a question reliably** (§U8.15). Pressing Enter
+   to pick a character sends the half-typed question, on Ask and both refinement chats. This shipped
+   with the languages it breaks, and the fix is one line.
+2. **Three screens report an outage as "nothing here"** (§U7.17, §U7.18, §U6.15). The new export
+   screen says a project has no modules, and the Ask picker says there is no matching project, when
+   in fact the request failed. "Re-index now" on Ask does nothing visible when it fails.
+3. **Keyboard and screen-reader gaps** (§U11.9, §U11.10, §U5.12, §U6.20, plus the open §U5.9 and
+   §U11.6–§U11.8). Three checklist filters have no name at all. Ask's composer shows no focus ring.
+   Every dialog's Close button is announced in English.
+4. **Contrast in light mode** (§U1.4). White text on the success, info and danger badges is 2.2–3.8
+   to 1, against a 4.5 target.
+5. **Small false or missing states**:
+   - §U8.14: the chats say "no permission" while the project loads.
+   - §U8.16 and §U8.13: a cut-off reply looks complete in the refinement chats.
+   - §U7.16: a vote briefly reverts.
+   - §U3.5 and §U3.6: the feedback screen's filter states.
+   - §U6.16: the signed-out language picker.
+6. **Copy** (§U6.17–§U6.19), **hygiene** (§U1.5, §U3.8, §U3.9, §U4.7, §U4.8, §U5.13, §U5.14,
+   §U7.19, §U8.17, §U8.18, §U10.13–§U10.18), and **documentation** (§U12.6–§U12.14).
+
 
 ### §U8.15 Pressing Enter to pick an IME candidate sends a half-typed question — 🔴 bug — ✅ RESOLVED 2026-10-25
 
@@ -4420,6 +5139,320 @@ inline, because nobody asked.
 
 **What we should do.** Add `fieldErrorText(mutation.error, …)` and a `FieldError` to each. Fifteen
 minutes.
+
+### §U1.5 The web manifest repeats two theme colours as raw hex — 🟡 hygiene — ✅ RESOLVED 2026-10-25
+
+> Fixed. `app/manifest.ts` names the two tokens it mirrors; `.claude/rules/design-system.md` §2 already listed it as the one allowed exception. On `fix/hygiene-sweep-2026-10-25`.
+>
+> Original finding follows.
+
+**Evidence:** CONFIRMED.
+
+**Where:** `app/manifest.ts:23-24`; `app/globals.css:14-15`
+
+**What this is.** `globals.css` is meant to be the only file with a raw hex colour. Every component
+names a token instead.
+
+**Why this can happen.** A web manifest is JSON served to the browser and cannot read a CSS
+variable. So `theme_color` and `background_color` copy `#615fff` and `#f1f5f9` by hand.
+
+**What it costs.** If the primary or background token changes, the installed-app chrome keeps the
+old colour, and nothing points at the copy.
+
+**What we should do.** Add a comment naming the two tokens it mirrors, and list the manifest as the
+one allowed exception in `.claude/rules/design-system.md`. Five minutes.
+
+### §U3.8 Notification timestamps have no absolute time on hover — 🟡 hygiene — ✅ RESOLVED 2026-10-25
+
+> Fixed. Notification times carry `title={formatAbsolute(...)}`. On `fix/hygiene-sweep-2026-10-25`.
+>
+> Original finding follows.
+
+**Evidence:** CONFIRMED.
+
+**Where:** `components/notifications/notification-list.tsx:56-58`
+
+**What this is.** Every list shows relative time ("3 hours ago") with the exact time as its `title`,
+through `formatRelative`/`formatAbsolute` (`docs/design.md` → Lists).
+
+**Why this can happen.** The notification row renders `formatRelative` alone, and this one list is
+used on `/notifications` and in the bell.
+
+**What it costs.** On these screens alone, hovering a time shows nothing.
+
+**What we should do.** Add `title={formatAbsolute(n.createdAt)}`. Five minutes.
+
+### §U3.9 The feedback table's date is a raw `YYYY-MM-DD` in every language — 🟡 hygiene — ✅ RESOLVED 2026-10-25
+
+> Fixed. `formatDay(isoDate, locale)` shows the day in the active locale, date only and in UTC; `docs/design.md` → Lists records it as the one date-only exception. On `fix/hygiene-sweep-2026-10-25`.
+>
+> Original finding follows.
+
+**Evidence:** CONFIRMED.
+
+**Where:** `components/output-feedback/feedback-table.tsx:~51-53`; `lib/api/types.ts:126`
+
+**What this is.** Admins see the day of a vote and never its time. That is deliberate
+(`.claude/rules/feedback.md` rule 2), so a relative "3 hours ago" is not possible here.
+
+**Why this can happen.** `formatDay` prints the ISO string as-is. Every other date in the app is
+formatted for the active locale.
+
+**What it costs.** A Japanese or Korean admin sees `2026-10-24` while every other date on screen is
+localised. The column also looks unlike its neighbours without saying why.
+
+**What we should do.** Format the day with the active locale (date only, no time). Note the date-only
+exception in `docs/design.md` → Lists. Fifteen minutes.
+
+### §U4.8 Five more states pick their colour at the call site — 🟡 hygiene — ✅ RESOLVED 2026-10-25
+
+> Fixed together with §U4.7. `changeSetOperationTone`, `pendingChangeSetTone` and `evalAdvisoryTone` in `lib/status.ts`, plus `toneTextClass` for inline text; `docs/design.md` describes them. On `fix/hygiene-sweep-2026-10-25`.
+>
+> Original finding follows.
+
+**Evidence:** CONFIRMED.
+
+**Where:**
+- `components/checklist/module-table.tsx:84`: `tone="warning"` for "Review changes".
+- `components/checklist/module-table.tsx:94`: `text-danger` on the fail count.
+- `components/change-sets/operation-groups.tsx:66`, `:82`: add, change and remove headings.
+- `components/eval/eval-pair-table.tsx:93`: `text-warning` for "unfaithful translation".
+- `components/eval/eval-run-sheet.tsx:83`: `text-warning` for grounding warnings.
+
+**What this is.** `.claude/rules/design-system.md` §5 says every status maps to a tone in exactly one
+module, `lib/status.ts`. Project, module, item result, audit outcome, eval status and eval verdict
+all do.
+
+**Why this can happen.** These five have no mapping, so each call site chose its own colour. Four
+are new since `df7594e`, and they are the same family as the open §U4.7.
+
+**What it costs.** Nothing is false today, because each choice is sensible. The next screen to show
+a pending change set or an operation kind has nothing to copy, so it can choose differently.
+
+**What we should do.** Add `changeSetOperationTone` and a pending-change-set tone to
+`lib/status.ts`, and route these sites through it, together with §U4.7. One hour.
+
+### §U5.14 The translate dialog restates the backend's "English sources only" rule — 🟡 hygiene — ✅ RESOLVED 2026-10-25
+
+> Fixed. The translate dialog's check is commented as mirroring `EvalService._new_translation` / `_source_invalid` in `backend/app/services/eval.py`. On `fix/hygiene-sweep-2026-10-25`.
+>
+> Original finding follows.
+
+**Evidence:** CONFIRMED.
+
+**Where:** `components/eval/translate-eval-set-dialog.tsx:19` (`TARGETS = LANGUAGES.filter(l => l !== "en")`);
+`components/eval/eval-set-screen.tsx:192`
+
+**What this is.** `.claude/rules/forms.md` limits client checks to required fields and shape. The
+backend owns its rules.
+
+**Why this can happen.** The dialog hard-codes that only English sets are translated, and only into
+the other six languages. The screen hard-codes when the Translate button appears.
+
+**What it costs.** If the backend widens the rule, the button stays hidden and the user never
+learns. That is the same cost as §U5.10.
+
+**What we should do.** Say so in a comment that names the backend rule. Better, have the set read
+carry a `translatable` flag. Half an hour.
+
+### §U6.17 Single-sentence messages end in a full stop, and four small copy splits — 🟡 hygiene — ✅ RESOLVED 2026-10-25
+
+> Fixed. Single-sentence messages dropped their full stop in all seven locales, "could not" replaces the contractions, the discard titles gained their question marks. Neither title key was unused, so none was removed. On `fix/hygiene-sweep-2026-10-25`.
+>
+> Original finding follows.
+
+**Evidence:** CONFIRMED.
+
+**Where:**
+- `messages/en/ask.json:63` (`preflight.genericError` "Something went wrong.").
+- `messages/en/errors.json`: the single-sentence entries, such as `VALIDATION_ERROR` (line 3),
+  `INTERNAL_ERROR` (line 4) and the "… not found." group.
+- Contractions: `messages/en/notifications.json:10`, `messages/en/profile.json:82`.
+- Discard titles: `messages/en/checklist.json:179`, `messages/en/mockData.json:33`.
+- Possibly unused: `messages/en/eval.json:37-38` (`titleNamed` beside `title`).
+
+**What this is.** `docs/design.md` → Feedback says feedback copy has no trailing period. The owner
+decided on 2026-10-24 that copy of two or more sentences keeps its stops (§U12.14), so only
+single-sentence copy is in scope here.
+
+**Why this can happen.** The single-sentence strings above end in a period, and they reach toasts
+through `toast.error(errorText(e))` at nine call sites. Around them are four smaller splits:
+- "Couldn't" in two strings, where the rest of the catalogue writes "could not".
+- Both "Discard proposed changes" confirm titles have no "?", unlike every other confirm title.
+- `titleNamed` and `title` sit side by side, and one is probably unused.
+- "That did not save. Try again" (`messages/en/eval.json:54`) is the one multi-sentence string with
+  no final stop.
+
+**What it costs.** Toasts read as assembled by different hands. It is cosmetic.
+
+**What we should do.** Drop the period from single-sentence entries, write "could not", add the
+question marks, and remove whichever title key is unused. One hour, including all seven locales.
+
+### §U6.18 The not-found, in-progress and server error messages say what happened, not what to do — 🟡 hygiene — ✅ RESOLVED 2026-10-25
+
+> Fixed in all seven locales. Not-found errors add "It may have been deleted; refresh the list", in-progress errors "Wait for it to finish", and `INTERNAL_ERROR` says to try again and tell an administrator; `VALIDATION_ERROR`, `INVALID_TOKEN` and `ADMIN_REQUIRED` gained a next step too. On `fix/hygiene-sweep-2026-10-25`.
+>
+> Original finding follows.
+
+**Evidence:** CONFIRMED.
+
+**Where:** `messages/en/errors.json`:
+- `VALIDATION_ERROR` (line 3), `INTERNAL_ERROR` (line 4), `INVALID_TOKEN` (line 5),
+  `ADMIN_REQUIRED` (line 11).
+- Every `*_NOT_FOUND` entry: users, projects, conversations, sessions, modules, items, both kinds
+  of change set, records, eval sets and runs, roles, audit events, notifications, feedback targets.
+- `EVAL_SET_NOT_READY` and both `*_GENERATION_IN_PROGRESS` entries.
+
+**What this is.** `docs/design.md` → Feedback asks error copy to say what to do next. The frontend
+picks a message by the backend's error code, and every one of the backend's 56 codes has an entry.
+
+**Why this can happen.** These entries state the condition only: "Project not found.", "Internal
+server error.", "Request validation failed.". A user who reaches one from a stale tab is left with a
+dead end. `INTERNAL_ERROR` also reads as a developer's message.
+
+**What we should do.** Add the next step to each. For not-found, that is "It may have been deleted;
+refresh the list". For in-progress, "Wait for it to finish". For `INTERNAL_ERROR`, "Something went
+wrong on our side. Try again, and tell an administrator if it keeps happening". One to two hours
+across seven locales.
+
+### §U6.19 Three destructive confirmations do not say what is lost — 🟡 hygiene — ✅ RESOLVED 2026-10-25
+
+> Fixed. Deleting a mock-data record names it and says the rest of the dataset stays; removing a member names them and says their conversations and recorded results stay; the role button reads "Delete role". On `fix/hygiene-sweep-2026-10-25`.
+>
+> Original finding follows.
+
+**Evidence:** CONFIRMED.
+
+**Where:** `messages/en/mockData.json:4-5` (delete a record); `messages/en/projects.json:116-121`
+(remove a member); `messages/en/roles.json:29-31` (delete a role)
+
+**What this is.** A destructive confirmation names what is destroyed and what goes with it. Project,
+module, test case, eval set and clear-results all do.
+
+**Why this can happen.** Deleting a record says only "This cannot be undone." Removing a member
+says they lose access, but not that their conversations and recorded results stay, or that they can
+be added back. Deleting a role uses a bare "Delete" button, where every other dialog names its
+object ("Delete project").
+
+**What we should do.** Name the record, say what survives a removal, and write "Delete role". Half
+an hour.
+
+### §U7.19 Notification preferences load with no skeleton — 🟡 hygiene — ✅ RESOLVED 2026-10-25
+
+> Fixed. Notification preferences render `TableSkeleton` while loading. On `fix/hygiene-sweep-2026-10-25`.
+>
+> Original finding follows.
+
+**Evidence:** CONFIRMED.
+
+**Where:** `components/notifications/preferences-screen.tsx:~56-95`
+
+**What this is.** A loading list shows skeleton rows shaped like the settled layout, so nothing jumps
+(`docs/design.md` → Lists). The profile's Language and Answer style sections do.
+
+**Why this can happen.** While loading, the preferences table renders its header with zero rows,
+then the rows pop in.
+
+**What we should do.** Render `TableSkeleton` while loading. Fifteen minutes.
+
+### §U8.17 The "thinking" label is looked up two ways — 🟡 hygiene — ✅ RESOLVED 2026-10-25
+
+> Fixed. Ask reads the label through `usePhaseLabel()`. On `fix/hygiene-sweep-2026-10-25`.
+>
+> Original finding follows.
+
+**Evidence:** CONFIRMED.
+
+**Where:** `app/(app)/ask/[conversationId]/conversation-screen.tsx:~125`; `hooks/use-phase-label.ts`
+
+Both chats use `usePhaseLabel`, whose comment says it exists so all three surfaces say the same
+thing. Ask inlines its own `t.has("phases.…")` lookup. The output is identical today, and the next
+change to one will not reach the other. **Fix:** use the hook on Ask. Five minutes.
+
+### §U8.18 The two refinement chats' stream readers and panels are near-verbatim copies — 🟡 hygiene — ✅ RESOLVED 2026-10-25
+
+> Fixed. `lib/refinement/stream.ts` (`consumeRefinementStream`, parameterised by event name) replaces the two copies, keeping #90's `finishReason` handling; the panels stay separate. On `fix/hygiene-sweep-2026-10-25`.
+>
+> Original finding follows.
+
+**Evidence:** CONFIRMED.
+
+**Where:** `lib/checklist/stream.ts` vs `lib/mock-data/stream.ts`;
+`components/checklist/chat-panel.tsx` vs `components/mock-data/chat-panel.tsx`
+
+The two stream readers differ only in the change-set event's name. The two panels differ only in
+copy, query keys and endpoints. `components/mock-data/chat-panel.tsx` says the copy is deliberate.
+The cost is that §U8.13 and §U8.16 each have to be fixed twice. **Fix:** one reader parameterised by
+the event name. The panels can stay separate. One hour.
+
+### §U10.15 Two new off-scale spacings — 🟡 hygiene — ✅ RESOLVED 2026-10-25
+
+> Fixed together with §U10.14. On `fix/hygiene-sweep-2026-10-25`.
+>
+> Original finding follows.
+
+**Evidence:** CONFIRMED.
+
+**Where:** `components/profile/profile-screen.tsx:91` (`lg:top-24`, `lg:w-48`);
+`components/form/password-input.tsx:35` (`pe-10`)
+
+Spacing comes from the steps 1, 2, 3, 4, 6, 8 and 12 (`docs/design.md:147`). The only documented
+exception is `pl-9` (`:158`). These two are new since `df7594e`. The rest of §U10.14's set is
+unchanged. **Fix:** move them onto the scale, or document them beside `pl-9`. Fifteen minutes.
+
+### §U10.16 A small-caps "eyebrow" style outside the type scale — 🟡 hygiene — ✅ RESOLVED 2026-10-25
+
+> Fixed. No new scale row: the four eyebrows use the muted `text-sm` label style, and `docs/design.md` says there is no eyebrow style. On `fix/hygiene-sweep-2026-10-25`.
+>
+> Original finding follows.
+
+**Evidence:** CONFIRMED.
+
+**Where:** `components/audit/audit-change-list.tsx:92`; `components/audit/audit-event-detail.tsx:29`,
+`:126`; `components/eval/eval-pair-table.tsx:137`
+
+**What this is.** `docs/design.md:84-90` defines seven type styles, and a section title is
+`text-xl font-semibold` (`:108-109`).
+
+**Why this can happen.** Four places use `text-xs font-medium tracking-wide uppercase`, which is not
+in the scale. One of them is an `<h2>` (`audit-event-detail.tsx:126`).
+
+**What it costs.** In English these labels are tracked capitals. `uppercase` does nothing to
+Japanese, Korean or Chinese text, so the same label looks like a different element in those
+languages.
+
+**What we should do.** Either add the eyebrow as an eighth scale row, or use the muted `text-sm`
+label style. Fifteen minutes.
+
+### §U10.17 The module list shows its source path in the body face — 🟡 hygiene — ✅ RESOLVED 2026-10-25
+
+> Fixed. The module list's source path is `font-mono`. The related SUSPECT at `module-screen.tsx` is already satisfied: every locale's string carries the `<path>` tag, rendered `font-mono`. On `fix/hygiene-sweep-2026-10-25`.
+>
+> Original finding follows.
+
+**Evidence:** CONFIRMED.
+
+**Where:** `components/checklist/module-table.tsx:61-63`. Related: `app/(app)/checklist/[moduleId]/module-screen.tsx:337`
+(SUSPECT, because the catalogue string would need a `<path>` tag)
+
+File paths are `font-mono text-sm` everywhere (`docs/design.md:80`, `:90`). The project, eval and
+path-picker screens now follow it, and this column does not. **Fix:** add `font-mono`. Five
+minutes.
+
+### §U10.18 A long module name in the export picker may be cut with no way to read it — 🟡 hygiene — ✅ RESOLVED 2026-10-25
+
+> Fixed, and the SUSPECT is confirmed: the label was `truncate` with no `title`. It now wraps (`min-w-0 break-words`). On `fix/hygiene-sweep-2026-10-25`.
+>
+> Original finding follows.
+
+**Evidence:** SUSPECT. Unverified: whether the label is width-limited. Rendering a module with an
+80-character name settles it.
+
+**Where:** `app/(app)/checklist/export/export-screen.tsx:247` (`FieldLabel … className="truncate"`)
+
+The label truncates and has no `title`. Two modules whose names share a long prefix would then look
+identical. **Fix:** add `title={module.name}`, or let the label wrap. Five minutes.
+
 
 
 

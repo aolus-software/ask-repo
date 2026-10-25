@@ -3,6 +3,8 @@
 import { useTranslations } from "next-intl";
 
 import { Separator } from "@/components/ui/separator";
+import { changeSetOperationTone, toneTextClass } from "@/lib/status";
+import { cn } from "@/lib/utils";
 
 interface OperationLike {
   op: "add" | "update" | "remove";
@@ -63,7 +65,14 @@ export function OperationGroups<T extends OperationLike>({
     <>
       {added.length > 0 ? (
         <div>
-          <h3 className="text-primary text-sm font-medium">{t("added")}</h3>
+          <h3
+            className={cn(
+              "text-sm font-medium",
+              toneTextClass(changeSetOperationTone("add")),
+            )}
+          >
+            {t("added")}
+          </h3>
           <Separator className="mt-2" />
           <div className="divide-y">{added.map(renderRow)}</div>
         </div>
@@ -71,7 +80,14 @@ export function OperationGroups<T extends OperationLike>({
 
       {updated.length > 0 ? (
         <div>
-          <h3 className="text-muted-foreground text-sm font-medium">{t("changed")}</h3>
+          <h3
+            className={cn(
+              "text-sm font-medium",
+              toneTextClass(changeSetOperationTone("update")),
+            )}
+          >
+            {t("changed")}
+          </h3>
           <Separator className="mt-2" />
           <div className="divide-y">{updated.map(renderRow)}</div>
         </div>
@@ -79,7 +95,14 @@ export function OperationGroups<T extends OperationLike>({
 
       {removed.length > 0 ? (
         <div>
-          <h3 className="text-danger-text text-sm font-medium">{t("removed")}</h3>
+          <h3
+            className={cn(
+              "text-sm font-medium",
+              toneTextClass(changeSetOperationTone("remove")),
+            )}
+          >
+            {t("removed")}
+          </h3>
           <Separator className="mt-2" />
           <div className="divide-y">{removed.map(renderRow)}</div>
         </div>

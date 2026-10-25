@@ -58,6 +58,9 @@
     "filterByReason": "Tapis mengikut sebab",
     "up": "Naik",
     "down": "Turun",
+    "projectChip": "Projek: {value}",
+    "promptVersionChip": "Versi prompt: {value}",
+    "removeFilter": "Alih keluar penapis: {label}",
     "fromDate": "Dari tarikh",
     "toDate": "Hingga tarikh"
   }

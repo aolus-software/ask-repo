@@ -22,14 +22,17 @@ function pollWhile(live: boolean, connected: boolean): number | false {
   return live ? (connected ? 60_000 : 3000) : false;
 }
 
+/** The page size of both eval lists; the backend's maximum (`MAX_PAGE_SIZE`). */
+const PAGE_LIMIT = 100;
+
 /** A project's eval sets, newest first. Polls while any set is still generating. */
-export function useEvalSets(projectId: string, enabled = true) {
+export function useEvalSets(projectId: string, enabled = true, page = 1) {
   const { connected } = useLiveEvents();
   return useQuery({
-    queryKey: keys.eval.sets(projectId),
+    queryKey: keys.eval.sets(projectId, page),
     queryFn: () =>
       apiFetch<PaginatedResponse<EvalSetSummary>>(
-        `${endpoints.eval.projectSets(projectId)}?limit=100`,
+        `${endpoints.eval.projectSets(projectId)}?page=${page}&limit=${PAGE_LIMIT}`,
       ),
     enabled: enabled && Boolean(projectId),
     refetchInterval: (query) =>
@@ -56,13 +59,13 @@ export function useEvalSet(setId: string, enabled = true) {
 }
 
 /** A set's runs, newest first. Polls while any run is still running. */
-export function useEvalRuns(setId: string, enabled = true) {
+export function useEvalRuns(setId: string, enabled = true, page = 1) {
   const { connected } = useLiveEvents();
   return useQuery({
-    queryKey: keys.eval.runs(setId),
+    queryKey: keys.eval.runs(setId, page),
     queryFn: () =>
       apiFetch<PaginatedResponse<EvalRunSummary>>(
-        `${endpoints.eval.setRuns(setId)}?limit=100`,
+        `${endpoints.eval.setRuns(setId)}?page=${page}&limit=${PAGE_LIMIT}`,
       ),
     enabled: enabled && Boolean(setId),
     refetchInterval: (query) =>

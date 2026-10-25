@@ -21,7 +21,7 @@ from app.schemas.me import (
     MembershipSummary,
     SessionResponse,
 )
-from app.schemas.pagination import ListQuery, PaginatedResponse
+from app.schemas.pagination import PageQuery, PaginatedResponse
 from app.services.me import MeService
 
 router = APIRouter(prefix="/me", tags=["Me"])
@@ -88,7 +88,7 @@ async def revoke_session(
 async def list_activity(
     current_user: CurrentUser,
     service: MeServiceDep,
-    query: Annotated[ListQuery, Query()],
+    query: Annotated[PageQuery, Query()],
 ) -> PaginatedResponse[ActivityEntry]:
     return await service.activity(current_user, query)
 

@@ -25,7 +25,7 @@ describe("FeedbackTable", () => {
     // the backend deliberately withholds.
     render(<FeedbackTable rows={[row]} isLoading={false} />);
 
-    const cell = screen.getByText("2026-09-27");
+    const cell = screen.getByText("Sep 27, 2026");
     expect(cell).toBeInTheDocument();
     expect(screen.queryByText(/ago/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/\d{2}:\d{2}/)).not.toBeInTheDocument();

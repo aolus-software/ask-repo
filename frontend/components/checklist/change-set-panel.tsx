@@ -20,7 +20,7 @@ import { ConfirmDialog } from "@/components/form/confirm-dialog";
 import { FormError } from "@/components/form/form-error";
 import { FeedbackControl } from "@/components/output-feedback/feedback-control";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Badge } from "@/components/ui/badge";
+import { StatusBadge } from "@/components/feedback/status-badge";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -39,6 +39,7 @@ import type {
   ChecklistItemResponse,
 } from "@/lib/api/types";
 import { keys } from "@/lib/query/keys";
+import { testCaseKindTone } from "@/lib/status";
 
 /** The camelCase field names with a label (`checklist.changeSetPanel.fields.*`); unknown keys fall back to the key itself. */
 const LABELLED_FIELDS = [
@@ -185,12 +186,11 @@ export function ChangeSetPanel({
                   proposals are failure cases is most of what tells them
                   whether the set is worth accepting. */}
               {operation.kind === "negative" ? (
-                <Badge
-                  variant="outline"
-                  className="text-warning-text border-warning/60 text-xs font-normal"
-                >
-                  {negativeLabel}
-                </Badge>
+                <StatusBadge
+                  tone={testCaseKindTone(operation.kind)}
+                  label={negativeLabel}
+                  className="text-xs font-normal"
+                />
               ) : null}
             </div>
             <p className="text-muted-foreground text-sm">{operation.feature}</p>

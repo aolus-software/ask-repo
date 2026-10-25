@@ -4,9 +4,10 @@ import uuid
 from datetime import datetime
 from typing import Literal, Self
 
-from pydantic import Field, model_validator
+from pydantic import Field, field_validator, model_validator
 
-from app.core.language import Language
+from app.core.language import Language, language_or_default
+from app.models.checklist import MAX_SOURCE_PATH_CHARS
 from app.models.eval import (
     EvalExclusionReason,
     EvalMix,
@@ -16,8 +17,7 @@ from app.models.eval import (
     EvalVerdict,
 )
 from app.schemas.base import ApiModel
-
-NAME_MAX_LENGTH = 120
+from app.schemas.fields import ResourceName
 
 
 class EvalSetCreate(ApiModel):
@@ -32,8 +32,8 @@ class EvalSetCreate(ApiModel):
     and the one-job-at-a-time cap were reasoned about.
     """
 
-    name: str | None = Field(default=None, min_length=1, max_length=NAME_MAX_LENGTH)
-    source_path: str | None = Field(default=None, max_length=1024)
+    name: ResourceName | None = None
+    source_path: str | None = Field(default=None, max_length=MAX_SOURCE_PATH_CHARS)
     count: Literal[10, 25, 50] | None = None
     mix: EvalMix | None = None
     source_set_id: uuid.UUID | None = None
@@ -104,6 +104,14 @@ class EvalSetSummary(ApiModel):
     indexed_generation: int | None
     created_at: datetime
     latest_run: EvalRunSummary | None = None
+
+    @field_validator("language", mode="before")
+    @classmethod
+    def _unshipped_language_reads_as_english(cls, value: object) -> object:
+        """A stored tag a later release no longer ships reads as English, not a 500."""
+        if isinstance(value, str):
+            return language_or_default(value)
+        return value
 
 
 class EvalPairRead(ApiModel):

@@ -51,7 +51,7 @@
     },
     "excludeLabel": "Kecualikan: {question}",
     "referenceAnswer": "Jawapan rujukan",
-    "saveFailed": "Itu tidak tersimpan. Cuba lagi"
+    "saveFailed": "Itu tidak tersimpan. Cuba lagi."
   },
   "runTable": {
     "generatingTitle": "Menjana soalan…",

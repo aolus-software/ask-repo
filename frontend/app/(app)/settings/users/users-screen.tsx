@@ -29,7 +29,7 @@ export function UsersScreen() {
     sort: SORT.users.createdAt,
     sortDirection: "desc",
   });
-  const query = useUsers(params);
+  const query = useUsers(params, { enabled: user.isAdmin });
 
   const users = query.data?.items ?? [];
 

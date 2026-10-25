@@ -33,7 +33,20 @@ function columnsFor(records: MockDataRecordResponse[]): string[] {
   return seen;
 }
 
-function DeleteRecordButton({ moduleId, id }: { moduleId: string; id: string }) {
+/** What names a record in a confirmation: its first non-empty field value, else a short id. */
+function recordName(record: MockDataRecordResponse): string {
+  const first = Object.values(record.fields).find((value) => value.trim() !== "");
+  return first ?? record.id.slice(0, 8);
+}
+
+function DeleteRecordButton({
+  moduleId,
+  record,
+}: {
+  moduleId: string;
+  record: MockDataRecordResponse;
+}) {
+  const id = record.id;
   const t = useTranslations("mockData.recordsTable");
   const errorText = useErrorText();
   const [confirming, setConfirming] = useState(false);
@@ -54,7 +67,7 @@ function DeleteRecordButton({ moduleId, id }: { moduleId: string; id: string }) 
       <ConfirmDialog
         open={confirming}
         onOpenChange={setConfirming}
-        title={t("deleteTitle")}
+        title={t("deleteTitle", { name: recordName(record) })}
         description={t("deleteDescription")}
         confirmLabel={t("delete")}
         isPending={remove.isPending}
@@ -127,7 +140,7 @@ export function RecordsTable({
                 ))}
                 <TableCell>
                   {canEdit ? (
-                    <DeleteRecordButton moduleId={moduleId} id={record.id} />
+                    <DeleteRecordButton moduleId={moduleId} record={record} />
                   ) : null}
                 </TableCell>
               </TableRow>

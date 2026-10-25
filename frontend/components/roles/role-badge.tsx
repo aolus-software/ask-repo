@@ -11,7 +11,7 @@ import { useTranslations } from "next-intl";
 export function RoleBadge({ name, isSystem }: { name: string; isSystem: boolean }) {
   const t = useTranslations("roles.badge");
   return (
-    <span className="inline-flex items-center gap-1.5 font-medium">
+    <span className="inline-flex items-center gap-2 font-medium">
       {name}
       {isSystem ? (
         <Lock className="text-muted-foreground size-4" aria-label={t("builtIn")} />

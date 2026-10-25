@@ -133,7 +133,7 @@ function RevokeAction({
         open={confirming}
         onOpenChange={setConfirming}
         title={t("revokeDialog.title", { name: member.name })}
-        description={t("revokeDialog.description")}
+        description={t("revokeDialog.description", { name: member.name })}
         confirmLabel={t("revokeDialog.confirm")}
         isPending={mutation.isPending}
         // 409 LAST_OWNER names no field, so it renders as this dialog's banner — the
@@ -174,7 +174,7 @@ export function MemberTable({
   // to the person who opened this tab to check exactly that
   // (`docs/audit-finding-solved-logs.md` §U7.4).
   if (query.isError) {
-    return <ListError error={query.error} onRetry={() => query.refetch()} />;
+    return <ListError padded error={query.error} onRetry={() => query.refetch()} />;
   }
 
   if (!query.isLoading && members.length === 0) {

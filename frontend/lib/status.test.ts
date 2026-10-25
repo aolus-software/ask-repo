@@ -4,6 +4,11 @@ import type { ChecklistItemStatus, ProjectStatus } from "@/lib/api/types";
 import {
   auditOutcomeLabelKey,
   auditOutcomeTone,
+  changeSetOperationTone,
+  evalAdvisoryTone,
+  pendingChangeSetTone,
+  testCaseKindTone,
+  toneTextClass,
   checklistItemResultLabelKey,
   checklistItemResultTone,
   isTerminalStatus,
@@ -75,5 +80,30 @@ describe("auditOutcomeTone/auditOutcomeLabelKey", () => {
     expect(auditOutcomeTone("success")).toBe("success");
     expect(auditOutcomeLabelKey("failure")).toBe("auditOutcome.failure");
     expect(auditOutcomeLabelKey("success")).toBe("auditOutcome.success");
+  });
+});
+
+describe("test-case, change-set and advisory tones", () => {
+  it("tones a negative test case as a warning and a positive one as neutral", () => {
+    expect(testCaseKindTone("negative")).toBe("warning");
+    expect(testCaseKindTone("positive")).toBe("neutral");
+  });
+
+  it("tones each change-set operation", () => {
+    expect(changeSetOperationTone("add")).toBe("success");
+    expect(changeSetOperationTone("update")).toBe("neutral");
+    expect(changeSetOperationTone("remove")).toBe("danger");
+  });
+
+  it("tones a pending change set and an eval advisory as warnings", () => {
+    expect(pendingChangeSetTone()).toBe("warning");
+    expect(evalAdvisoryTone()).toBe("warning");
+  });
+
+  it("renders a tone as running text through the semantic text tokens", () => {
+    expect(toneTextClass("success")).toBe("text-success-text");
+    expect(toneTextClass("warning")).toBe("text-warning-text");
+    expect(toneTextClass("danger")).toBe("text-danger-text");
+    expect(toneTextClass("neutral")).toBe("text-muted-foreground");
   });
 });

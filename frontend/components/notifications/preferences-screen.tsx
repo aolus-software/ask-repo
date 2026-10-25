@@ -6,11 +6,13 @@ import { toast } from "sonner";
 
 import { EmptyState } from "@/components/feedback/empty-state";
 import { ListError } from "@/components/feedback/list-error";
+import { TableSkeleton } from "@/components/feedback/table-skeleton";
 import { FormError } from "@/components/form/form-error";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import { Table, TableBody } from "@/components/ui/table";
 import {
   useNotificationPreferences,
   useUpdateNotificationPreferences,
@@ -57,7 +59,13 @@ export function PreferencesScreen() {
           <div className="p-6">
             <ListError error={query.error} onRetry={() => query.refetch()} />
           </div>
-        ) : !query.isLoading && items.length === 0 ? (
+        ) : query.isLoading ? (
+          <Table>
+            <TableBody>
+              <TableSkeleton columns={3} />
+            </TableBody>
+          </Table>
+        ) : items.length === 0 ? (
           <EmptyState
             title={t("preferences.emptyTitle")}
             description={t("preferences.emptyDescription")}

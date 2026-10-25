@@ -19,6 +19,10 @@ import {
 import { useTranslateEvalSet } from "@/hooks/use-eval";
 import { ENDONYMS, LANGUAGES, type Language } from "@/lib/i18n/languages";
 
+// Mirrors the backend's rule that only a ready English set is translated, and into the
+// other languages: `EvalService._new_translation` and `_source_invalid` in
+// `backend/app/services/eval.py`. The screen's Translate button (`eval-set-screen.tsx`)
+// restates the same "English sources only" check. Change all three together.
 const TARGETS = LANGUAGES.filter((language) => language !== "en");
 
 /**

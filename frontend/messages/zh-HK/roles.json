@@ -28,7 +28,7 @@
   "delete": {
     "title": "刪除 {name}？",
     "description": "此操作無法復原。仍在專案中持有此角色的任何人，必須先改為其他角色。",
-    "confirm": "刪除",
+    "confirm": "刪除角色",
     "done": "已刪除角色"
   },
   "create": {

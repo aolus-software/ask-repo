@@ -73,10 +73,16 @@ export const keys = {
   },
   eval: {
     all: ["eval"] as const,
-    sets: (projectId: string) => ["eval", "sets", projectId] as const,
+    sets: (projectId: string, page?: number) =>
+      page === undefined
+        ? (["eval", "sets", projectId] as const)
+        : (["eval", "sets", projectId, page] as const),
     set: (id: string) => ["eval", "set", id] as const,
     allRuns: ["eval", "runs"] as const,
-    runs: (setId: string) => ["eval", "runs", setId] as const,
+    runs: (setId: string, page?: number) =>
+      page === undefined
+        ? (["eval", "runs", setId] as const)
+        : (["eval", "runs", setId, page] as const),
     run: (id: string) => ["eval", "run", id] as const,
   },
   roles: {

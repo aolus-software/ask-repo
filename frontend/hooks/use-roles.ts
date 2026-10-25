@@ -30,8 +30,8 @@ export function useRoles({ enabled = true }: { enabled?: boolean } = {}) {
  * `notFound` is true only once the list has loaded successfully and no row matches —
  * distinct from `isLoading`/`isError`, which the caller checks first.
  */
-export function useRole(id: string) {
-  const query = useRoles();
+export function useRole(id: string, options: { enabled?: boolean } = {}) {
+  const query = useRoles(options);
   const role = query.data?.find((candidate) => candidate.id === id);
   const notFound = !query.isLoading && !query.isError && role === undefined;
 
@@ -39,8 +39,9 @@ export function useRole(id: string) {
 }
 
 /** The permission catalogue, grouped and labelled by the server for the matrix. */
-export function usePermissionCatalog() {
+export function usePermissionCatalog({ enabled = true }: { enabled?: boolean } = {}) {
   return useQuery({
+    enabled,
     queryKey: keys.permissionCatalogue,
     queryFn: () => apiFetch<PermissionCatalogResponse>(endpoints.permissions.catalogue),
   });

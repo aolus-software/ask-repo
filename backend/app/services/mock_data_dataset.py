@@ -24,7 +24,7 @@ from app.core import access
 from app.core.audit import AuditEntry, AuditEventType, AuditRecorder
 from app.core.errors import AppError, ErrorCode
 from app.core.feedback import FeedbackTarget
-from app.core.language import Language, parse_language
+from app.core.language import Language, language_or_default
 from app.core.middleware import AuthenticatedUser
 from app.core.permissions import Permission
 from app.live.events import mock_data_event
@@ -248,7 +248,7 @@ class MockDataDatasetService:
         module = await self._require_readable_module(module_id, actor)
         records = await self._records_within_cap(module_id)
         project = await self.projects.get(module.project_id)
-        language = (parse_language(project.content_language) if project else None) or Language.EN
+        language = language_or_default(project.content_language if project else None)
         content = build_mock_data_workbook(records, language=language)
         await self._record_export(module, actor=actor, format_="xlsx", row_count=len(records))
         return content
@@ -372,7 +372,7 @@ class MockDataDatasetService:
             dataset_id=dataset.id,
             project_id=project.id,
             generation=project.active_generation,
-            reply_language=parse_language(project.content_language) or Language.EN,
+            reply_language=language_or_default(project.content_language),
             collection=project.embedding_collection or "",
             question=payload.question,
             history=[

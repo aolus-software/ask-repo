@@ -33,52 +33,12 @@ settle it, is stated).
 
 ## Open findings
 
-Every finding from the 2026-09-19 and 2026-09-27 sweeps has been fixed and is in
-[`audit-finding-solved-logs.md`](audit-finding-solved-logs.md). Everything below was raised on
-2026-10-04 or 2026-10-24 and is still open; what was fixed on 2026-10-17 is in the log.
+No finding is open. Every finding from every sweep has been fixed and is in
+[`audit-finding-solved-logs.md`](audit-finding-solved-logs.md), under the sweep that raised it; the
+last open ones were fixed on 2026-10-25. A new sweep adds its rows to this table.
 
 | # | Finding | Severity | Raised |
 | --- | --- | --- | --- |
-| §2.2 | Two services flatten the project scope into a raw id list, and the single-point grep cannot see it | 🟡 | 2026-10-04 |
-| §7.1 | Four eval routes do not declare `422` | 🟡 | 2026-10-04 |
-| §7.2 | Eval, feedback and activity lists accept `sort`/`search` and ignore them | 🟡 | 2026-10-04 |
-| §7.3 | An eval set can be created with a whitespace-only name | 🟡 | 2026-10-04 |
-| §9.17 | `HOST` and `PORT` are settings nothing reads | 🟡 | 2026-10-04 |
-| §9.19 | The "project is indexed" guard exists in three copies | 🟡 | 2026-10-04 |
-| §9.20 | The lease and heartbeat mechanism is copied across five repositories | 🟡 | 2026-10-04 |
-| §9.21 | Four dead `STRANDED_AFTER_SECONDS` constants | 🟡 | 2026-10-04 |
-| §9.22 | Eval does not normalise `sourcePath` the way checklist modules do | 🟡 | 2026-10-04 |
-| §4.1 | A timed-out or cancelled clone leaves its `git` process behind | 🟡 | 2026-10-24 |
-| §4.2 | The connect-time address pin uses only the first record, and may not accept IPv6 (SUSPECT) | 🟡 | 2026-10-24 |
-| §7.4 | The four membership routes declare no `summary` and no error responses | 🟡 | 2026-10-24 |
-| §7.5 | The source-path check's errors are undeclared on three routes | 🟡 | 2026-10-24 |
-| §7.6 | The `409` on `DELETE /users/{id}` is declared with a shape `LAST_ADMIN` does not have | 🟡 | 2026-10-24 |
-| §7.7 | The three download routes document no body | 🟡 | 2026-10-24 |
-| §7.8 | The eval-set create body marks every field optional | 🟡 | 2026-10-24 |
-| §7.9 | An eval set with a retired language would fail every list it appears in (SUSPECT) | 🟡 | 2026-10-24 |
-| §9.32 | Five English-only constants survive the translated tables | 🟡 | 2026-10-24 |
-| §9.33 | "An unset or unshipped language reads as English" is written out eight times | 🟡 | 2026-10-24 |
-| §9.34 | The single- and multi-module checklist exports duplicate their filter and cap logic | 🟡 | 2026-10-24 |
-
-## Top priorities (2026-10-24)
-
-The 2026-10-24 sweep found no security finding, no 🔴 bug and no 🟠 risk in the backend. Access,
-read scoping, conversation privacy, the clone's address checks and soft delete all held across
-Phase 2.7. Everything open is hygiene or documentation.
-
-1. **Error text and logs that say more than they should** (§6.1, §6.2): a provider outage can put an
-   internal URL on the project screen, and a refused reset email may log the address. Neither leaks
-   a secret.
-2. **The eval job edge cases** (§5.1, §8.3–§8.7): orphan results after a mid-run delete, a failed
-   run's empty tallies, a generator that never checks its lease, a resumed run's overwritten stamp,
-   audit-after-publish ordering, and a translation that fails for the wrong reason.
-3. **The response-contract gaps** (§7.1–§7.9), led by the membership routes (§7.4) and the
-   undeclared path error on module create (§7.5).
-4. **The duplication and dead code** (§9.17, §9.19–§9.22, §9.32–§9.34), the clone process clean-up
-   (§4.1), the scope plumbing in two services (§2.2), and the IPv6 pin question (§4.2).
-5. **The documentation** (§9.30, §9.36, §9.38): stale test and schema comments, the architecture
-   page's notification-site count, and a phase-1 docstring. §9.35 and §9.37 were fixed with the
-   v2.4.0 release cut and are in the log.
 
 ---
 
@@ -451,38 +411,9 @@ Every finding this sweep raised here (§1.3) was resolved on 2026-10-17 and is i
 
 ## §2 Read scoping
 
-### §2.2 Two services flatten the project scope into a raw id list, and the single-point grep cannot see it — 🟡 hygiene
+Every finding still open here (§2.2) was resolved on 2026-10-25; all of them are in
+[`audit-finding-solved-logs.md`](audit-finding-solved-logs.md).
 
-> **Corrected 2026-10-17.** This finding was first filed as "three reads of `scope.ids`", citing
-> `repositories/feedback.py:41`. That line reads a `project_ids` filter, not `scope.ids`. A recount
-> finds five reads outside `access.py`. Three of them are repositories applying a `ProjectScope`
-> they were handed, which is the intended pattern. The two that matter are in services. The
-> heading and blocks below are the corrected version.
-
-**Evidence:** CONFIRMED (`grep -rn "scope\.ids" backend/app`, re-run 2026-10-17).
-
-**Where:** `backend/app/services/feedback.py:260`, `backend/app/services/me.py:125` (the two service
-sites); `backend/app/repositories/project.py:84`, `checklist_module.py:58`, `checklist_item.py:42`
-(the three repository sites, which are correct); `backend/tests/test_scoping_is_single_point.py`
-
-**What this is.** `docs/PRD.md` §7 requires that which projects a user may read is decided in one
-function, `resolve_project_scope`, and a grep test enforces it. The resolver returns a
-`ProjectScope`: either unrestricted (an administrator) or a set of project ids. Repositories
-receive that object and apply it in their `WHERE` clause.
-
-**Why this can happen.** `FeedbackService` and `MeService` do not pass the `ProjectScope` down.
-Each unpacks it into a plain list (`None if scope.unrestricted else scope.ids`), and the repository
-filters on that list. The result is correct today, because both lists come straight from the
-resolver. But the repository can no longer tell a resolver-issued list from any other list of ids.
-The grep test has no pattern for `scope.ids`, so a later service that builds the list some other
-way would also pass.
-
-**What it costs.** Nothing today. It is the shape that lets read scoping leak out of `access.py`
-without any test noticing.
-
-**What we should do.** Pass the `ProjectScope` itself into `FeedbackRepository` and the activity
-query, the way the project and checklist repositories already do. Then add a grep pattern for
-`scope.ids` outside `app/core/access.py` and `app/repositories/`. About an hour.
 
 ## §3 Conversation and voter privacy
 
@@ -497,57 +428,9 @@ Every finding this sweep raised here (§5.1) was resolved on 2026-10-25 and is i
 
 ## §7 The response contract
 
-### §7.1 Four eval routes do not declare `422` — 🟡 hygiene
+Every finding still open here (§7.1–§7.3) was resolved on 2026-10-25; all of them are in
+[`audit-finding-solved-logs.md`](audit-finding-solved-logs.md).
 
-**Evidence:** CONFIRMED.
-
-**Where:** `backend/app/api/routes/eval.py:91-102`, `:105-116`, `:136-150`, `:170-181`;
-`backend/app/api/routes/projects.py:118`, `:184` (the siblings that declare it)
-
-**What this is.** `.claude/rules/response-api.md` (`:117-120`, `:150`) requires `422` on a route
-that takes a body or typed query parameters. The project routes go further and declare it for a
-typed UUID path parameter too, so `/docs` and generated clients describe the malformed-id case.
-
-**Why this can happen.** `get_eval_set`, `delete_eval_set`, `start_eval_run` and `get_eval_run`
-take a UUID path parameter and omit `422`, while the project routes with the same shape declare
-it. Strictly, the rule's wording does not require it for a path-only route, so this is a sibling
-inconsistency rather than a rule breach. `start_eval_run` also takes a body, and for that route
-the rule does apply.
-
-**What we should do.** Add `422` to the four `responses` blocks. Minutes.
-
-### §7.2 Eval, feedback and activity lists accept `sort`/`search` and ignore them — 🟡 hygiene
-
-**Evidence:** CONFIRMED.
-
-**Where:** `backend/app/api/routes/eval.py:74-89`, `:153-167`; `backend/app/services/eval.py:136-151`,
-`:319-332`; `backend/app/api/routes/feedback.py:37-50` (takes `FeedbackListQuery`, a `ListQuery`
-subclass); `backend/app/api/routes/me.py:80-93`
-
-**What this is.** `ListQuery` carries `page`, `limit`, `sort`, `sortDirection` and `search`.
-`.claude/rules/router.md` says an unknown `sort` answers `400`, and the project, checklist and
-conversation lists do.
-
-**Why this can happen.** These routes take `ListQuery` but have a fixed order, so the service
-reads only `page` and `limit`. `?sort=bogus` answers `200`, and `?search=x` returns the whole list.
-
-**What it costs.** A client that sends a search gets an unfiltered list and no error, and the
-generated docs advertise parameters that do nothing.
-
-**What we should do.** Add a `PageQuery` (page and limit only) for fixed-order lists, or honour
-or reject the fields. One to two hours, across the four routes.
-
-### §7.3 An eval set can be created with a whitespace-only name — 🟡 hygiene
-
-**Evidence:** CONFIRMED.
-
-**Where:** `backend/app/schemas/eval.py:22`; `backend/app/services/eval.py:90`
-
-**Why this can happen.** `name` has `min_length=1` but no stripping, and the service strips it
-after validation. `{"name": "   "}` passes, stores `""`, and writes an empty audit `target_label`.
-
-**What we should do.** Strip in a validator before the length check. Minutes. The checklist
-module name has the same gap; fix both together.
 
 ## §8 Job and status handling
 
@@ -557,59 +440,9 @@ Every finding this sweep raised here (§8.1–§8.6) was resolved, on 2026-10-17
 
 ## §9 Code health — dead code, duplication, and documentation
 
-### §9.17 `HOST` and `PORT` are settings nothing reads — 🟡 hygiene
+Every finding still open here (§9.17–§9.22) was resolved on 2026-10-25; all of them are in
+[`audit-finding-solved-logs.md`](audit-finding-solved-logs.md).
 
-**Where:** `backend/app/config.py:28-29`; `backend/.env.example:12-13`; `docs/configuration.md:82-83`
-
-The bind address comes from the uvicorn command (`Makefile:207`,
-`infra/backend.prod.Dockerfile:68`). `grep -rnw "settings\.\(host\|port\)" backend/app` returns
-nothing, so an operator who sets `PORT=9000` changes nothing. **Fix:** delete the two fields and
-their example and doc rows, or pass them to uvicorn. Every other of the 108 settings is read.
-
-### §9.19 The "project is indexed" guard exists in three copies — 🟡 hygiene
-
-**Where:** `backend/app/services/index_guards.py:16-26`, `backend/app/core/access.py:155-181`
-(`require_answerable`), `backend/app/services/indexed_path.py:200-212`; a fourth variant at
-`backend/app/eval/runner.py:116-119` (it raises `TerminalIngestionError` with its own message)
-
-Same condition, same message, three bodies (`require_answerable` adds the `EMBEDDING_MODEL_CHANGED`
-check on top of the shared condition) — although `index_guards.py`'s own docstring says it
-exists "so a fourth caller cannot drift" (commit `8f42a28`, a partial fix of §9.4). **Fix:** move
-`require_indexed` to a leaf module (importing it from `index_guards` would cycle through
-`IndexedPathReader`) and call it from all three. One hour.
-
-### §9.20 The lease and heartbeat mechanism is copied across five repositories — 🟡 hygiene
-
-**Where:** `claim`/`renew_lease`/`release`/`claim_stranded`/`defer` in
-`backend/app/repositories/checklist_module.py`, `mock_data_dataset.py`, `eval_set.py`, `eval_run.py`
-(and the project's `claim`/`renew_lease`/`release`/`find_stranded`); `LEASE_SECONDS`/`LEASE_RENEWAL_SECONDS`
-repeated in all five; a renewal heartbeat in five runners — `_renew`/`_stop_renewal` in
-`checklist/generator.py:212,235`, `mockdata/generator.py:227,246`, `eval/generator.py:146,159` and
-`eval/runner.py:332,349`, and a differently named `_renew_lease` in `ingestion/pipeline.py:334`; `_defer`/`_fail`/`_route_failure` in three queue handlers
-
-A lease is how one worker claims a job so another cannot run it at the same time. `eval_set.py:3-4`
-calls itself "a near-copy" of the mock-data repository. Parameter names already diverge
-(`generating_older_than_seconds` / `older_than_seconds` / `pending_older_than_seconds`). A fix to the
-lease protocol — §8.2 is one — has to land in five places. **Fix:** a lease helper parameterised
-by table, and one heartbeat context manager. A day; do it before a sixth job kind.
-
-### §9.21 Four dead `STRANDED_AFTER_SECONDS` constants — 🟡 hygiene
-
-**Where:** `backend/app/repositories/checklist_module.py:33`, `mock_data_dataset.py:28`,
-`eval_set.py:23`, `eval_run.py:23`
-
-Nothing imports them; the live value is `backend/app/worker.py:73`. **Fix:** delete them.
-
-### §9.22 Eval does not normalise `sourcePath` the way checklist modules do — 🟡 hygiene
-
-**Where:** `backend/app/services/eval.py:83-91`, `backend/app/eval/generator.py:95`; compare
-`backend/app/services/checklist_module.py:163`; `backend/app/services/path_tree.py:34-47`;
-`backend/app/schemas/eval.py:12`, `:23`; `backend/app/models/checklist.py:25-26`
-
-A checklist module strips whitespace and slashes from its path, so `src/` and `/src` work. Eval
-passes it raw, so the same input answers `400 MODULE_PATH_NOT_INDEXED`. Eval also caps the path at
-1024 characters where checklist uses 512, and repeats the 120-character name limit as its own
-constant. **Fix:** one shared normaliser and the shared length constants. One hour.
 
 ## Verified correct in this sweep (2026-10-04), with what was checked
 
@@ -703,48 +536,9 @@ Their line numbers have moved; the current locations are:
 
 ## §4 Ingestion and server-side request forgery
 
-### §4.1 A timed-out or cancelled clone leaves its `git` process behind — 🟡 hygiene
+Every finding still open here (§4.1–§4.2) was resolved on 2026-10-25; all of them are in
+[`audit-finding-solved-logs.md`](audit-finding-solved-logs.md).
 
-**Evidence:** CONFIRMED by reading the code; not reproduced.
-
-**Where:** `backend/app/ingestion/cloner.py:218-230`; the scratch directory is removed by
-`backend/app/ingestion/pipeline.py` (`shutil.rmtree`)
-
-**What this is.** Indexing a project starts by running `git clone` as a child process. The cloner
-waits for it with a 120-second timeout (`docs/PRD.md` §9) and a size watcher, so a hung or huge
-clone cannot hold its job forever.
-
-**Why this can happen.** On timeout the code calls `process.kill()` and raises at once — it never
-awaits `process.wait()`, so the dead process is not reaped until the event loop gets round to it.
-If the worker is cancelled mid-clone (a shutdown, a redeploy), the `finally` block stops only the
-size watcher: `git` is neither killed nor awaited, and keeps writing into `/data/repos` while the
-pipeline's `rmtree` removes the same directory.
-
-**What it costs.** No user sees anything. An operator may find stray `git` processes after a
-redeploy, or leftover scratch directories that the next run has to step around.
-
-**What we should do.** In the `finally`, kill the process if it is still running and await
-`process.wait()` (under `asyncio.shield`, since the task may be cancelled). Half an hour.
-
-### §4.2 The connect-time address pin uses only the first record, and may not accept IPv6 — 🟡 hygiene
-
-**Evidence:** SUSPECT. Unverified: whether the deployed `git`/`curl` accepts an unbracketed IPv6
-literal in `http.curloptResolve`. Running `git -c http.curloptResolve=github.com:443:<ipv6> ls-remote
-https://github.com/…` in the production image settles it.
-
-**Where:** `backend/app/core/repo_url.py:124-130`; `backend/app/ingestion/cloner.py:44`
-
-**What this is.** To stop a repository URL from being re-resolved to a private address between the
-check and the clone, the validator checks every address the host resolves to, then pins the clone
-to one of them with curl's resolve override.
-
-**Why this can happen.** It pins `addresses[0]`. If that is an IPv6 address and curl wants it
-bracketed, the clone fails; if that one address is unreachable, the clone fails rather than trying
-the next. Either way the failure is a retryable "clone failed", never a request to an unchecked
-address — the security control holds.
-
-**What we should do.** Settle the IPv6 question first. If it bites, prefer an IPv4 record or
-bracket IPv6 literals. One hour, including a test.
 
 ## §6 Secret handling
 
@@ -754,125 +548,9 @@ Every finding this sweep raised here (§6.1–§6.2) was resolved on 2026-10-25 
 
 ## §7 The response contract
 
-### §7.4 The four membership routes declare no `summary` and no error responses — 🟡 hygiene
+Every finding still open here (§7.4–§7.9) was resolved on 2026-10-25; all of them are in
+[`audit-finding-solved-logs.md`](audit-finding-solved-logs.md).
 
-**Evidence:** CONFIRMED.
-
-**Where:** `backend/app/api/routes/members.py:29`, `:37-40`, `:52`, `:64`; the raises are in
-`backend/app/services/membership.py:84`, `:87`, `:89`, `:168`, `:181`, `:216`, `:249`
-
-**What this is.** `.claude/rules/response-api.md` requires every route to declare a `summary`, a
-`status_code`, and a `responses` block listing what its service raises, so `/docs` and every
-generated client describe the real errors.
-
-**Why this can happen.** The members router never had its contract pass. Its four routes (list,
-add, change role, remove) declare none of it, and two have no `status_code`. The service raises
-`404` (`ROLE_NOT_FOUND`, `USER_NOT_FOUND`, `MEMBERSHIP_NOT_FOUND`), `409` (`MEMBERSHIP_EXISTS`,
-`LAST_OWNER`) and `403 INSUFFICIENT_ROLE`.
-
-**What it costs.** `/docs` shows these routes with only their success status, titled by function
-name. A generated client has no typed error for "this would leave the project with no owner".
-
-**What we should do.** Add `summary`, `status_code` and `responses` (401/403/404/422 on all four,
-409 on add, change and remove). Half an hour. No other router has this gap.
-
-### §7.5 The source-path check's errors are undeclared on three routes — 🟡 hygiene
-
-**Evidence:** CONFIRMED.
-
-**Where:** `backend/app/api/routes/checklist_modules.py:140-146` (`POST`), `:170-176` (`PATCH`);
-`backend/app/api/routes/eval.py:58-70` (`POST /projects/{id}/eval-sets`); the raises are in
-`backend/app/services/index_guards.py:15-27`, `:74-87` and `backend/app/services/indexed_path.py:143-148`
-
-**What this is.** A checklist module or an eval set can be pointed at a path in the repository.
-`require_path_indexed` refuses a path the index does not contain with
-`400 MODULE_PATH_NOT_INDEXED`, and answers `503 VECTOR_STORE_UNAVAILABLE` if the vector store cannot
-be read.
-
-**Why this can happen.** Neither module route declares `400` or `503`, the module `PATCH` also
-omits the `409 PROJECT_NOT_READY` that `require_indexed` raises, and the eval-set route omits `503`.
-
-**What it costs.** The most common error on module create — a mistyped path — is absent from
-`/docs` and from every generated client, and a vector-store outage arrives as an undocumented
-status.
-
-**What we should do.** Declare `400` and `503` on all three, and `409` on the module `PATCH`.
-Fifteen minutes.
-
-### §7.6 The `409` on `DELETE /users/{id}` is declared with a shape `LAST_ADMIN` does not have — 🟡 hygiene
-
-**Evidence:** CONFIRMED.
-
-**Where:** `backend/app/api/routes/users.py:96-117`; `backend/app/schemas/errors.py:40-41`;
-`backend/app/services/user.py:87-88` (`LAST_ADMIN`), `:236` (`LAST_OWNER` with `extra`)
-
-**What this is.** Deactivating a user can be refused two ways: `LAST_OWNER` (it would leave projects
-ownerless), whose body lists those projects, and `LAST_ADMIN` (it would remove the last
-administrator), whose body is the plain `{code, message}`.
-
-**Why this can happen.** The route declares `LastOwnerErrorResponse` for every `409`, and that model
-makes `projects` a required list.
-
-**What it costs.** A client generated from `/docs` that deserialises the `409` strictly fails on a
-`LAST_ADMIN` refusal — the one case where an admin most needs to read the message.
-
-**What we should do.** Make `projects` optional, or declare the two shapes as a union. Fifteen
-minutes.
-
-### §7.7 The three download routes document no body — 🟡 hygiene
-
-**Evidence:** CONFIRMED.
-
-**Where:** `backend/app/api/routes/projects.py:~166-190` (`.xlsx`/`.zip`, chosen at runtime);
-`backend/app/api/routes/checklist_items.py:73` (`.xlsx`); `backend/app/api/routes/mock_data_datasets.py:203-240`
-(`.json`/`.xlsx`)
-
-**What this is.** The export routes return a file with `response_class=Response`.
-`.claude/rules/response-api.md` treats an undeclared success body as a defect unless a reason is
-documented.
-
-**Why this can happen.** None declares a `200` content type or the `Content-Disposition` header, and
-none documents why.
-
-**What it costs.** `/docs` shows a `200` with no body; a generated client returns an untyped blob.
-
-**What we should do.** Add `responses={200: {"content": {<media type>: {}}, …}}` to each. Fifteen
-minutes.
-
-### §7.8 The eval-set create body marks every field optional — 🟡 hygiene
-
-**Evidence:** CONFIRMED.
-
-**Where:** `backend/app/schemas/eval.py:22-57`
-
-**What this is.** `POST /projects/{id}/eval-sets` takes one of two bodies: generate (`name`,
-`count`, `mix`, optional `sourcePath`) or translate (`sourceSetId`, `language`). A
-`model_validator` enforces "exactly one shape".
-
-**Why this can happen.** Both shapes live in one model, so every field is optional in the schema.
-The shape rule exists only in the validator and a docstring. The reason is stated — a union would
-prefix the field keys in `422` bodies — but the route's description does not say so.
-
-**What it costs.** A generated client accepts a body that always answers `422`.
-
-**What we should do.** Describe the two shapes in the route's `description` (and note that shape
-errors key as `fields["request"]`). Fifteen minutes.
-
-### §7.9 An eval set with a retired language would fail every list it appears in — 🟡 hygiene
-
-**Evidence:** SUSPECT. Unverified: whether a shipped language can ever be removed —
-`backend/app/core/language.py` says members are added, never renamed. A test that loads an eval set
-row with language `xx` settles the behaviour.
-
-**Where:** `backend/app/schemas/eval.py` (`EvalSetSummary.language: Language`);
-`backend/app/services/eval.py:479`; compare `backend/app/schemas/project.py:64-70`
-
-**Why this can happen.** A project's stored language that is no longer shipped reads as English
-(`_unshipped_language_reads_as_english`). An eval set's does not: the strict enum would raise during
-serialisation and answer `500` for the whole list.
-
-**What we should do.** Reuse the project schema's tolerant validator. Fifteen minutes. See §9.33,
-which would put that fallback in one place.
 
 ## §8 Job and status handling
 
@@ -882,49 +560,9 @@ Every finding this sweep raised here (§8.7) was resolved on 2026-10-25 and is i
 
 ## §9 Code health — dead code, duplication, and documentation
 
-### §9.32 Five English-only constants survive the translated tables — 🟡 hygiene
+Every finding still open here (§9.32–§9.34) was resolved on 2026-10-25; all of them are in
+[`audit-finding-solved-logs.md`](audit-finding-solved-logs.md).
 
-**Evidence:** CONFIRMED (`grep -rnw` finds each defined once in `backend/app`).
-
-**Where:** `backend/app/rag/grounding.py:87` (`NO_CONTEXT_ANSWER`), `:132` (`OUT_OF_SCOPE_ANSWER`);
-`backend/app/mail/compose.py:315` (`RESET_MESSAGE`); `backend/app/services/checklist_export.py:21`
-(`SHEET_TITLE`); `backend/app/services/mock_data_export.py:23` (`NO_DATA_LABEL`)
-
-Each is `TABLE[Language.EN]`, left behind when the table it came from was translated. Nothing in the
-application reads them; three are read only by tests (`tests/test_grounding.py`, `test_graph.py`,
-`test_checklist_export.py`, `test_project_export.py`), which therefore test the English constant
-rather than the language-picked path production takes. **Fix:** delete all five and point the
-tests at the tables. Half an hour.
-
-### §9.33 "An unset or unshipped language reads as English" is written out eight times — 🟡 hygiene
-
-**Evidence:** CONFIRMED (`grep -rn "parse_language(.*) or Language.EN" backend/app` → 8).
-
-**Where:** `backend/app/mockdata/generator.py:136`; `backend/app/checklist/generator.py:125`;
-`backend/app/services/mock_data_dataset.py:249`, `:373`; `backend/app/services/checklist_module.py:421`;
-`backend/app/services/project_export.py:102`; `backend/app/schemas/project.py:69`;
-`backend/app/repositories/notification.py:211`
-
-The eight copies agree today. If the fallback ever changes — the obvious next step is "the viewer's
-language" — the change has to land in eight places and any one missed makes a shared document's
-language depend on which code path produced it. `shared_language` in `app/core/language.py:113`
-hides a ninth. The `"en"` server defaults in `backend/app/models/project.py:107` and
-`backend/app/models/eval.py:110` are fine (a migration cannot import the enum) but deserve a comment
-naming `Language.EN`. **Fix:** one `language_or_default()` in `app/core/language.py`. One hour.
-
-### §9.34 The single- and multi-module checklist exports duplicate their filter and cap logic — 🟡 hygiene
-
-**Evidence:** CONFIRMED.
-
-**Where:** `backend/app/services/checklist_item.py:296-372` (`ChecklistItemService.export`);
-`backend/app/services/project_export.py:140-200` (`ProjectExportService._checklist`), and its
-mock-data cap at `:~210`
-
-Both build the same `list_all(...)` arguments, raise the same `409 EXPORT_TOO_LARGE` with different
-wording ("rows" vs "test cases"), and build the same audit `filter` details. A comment at
-`project_export.py:~183` says "same envelope as the per-module export" — the comment is the only
-thing keeping them aligned. **Fix:** extract the filter-to-details mapping and the cap check beside
-`build_workbook` in `app/services/checklist_export.py`. One hour.
 
 ## Verified correct in this sweep (2026-10-24), with what was checked
 

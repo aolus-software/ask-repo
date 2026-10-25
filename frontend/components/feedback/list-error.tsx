@@ -12,12 +12,21 @@ import { useErrorText } from "@/lib/i18n/error-text";
  * (`docs/audit-finding-solved-logs.md` §U7.1). `onRetry` is the query's own `refetch`, so this
  * never guesses at how to recover.
  */
-export function ListError({ error, onRetry }: { error: unknown; onRetry: () => void }) {
+export function ListError({
+  error,
+  onRetry,
+  padded = false,
+}: {
+  error: unknown;
+  onRetry: () => void;
+  /** Set when rendered directly inside a zero-padding card, so the alert does not touch its edges. */
+  padded?: boolean;
+}) {
   const t = useTranslations("feedback");
   const errorText = useErrorText();
 
   return (
-    <div className="space-y-4">
+    <div className={padded ? "space-y-4 p-4" : "space-y-4"}>
       <Alert variant="destructive">
         <AlertTitle>{t("listTitle")}</AlertTitle>
         <AlertDescription>{errorText(error)}</AlertDescription>

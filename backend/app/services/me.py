@@ -30,7 +30,7 @@ from app.schemas.me import (
     MembershipSummary,
     SessionResponse,
 )
-from app.schemas.pagination import ListQuery, PaginatedResponse
+from app.schemas.pagination import PageQuery, PaginatedResponse
 
 
 class MeService:
@@ -111,7 +111,7 @@ class MeService:
         )
 
     async def activity(
-        self, user: AuthenticatedUser, query: ListQuery
+        self, user: AuthenticatedUser, query: PageQuery
     ) -> PaginatedResponse[ActivityEntry]:
         """The caller's own audit rows, newest first.
 
@@ -124,7 +124,7 @@ class MeService:
             limit=query.limit,
             offset=(query.page - 1) * query.limit,
             actor_user_id=user.id,
-            visible_project_ids=None if scope.unrestricted else scope.ids,
+            visible_scope=scope,
         )
         items = [
             ActivityEntry(

@@ -61,7 +61,7 @@
   },
   "preflight": {
     "couldNotAnswer": "Pertanyaan itu tidak dapat dijawab",
-    "genericError": "Terjadi kesalahan.",
+    "genericError": "Terjadi kesalahan",
     "needsReindexTitle": "Proyek ini perlu diindeks ulang",
     "needsReindexBody": "Proyek ini diindeks dengan model embedding yang berbeda, sehingga vektor yang tersimpan tidak dapat dicari dengan model yang dijalankan instans ini sekarang. Indeks ulang proyek ini dan pertanyaan akan dapat dijawab lagi.",
     "reindexNow": "Indeks ulang sekarang",
