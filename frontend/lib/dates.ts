@@ -47,6 +47,12 @@ export function formatAbsolute(iso: string | null): string | undefined {
  * `YYYY-MM-DD` segment back out directly rather than routing through a `Date` and
  * risking the browser's local timezone shifting it to the adjacent day.
  */
-export function formatDay(isoDate: string): string {
-  return isoDate.slice(0, 10);
+export function formatDay(isoDate: string, locale?: string): string {
+  const day = isoDate.slice(0, 10);
+  if (!locale) return day;
+  // Pinned to UTC for the same reason: the day must not move with the viewer's zone.
+  return new Intl.DateTimeFormat(locale, {
+    dateStyle: "medium",
+    timeZone: "UTC",
+  }).format(new Date(`${day}T00:00:00Z`));
 }

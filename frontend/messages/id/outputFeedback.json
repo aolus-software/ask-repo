@@ -58,6 +58,9 @@
     "filterByReason": "Filter berdasarkan alasan",
     "up": "Baik",
     "down": "Buruk",
+    "projectChip": "Proyek: {value}",
+    "promptVersionChip": "Versi prompt: {value}",
+    "removeFilter": "Hapus filter: {label}",
     "fromDate": "Dari tanggal",
     "toDate": "Sampai tanggal"
   }

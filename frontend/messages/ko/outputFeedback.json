@@ -58,6 +58,9 @@
     "filterByReason": "이유별 필터",
     "up": "추천",
     "down": "비추천",
+    "projectChip": "프로젝트: {value}",
+    "promptVersionChip": "프롬프트 버전: {value}",
+    "removeFilter": "필터 제거: {label}",
     "fromDate": "시작 날짜",
     "toDate": "종료 날짜"
   }

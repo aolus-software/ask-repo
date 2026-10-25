@@ -214,6 +214,68 @@ describe("FeedbackControl", () => {
     );
   });
 
+  it("starts the popover clean after closing without sending", async () => {
+    vi.spyOn(client, "apiFetch").mockResolvedValue({});
+    renderControl();
+
+    await userEvent.click(screen.getByRole("button", { name: /not helpful/i }));
+    await userEvent.click(
+      screen.getByRole("checkbox", { name: /cited the wrong file/i }),
+    );
+    await userEvent.type(screen.getByRole("textbox"), "stale");
+    await userEvent.keyboard("{Escape}");
+    await waitFor(() => expect(screen.queryByRole("textbox")).toBeNull());
+
+    await userEvent.click(screen.getByRole("button", { name: /not helpful/i }));
+
+    expect(
+      screen.getByRole("checkbox", { name: /cited the wrong file/i }),
+    ).not.toBeChecked();
+    expect(screen.getByRole("textbox")).toHaveValue("");
+  });
+
+  it("starts the popover clean after a removed down vote", async () => {
+    vi.spyOn(client, "apiFetch").mockResolvedValue({});
+    renderControl({
+      initial: { rating: "down", reasonCodes: ["wrong_file_cited"], note: "old" },
+    });
+
+    // The active thumb withdraws the vote; a fresh thumbs-down then opens clean.
+    await userEvent.click(screen.getByRole("button", { name: /not helpful/i }));
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: /not helpful/i })).toHaveAttribute(
+        "aria-pressed",
+        "false",
+      ),
+    );
+    await userEvent.click(screen.getByRole("button", { name: /not helpful/i }));
+
+    expect(
+      screen.getByRole("checkbox", { name: /cited the wrong file/i }),
+    ).not.toBeChecked();
+    expect(screen.getByRole("textbox")).toHaveValue("");
+  });
+
+  it("labels the note field and shows a failed save beside the form", async () => {
+    vi.spyOn(client, "apiFetch").mockRejectedValue(
+      new ApiError(500, "INTERNAL_ERROR", "Boom"),
+    );
+    renderControl();
+
+    await userEvent.click(screen.getByRole("button", { name: /not helpful/i }));
+    expect(screen.getByLabelText("Anything else?")).toBe(screen.getByRole("textbox"));
+    await userEvent.click(
+      screen.getByRole("checkbox", { name: /cited the wrong file/i }),
+    );
+    await userEvent.click(screen.getByRole("button", { name: /send feedback/i }));
+
+    expect(await screen.findByRole("alert")).toBeInTheDocument();
+    // The popover stayed open, with the operator's input intact.
+    expect(
+      screen.getByRole("checkbox", { name: /cited the wrong file/i }),
+    ).toBeChecked();
+  });
+
   it("shows a character counter on the note field", async () => {
     renderControl();
 

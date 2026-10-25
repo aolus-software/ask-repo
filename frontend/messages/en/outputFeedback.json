@@ -58,6 +58,9 @@
     "filterByReason": "Filter by reason",
     "up": "Up",
     "down": "Down",
+    "projectChip": "Project: {value}",
+    "promptVersionChip": "Prompt version: {value}",
+    "removeFilter": "Remove filter: {label}",
     "fromDate": "From date",
     "toDate": "To date"
   }

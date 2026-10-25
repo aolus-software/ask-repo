@@ -1,5 +1,5 @@
 import { ExternalLink, ThumbsDown, ThumbsUp } from "lucide-react";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 
 import { TableSkeleton } from "@/components/feedback/table-skeleton";
 import {
@@ -26,6 +26,7 @@ export function FeedbackTable({
   isLoading: boolean;
 }) {
   const t = useTranslations("outputFeedback");
+  const locale = useLocale();
 
   return (
     <div className="overflow-x-auto">
@@ -49,7 +50,7 @@ export function FeedbackTable({
             rows.map((row) => (
               <TableRow key={row.id}>
                 <TableCell className="text-muted-foreground text-sm">
-                  {formatDay(row.createdOn)}
+                  {formatDay(row.createdOn, locale)}
                 </TableCell>
                 <TableCell className="text-sm">{row.projectName}</TableCell>
                 <TableCell className="text-sm">
