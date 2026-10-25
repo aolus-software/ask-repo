@@ -1,6 +1,6 @@
 [project]
 name = "askrepo-backend"
-version = "2.4.1"
+version = "2.4.2"
 description = "AskRepo API — codebase-aware assistant backend"
 readme = "README.md"
 requires-python = ">=3.13"
