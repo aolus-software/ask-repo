@@ -286,7 +286,9 @@ class MockDataGenerator:
         except TerminalIngestionError:
             raise
         except Exception as error:
-            raise RetryableIngestionError(f"scrolling the module failed: {error}") from error
+            raise RetryableIngestionError(
+                f"scrolling the module failed ({type(error).__name__})."
+            ) from error
 
         if not payloads:
             raise TerminalIngestionError(f"no indexed file matches {path_prefix!r} in this project")

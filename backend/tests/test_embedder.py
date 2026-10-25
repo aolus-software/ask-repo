@@ -114,3 +114,21 @@ async def test_status_codes_are_classified_consistently_across_providers(
 async def test_dimensions_are_probed_not_declared() -> None:
     """A number kept in sync by hand is a number that will eventually be wrong."""
     assert await probe_dimensions(FakeEmbedder(dimensions=768)) == 768
+
+
+@pytest.mark.parametrize("provider", ["ollama", "openai", "voyage"])
+async def test_a_transport_failure_names_the_class_not_the_text(provider: str) -> None:
+    """`Project.error` shows this message, so it must not quote the provider URL that
+    httpx puts in its exception text. The full exception stays on `__cause__`."""
+
+    def refuse(request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError("cannot reach http://internal-embedder.corp:11434/api/embed")
+
+    embedder = _build(provider, httpx.MockTransport(refuse))
+
+    with pytest.raises(RetryableIngestionError) as raised:
+        await embedder.embed_documents(["x"])
+
+    assert "ConnectError" in str(raised.value)
+    assert "internal-embedder" not in str(raised.value)
+    assert isinstance(raised.value.__cause__, httpx.ConnectError)

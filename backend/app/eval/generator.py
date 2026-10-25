@@ -274,7 +274,9 @@ class EvalSetGenerator:
         except TerminalIngestionError:
             raise
         except Exception as error:
-            raise RetryableIngestionError(f"scrolling the index failed: {error}") from error
+            raise RetryableIngestionError(
+                f"scrolling the index failed ({type(error).__name__})."
+            ) from error
         return payloads
 
     async def _generate_one(
