@@ -79,6 +79,9 @@
     "description": "How people rated answers, chat replies and proposals. Who voted, and the question behind a vote, are never shown.",
     "forbidden": "Only administrators can read feedback on model output.",
     "emptyTitle": "No feedback yet",
-    "emptyDescription": "Votes on answers, chat replies and change sets will appear here."
+    "emptyDescription": "Votes on answers, chat replies and change sets will appear here.",
+    "noMatchTitle": "No feedback matches these filters",
+    "noMatchDescription": "Try a different filter or a wider date range.",
+    "clearFilters": "Clear filters"
   }
 }

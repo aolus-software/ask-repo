@@ -2,6 +2,7 @@
 
 import { useTranslations } from "next-intl";
 
+import { FilterField } from "@/components/layout/filter-field";
 import { FEEDBACK_FEATURES } from "@/components/output-feedback/feedback-summary";
 import { REASON_CODES } from "@/components/output-feedback/reason-labels";
 import { Input } from "@/components/ui/input";
@@ -37,7 +38,10 @@ export function FeedbackFilters({
 
   return (
     <>
-      <div>
+      <FilterField
+        htmlFor="feedback-filter-feature"
+        label={t("filters.filterByFeature")}
+      >
         <Select
           value={currentFilters.feature ?? ANY}
           onValueChange={(value: string | null | undefined) =>
@@ -47,7 +51,7 @@ export function FeedbackFilters({
             })
           }
         >
-          <SelectTrigger className="w-full" aria-label={t("filters.filterByFeature")}>
+          <SelectTrigger id="feedback-filter-feature" className="w-full">
             <SelectValue>
               {(value: string) =>
                 value === ANY
@@ -65,9 +69,9 @@ export function FeedbackFilters({
             ))}
           </SelectContent>
         </Select>
-      </div>
+      </FilterField>
 
-      <div>
+      <FilterField htmlFor="feedback-filter-rating" label={t("filters.filterByVote")}>
         <Select
           value={currentFilters.rating ?? ANY}
           onValueChange={(value: string | null | undefined) =>
@@ -77,7 +81,7 @@ export function FeedbackFilters({
             })
           }
         >
-          <SelectTrigger className="w-full" aria-label={t("filters.filterByVote")}>
+          <SelectTrigger id="feedback-filter-rating" className="w-full">
             <SelectValue>
               {(value: string) =>
                 value === ANY
@@ -94,9 +98,9 @@ export function FeedbackFilters({
             <SelectItem value="down">{t("filters.down")}</SelectItem>
           </SelectContent>
         </Select>
-      </div>
+      </FilterField>
 
-      <div>
+      <FilterField htmlFor="feedback-filter-reason" label={t("filters.filterByReason")}>
         <Select
           value={currentFilters.reasonCode ?? ANY}
           onValueChange={(value: string | null | undefined) =>
@@ -107,7 +111,7 @@ export function FeedbackFilters({
             })
           }
         >
-          <SelectTrigger className="w-full" aria-label={t("filters.filterByReason")}>
+          <SelectTrigger id="feedback-filter-reason" className="w-full">
             <SelectValue>
               {(value: string) =>
                 value === ANY
@@ -125,10 +129,11 @@ export function FeedbackFilters({
             ))}
           </SelectContent>
         </Select>
-      </div>
+      </FilterField>
 
-      <div>
+      <FilterField htmlFor="feedback-filter-from" label={t("filters.fromDate")}>
         <Input
+          id="feedback-filter-from"
           type="date"
           className="w-full"
           value={currentFilters.createdFrom?.slice(0, 10) ?? ""}
@@ -138,12 +143,12 @@ export function FeedbackFilters({
               createdFrom: event.target.value || undefined,
             })
           }
-          aria-label={t("filters.fromDate")}
         />
-      </div>
+      </FilterField>
 
-      <div>
+      <FilterField htmlFor="feedback-filter-to" label={t("filters.toDate")}>
         <Input
+          id="feedback-filter-to"
           type="date"
           className="w-full"
           value={currentFilters.createdTo?.slice(0, 10) ?? ""}
@@ -153,9 +158,8 @@ export function FeedbackFilters({
               createdTo: event.target.value || undefined,
             })
           }
-          aria-label={t("filters.toDate")}
         />
-      </div>
+      </FilterField>
     </>
   );
 }

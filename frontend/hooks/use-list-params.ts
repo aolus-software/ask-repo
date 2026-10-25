@@ -97,5 +97,17 @@ export function useListParams(
     [searchParams, write],
   );
 
-  return { params, searchInput, setSearch, setPage, setParam };
+  /** Drops several keys in one write, which `setParam` cannot: it reads the URL on
+   * every call, so one call per key would have each overwrite the one before it. */
+  const clearParams = useCallback(
+    (keys: readonly string[]) => {
+      const next = new URLSearchParams(searchParams.toString());
+      for (const key of keys) next.delete(key);
+      next.delete("page");
+      write(next);
+    },
+    [searchParams, write],
+  );
+
+  return { params, searchInput, setSearch, setPage, setParam, clearParams };
 }

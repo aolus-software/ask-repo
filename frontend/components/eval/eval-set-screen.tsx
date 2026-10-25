@@ -17,6 +17,7 @@ import { DetailError } from "@/components/feedback/detail-error";
 import { JobFailureAlert } from "@/components/feedback/job-failure-alert";
 import { NotFound } from "@/components/feedback/not-found";
 import { useBreadcrumbLabel } from "@/components/layout/breadcrumb-labels";
+import { FilterField } from "@/components/layout/filter-field";
 import { PageHeader } from "@/components/layout/page-header";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -289,32 +290,33 @@ export function EvalSetScreen({
       {doneRuns.length >= 2 ? (
         <section className="space-y-3">
           <h2 className="text-xl font-semibold tracking-tight">{t("compare")}</h2>
-          <div className="flex flex-wrap gap-3">
+          <div className="flex flex-wrap items-end gap-4">
             {compareSelects.map(([key, label, value, setValue], position, all) => {
               const otherId = all[1 - position][2];
               return (
-                <Select
-                  key={key}
-                  value={value ?? ""}
-                  onValueChange={(next: string | null) => setValue(next || null)}
-                >
-                  <SelectTrigger className="w-64" aria-label={label}>
-                    <SelectValue>
-                      {(id: string) => (id ? runLabel(id) : label)}
-                    </SelectValue>
-                  </SelectTrigger>
-                  <SelectContent>
-                    {doneRuns.map((run) => (
-                      <SelectItem
-                        key={run.id}
-                        value={run.id}
-                        disabled={run.id === otherId}
-                      >
-                        {runLabel(run.id)}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <FilterField key={key} htmlFor={`eval-compare-${key}`} label={label}>
+                  <Select
+                    value={value ?? ""}
+                    onValueChange={(next: string | null) => setValue(next || null)}
+                  >
+                    <SelectTrigger id={`eval-compare-${key}`} className="w-64">
+                      <SelectValue>
+                        {(id: string) => (id ? runLabel(id) : label)}
+                      </SelectValue>
+                    </SelectTrigger>
+                    <SelectContent>
+                      {doneRuns.map((run) => (
+                        <SelectItem
+                          key={run.id}
+                          value={run.id}
+                          disabled={run.id === otherId}
+                        >
+                          {runLabel(run.id)}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </FilterField>
               );
             })}
           </div>
@@ -342,26 +344,27 @@ export function EvalSetScreen({
           <h2 className="text-xl font-semibold tracking-tight">
             {t("compareWithSource")}
           </h2>
-          <div className="flex flex-wrap gap-3">
+          <div className="flex flex-wrap items-end gap-4">
             {sourceCompareSelects.map(([key, label, value, setValue, options, all]) => (
-              <Select
-                key={key}
-                value={value ?? ""}
-                onValueChange={(next: string | null) => setValue(next || null)}
-              >
-                <SelectTrigger className="w-64" aria-label={label}>
-                  <SelectValue>
-                    {(id: string) => (id ? runLabelIn(all, id) : label)}
-                  </SelectValue>
-                </SelectTrigger>
-                <SelectContent>
-                  {options.map((run) => (
-                    <SelectItem key={run.id} value={run.id}>
-                      {runLabelIn(all, run.id)}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <FilterField key={key} htmlFor={`eval-compare-${key}`} label={label}>
+                <Select
+                  value={value ?? ""}
+                  onValueChange={(next: string | null) => setValue(next || null)}
+                >
+                  <SelectTrigger id={`eval-compare-${key}`} className="w-64">
+                    <SelectValue>
+                      {(id: string) => (id ? runLabelIn(all, id) : label)}
+                    </SelectValue>
+                  </SelectTrigger>
+                  <SelectContent>
+                    {options.map((run) => (
+                      <SelectItem key={run.id} value={run.id}>
+                        {runLabelIn(all, run.id)}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </FilterField>
             ))}
           </div>
           {sourceRunId &&

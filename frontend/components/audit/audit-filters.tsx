@@ -3,6 +3,7 @@
 import { useTranslations } from "next-intl";
 import { useMemo } from "react";
 
+import { FilterField } from "@/components/layout/filter-field";
 import {
   Combobox,
   ComboboxContent,
@@ -78,7 +79,7 @@ export function AuditFilters({
     // inside a single cell, which collapses every control to a quarter of one column --
     // wide enough for "All e..." and a clipped date picker.
     <>
-      <div>
+      <FilterField htmlFor="audit-filter-event" label={t("eventType")}>
         <Combobox
           items={eventOptions}
           value={selectedEvent}
@@ -93,7 +94,7 @@ export function AuditFilters({
           <ComboboxInput
             className="w-full"
             placeholder={t("allEvents")}
-            aria-label={t("eventType")}
+            id="audit-filter-event"
           />
           <ComboboxContent>
             <ComboboxEmpty>{t("noEventMatches")}</ComboboxEmpty>
@@ -106,9 +107,9 @@ export function AuditFilters({
             </ComboboxList>
           </ComboboxContent>
         </Combobox>
-      </div>
+      </FilterField>
 
-      <div>
+      <FilterField htmlFor="audit-filter-outcome" label={t("outcome")}>
         <Combobox
           items={outcomeOptions}
           value={selectedOutcome}
@@ -124,7 +125,7 @@ export function AuditFilters({
           <ComboboxInput
             className="w-full"
             placeholder={t("allOutcomes")}
-            aria-label={t("outcome")}
+            id="audit-filter-outcome"
           />
           <ComboboxContent>
             <ComboboxEmpty>{t("noOutcomeMatches")}</ComboboxEmpty>
@@ -137,10 +138,11 @@ export function AuditFilters({
             </ComboboxList>
           </ComboboxContent>
         </Combobox>
-      </div>
+      </FilterField>
 
-      <div>
+      <FilterField htmlFor="audit-filter-from" label={t("fromDate")}>
         <Input
+          id="audit-filter-from"
           type="date"
           className="w-full"
           value={currentFilters.occurredFrom?.slice(0, 10) ?? ""}
@@ -150,12 +152,12 @@ export function AuditFilters({
               occurredFrom: event.target.value || undefined,
             })
           }
-          aria-label={t("fromDate")}
         />
-      </div>
+      </FilterField>
 
-      <div>
+      <FilterField htmlFor="audit-filter-to" label={t("toDate")}>
         <Input
+          id="audit-filter-to"
           type="date"
           className="w-full"
           value={currentFilters.occurredTo?.slice(0, 10) ?? ""}
@@ -165,9 +167,8 @@ export function AuditFilters({
               occurredTo: event.target.value || undefined,
             })
           }
-          aria-label={t("toDate")}
         />
-      </div>
+      </FilterField>
     </>
   );
 }

@@ -15,6 +15,7 @@ import {
   FeedbackSummarySkeleton,
 } from "@/components/output-feedback/feedback-summary";
 import { FeedbackTable } from "@/components/output-feedback/feedback-table";
+import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { useFeedbackList, useFeedbackSummary } from "@/hooks/use-feedback";
 import { useListParams } from "@/hooks/use-list-params";
@@ -41,7 +42,7 @@ function changedKey(
 export function FeedbackScreen() {
   const t = useTranslations("settings.feedback");
   const user = useSession();
-  const { params, setPage, setParam } = useListParams(
+  const { params, setPage, setParam, clearParams } = useListParams(
     { limit: 25 },
     { extraParams: EXTRA_PARAMS },
   );
@@ -49,6 +50,7 @@ export function FeedbackScreen() {
   const list = useFeedbackList(listParams);
   const summary = useFeedbackSummary(listParams);
   const rows = list.data?.items ?? [];
+  const filtered = EXTRA_PARAMS.some((key) => Boolean(listParams[key]));
 
   if (!user.isAdmin) return <Forbidden message={t("forbidden")} />;
 
@@ -85,8 +87,15 @@ export function FeedbackScreen() {
         ) : !list.isLoading && rows.length === 0 ? (
           <EmptyState
             icon={MessageSquareWarning}
-            title={t("emptyTitle")}
-            description={t("emptyDescription")}
+            title={filtered ? t("noMatchTitle") : t("emptyTitle")}
+            description={filtered ? t("noMatchDescription") : t("emptyDescription")}
+            action={
+              filtered ? (
+                <Button variant="outline" onClick={() => clearParams(EXTRA_PARAMS)}>
+                  {t("clearFilters")}
+                </Button>
+              ) : undefined
+            }
           />
         ) : (
           <>
