@@ -185,7 +185,7 @@ inside a card is `space-y-4`; between cards, `gap-6`.
 | Filter/toolbar grid | `grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-4` — four cells including the search box. A screen carrying four or more filters passes `columns={5}` to `ListToolbar` for `lg:grid-cols-5`; `/settings/audit` is the one that does. Filters are passed as sibling cells, never wrapped in a grid of their own, or they divide one cell between them |
 | Button group | `gap-2` |
 | Page section gap | `gap-6` |
-| Input with a leading icon | `pl-9` — the one value off the scale. It clears a `left-3 size-4` icon (0.75rem + 1rem) plus a 0.5rem gap to the text, which no on-scale value does. Used by `ListToolbar`'s search box and the conversation rail's search |
+| Input with a leading icon | `pl-9` — off the scale. It clears a `left-3 size-4` icon (0.75rem + 1rem) plus a 0.5rem gap to the text, which no on-scale value does. Used by `ListToolbar`'s search box and the conversation rail's search |
 | Input with a trailing icon button | `pe-10` — an exception beside `pl-9`, for the same reason: it clears the `size-4` show/hide button in `PasswordInput` plus its padding, which no on-scale value does |
 | Profile section rail | `lg:top-24 lg:w-48` — dimensions rather than spacing steps. `top-24` is the `h-16` navbar plus a `p-8` gap, so the sticky rail stops below the navbar, and `w-48` is a fixed rail width |
 | Notification count badge | `text-[10px]` on the bell's count. It is outside the type scale on purpose: the badge is a 1rem circle (`min-w-4`) that has to hold two digits, and `text-xs` (0.75rem) does not fit. Its offset is on the scale (`-top-1 -right-1`) |
