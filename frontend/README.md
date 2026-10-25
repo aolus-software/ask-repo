@@ -155,8 +155,8 @@ frontend/
 │   │                      #   forwarded headers, the public forward
 │   ├── i18n/              # the language list, error text by code, catalogue parity test
 │   ├── ask/               # SSE parser, pending-question carrier
-│   ├── checklist/         # change-set operations, path helpers, the refinement stream
-│   ├── mock-data/         # the mock-data refinement stream
+│   ├── checklist/         # change-set operations, path helpers
+│   ├── refinement/        # the one stream reader both refinement chats share
 │   ├── live/              # reconnect backoff, event-to-query invalidation
 │   ├── query/             # the query client, keys and provider
 │   ├── eval-compare.ts    # two runs compared on the pairs both answered

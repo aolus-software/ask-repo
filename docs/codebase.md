@@ -162,7 +162,8 @@ backend/app/
 │
 ├── ingestion/         cloner, walker, chunker, embedder/, vector_store, pipeline, errors
 ├── observability/     the AI call log: features, record, recorder, trace_ids, langfuse_sink
-├── queue/             topics, producer, consumer, retry, protocol, heartbeat, checklist, mock_data, eval
+├── queue/             topics, producer, consumer, retry, protocol, heartbeat, job_failure, checklist,
+│                      mock_data, eval
 ├── rag/               retriever, chat, prompts, prompt_version, answer_style, answerer,
 │   │                  grounding, capability, errors
 │   └── graph/         build.py, nodes.py, state.py
