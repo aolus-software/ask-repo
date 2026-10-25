@@ -13,6 +13,14 @@ client can have received it, so it is recorded under Changed and allowed in a `M
 
 ## [Unreleased]
 
+## [2.4.2] — 2026-10-25
+
+> **Read before upgrading: this is not a fixes-only release, despite the patch number.** It adds
+> one `ErrorCode` (`EVAL_SET_GENERATING`, a new `409` on `DELETE /eval-sets/{id}`), removes the
+> `HOST` and `PORT` settings, caps an eval set's `sourcePath` at 512 characters (down from 1024) and
+> refuses a name made only of spaces with `422`. Under this file's versioning rule that is a
+> `MINOR`; it was released as `2.4.2` by owner decision (2026-10-25).
+
 ### Added
 
 - **`409 EVAL_SET_GENERATING`** on `DELETE /eval-sets/{id}`, while the set is still generating
@@ -1067,7 +1075,8 @@ None of these is a defect. Each is a documented, deliberate scope decision:
 
 ---
 
-[Unreleased]: https://github.com/aolus-software/ask-repo/compare/v2.4.1...HEAD
+[Unreleased]: https://github.com/aolus-software/ask-repo/compare/v2.4.2...HEAD
+[2.4.2]: https://github.com/aolus-software/ask-repo/compare/v2.4.1...v2.4.2
 [2.4.1]: https://github.com/aolus-software/ask-repo/compare/v2.4.0...v2.4.1
 [2.4.0]: https://github.com/aolus-software/ask-repo/compare/v2.3.0...v2.4.0
 [2.3.0]: https://github.com/aolus-software/ask-repo/compare/v2.2.0...v2.3.0
