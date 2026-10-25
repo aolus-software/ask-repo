@@ -1,6 +1,6 @@
 "use client";
 
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { ThumbsDown, ThumbsUp } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useState } from "react";
@@ -17,6 +17,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Textarea } from "@/components/ui/textarea";
 import { apiFetch } from "@/lib/api/client";
 import { endpoints } from "@/lib/api/endpoints";
+import { keys } from "@/lib/query/keys";
 import type {
   FeedbackRating,
   FeedbackReasonCode,
@@ -24,6 +25,45 @@ import type {
   MyFeedback,
 } from "@/lib/api/types";
 import { cn } from "@/lib/utils";
+
+/** The query prefixes whose cached reads carry `myFeedback` for each target type. */
+const CACHES_HOLDING: Record<FeedbackTargetType, readonly string[]> = {
+  message: keys.conversations.all,
+  checklist_message: keys.checklistMessages.all,
+  mock_data_message: keys.mockDataMessages.all,
+  checklist_change_set: keys.checklistChangeSets.all,
+  mock_data_change_set: keys.mockDataChangeSets.all,
+};
+
+/**
+ * `data` with `myFeedback` replaced on the record whose id is `targetId`, wherever
+ * it sits in the cached shape. Unchanged branches keep their identity, so only the
+ * queries that actually hold the target re-render.
+ */
+function withVote(data: unknown, targetId: string, vote: MyFeedback | null): unknown {
+  if (Array.isArray(data)) {
+    let changed = false;
+    const next = data.map((entry) => {
+      const patched = withVote(entry, targetId, vote);
+      if (patched !== entry) changed = true;
+      return patched;
+    });
+    return changed ? next : data;
+  }
+  if (data === null || typeof data !== "object") return data;
+  const record = data as Record<string, unknown>;
+  if (record.id === targetId && "myFeedback" in record) {
+    return { ...record, myFeedback: vote };
+  }
+  let changed = false;
+  const next: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(record)) {
+    const patched = withVote(value, targetId, vote);
+    if (patched !== value) changed = true;
+    next[key] = patched;
+  }
+  return changed ? next : data;
+}
 
 interface FeedbackControlProps {
   targetType: FeedbackTargetType;
@@ -36,9 +76,11 @@ interface FeedbackControlProps {
  * Thumbs up/down on one model-authored output, and on a thumbs-down, why.
  *
  * The vote is the caller's own and nobody else sees it on this screen
- * (`.claude/rules/feedback.md`). Optimistic, with a local rollback: the list
+ * (`.claude/rules/feedback.md`). Optimistic, with a local rollback. The list
  * that supplied `initial` is not refetched, because nothing else on the
- * screen depends on the vote.
+ * screen depends on the vote; instead a saved vote is written into that
+ * cached read, so a remount within the stale time seeds from the vote
+ * rather than from what the list held before it.
  *
  * `initial` can change under us — a cached list refetches while this control
  * is mounted, or the same control remounts against a fresh `initial` from
@@ -56,6 +98,7 @@ export function FeedbackControl({
   className,
 }: FeedbackControlProps) {
   const t = useTranslations("outputFeedback");
+  const queryClient = useQueryClient();
   const [vote, setVote] = useState<MyFeedback | null>(initial ?? null);
   const [open, setOpen] = useState(false);
   const [reasons, setReasons] = useState<FeedbackReasonCode[]>(
@@ -74,6 +117,11 @@ export function FeedbackControl({
       const previous = vote;
       setVote(next);
       return { previous };
+    },
+    onSuccess: (_data, next) => {
+      queryClient.setQueriesData({ queryKey: CACHES_HOLDING[targetType] }, (data) =>
+        withVote(data, targetId, next),
+      );
     },
     onError: (_error, _next, context) => {
       setVote(context?.previous ?? null);
