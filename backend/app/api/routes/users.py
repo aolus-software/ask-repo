@@ -13,7 +13,7 @@ from fastapi import APIRouter, Depends, Query, status
 
 from app.api.deps import AdminUser, AuditRecorderDep, CurrentUser, SessionDep
 from app.config import Settings, get_settings
-from app.schemas.errors import ERROR_RESPONSES, LastOwnerErrorResponse
+from app.schemas.errors import ERROR_RESPONSES, ErrorResponse, LastOwnerErrorResponse
 from app.schemas.pagination import ListQuery, PaginatedResponse
 from app.schemas.user import (
     ResetPasswordRequest,
@@ -103,9 +103,13 @@ async def update_user(
         **{code: ERROR_RESPONSES[code] for code in (401, 403, 404, 422)},
         # Not the generic 409: this one names the projects that would be left with no
         # owner, and a client that cannot see them cannot act on the refusal.
+        # LAST_ADMIN has the plain body, so the declared shape is a union of the two.
         409: {
-            "model": LastOwnerErrorResponse,
-            "description": "Valid request, wrong state. LAST_OWNER names the blocking projects",
+            "model": LastOwnerErrorResponse | ErrorResponse,
+            "description": (
+                "Valid request, wrong state. LAST_OWNER names the blocking projects; "
+                "LAST_ADMIN carries only a code and a message"
+            ),
         },
     },
 )

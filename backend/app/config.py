@@ -43,10 +43,6 @@ class Settings(BaseSettings):
     app_env: str = "development"
     debug: bool = True
 
-    # Server
-    host: str = "0.0.0.0"
-    port: int = 8000
-
     # CORS — set as a JSON array in the environment, e.g. '["http://localhost:3000"]'
     cors_origins: list[str] = ["http://localhost:3000"]
 

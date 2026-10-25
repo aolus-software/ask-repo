@@ -26,6 +26,7 @@ from app.models.conversation import FinishReason, MessageRole
 from app.schemas.base import ApiModel
 from app.schemas.conversation import CitationPayload, StreamEvent
 from app.schemas.feedback import MyFeedback
+from app.schemas.fields import ResourceName
 from app.schemas.pagination import ListQuery
 
 MAX_TEST_NAME_CHARS = 500
@@ -58,14 +59,14 @@ class ChecklistModuleCreateRequest(ApiModel):
     """Name a module and point it at a path in the indexed repository."""
 
     project_id: uuid.UUID
-    name: str = Field(min_length=1, max_length=MAX_MODULE_NAME_CHARS)
+    name: ResourceName
     source_path: str = Field(min_length=1, max_length=MAX_SOURCE_PATH_CHARS)
 
 
 class ChecklistModuleUpdateRequest(ApiModel):
     """Rename a module or re-point it. `status` is absent: it is the server's."""
 
-    name: str | None = Field(default=None, min_length=1, max_length=MAX_MODULE_NAME_CHARS)
+    name: ResourceName | None = None
     source_path: str | None = Field(default=None, min_length=1, max_length=MAX_SOURCE_PATH_CHARS)
 
 

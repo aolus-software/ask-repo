@@ -13,7 +13,7 @@ from app.core.feedback import (
     ReasonCode,
 )
 from app.schemas.base import ApiModel
-from app.schemas.pagination import ListQuery
+from app.schemas.pagination import PageQuery
 
 
 class FeedbackWrite(ApiModel):
@@ -63,8 +63,9 @@ class FeedbackFilterFields(ApiModel):
     created_to: date | None = None
 
 
-class FeedbackListQuery(ListQuery, FeedbackFilterFields):
-    """`ListQuery` plus the filters. `created_at` descending is the only order."""
+class FeedbackListQuery(PageQuery, FeedbackFilterFields):
+    """`PageQuery` plus the filters. The order is fixed (UTC day, then id) so a client
+    cannot sort a vote's time back out (`.claude/rules/feedback.md` rule 2)."""
 
 
 class FeedbackSummaryQuery(FeedbackFilterFields):

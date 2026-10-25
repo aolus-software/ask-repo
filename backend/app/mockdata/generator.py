@@ -22,7 +22,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.checklist.source import ModuleSource, rebuild_files
 from app.config import Settings
-from app.core.language import Language, parse_language
+from app.core.language import Language, language_or_default
 from app.core.notifications import NotificationType
 from app.db.session import get_sessionmaker
 from app.ingestion.errors import RetryableIngestionError, TerminalIngestionError
@@ -133,7 +133,7 @@ class MockDataGenerator:
         module_name = module.name
         # Shared content follows the project, never the requester (spec §4.4). Read
         # into a local before the first await that could expire the row.
-        language = parse_language(project.content_language) or Language.EN
+        language = language_or_default(project.content_language)
         self._scope = {
             "trace_seed": str(change_set_id),
             "project_id": project.id,

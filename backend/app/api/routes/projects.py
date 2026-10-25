@@ -14,7 +14,7 @@ from app.api.deps import AuditRecorderDep, CurrentUser, SessionDep
 from app.config import Settings, get_settings
 from app.ingestion.vector_store import VectorStoreFactory, build_store_factory
 from app.queue.protocol import IngestionQueue
-from app.schemas.errors import ERROR_RESPONSES
+from app.schemas.errors import ERROR_RESPONSES, download_response
 from app.schemas.pagination import PaginatedResponse
 from app.schemas.project import (
     IndexedPathsResponse,
@@ -27,7 +27,7 @@ from app.schemas.project import (
 from app.schemas.project_export import ProjectExportQuery
 from app.services.indexed_path import IndexedPathReader, IndexedPathService, shared_cache
 from app.services.project import ProjectService
-from app.services.project_export import ProjectExportService
+from app.services.project_export import XLSX_MEDIA_TYPE, ZIP_MEDIA_TYPE, ProjectExportService
 
 router = APIRouter(prefix="/projects", tags=["Projects"])
 
@@ -168,7 +168,10 @@ async def list_indexed_paths(
     summary="Export the test checklist and mock data of a project's modules",
     # 404 for a non-member or a module id outside the project, 403 for a member whose
     # role cannot read a requested part, 409 past a part's row cap.
-    responses={code: ERROR_RESPONSES[code] for code in (401, 403, 404, 409, 422)},
+    responses={
+        **download_response(XLSX_MEDIA_TYPE, ZIP_MEDIA_TYPE),
+        **{code: ERROR_RESPONSES[code] for code in (401, 403, 404, 409, 422)},
+    },
 )
 async def export_project(
     project_id: uuid.UUID,

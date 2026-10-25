@@ -110,10 +110,12 @@ def test_weak_evidence_is_a_distinct_warning_from_no_context() -> None:
 
 def test_the_out_of_scope_refusal_says_what_to_ask_instead() -> None:
     """A refusal that does not redirect reads as a failure rather than a boundary."""
-    from app.rag.grounding import OUT_OF_SCOPE_ANSWER
+    from app.core.language import Language
+    from app.rag.grounding import OUT_OF_SCOPE_ANSWERS
 
-    assert OUT_OF_SCOPE_ANSWER.strip()
-    assert "project" in OUT_OF_SCOPE_ANSWER.lower()
+    english = OUT_OF_SCOPE_ANSWERS[Language.EN]
+    assert english.strip()
+    assert "project" in english.lower()
 
 
 @pytest.mark.parametrize(

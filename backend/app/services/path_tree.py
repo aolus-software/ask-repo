@@ -31,6 +31,15 @@ class PathEntry:
     file_count: int | None
 
 
+def normalise_source_path(value: str) -> str:
+    """A user-typed repository path as the index spells it: no surrounding whitespace
+    and no leading or trailing slash, so `src/` and `/src` both mean `src`.
+
+    A bare `/` becomes the empty string, which is the repository root.
+    """
+    return value.strip().strip(SEPARATOR)
+
+
 def covers(paths: Iterable[str], candidate: str) -> bool:
     """Whether `candidate` names an indexed file or a directory containing one.
 

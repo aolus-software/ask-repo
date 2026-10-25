@@ -24,7 +24,7 @@ from app.core import access
 from app.core.audit import AuditEntry, AuditEventType, AuditRecorder, ChangedValue
 from app.core.errors import AppError, ErrorCode
 from app.core.feedback import FeedbackTarget
-from app.core.language import Language, parse_language
+from app.core.language import Language, language_or_default
 from app.core.middleware import AuthenticatedUser
 from app.core.permissions import Permission
 from app.live.events import checklist_module_event
@@ -78,6 +78,7 @@ from app.schemas.pagination import PaginatedResponse
 from app.services.feedback import my_feedback_map
 from app.services.index_guards import require_indexed, require_path_indexed, require_stable_index
 from app.services.indexed_path import IndexedPathReader
+from app.services.path_tree import normalise_source_path
 
 logger = logging.getLogger(__name__)
 
@@ -161,14 +162,14 @@ class ChecklistModuleService:
         project = await access.require_readable_project(self.projects, payload.project_id, actor)
         access.require_permission(actor, project.id, Permission.MODULE_CREATE)
         require_indexed(project)
-        source_path = payload.source_path.strip().strip("/")
+        source_path = normalise_source_path(payload.source_path)
         await require_path_indexed(self.indexed_paths, project, source_path)
         module = await self.modules.add(
             ChecklistModule(
                 id=uuid.uuid4(),
                 project_id=project.id,
                 created_by=actor.id,
-                name=payload.name.strip(),
+                name=payload.name,
                 source_path=source_path,
                 status=ChecklistModuleStatus.EMPTY.value,
             )
@@ -206,9 +207,9 @@ class ChecklistModuleService:
         old_name = module.name
         old_source_path = module.source_path
         if payload.name is not None:
-            module.name = payload.name.strip()
+            module.name = payload.name
         if payload.source_path is not None:
-            source_path = payload.source_path.strip().strip("/")
+            source_path = normalise_source_path(payload.source_path)
             # Only a re-point needs an index. A rename has to keep working whatever
             # state the project is in, and there is nothing to validate a name against.
             project = await access.require_readable_project(self.projects, module.project_id, actor)
@@ -418,7 +419,7 @@ class ChecklistModuleService:
             module_name=module.name,
             project_id=project.id,
             generation=project.active_generation,
-            reply_language=parse_language(project.content_language) or Language.EN,
+            reply_language=language_or_default(project.content_language),
             # Verbatim from the row, never recomputed from current settings.
             collection=project.embedding_collection or "",
             question=payload.question,

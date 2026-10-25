@@ -22,7 +22,7 @@ from app.config import Settings
 from app.core import access
 from app.core.audit import AuditEntry, AuditEventType, AuditRecorder, ContextValue
 from app.core.errors import AppError, ErrorCode
-from app.core.language import Language, parse_language
+from app.core.language import Language, language_or_default
 from app.core.middleware import AuthenticatedUser
 from app.core.permissions import Permission
 from app.models.checklist import ChecklistItem, ChecklistModule
@@ -35,7 +35,7 @@ from app.repositories.mock_data_record import MockDataRecordRepository
 from app.repositories.project import ProjectRepository
 from app.repositories.user import UserRepository
 from app.schemas.project_export import ProjectExportPart, ProjectExportQuery
-from app.services.checklist_export import build_workbook
+from app.services.checklist_export import build_workbook, filter_audit_details, require_within_cap
 from app.services.mock_data_export import ModuleRecords, build_project_mock_data_workbook
 
 XLSX_MEDIA_TYPE = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
@@ -99,7 +99,7 @@ class ProjectExportService:
             access.require_permission(actor, project.id, Permission.MOCKDATA_READ)
 
         modules = await self._chosen_modules(project, query.module_ids, actor)
-        language = parse_language(project.content_language) or Language.EN
+        language = language_or_default(project.content_language)
         built: list[_Part] = []
         if ProjectExportPart.CHECKLIST in parts:
             built.append(await self._checklist(project, modules, query, actor, language))
@@ -157,13 +157,12 @@ class ProjectExportService:
             source=query.source.value if query.source else None,
             kind=query.kind.value if query.kind else None,
         )
-        if len(rows) > cap:
-            raise AppError(
-                status.HTTP_409_CONFLICT,
-                ErrorCode.EXPORT_TOO_LARGE,
-                f"That export matches more than {cap} test cases. Choose fewer modules "
-                "or narrow the filters, and try again.",
-            )
+        require_within_cap(
+            len(rows),
+            cap,
+            f"That export matches more than {cap} test cases. Choose fewer modules "
+            "or narrow the filters, and try again.",
+        )
         order = {module.id: index for index, module in enumerate(modules)}
         # Stable: within a module, `list_all`'s (feature, position) order survives.
         rows.sort(key=lambda row: order[row.module_id])
@@ -173,17 +172,13 @@ class ProjectExportService:
             module_names={module.id: module.name for module in modules},
             language=language,
         )
-        # Same envelope as the per-module export: the filters as named values, the
-        # feature only as a flag because it is picked from generated content.
-        filter_details: dict[str, str] = {"projectId": str(project.id)}
-        if query.feature is not None:
-            filter_details["featureFilterApplied"] = "true"
-        if query.status is not None:
-            filter_details["status"] = query.status.value
-        if query.source is not None:
-            filter_details["source"] = query.source.value
-        if query.kind is not None:
-            filter_details["kind"] = query.kind.value
+        filter_details = filter_audit_details(
+            project_id=project.id,
+            feature=query.feature,
+            status=query.status,
+            source=query.source,
+            kind=query.kind,
+        )
         return _Part(
             CHECKLIST_FILENAME,
             content,
@@ -212,13 +207,12 @@ class ProjectExportService:
         cap = self.settings.mock_data_export_max_rows
         module_ids = [module.id for module in modules]
         records = await self.records.list_for_modules(module_ids)
-        if len(records) > cap:
-            raise AppError(
-                status.HTTP_409_CONFLICT,
-                ErrorCode.EXPORT_TOO_LARGE,
-                f"Those modules hold more than {cap} mock data records. Choose fewer "
-                "modules and try again.",
-            )
+        require_within_cap(
+            len(records),
+            cap,
+            f"Those modules hold more than {cap} mock data records. Choose fewer "
+            "modules and try again.",
+        )
         datasets = await self.datasets.get_by_modules(module_ids)
         by_module: dict[uuid.UUID, list[MockDataRecord]] = {key: [] for key in module_ids}
         for record in records:

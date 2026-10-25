@@ -84,8 +84,6 @@ language. The non-English entries are machine-assisted drafts awaiting native-sp
 review (spec §0.1 decision 4).
 """
 
-NO_CONTEXT_ANSWER = NO_CONTEXT_ANSWERS[Language.EN]
-
 OUT_OF_SCOPE_ANSWERS: dict[Language, str] = {
     Language.EN: (
         "I only answer questions about the code in this project. Ask me about a file, a "
@@ -128,8 +126,6 @@ the machine-readable distinction rides in the `done` event's `intent`.
 Fixed strings, never generated. The non-English entries are machine-assisted drafts
 awaiting native-speaker review (spec §0.1 decision 4).
 """
-
-OUT_OF_SCOPE_ANSWER = OUT_OF_SCOPE_ANSWERS[Language.EN]
 
 # A path-shaped token: at least one directory separator, and a dotted extension.
 # Both conditions are needed — without the separator this matches every sentence

@@ -135,7 +135,7 @@ async def list_checklist_modules(
     response_model=ChecklistModuleResponse,
     status_code=status.HTTP_201_CREATED,
     summary="Create a checklist module",
-    responses={code: ERROR_RESPONSES[code] for code in (401, 403, 404, 409, 422)},
+    responses={code: ERROR_RESPONSES[code] for code in (400, 401, 403, 404, 409, 422, 503)},
 )
 async def create_checklist_module(
     payload: ChecklistModuleCreateRequest,
@@ -165,7 +165,7 @@ async def get_checklist_module(
     response_model=ChecklistModuleResponse,
     status_code=status.HTTP_200_OK,
     summary="Rename or re-point a checklist module",
-    responses={code: ERROR_RESPONSES[code] for code in (401, 403, 404, 422)},
+    responses={code: ERROR_RESPONSES[code] for code in (400, 401, 403, 404, 409, 422, 503)},
 )
 async def update_checklist_module(
     module_id: uuid.UUID,
