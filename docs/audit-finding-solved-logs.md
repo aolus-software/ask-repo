@@ -1010,6 +1010,149 @@ ships and belong in its Added entry. Line 22 says the reindex refusal "reuses th
 code", which is itself new in this release. **Fix:** merge the headings and move the two entries
 before the release is cut.
 
+### §5.1 Deleting a project mid-run can leave live eval results under a deleted run — 🟡 hygiene — ✅ RESOLVED 2026-10-25
+
+> Fixed, by owner decision (2026-10-25): the runner re-checks rather than the delete refusing. `EvalRunRepository.hold_for_commit` locks the run `FOR UPDATE` where `deleted_at IS NULL` and the lease is this worker's, before each result batch commits; a deleted run stops the loop and the batch rolls back. A project delete is never refused. Results committed before the delete are soft-deleted by it (`ProjectService.delete` soft-deletes eval results), so nothing is orphaned either side. On `fix/eval-reliability-forms-2026-10-25`.
+>
+> Original finding follows.
+
+**Evidence:** CONFIRMED by reading; the race was not executed.
+
+**Where:** `backend/app/services/project.py:309-387` (the soft-delete block of `delete`);
+`backend/app/eval/runner.py:57` (`RESULT_BATCH = 10`), `:148-172` (the result loop), `:231-238`
+(`_require_lease`), `:332-346` (`_renew`), `:182-194` (the final release);
+`backend/app/repositories/eval_run.py:21-22`, `:112`, `:135`
+
+**What this is.** An eval run answers each question with the real answer graph and stores the
+answer and a judge's verdict as result rows, committing every ten. A worker holds a lease on the
+run and renews it every 60 seconds.
+
+**Why this can happen.** A project delete soft-deletes the project's eval rows, but takes no lock
+on a running run and does not refuse while one is active (unlike reindex and eval set delete,
+which refuse with `409 EVAL_RUN_IN_PROGRESS`). Sequence: an owner deletes the project → the run row is
+soft-deleted → the worker keeps committing batches of ten results → those rows are live, under a
+deleted run, and nothing sweeps them.
+
+The window is bounded. `renew_lease` filters on `deleted_at IS NULL`, so the renewal task's next
+tick (at most 60 seconds later) fails, and `_require_lease` stops the loop before the next commit.
+The final `release` also refuses a deleted run and rolls back. What leaks is only the batches
+committed between the delete and that tick: up to about a minute of results.
+
+**What it costs.** Orphan rows holding model answers about a deleted repository's code. No route
+returns them (the run is deleted), so it is invisible rather than exposed.
+
+**What we should do.** Either refuse a project delete with `409 EVAL_RUN_IN_PROGRESS` while a run
+is active, or have the runner's batch commit re-check the run (`... WHERE deleted_at IS NULL`).
+One to two hours.
+
+### §8.3 A failed eval run reports zero tallies and no finish time — 🟡 hygiene — ✅ RESOLVED 2026-10-25
+
+> Fixed. `_RunLease.fail` releases a failed run with `finished_at` and tallies computed from its committed results (`EvalResultRepository.tally_for_run`, one aggregate query). On `fix/eval-reliability-forms-2026-10-25`.
+>
+> Original finding follows.
+
+**Evidence:** CONFIRMED.
+
+**Where:** `backend/app/queue/eval.py:133-143` (`_RunLease.fail`); `backend/app/eval/runner.py:182-194`
+
+**Why this can happen.** Tallies (`hits`, `correct`, `partial`, `wrong`, `errors`,
+`pairs_answered`) and `finished_at` are written only when a run finishes `done`. A run that
+answers 30 of 50 questions and then fails keeps its 30 committed results but is released `failed`
+with tallies of zero and no finish time.
+
+**What it costs.** The runs table shows "hits 0/0 · correct 0" for a run whose detail sheet lists 30
+answers, and its duration cannot be computed.
+
+**What we should do.** On failure, write `finished_at` and tallies computed from the committed
+results. One hour.
+
+### §8.4 The eval set generator never checks that it still holds its lease — 🟡 hygiene — ✅ RESOLVED 2026-10-25
+
+> Fixed together with §8.7. The generator checks its lease on every question, in both sampling and translation, and stops once the renewal task has ended. Deleting a set that is generating is refused with the new `409 EVAL_SET_GENERATING` (owner decision, 2026-10-25). On `fix/eval-reliability-forms-2026-10-25`.
+>
+> Original finding follows.
+
+**Evidence:** CONFIRMED.
+
+**Where:** `backend/app/eval/generator.py:88-119`, `:139-143`; compare `backend/app/eval/runner.py:231-238`
+
+**Why this can happen.** The runner checks its renewal task before each batch; the generator
+starts one and never reads it. If the set is deleted while generating (`delete_set` refuses only
+while a *run* is active), or its lease lapses and the sweep re-publishes it, the generator carries
+on through up to 50 model calls and only learns at the end, when its release matches no row and it
+discards everything.
+
+**What it costs.** Wasted model calls; no stuck or corrupt rows.
+
+**What we should do.** Check the renewal task in the per-question loop, as the runner does, and
+consider refusing to delete a set that is still generating. One hour.
+
+### §8.5 A resumed eval run overwrites its own provenance stamp — 🟡 hygiene — ✅ RESOLVED 2026-10-25
+
+> Fixed. Each provenance field is written only when empty; a resume whose stamp would change fails the run as terminal, naming the fields, and overwrites nothing. `claim` sets `started_at` with `coalesce`, so the first claim's time survives. On `fix/eval-reliability-forms-2026-10-25`.
+>
+> Original finding follows.
+
+**Evidence:** CONFIRMED 2026-10-17 (was SUSPECT). The overwrite is in
+`backend/app/eval/runner.py:132-138` and `backend/app/repositories/eval_run.py:88-96` (`started_at`
+reset at `:93`). The trigger is reachable: a resume happens only after a lease lapses, which means
+a worker restart or a redeploy, and that is exactly when `PROMPT_VERSION` or the `CHAT_*` settings
+can change (§8.1 makes the settings drift more likely). The embedding model and index generation
+cannot change mid-run, because reindex refuses with `409` (`backend/app/services/project.py:271-279`).
+How often it happens in practice cannot be measured from the code.
+
+**What this is.** Each run records which prompt version, chat model, judge model, embedding model
+and index generation it used, so two runs can be compared honestly. `docs/PRD.md` (`:343`, `:354`)
+says a score is comparable only against a fixed prompt; the list of stamped fields comes from
+`app/models/eval.py`.
+
+**Why this can happen.** Every attempt overwrites the stamp and resets `started_at`. A run that
+answers 20 questions, is retried after a restart, and resumes on a different model is stamped only
+with the second.
+
+**What we should do.** Stamp only when empty; on resume, compare and fail the run if the stamp
+would change. Set `started_at` only once. One hour.
+
+### §8.6 Eval requests audit after the publish, unlike reindex — 🟡 hygiene — ✅ RESOLVED 2026-10-25
+
+> Fixed. `create_set` and `start_run` in `app/services/eval.py`, and the mock-data generation request in `app/services/mock_data_dataset.py`, record their audit event after the commit and before the Kafka publish, as reindex does. Tests make the publish raise and find the audit row. On `fix/eval-reliability-forms-2026-10-25`.
+>
+> Original finding follows.
+
+**Evidence:** CONFIRMED 2026-10-17 (was SUSPECT). The ordering is certain: commit `:105`, publish
+`:107`, audit `:117-133` in `create_set`; commit `:291`, publish `:295`, audit `:305` in
+`start_run`. `producer.produce_to` raises on a Kafka failure. How often a produce fails after the
+commit cannot be measured from the code.
+
+**Where:** `backend/app/services/eval.py:105-134`, `:291-316`; compare
+`backend/app/services/project.py:293-306`
+
+**Why this can happen.** `create_set` and `start_run` commit, then publish to Kafka, then record
+the audit event. If the publish raises, the user sees a `500`, the row survives (the sweep later
+publishes it), and `eval_set.generation.requested` / `eval_run.requested` is never written.
+Reindex and checklist generation record before the publish. Mock data has the same order as eval.
+
+**What we should do.** Record the audit event before the publish (still after the commit, as
+`.claude/rules/audit-trail.md` requires), in eval and mock data. Half an hour.
+
+### §9.30 Stale comments in the feedback schema and the audit coverage test — 📄 doc — ✅ RESOLVED 2026-10-25
+
+> Fixed. The feedback schema's `trace_url` comment now says when the value is set and why it is always null for an Ask answer; the audit coverage test speaks of "the named exemptions" and its check is renamed `test_every_exemption_is_one_the_rule_names`; and the middleware test no longer claims `/auth/me` does not exist. On `fix/eval-reliability-forms-2026-10-25`.
+>
+> Original finding follows.
+
+**Where:** `backend/app/schemas/feedback.py:95` ("Stage 2 (Langfuse) fills this; until then…
+null" — Stage 2 shipped, `backend/app/services/feedback.py:165-166`);
+`backend/tests/test_audit_coverage.py:11`, `:14`, `:50`, `:221`, `:238-241` ("six", "five"
+exemptions — there are seven: the comment at `:38` says so, and `VALID_EXEMPTIONS` at `:60-62`
+has seven);
+`backend/tests/test_auth_middleware.py:219` ("`/auth/me` does not exist yet" — it does,
+`backend/app/api/routes/auth.py:327`)
+
+**Fix:** reword to "the named exemptions" and rename `test_every_exemption_is_one_of_the_five`.
+
+
+
 
 ## Sweep 2026-10-24
 
@@ -1070,6 +1213,92 @@ comment that promises more than the code delivers.
 **What we should do.** Build those three messages from the exception's class name (as the
 unexpected-error branch at `consumer.py:127-131` already does), and correct the comment. Half an
 hour.
+
+### §6.2 A refused reset email may log the recipient's address — 🟡 hygiene — ✅ RESOLVED 2026-10-25
+
+> Fixed, and the SUSPECT is confirmed: aiosmtplib 5.1.3's `SMTPRecipientRefused` stringifies with the address in it. The warning in `app/services/password_reset.py` now logs the token row id, the error's class (`type(error.__cause__ or error).__name__`) and `retryable`, never the message. A test asserts the address does not reach the log record. On `fix/eval-reliability-forms-2026-10-25`.
+>
+> Original finding follows.
+
+**Evidence:** SUSPECT. Unverified: whether `aiosmtplib`'s `SMTPRecipientsRefused` text includes the
+address. Reading its `__str__` settles it.
+
+**Where:** `backend/app/services/password_reset.py:173-180`; `backend/app/mail/sender.py:60-70`
+
+**What this is.** When a reset email cannot be sent, the service logs a `WARNING` with the token
+row's id — deliberately never the token (`.claude/rules/mail.md`).
+
+**Why this can happen.** The same line also logs the `MailSendError`, which is built from the SMTP
+library's own message. A relay that refuses the recipient produces a message that may quote the
+address.
+
+**What it costs.** A user's email address in operator logs. Not a secret, and not the audit trail,
+but more than the line needs.
+
+**What we should do.** Log `type(error.__cause__).__name__` and `error.retryable` instead of the
+message. Fifteen minutes.
+
+### §8.7 Translating an eval set whose source is deleted mid-job fails with the wrong reason — 🟡 hygiene — ✅ RESOLVED 2026-10-25
+
+> Fixed together with §8.4. `EvalService.delete_set` refuses with `409 EVAL_SET_GENERATING` while a live translation of the set is generating, after the existing `404`/`403` checks. The new `ErrorCode` has a message in all seven `errors.json` catalogues (non-English values machine drafts). On `fix/eval-reliability-forms-2026-10-25`.
+>
+> Original finding follows.
+
+**Evidence:** CONFIRMED.
+
+**Where:** `backend/app/eval/generator.py:107-109`, `:197-235`;
+`backend/app/repositories/eval_pair.py:18-24` (`list_for_set` uses `active_select`);
+`backend/app/services/eval.py:251-262` (`delete_set` refuses only on an active run)
+
+**What this is.** Since #69 an English eval set can be translated into another language; the worker
+reads the source set's pairs and translates each one.
+
+**Why this can happen.** User A requests a translation of set S → the worker starts → user B
+deletes S, which is allowed because no *run* is active → the worker's read of S's pairs filters
+out the soft-deleted rows and finds none → the translation is released as `failed` with "No
+question could be translated with its code kept intact", and an `eval_set.failed` notification
+goes out.
+
+**What it costs.** The project's members are told the translation failed for a reason that is not
+true. No row is stuck.
+
+**What we should do.** Refuse to delete a set while a translation of it is generating — the same
+guard §8.4 proposes for a set that is itself generating. One hour, both together.
+
+### §9.36 `docs/architecture.md` counts nine notification fan-out sites; there are thirteen — 📄 doc — ✅ RESOLVED 2026-10-25
+
+> Fixed. `docs/architecture.md` says thirteen fan-out sites and lists the eval set generator, the runner and the queue's two terminal-failure paths. `docs/PRD.md` §6 items 7 and 8 now say their counts were the counts when each phase shipped, and give today's (47 events; fifteen notification events at thirteen sites). On `fix/eval-reliability-forms-2026-10-25`.
+>
+> Original finding follows.
+
+**Evidence:** CONFIRMED.
+
+**Where:** `docs/architecture.md:303`; the sites are `backend/app/ingestion/pipeline.py:140,184`,
+`backend/app/checklist/generator.py:198`, `backend/app/mockdata/generator.py:218`,
+`backend/app/services/checklist_change_set.py:186,255`, `backend/app/services/mock_data_change_set.py:144,210`,
+`backend/app/services/membership.py:116`, and the four eval callers of `backend/app/eval/notifications.py`
+(`eval/generator.py:147`, `eval/runner.py:213`, `queue/eval.py:120,162`)
+
+`.claude/rules/notifications.md` already says thirteen. The architecture page predates #66 and also
+words the generators as "two checklist and two mock-data", which reads as four. **Fix:** "Thirteen",
+listing the eval generator, runner and terminal-failure path. `docs/PRD.md` §6 items 7 and 8 also
+quote "40 events", "eleven members" and "nine call sites" (now 47, 15 and 13); they read as
+snapshots, and adding "at the time" would make that explicit. Ten minutes.
+
+### §9.38 A project-list docstring still describes phase 1 — 📄 doc — ✅ RESOLVED 2026-10-25
+
+> Fixed. The `list_projects` docstring in `backend/app/services/project.py` says only that the scope comes from the access resolver and nowhere else. On `fix/eval-reliability-forms-2026-10-25`.
+>
+> Original finding follows.
+
+**Evidence:** CONFIRMED.
+
+**Where:** `backend/app/services/project.py:192-194`
+
+"In phase 1 it is unrestricted; phase 2 changes the resolver's body" — phase 2.1 shipped per-project
+access long ago. **Fix:** "The scope comes from the access resolver and nowhere else." Two minutes.
+
+
 
 
 
@@ -3739,6 +3968,103 @@ reaches 4.5:1, or switch their `-foreground` to the dark ink the warning badge a
 separate darker `*-text` tokens for coloured text. Record the ratios in `docs/design.md`. Roughly
 half a day, most of it checking the results look right.
 
+### §U5.9 The generate-eval-set dialog has two unassociated labels and a silent blank name — 🟡 hygiene — ✅ RESOLVED 2026-10-25
+
+> Fixed. Questions and Mix carry `id`/`htmlFor`; a blank name shows a translated field error (`eval.generateDialog.nameRequired`) and posts nothing. Name already had its required marker. On `fix/eval-reliability-forms-2026-10-25`.
+>
+> Original finding follows.
+
+**Where:** `components/eval/generate-eval-set-dialog.tsx:139`, `:146`, `:160`, `:165`, `:72`
+
+**What this is.** `.claude/rules/forms.md` requires every control to have an `id` and its label an
+`htmlFor`, so that clicking the label focuses the control and screen readers announce it. Required
+fields show an error when empty.
+
+**Why this can happen.** The "Questions" and "Mix" labels have no `htmlFor`, and their selects have
+no `id`. Submitting with a blank name hits `if (!values.name.trim()) return;`, which simply does
+nothing: no error, no required marker.
+
+**What it costs.** A user presses Generate and nothing happens, with no explanation. Screen-reader
+users hear two unlabelled dropdowns.
+
+**What we should do.** Add `id`/`htmlFor` to both selects, mark Name required, and show a field
+error on a blank name. Half an hour.
+
+### §U11.6 Excluded pairs and pressed thumbs are signalled by colour alone — 🟡 hygiene — ✅ RESOLVED 2026-10-25
+
+> Fixed. A pressed thumb is drawn filled (`fill-current`), and an excluded pair shows an "Excluded" badge beside its type badge. On `fix/eval-reliability-forms-2026-10-25`.
+>
+> Original finding follows.
+
+**Where:** `components/eval/eval-pair-table.tsx:52`; `components/output-feedback/feedback-control.tsx:124-125`, `:138-139`
+
+**What this is.** A state shown only by colour cannot be seen by colour-blind users, or in a
+greyscale screenshot.
+
+**Why this can happen.** An excluded pair is shown only by dimming its row's text. A pressed thumb
+differs from an unpressed one only by colour, with the same icon. Screen readers are covered,
+because the thumbs carry `aria-pressed` and the exclude switch is a labelled control. The gap is
+for sighted users.
+
+**What we should do.** Fill the pressed thumb icon, and add an "Excluded" badge on the row.
+Half an hour.
+
+### §U11.7 Eval run rows are clickable without a visible or accessible control — 🟡 hygiene — ✅ RESOLVED 2026-10-25
+
+> Fixed. The run row's `onClick`, `tabIndex` and Enter handler are gone; the run's start time is a real `<button>` named "Open run from {when}", so Enter and Space both work and a screen reader announces it. On `fix/eval-reliability-forms-2026-10-25`.
+>
+> Original finding follows.
+
+**Where:** `components/eval/eval-run-table.tsx:48-56`; compare `components/eval/eval-pair-table.tsx:57-61`
+
+**Why this can happen.** The whole run row has `onClick`, `tabIndex={0}` and an Enter handler, with
+no button, link, role or accessible name, and Space does nothing. The only cue is the pointer
+cursor. The pair table beside it uses a real `<button aria-expanded>`.
+
+**What it costs.** Screen-reader users hear a row of cells with no hint it opens anything.
+Keyboard users get half the expected keys.
+
+**What we should do.** Put a real button (for example on the run's name or an "Open" control) in
+the row, as the pair table does. Half an hour.
+
+### §U11.8 The compare selects and the date filters lose their visible labels — 🟡 hygiene — ✅ RESOLVED 2026-10-25
+
+> Fixed, and extended by owner decision (2026-10-25) to the checklist grid's filters, which §U11.9 had left at `aria-label` only. A new `components/layout/filter-field.tsx` gives every filter a small visible label with `htmlFor`, on the eval compare selects, the feedback and audit filters and the checklist filters. `ListToolbar` bottom-aligns its cells so an unlabelled search box lines up. `docs/design.md` → Lists records the pattern. On `fix/eval-reliability-forms-2026-10-25`.
+>
+> Original finding follows.
+
+**Where:** `components/eval/eval-set-screen.tsx:151-176`; `components/output-feedback/feedback-filters.tsx:127-152`;
+`components/audit/audit-filters.tsx:138-161`; `.claude/rules/forms.md:66-67`
+
+**Why this can happen.** These controls carry only an `aria-label`. The compare selects show "Base
+run" or "Head run" as a placeholder, and once a run is chosen that text is replaced by the run's
+name, so nothing on screen says which side is which. The date inputs have no visible label at all.
+The feedback screen's feature, vote and reason selects are in the same state.
+
+**What we should do.** Give each a visible `FieldLabel` with `htmlFor`, which `forms.md` requires.
+One hour.
+
+### §U3.5 `/settings/feedback` says "No feedback yet" when filters exclude everything — 🟡 hygiene — ✅ RESOLVED 2026-10-25
+
+> Fixed. An empty list with any filter set, URL-only ones included, shows "No feedback matches these filters" with a Clear filters action (`clearParams` in `hooks/use-list-params.ts`); the unfiltered empty case keeps "No feedback yet". The audit screen has no such action to copy, contrary to the finding, so it was built here. On `fix/eval-reliability-forms-2026-10-25`.
+>
+> Original finding follows.
+
+**Where:** `app/(app)/settings/feedback/feedback-screen.tsx:89-94`
+
+**What this is.** The admin feedback screen lists votes and can be filtered by feature, vote,
+reason and date.
+
+**Why this can happen.** Whenever the result is empty, the screen renders the same "No feedback yet"
+empty state, whether or not a filter is active.
+
+**What it costs.** An administrator who filters to a narrow window is told nobody has ever voted,
+which is false.
+
+**What we should do.** Branch on whether any filter is set, the way the audit screen does: "No
+feedback matches these filters", with a clear-filters action. Half an hour.
+
+
 
 
 
@@ -4046,6 +4372,55 @@ dialog and sheet in the app.
 **What we should do.** Give the two wrappers a translated `closeLabel`, or call `useTranslations`
 inside them. Note it in `design-system.md` §1 as the one sanctioned edit to generated code. Half an
 hour.
+
+### §U5.12 Three more labels are not tied to their control — 🟡 hygiene — ✅ RESOLVED 2026-10-25
+
+> Fixed. The export screen's project combobox, the create-module dialog's project control and the translate dialog's language select each have an `id` and a label `htmlFor`, and their redundant `aria-label`s are gone. On `fix/eval-reliability-forms-2026-10-25`.
+>
+> Original finding follows.
+
+**Evidence:** CONFIRMED.
+
+**Where:**
+- `app/(app)/checklist/export/export-screen.tsx:154`, `:166`: the project combobox.
+- `components/checklist/create-module-dialog.tsx:108`.
+- `components/eval/translate-eval-set-dialog.tsx:86`: the language select.
+
+**What this is.** `.claude/rules/forms.md` requires every control to have an `id` and its
+`FieldLabel` a matching `htmlFor`. Tests and screen readers both find controls by label.
+
+**Why this can happen.** These three `FieldLabel`s have no `htmlFor`, and their controls carry only
+an `aria-label`. This is the same shape as the open §U5.9, and two of the three are new.
+
+**What it costs.** Clicking the label does nothing. A screen reader reads the `aria-label`, which
+can drift from the visible text.
+
+**What we should do.** Give each control an `id` and each label its `htmlFor`. Fifteen minutes.
+
+### §U5.13 Three fields have no inline error to show a rejection — 🟡 hygiene — ✅ RESOLVED 2026-10-25
+
+> Fixed. `contentLanguage` on create project, and `count` and `mix` on generate eval set, render their field error through `useFieldErrorText` and `FieldError`. On `fix/eval-reliability-forms-2026-10-25`.
+>
+> Original finding follows.
+
+**Evidence:** CONFIRMED. The trigger needs the backend to reject a value the frontend sends. Today
+that happens only if the two language lists drift, and a test exists to stop that.
+
+**Where:** `components/projects/create-project-dialog.tsx:115-127` (`contentLanguage`; compare `:67-69`);
+`components/eval/generate-eval-set-dialog.tsx` (`count`, `mix`); `components/form/form-error.tsx:13`
+
+**What this is.** Under the one-error-surface rule (`.claude/rules/forms.md`), a `422` that names a
+field shows inline under that field. The form-level banner appears only when no field was named.
+
+**Why this can happen.** These three fields never ask for their field error. So a `422` naming only
+`contentLanguage`, `count` or `mix` hides the banner, because a field was named, and shows nothing
+inline, because nobody asked.
+
+**What it costs.** The dialog stays open, the button re-enables, and nothing says why.
+
+**What we should do.** Add `fieldErrorText(mutation.error, …)` and a `FieldError` to each. Fifteen
+minutes.
+
 
 
 

@@ -100,16 +100,6 @@ class EvalService:
         set_id, language, source_set_id = eval_set.id, eval_set.language, eval_set.source_set_id
         await self.session.commit()
 
-        await queue.enqueue_eval(
-            EvalJobMessage(
-                kind="generate",
-                target_id=set_id,
-                job_id=uuid.uuid4(),
-                attempt=0,
-                not_before_ms=int(time.time() * 1000),
-                original_topic=self.settings.kafka_eval_topic,
-            )
-        )
         context: dict[str, ContextValue] = {"language": language}
         if source_set_id is not None:
             context["sourceSetId"] = str(source_set_id)
@@ -129,6 +119,19 @@ class EvalService:
                     "mix": (None, mix),
                 },
                 context=context,
+            )
+        )
+        # After the commit and the audit write, like `ProjectService.reindex`: a failed
+        # publish is then a 500 with the request already on the trail, and the sweep
+        # re-publishes the committed row (audit finding §8.6).
+        await queue.enqueue_eval(
+            EvalJobMessage(
+                kind="generate",
+                target_id=set_id,
+                job_id=uuid.uuid4(),
+                attempt=0,
+                not_before_ms=int(time.time() * 1000),
+                original_topic=self.settings.kafka_eval_topic,
             )
         )
         return summary
@@ -259,6 +262,20 @@ class EvalService:
                 ErrorCode.EVAL_RUN_IN_PROGRESS,
                 "A run is in progress for this set. Wait for it to finish before deleting.",
             )
+        # Refused, not interrupted: a generator reading a set that vanishes under it would
+        # fail with a reason that is not true (audit findings §8.4, §8.7). The row lock
+        # above is the one `create_set` takes on a translation's source, so a request
+        # for a translation cannot slip in between this check and the delete.
+        if (
+            eval_set.status == EvalSetStatus.GENERATING.value
+            or await self.sets.generating_translation_of(eval_set.id) is not None
+        ):
+            raise AppError(
+                status.HTTP_409_CONFLICT,
+                ErrorCode.EVAL_SET_GENERATING,
+                "This eval set, or a translation of it, is still generating. "
+                "Wait for it to finish before deleting.",
+            )
         name, source_path, pair_count = eval_set.name, eval_set.source_path, eval_set.pair_count
         _, run_count = await self.runs.list_for_set(eval_set.id, limit=1, offset=0)
         project_id = project.id
@@ -377,16 +394,6 @@ class EvalService:
         await self.session.refresh(run)
         summary = EvalRunSummary.model_validate(run)
 
-        await queue.enqueue_eval(
-            EvalJobMessage(
-                kind="run",
-                target_id=run_id,
-                job_id=uuid.uuid4(),
-                attempt=0,
-                not_before_ms=int(time.time() * 1000),
-                original_topic=self.settings.kafka_eval_topic,
-            )
-        )
         await self._recorder.record(
             AuditEntry(
                 event_type=AuditEventType.EVAL_RUN_REQUESTED,
@@ -397,6 +404,19 @@ class EvalService:
                 target_label=set_name,
                 project_id=project_id,
                 context={"pairCount": pair_count},
+            )
+        )
+        # After the commit and the audit write, like `ProjectService.reindex`: a failed
+        # publish is then a 500 with the request already on the trail, and the sweep
+        # re-publishes the committed row (audit finding §8.6).
+        await queue.enqueue_eval(
+            EvalJobMessage(
+                kind="run",
+                target_id=run_id,
+                job_id=uuid.uuid4(),
+                attempt=0,
+                not_before_ms=int(time.time() * 1000),
+                original_topic=self.settings.kafka_eval_topic,
             )
         )
         return summary

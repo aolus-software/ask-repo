@@ -65,7 +65,8 @@
       "status": "Status",
       "results": "Results",
       "model": "Model"
-    }
+    },
+    "openRun": "Open run from {when}"
   },
   "runSheet": {
     "title": "Run results",
@@ -97,13 +98,12 @@
     "submit": "Generate",
     "started": "Generation started",
     "nameLabel": "Name",
+    "nameRequired": "Enter a name.",
     "namePlaceholder": "e.g., Auth questions",
     "pathLabel": "Path",
     "pathHelp": "Leave empty for the whole project, or pick a folder or file to cover.",
     "questionsLabel": "Questions",
-    "countAria": "Number of questions",
-    "mixLabel": "Mix",
-    "mixAria": "Question mix"
+    "mixLabel": "Mix"
   },
   "translateDialog": {
     "title": "Translate {name}",
@@ -111,7 +111,6 @@
     "submit": "Translate",
     "started": "Translation started",
     "languageLabel": "Language",
-    "languageAria": "Target language",
     "alreadyTranslated": "{language} (already translated)"
   },
   "screen": {

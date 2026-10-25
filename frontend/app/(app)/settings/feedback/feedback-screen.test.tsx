@@ -5,10 +5,15 @@ import { describe, expect, it, vi } from "vitest";
 import { FeedbackScreen } from "@/app/(app)/settings/feedback/feedback-screen";
 import { ApiError } from "@/lib/api/errors";
 
+const { searchState, replaceMock } = vi.hoisted(() => ({
+  searchState: { value: "" },
+  replaceMock: vi.fn(),
+}));
+
 vi.mock("next/navigation", () => ({
-  useRouter: () => ({ replace: vi.fn() }),
+  useRouter: () => ({ replace: replaceMock }),
   usePathname: () => "/settings/feedback",
-  useSearchParams: () => new URLSearchParams(),
+  useSearchParams: () => new URLSearchParams(searchState.value),
 }));
 
 vi.mock("@/hooks/use-session", () => ({
@@ -92,5 +97,46 @@ describe("FeedbackScreen", () => {
     expect(container.querySelectorAll('[data-slot="skeleton"]').length).toBeGreaterThan(
       0,
     );
+  });
+
+  describe("when the list is empty", () => {
+    const emptyList = {
+      data: { items: [], page: 1, limit: 25, totalCount: 0, totalPages: 1 },
+      isLoading: false,
+      isError: false,
+      error: null,
+      refetch: vi.fn(),
+    };
+    const quietSummary = {
+      data: undefined,
+      isLoading: false,
+      isError: false,
+      error: null,
+      refetch: vi.fn(),
+    };
+
+    it("says there is no feedback yet when no filter is set", () => {
+      searchState.value = "";
+      useFeedbackListMock.mockReturnValue(emptyList);
+      useFeedbackSummaryMock.mockReturnValue(quietSummary);
+      renderScreen();
+
+      expect(screen.getByText("No feedback yet")).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: /clear filters/i })).toBeNull();
+    });
+
+    it("says nothing matches, with a clear action, when a filter is set", () => {
+      searchState.value = "rating=down&createdFrom=2026-10-01";
+      replaceMock.mockClear();
+      useFeedbackListMock.mockReturnValue(emptyList);
+      useFeedbackSummaryMock.mockReturnValue(quietSummary);
+      renderScreen();
+
+      expect(screen.getByText("No feedback matches these filters")).toBeInTheDocument();
+      expect(screen.queryByText("No feedback yet")).toBeNull();
+
+      fireEvent.click(screen.getByRole("button", { name: /clear filters/i }));
+      expect(replaceMock).toHaveBeenCalledWith("/settings/feedback", { scroll: false });
+    });
   });
 });

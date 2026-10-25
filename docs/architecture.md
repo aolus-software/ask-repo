@@ -300,8 +300,10 @@ into a prompt; doing so would make user-authored content an instruction, which i
 
 ## The notification fan-out path
 
-Nine call sites — the two ingestion outcomes, the two checklist and two mock-data generators,
-change-set apply and discard on both, and `MembershipService.grant` — raise a notification
+Thirteen call sites raise a notification: the two ingestion outcomes, the checklist generator and
+the mock-data generator, change-set apply and discard on both, `MembershipService.grant`, and the
+four eval callers of `app/eval/notifications.py` — the set generator, the runner, and the queue's
+terminal-failure path for a set and for a run
 (`.claude/rules/notifications.md`). Where that write happens, relative to everything else, is the
 mirror image of the audit path above and for a reason worth stating rather than assuming.
 

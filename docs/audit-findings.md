@@ -40,35 +40,25 @@ Every finding from the 2026-09-19 and 2026-09-27 sweeps has been fixed and is in
 | # | Finding | Severity | Raised |
 | --- | --- | --- | --- |
 | §2.2 | Two services flatten the project scope into a raw id list, and the single-point grep cannot see it | 🟡 | 2026-10-04 |
-| §5.1 | Deleting a project mid-run can leave live eval results under a deleted run | 🟡 | 2026-10-04 |
 | §7.1 | Four eval routes do not declare `422` | 🟡 | 2026-10-04 |
 | §7.2 | Eval, feedback and activity lists accept `sort`/`search` and ignore them | 🟡 | 2026-10-04 |
 | §7.3 | An eval set can be created with a whitespace-only name | 🟡 | 2026-10-04 |
-| §8.3 | A failed eval run reports zero tallies and no finish time | 🟡 | 2026-10-04 |
-| §8.4 | The eval set generator never checks that it still holds its lease | 🟡 | 2026-10-04 |
-| §8.5 | A resumed eval run overwrites its own provenance stamp | 🟡 | 2026-10-04 |
-| §8.6 | Eval requests audit after the publish, unlike reindex | 🟡 | 2026-10-04 |
 | §9.17 | `HOST` and `PORT` are settings nothing reads | 🟡 | 2026-10-04 |
 | §9.19 | The "project is indexed" guard exists in three copies | 🟡 | 2026-10-04 |
 | §9.20 | The lease and heartbeat mechanism is copied across five repositories | 🟡 | 2026-10-04 |
 | §9.21 | Four dead `STRANDED_AFTER_SECONDS` constants | 🟡 | 2026-10-04 |
 | §9.22 | Eval does not normalise `sourcePath` the way checklist modules do | 🟡 | 2026-10-04 |
-| §9.30 | Stale comments in the feedback schema and the audit coverage test | 📄 | 2026-10-04 |
 | §4.1 | A timed-out or cancelled clone leaves its `git` process behind | 🟡 | 2026-10-24 |
 | §4.2 | The connect-time address pin uses only the first record, and may not accept IPv6 (SUSPECT) | 🟡 | 2026-10-24 |
-| §6.2 | A refused reset email may log the recipient's address (SUSPECT) | 🟡 | 2026-10-24 |
 | §7.4 | The four membership routes declare no `summary` and no error responses | 🟡 | 2026-10-24 |
 | §7.5 | The source-path check's errors are undeclared on three routes | 🟡 | 2026-10-24 |
 | §7.6 | The `409` on `DELETE /users/{id}` is declared with a shape `LAST_ADMIN` does not have | 🟡 | 2026-10-24 |
 | §7.7 | The three download routes document no body | 🟡 | 2026-10-24 |
 | §7.8 | The eval-set create body marks every field optional | 🟡 | 2026-10-24 |
 | §7.9 | An eval set with a retired language would fail every list it appears in (SUSPECT) | 🟡 | 2026-10-24 |
-| §8.7 | Translating an eval set whose source is deleted mid-job fails with the wrong reason | 🟡 | 2026-10-24 |
 | §9.32 | Five English-only constants survive the translated tables | 🟡 | 2026-10-24 |
 | §9.33 | "An unset or unshipped language reads as English" is written out eight times | 🟡 | 2026-10-24 |
 | §9.34 | The single- and multi-module checklist exports duplicate their filter and cap logic | 🟡 | 2026-10-24 |
-| §9.36 | `docs/architecture.md` counts nine notification fan-out sites; there are thirteen | 📄 | 2026-10-24 |
-| §9.38 | A project-list docstring still describes phase 1 | 📄 | 2026-10-24 |
 
 ## Top priorities (2026-10-24)
 
@@ -501,36 +491,9 @@ Every finding this sweep raised here (§3.1–§3.3) was resolved on 2026-10-17 
 
 ## §5 Soft delete
 
-### §5.1 Deleting a project mid-run can leave live eval results under a deleted run — 🟡 hygiene
+Every finding this sweep raised here (§5.1) was resolved on 2026-10-25 and is in
+[`audit-finding-solved-logs.md`](audit-finding-solved-logs.md).
 
-**Evidence:** CONFIRMED by reading; the race was not executed.
-
-**Where:** `backend/app/services/project.py:309-387` (the soft-delete block of `delete`);
-`backend/app/eval/runner.py:57` (`RESULT_BATCH = 10`), `:148-172` (the result loop), `:231-238`
-(`_require_lease`), `:332-346` (`_renew`), `:182-194` (the final release);
-`backend/app/repositories/eval_run.py:21-22`, `:112`, `:135`
-
-**What this is.** An eval run answers each question with the real answer graph and stores the
-answer and a judge's verdict as result rows, committing every ten. A worker holds a lease on the
-run and renews it every 60 seconds.
-
-**Why this can happen.** A project delete soft-deletes the project's eval rows, but takes no lock
-on a running run and does not refuse while one is active (unlike reindex and eval set delete,
-which refuse with `409 EVAL_RUN_IN_PROGRESS`). Sequence: an owner deletes the project → the run row is
-soft-deleted → the worker keeps committing batches of ten results → those rows are live, under a
-deleted run, and nothing sweeps them.
-
-The window is bounded. `renew_lease` filters on `deleted_at IS NULL`, so the renewal task's next
-tick (at most 60 seconds later) fails, and `_require_lease` stops the loop before the next commit.
-The final `release` also refuses a deleted run and rolls back. What leaks is only the batches
-committed between the delete and that tick: up to about a minute of results.
-
-**What it costs.** Orphan rows holding model answers about a deleted repository's code. No route
-returns them (the run is deleted), so it is invisible rather than exposed.
-
-**What we should do.** Either refuse a project delete with `409 EVAL_RUN_IN_PROGRESS` while a run
-is active, or have the runner's batch commit re-check the run (`... WHERE deleted_at IS NULL`).
-One to two hours.
 
 ## §7 The response contract
 
@@ -588,79 +551,9 @@ module name has the same gap; fix both together.
 
 ## §8 Job and status handling
 
-### §8.3 A failed eval run reports zero tallies and no finish time — 🟡 hygiene
+Every finding this sweep raised here (§8.1–§8.6) was resolved, on 2026-10-17 and 2026-10-25, and is in
+[`audit-finding-solved-logs.md`](audit-finding-solved-logs.md).
 
-**Evidence:** CONFIRMED.
-
-**Where:** `backend/app/queue/eval.py:133-143` (`_RunLease.fail`); `backend/app/eval/runner.py:182-194`
-
-**Why this can happen.** Tallies (`hits`, `correct`, `partial`, `wrong`, `errors`,
-`pairs_answered`) and `finished_at` are written only when a run finishes `done`. A run that
-answers 30 of 50 questions and then fails keeps its 30 committed results but is released `failed`
-with tallies of zero and no finish time.
-
-**What it costs.** The runs table shows "hits 0/0 · correct 0" for a run whose detail sheet lists 30
-answers, and its duration cannot be computed.
-
-**What we should do.** On failure, write `finished_at` and tallies computed from the committed
-results. One hour.
-
-### §8.4 The eval set generator never checks that it still holds its lease — 🟡 hygiene
-
-**Evidence:** CONFIRMED.
-
-**Where:** `backend/app/eval/generator.py:88-119`, `:139-143`; compare `backend/app/eval/runner.py:231-238`
-
-**Why this can happen.** The runner checks its renewal task before each batch; the generator
-starts one and never reads it. If the set is deleted while generating (`delete_set` refuses only
-while a *run* is active), or its lease lapses and the sweep re-publishes it, the generator carries
-on through up to 50 model calls and only learns at the end, when its release matches no row and it
-discards everything.
-
-**What it costs.** Wasted model calls; no stuck or corrupt rows.
-
-**What we should do.** Check the renewal task in the per-question loop, as the runner does, and
-consider refusing to delete a set that is still generating. One hour.
-
-### §8.5 A resumed eval run overwrites its own provenance stamp — 🟡 hygiene
-
-**Evidence:** CONFIRMED 2026-10-17 (was SUSPECT). The overwrite is in
-`backend/app/eval/runner.py:132-138` and `backend/app/repositories/eval_run.py:88-96` (`started_at`
-reset at `:93`). The trigger is reachable: a resume happens only after a lease lapses, which means
-a worker restart or a redeploy, and that is exactly when `PROMPT_VERSION` or the `CHAT_*` settings
-can change (§8.1 makes the settings drift more likely). The embedding model and index generation
-cannot change mid-run, because reindex refuses with `409` (`backend/app/services/project.py:271-279`).
-How often it happens in practice cannot be measured from the code.
-
-**What this is.** Each run records which prompt version, chat model, judge model, embedding model
-and index generation it used, so two runs can be compared honestly. `docs/PRD.md` (`:343`, `:354`)
-says a score is comparable only against a fixed prompt; the list of stamped fields comes from
-`app/models/eval.py`.
-
-**Why this can happen.** Every attempt overwrites the stamp and resets `started_at`. A run that
-answers 20 questions, is retried after a restart, and resumes on a different model is stamped only
-with the second.
-
-**What we should do.** Stamp only when empty; on resume, compare and fail the run if the stamp
-would change. Set `started_at` only once. One hour.
-
-### §8.6 Eval requests audit after the publish, unlike reindex — 🟡 hygiene
-
-**Evidence:** CONFIRMED 2026-10-17 (was SUSPECT). The ordering is certain: commit `:105`, publish
-`:107`, audit `:117-133` in `create_set`; commit `:291`, publish `:295`, audit `:305` in
-`start_run`. `producer.produce_to` raises on a Kafka failure. How often a produce fails after the
-commit cannot be measured from the code.
-
-**Where:** `backend/app/services/eval.py:105-134`, `:291-316`; compare
-`backend/app/services/project.py:293-306`
-
-**Why this can happen.** `create_set` and `start_run` commit, then publish to Kafka, then record
-the audit event. If the publish raises, the user sees a `500`, the row survives (the sweep later
-publishes it), and `eval_set.generation.requested` / `eval_run.requested` is never written.
-Reindex and checklist generation record before the publish. Mock data has the same order as eval.
-
-**What we should do.** Record the audit event before the publish (still after the commit, as
-`.claude/rules/audit-trail.md` requires), in eval and mock data. Half an hour.
 
 ## §9 Code health — dead code, duplication, and documentation
 
@@ -717,18 +610,6 @@ A checklist module strips whitespace and slashes from its path, so `src/` and `/
 passes it raw, so the same input answers `400 MODULE_PATH_NOT_INDEXED`. Eval also caps the path at
 1024 characters where checklist uses 512, and repeats the 120-character name limit as its own
 constant. **Fix:** one shared normaliser and the shared length constants. One hour.
-
-### §9.30 Stale comments in the feedback schema and the audit coverage test — 📄 doc
-
-**Where:** `backend/app/schemas/feedback.py:95` ("Stage 2 (Langfuse) fills this; until then…
-null" — Stage 2 shipped, `backend/app/services/feedback.py:165-166`);
-`backend/tests/test_audit_coverage.py:11`, `:14`, `:50`, `:221`, `:238-241` ("six", "five"
-exemptions — there are seven: the comment at `:38` says so, and `VALID_EXEMPTIONS` at `:60-62`
-has seven);
-`backend/tests/test_auth_middleware.py:219` ("`/auth/me` does not exist yet" — it does,
-`backend/app/api/routes/auth.py:327`)
-
-**Fix:** reword to "the named exemptions" and rename `test_every_exemption_is_one_of_the_five`.
 
 ## Verified correct in this sweep (2026-10-04), with what was checked
 
@@ -867,25 +748,9 @@ bracket IPv6 literals. One hour, including a test.
 
 ## §6 Secret handling
 
-### §6.2 A refused reset email may log the recipient's address — 🟡 hygiene
+Every finding this sweep raised here (§6.1–§6.2) was resolved on 2026-10-25 and is in
+[`audit-finding-solved-logs.md`](audit-finding-solved-logs.md).
 
-**Evidence:** SUSPECT. Unverified: whether `aiosmtplib`'s `SMTPRecipientsRefused` text includes the
-address. Reading its `__str__` settles it.
-
-**Where:** `backend/app/services/password_reset.py:173-180`; `backend/app/mail/sender.py:60-70`
-
-**What this is.** When a reset email cannot be sent, the service logs a `WARNING` with the token
-row's id — deliberately never the token (`.claude/rules/mail.md`).
-
-**Why this can happen.** The same line also logs the `MailSendError`, which is built from the SMTP
-library's own message. A relay that refuses the recipient produces a message that may quote the
-address.
-
-**What it costs.** A user's email address in operator logs. Not a secret, and not the audit trail,
-but more than the line needs.
-
-**What we should do.** Log `type(error.__cause__).__name__` and `error.retryable` instead of the
-message. Fifteen minutes.
 
 ## §7 The response contract
 
@@ -1011,28 +876,9 @@ which would put that fallback in one place.
 
 ## §8 Job and status handling
 
-### §8.7 Translating an eval set whose source is deleted mid-job fails with the wrong reason — 🟡 hygiene
+Every finding this sweep raised here (§8.7) was resolved on 2026-10-25 and is in
+[`audit-finding-solved-logs.md`](audit-finding-solved-logs.md).
 
-**Evidence:** CONFIRMED.
-
-**Where:** `backend/app/eval/generator.py:107-109`, `:197-235`;
-`backend/app/repositories/eval_pair.py:18-24` (`list_for_set` uses `active_select`);
-`backend/app/services/eval.py:251-262` (`delete_set` refuses only on an active run)
-
-**What this is.** Since #69 an English eval set can be translated into another language; the worker
-reads the source set's pairs and translates each one.
-
-**Why this can happen.** User A requests a translation of set S → the worker starts → user B
-deletes S, which is allowed because no *run* is active → the worker's read of S's pairs filters
-out the soft-deleted rows and finds none → the translation is released as `failed` with "No
-question could be translated with its code kept intact", and an `eval_set.failed` notification
-goes out.
-
-**What it costs.** The project's members are told the translation failed for a reason that is not
-true. No row is stuck.
-
-**What we should do.** Refuse to delete a set while a translation of it is generating — the same
-guard §8.4 proposes for a set that is itself generating. One hour, both together.
 
 ## §9 Code health — dead code, duplication, and documentation
 
@@ -1079,31 +925,6 @@ wording ("rows" vs "test cases"), and build the same audit `filter` details. A c
 `project_export.py:~183` says "same envelope as the per-module export" — the comment is the only
 thing keeping them aligned. **Fix:** extract the filter-to-details mapping and the cap check beside
 `build_workbook` in `app/services/checklist_export.py`. One hour.
-
-### §9.36 `docs/architecture.md` counts nine notification fan-out sites; there are thirteen — 📄 doc
-
-**Evidence:** CONFIRMED.
-
-**Where:** `docs/architecture.md:303`; the sites are `backend/app/ingestion/pipeline.py:140,184`,
-`backend/app/checklist/generator.py:198`, `backend/app/mockdata/generator.py:218`,
-`backend/app/services/checklist_change_set.py:186,255`, `backend/app/services/mock_data_change_set.py:144,210`,
-`backend/app/services/membership.py:116`, and the four eval callers of `backend/app/eval/notifications.py`
-(`eval/generator.py:147`, `eval/runner.py:213`, `queue/eval.py:120,162`)
-
-`.claude/rules/notifications.md` already says thirteen. The architecture page predates #66 and also
-words the generators as "two checklist and two mock-data", which reads as four. **Fix:** "Thirteen",
-listing the eval generator, runner and terminal-failure path. `docs/PRD.md` §6 items 7 and 8 also
-quote "40 events", "eleven members" and "nine call sites" (now 47, 15 and 13); they read as
-snapshots, and adding "at the time" would make that explicit. Ten minutes.
-
-### §9.38 A project-list docstring still describes phase 1 — 📄 doc
-
-**Evidence:** CONFIRMED.
-
-**Where:** `backend/app/services/project.py:192-194`
-
-"In phase 1 it is unrestricted; phase 2 changes the resolver's body" — phase 2.1 shipped per-project
-access long ago. **Fix:** "The scope comes from the access resolver and nowhere else." Two minutes.
 
 ## Verified correct in this sweep (2026-10-24), with what was checked
 

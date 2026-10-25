@@ -1,10 +1,12 @@
 """The reset flow's policy, below the route: enumeration, single use, sessions, audit."""
 
+import logging
 import uuid
 from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
+import aiosmtplib
 import pytest
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -258,3 +260,32 @@ async def test_a_failed_delivery_never_raises_and_leaves_sent_at_null(
     stored = (await db_session.scalars(select(PasswordResetToken))).one()
     await db_session.refresh(stored)
     assert stored.sent_at is None
+
+
+async def test_a_failed_delivery_does_not_log_the_recipient_address(
+    db_session: AsyncSession,
+    sessionmaker: async_sessionmaker[AsyncSession],
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    await _user(db_session)
+    settings = _mail_on()
+    pending = await _service(db_session, sessionmaker, settings).request(
+        PasswordResetRequest(email="dev@example.com")
+    )
+    assert pending is not None
+    sender = RecordingMailSender()
+    refusal = aiosmtplib.SMTPRecipientRefused(550, "no such user", "dev@example.com")
+    error = MailSendError(str(refusal), retryable=False)
+    error.__cause__ = refusal
+    sender.fail_with = error
+
+    with caplog.at_level(logging.WARNING, logger="app.services.password_reset"):
+        await deliver_password_reset(
+            pending, sender=sender, settings=settings, sessionmaker=sessionmaker
+        )
+
+    [record] = [r for r in caplog.records if r.name == "app.services.password_reset"]
+    text = record.getMessage()
+    assert "dev@example.com" not in text
+    assert "SMTPRecipientRefused" in text
+    assert str(pending.token_id) in text

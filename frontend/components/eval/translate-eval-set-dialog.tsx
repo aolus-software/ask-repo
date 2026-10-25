@@ -83,12 +83,12 @@ export function TranslateEvalSetDialog({
         onSubmit={handleSubmit}
       >
         <Field>
-          <FieldLabel>{t("languageLabel")}</FieldLabel>
+          <FieldLabel htmlFor="translate-language">{t("languageLabel")}</FieldLabel>
           <Select
             value={language ?? ""}
             onValueChange={(value) => setChosen((value || null) as Language | null)}
           >
-            <SelectTrigger className="w-full" aria-label={t("languageAria")}>
+            <SelectTrigger id="translate-language" className="w-full">
               <SelectValue>
                 {(value: string) => (value ? ENDONYMS[value as Language] : "")}
               </SelectValue>

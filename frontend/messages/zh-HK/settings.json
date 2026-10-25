@@ -79,6 +79,9 @@
     "description": "大家如何評價回答、聊天回覆和建議。投票者是誰，以及投票背後的問題，一律不會顯示。",
     "forbidden": "只有管理員可以閱讀對模型輸出的意見回饋。",
     "emptyTitle": "暫無意見回饋",
-    "emptyDescription": "對回答、聊天回覆和變更集的投票會顯示在這裏。"
+    "emptyDescription": "對回答、聊天回覆和變更集的投票會顯示在這裏。",
+    "noMatchTitle": "沒有符合這些篩選條件的回饋",
+    "noMatchDescription": "請嘗試其他篩選條件或更闊的日期範圍。",
+    "clearFilters": "清除篩選"
   }
 }

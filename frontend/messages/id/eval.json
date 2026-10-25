@@ -65,7 +65,8 @@
       "status": "Status",
       "results": "Hasil",
       "model": "Model"
-    }
+    },
+    "openRun": "Buka proses dari {when}"
   },
   "runSheet": {
     "title": "Hasil eksekusi",
@@ -97,13 +98,12 @@
     "submit": "Buat",
     "started": "Pembuatan dimulai",
     "nameLabel": "Nama",
+    "nameRequired": "Masukkan nama.",
     "namePlaceholder": "mis., Pertanyaan autentikasi",
     "pathLabel": "Jalur",
     "pathHelp": "Kosongkan untuk seluruh proyek, atau pilih folder atau berkas yang akan dicakup.",
     "questionsLabel": "Pertanyaan",
-    "countAria": "Jumlah pertanyaan",
-    "mixLabel": "Campuran",
-    "mixAria": "Campuran pertanyaan"
+    "mixLabel": "Campuran"
   },
   "translateDialog": {
     "title": "Terjemahkan {name}",
@@ -111,7 +111,6 @@
     "submit": "Terjemahkan",
     "started": "Terjemahan dimulai",
     "languageLabel": "Bahasa",
-    "languageAria": "Bahasa tujuan",
     "alreadyTranslated": "{language} (sudah diterjemahkan)"
   },
   "screen": {

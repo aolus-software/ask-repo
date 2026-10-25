@@ -13,6 +13,12 @@ client can have received it, so it is recorded under Changed and allowed in a `M
 
 ## [Unreleased]
 
+### Added
+
+- **`409 EVAL_SET_GENERATING`** on `DELETE /eval-sets/{id}`, while the set is still generating
+  or a translation of it is. Deleting either mid-job used to let the generator spend up to 50
+  model calls for nothing, or report a translation as failed for a reason that was not true.
+
 ### Changed
 
 - **A failed embedding or vector-store call no longer puts the provider's or Qdrant's own error
@@ -21,6 +27,9 @@ client can have received it, so it is recorded under Changed and allowed in a `M
   embedders, the vector store and the scroll step of checklist, mock-data and eval set
   generation. An operator diagnosing a width mismatch reads Qdrant's reason in the log rather
   than on the screen.
+- **Every filter has a visible label.** The checklist grid, the eval compare selects, and the
+  feedback and audit filters show a small label above each control, instead of a placeholder
+  that disappeared once a value was chosen.
 
 ### Fixed
 
@@ -50,6 +59,24 @@ client can have received it, so it is recorded under Changed and allowed in a `M
 - **A thumbs vote no longer briefly disappears** when its answer or change set is shown again.
 - **A failed language switch on the sign-in pages shows an error** instead of reloading the page
   in the old language.
+- **A failed eval run keeps its results' tallies and a finish time**, instead of showing zero
+  for a run whose detail lists the answers it gave.
+- **A resumed eval run keeps the provenance it started with.** A run picked up again after a
+  restart no longer overwrites which prompt, models and index it was scored against, or its
+  start time; if the model changed in between, the run fails rather than mixing two.
+- **An eval run stops saving answers once its project is deleted**, rather than for up to a
+  minute afterwards.
+- **Requesting an eval set, an eval run or mock data is recorded in the audit trail even when
+  the job cannot be queued**: the event is now written before the publish to Kafka.
+- **A refused password-reset email no longer writes the recipient's address to the log.**
+- **Form labels and errors.** Clicking a label focuses its control on the eval, export,
+  create-module and translate dialogs; a blank eval set name says so instead of doing nothing;
+  and a rejected content language, question count or mix shows its error under the field.
+- **State is no longer shown by colour alone**: a pressed thumb is filled, and an excluded eval
+  question carries an "Excluded" badge. An eval run row opens from a real button, by keyboard
+  as well as by mouse.
+- **The feedback screen says "No feedback matches these filters"**, with a way to clear them,
+  instead of "No feedback yet" when its filters hide everything.
 
 ## [2.4.1] — 2026-10-25
 

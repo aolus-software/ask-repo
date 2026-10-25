@@ -191,8 +191,7 @@ class ProjectService:
     ) -> PaginatedResponse[ProjectResponse]:
         """A page of projects the caller may read.
 
-        The scope comes from the access resolver and nowhere else. In phase 1 it is
-        unrestricted; phase 2 changes the resolver's body and this line stays put.
+        The scope comes from the access resolver and nowhere else.
         """
         scope = access.resolve_project_scope(actor)
 

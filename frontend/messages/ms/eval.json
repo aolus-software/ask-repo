@@ -65,7 +65,8 @@
       "status": "Status",
       "results": "Keputusan",
       "model": "Model"
-    }
+    },
+    "openRun": "Buka larian dari {when}"
   },
   "runSheet": {
     "title": "Keputusan larian",
@@ -97,13 +98,12 @@
     "submit": "Jana",
     "started": "Penjanaan dimulakan",
     "nameLabel": "Nama",
+    "nameRequired": "Masukkan nama.",
     "namePlaceholder": "cth., Soalan pengesahan",
     "pathLabel": "Laluan",
     "pathHelp": "Biarkan kosong untuk keseluruhan projek, atau pilih folder atau fail untuk diliputi.",
     "questionsLabel": "Soalan",
-    "countAria": "Bilangan soalan",
-    "mixLabel": "Campuran",
-    "mixAria": "Campuran soalan"
+    "mixLabel": "Campuran"
   },
   "translateDialog": {
     "title": "Terjemah {name}",
@@ -111,7 +111,6 @@
     "submit": "Terjemah",
     "started": "Terjemahan dimulakan",
     "languageLabel": "Bahasa",
-    "languageAria": "Bahasa sasaran",
     "alreadyTranslated": "{language} (sudah diterjemah)"
   },
   "screen": {

@@ -171,11 +171,13 @@ async def deliver_password_reset(
     try:
         await sender.send(email)
     except MailSendError as error:
+        # The error's class, never its text: a relay's refusal quotes the recipient.
+        cause = error.__cause__ if error.__cause__ is not None else error
         logger.warning(
-            "reset email for token %s not sent (retryable=%s): %s",
+            "reset email for token %s not sent (%s, retryable=%s)",
             pending.token_id,
+            type(cause).__name__,
             error.retryable,
-            error,
         )
         return
     try:

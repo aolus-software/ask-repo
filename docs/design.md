@@ -233,6 +233,13 @@ Every list screen has the same skeleton:
 3. `card-table` surface — a `Card` with no padding wrapping a `Table`.
 4. Pagination footer inside the same card.
 
+**Every filter carries a visible label.** Each filter is a `FilterField`
+(`components/layout/filter-field.tsx`): a small `text-xs text-muted-foreground` `FieldLabel` above its
+control, with a matching `htmlFor` and `id`, and `gap-1` between them. A placeholder or an
+`aria-label` is not enough, because a chosen value replaces the placeholder and a date input has
+neither. The toolbar grid is `items-end`, so the unlabelled search box and the labelled filters share
+a baseline. This covers the audit, feedback and checklist-grid filters and the eval compare selects.
+
 The `card-table` surface applies to **every** `<Table>` in the app, not only the four-part list
 screens above — a grid on a detail-page tab (the QA Checklist's test-case grid, for instance)
 wraps the same way. See `.claude/rules/design-system.md` §11.

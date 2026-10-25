@@ -5,7 +5,7 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 from httpx import AsyncClient
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import Settings
@@ -884,7 +884,12 @@ async def test_a_deleted_translation_frees_its_language(
     body = {"sourceSetId": str(source.id), "language": "ms"}
 
     first = (await authed_client.post(f"/projects/{project.id}/eval-sets", json=body)).json()
-    await authed_client.delete(f"/eval-sets/{first['id']}")
+    # A set that is still generating cannot be deleted (EVAL_SET_GENERATING); let it finish.
+    await db_session.execute(
+        update(EvalSet).where(EvalSet.id == uuid.UUID(first["id"])).values(status="ready")
+    )
+    await db_session.commit()
+    assert (await authed_client.delete(f"/eval-sets/{first['id']}")).status_code == 204
     again = await authed_client.post(f"/projects/{project.id}/eval-sets", json=body)
 
     assert again.status_code == 202
@@ -1002,3 +1007,147 @@ async def test_translating_needs_a_stable_index(
 
     assert response.status_code == 409
     assert response.json()["detail"]["code"] == "PROJECT_NOT_READY"
+
+
+async def test_deleting_a_generating_set_is_409(
+    authed_client: AsyncClient,
+    grant_membership: GrantMembership,
+    authed_user: User,
+    db_session: AsyncSession,
+) -> None:
+    project = await _ready_project(db_session)
+    eval_set = await create_eval_set(
+        db_session, project_id=project.id, status=EvalSetStatus.GENERATING
+    )
+    set_id = eval_set.id
+    await grant_membership(authed_user.id, project.id, OWNER_NAME)
+
+    response = await authed_client.delete(f"/eval-sets/{set_id}")
+
+    assert response.status_code == 409
+    assert response.json()["detail"]["code"] == "EVAL_SET_GENERATING"
+    db_session.expire_all()
+    row = await db_session.get(EvalSet, set_id)
+    assert row is not None
+    assert row.deleted_at is None
+
+
+async def test_deleting_a_set_whose_translation_is_generating_is_409_until_it_finishes(
+    authed_client: AsyncClient,
+    grant_membership: GrantMembership,
+    authed_user: User,
+    db_session: AsyncSession,
+) -> None:
+    project = await _ready_project(db_session)
+    source = await create_eval_set(db_session, project_id=project.id)
+    translation = await create_eval_set(
+        db_session,
+        project_id=project.id,
+        status=EvalSetStatus.GENERATING,
+        language="id",
+        source_set_id=source.id,
+    )
+    await grant_membership(authed_user.id, project.id, OWNER_NAME)
+
+    refused = await authed_client.delete(f"/eval-sets/{source.id}")
+
+    assert refused.status_code == 409
+    assert refused.json()["detail"]["code"] == "EVAL_SET_GENERATING"
+
+    translation.status = EvalSetStatus.READY.value
+    await db_session.commit()
+
+    assert (await authed_client.delete(f"/eval-sets/{source.id}")).status_code == 204
+    assert (await authed_client.delete(f"/eval-sets/{translation.id}")).status_code == 204
+
+
+async def test_a_deleted_generating_translation_does_not_block_its_source(
+    authed_client: AsyncClient,
+    grant_membership: GrantMembership,
+    authed_user: User,
+    db_session: AsyncSession,
+) -> None:
+    project = await _ready_project(db_session)
+    source = await create_eval_set(db_session, project_id=project.id)
+    translation = await create_eval_set(
+        db_session,
+        project_id=project.id,
+        status=EvalSetStatus.GENERATING,
+        language="id",
+        source_set_id=source.id,
+    )
+    translation.deleted_at = datetime.now(UTC)
+    await db_session.commit()
+    await grant_membership(authed_user.id, project.id, OWNER_NAME)
+
+    assert (await authed_client.delete(f"/eval-sets/{source.id}")).status_code == 204
+
+
+async def test_the_generating_refusal_comes_after_the_404_and_403(
+    authed_client: AsyncClient,
+    grant_membership: GrantMembership,
+    authed_user: User,
+    db_session: AsyncSession,
+) -> None:
+    project = await _ready_project(db_session)
+    eval_set = await create_eval_set(
+        db_session, project_id=project.id, status=EvalSetStatus.GENERATING
+    )
+    await db_session.commit()
+
+    not_a_member = await authed_client.delete(f"/eval-sets/{eval_set.id}")
+    await grant_membership(authed_user.id, project.id, VIEWER_NAME)
+    without_permission = await authed_client.delete(f"/eval-sets/{eval_set.id}")
+
+    assert not_a_member.status_code == 404
+    assert not_a_member.json()["detail"]["code"] == "EVAL_SET_NOT_FOUND"
+    assert without_permission.status_code == 403
+    assert without_permission.json()["detail"]["code"] == "INSUFFICIENT_ROLE"
+
+
+class _BrokerDown(Exception):
+    """Stands in for any failure of the Kafka produce."""
+
+
+async def _refuse_to_publish(*args: object, **kwargs: object) -> None:
+    raise _BrokerDown
+
+
+async def test_a_failed_publish_still_leaves_the_set_request_on_the_trail(
+    authed_client: AsyncClient,
+    authed_user: User,
+    grant_membership: GrantMembership,
+    db_session: AsyncSession,
+    ingestion_queue: InMemoryIngestionQueue,
+    audit_rows: AuditRows,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project = await _ready_project(db_session)
+    await db_session.commit()
+    await grant_membership(authed_user.id, project.id, EDITOR_NAME)
+    monkeypatch.setattr(ingestion_queue, "enqueue_eval", _refuse_to_publish)
+
+    with pytest.raises(_BrokerDown):
+        await authed_client.post(f"/projects/{project.id}/eval-sets", json=BODY)
+
+    assert len(await audit_rows("eval_set.generation.requested")) == 1
+
+
+async def test_a_failed_publish_still_leaves_the_run_request_on_the_trail(
+    authed_client: AsyncClient,
+    authed_user: User,
+    grant_membership: GrantMembership,
+    db_session: AsyncSession,
+    ingestion_queue: InMemoryIngestionQueue,
+    audit_rows: AuditRows,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project, eval_set = await _runnable_set(db_session, pairs=2)
+    await db_session.commit()
+    await grant_membership(authed_user.id, project.id, EDITOR_NAME)
+    monkeypatch.setattr(ingestion_queue, "enqueue_eval", _refuse_to_publish)
+
+    with pytest.raises(_BrokerDown):
+        await authed_client.post(f"/eval-sets/{eval_set.id}/runs")
+
+    assert len(await audit_rows("eval_run.requested")) == 1

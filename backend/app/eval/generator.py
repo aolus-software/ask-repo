@@ -104,7 +104,7 @@ class EvalSetGenerator:
         renewal = asyncio.create_task(self._renew(set_id=set_id, worker_id=worker_id))
         try:
             if eval_set.source_set_id is not None:
-                pairs = await self._translate(eval_set, scope)
+                pairs = await self._translate(eval_set, scope, renewal)
                 usable = any(pair.exclusion_reason is None for pair in pairs)
                 failure, generation = NO_FAITHFUL_TRANSLATION_ERROR, eval_set.indexed_generation
             else:
@@ -112,7 +112,7 @@ class EvalSetGenerator:
                     raise TerminalIngestionError(f"project {project.id} has no index to scroll")
                 generation = project.active_generation
                 pairs = await self._sample(
-                    eval_set, project.id, project.embedding_collection, generation, scope
+                    eval_set, project.id, project.embedding_collection, generation, scope, renewal
                 )
                 usable = bool(pairs)
                 failure = NO_PAIRS_ERROR
@@ -162,6 +162,7 @@ class EvalSetGenerator:
         collection: str,
         generation: int,
         scope: dict[str, Any],
+        renewal: "asyncio.Task[None]",
     ) -> list[EvalPair]:
         """Scroll the index, sample chunks and write one generated pair per usable chunk."""
         payloads = await self._scroll(
@@ -176,6 +177,7 @@ class EvalSetGenerator:
         model = self.chat_model.with_structured_output(GeneratedPair)
         pairs: list[EvalPair] = []
         for chunk, question_type in zip(chunks, types, strict=True):
+            self._require_lease(renewal, eval_set.id)
             generated = await self._generate_one(model, chunk, question_type, scope)
             if generated is None:
                 continue
@@ -194,7 +196,9 @@ class EvalSetGenerator:
             )
         return pairs
 
-    async def _translate(self, eval_set: EvalSet, scope: dict[str, Any]) -> list[EvalPair]:
+    async def _translate(
+        self, eval_set: EvalSet, scope: dict[str, Any], renewal: "asyncio.Task[None]"
+    ) -> list[EvalPair]:
         """One pair per source pair, in source order, with the source's current exclusions.
 
         An unfaithful pair is written excluded with `translation_unfaithful` and keeps the
@@ -210,6 +214,7 @@ class EvalSetGenerator:
         now = datetime.now(UTC)
         pairs: list[EvalPair] = []
         for source in sources:
+            self._require_lease(renewal, eval_set.id)
             outcome = await translate_question(
                 model, question=source.question, language=language, scope=scope
             )
@@ -233,6 +238,17 @@ class EvalSetGenerator:
                 )
             )
         return pairs
+
+    @staticmethod
+    def _require_lease(renewal: "asyncio.Task[None]", set_id: uuid.UUID) -> None:
+        """Stop spending model calls once the heartbeat has stopped: the lease was lost.
+
+        The set was deleted or another worker owns it, and either way this run's
+        release would match no row and discard everything (audit finding §8.4).
+        Mirrors `EvalRunner._require_lease`.
+        """
+        if renewal.done():
+            raise RetryableIngestionError(f"eval set {set_id} lost its lease mid-run")
 
     async def _renew(self, *, set_id: uuid.UUID, worker_id: str) -> None:
         """Hold the lease for the length of the run. Mirrors `MockDataGenerator._renew`."""

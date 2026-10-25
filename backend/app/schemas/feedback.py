@@ -95,7 +95,8 @@ class FeedbackAdminRead(ApiModel):
     note: str | None
     prompt_version: str
     created_on: date
-    # Stage 2 (Langfuse) fills this; until then, and whenever Langfuse is off, null.
+    # Set from the target's own id when Langfuse is on; null when it is off, and always
+    # null for an Ask answer (`.claude/rules/feedback.md` rule 5).
     trace_url: str | None = None
 
 

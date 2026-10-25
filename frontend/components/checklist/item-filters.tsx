@@ -2,6 +2,7 @@
 
 import { useTranslations } from "next-intl";
 
+import { FilterField } from "@/components/layout/filter-field";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -43,9 +44,10 @@ export function ItemFilters({
     // (`docs/design.md` → Spacing): one row, not four stacked full-width controls.
     // Unlike `ListToolbar`'s filters slot these are rendered directly by the screen,
     // so the row has to be declared here or each child becomes its own block.
-    <div className="grid grid-cols-1 gap-4 md:grid-cols-3 lg:grid-cols-4">
-      <div>
+    <div className="grid grid-cols-1 items-end gap-4 md:grid-cols-3 lg:grid-cols-4">
+      <FilterField htmlFor="item-filter-feature" label={t("itemFilters.featureAria")}>
         <Input
+          id="item-filter-feature"
           placeholder={t("itemFilters.featurePlaceholder")}
           value={currentFilters.feature ?? ""}
           onChange={(event) =>
@@ -54,11 +56,10 @@ export function ItemFilters({
               feature: event.target.value || undefined,
             })
           }
-          aria-label={t("itemFilters.featureAria")}
         />
-      </div>
+      </FilterField>
 
-      <div>
+      <FilterField htmlFor="item-filter-status" label={t("itemFilters.statusAria")}>
         <Select
           value={currentFilters.status ?? ANY}
           onValueChange={(value) =>
@@ -68,7 +69,7 @@ export function ItemFilters({
             })
           }
         >
-          <SelectTrigger className="w-full" aria-label={t("itemFilters.statusAria")}>
+          <SelectTrigger id="item-filter-status" className="w-full">
             {/* Base UI renders the raw selected value, not the item's label, so
                 without this the trigger reads "any" or "pass" instead of the
                 wording in the menu. */}
@@ -89,9 +90,9 @@ export function ItemFilters({
             ))}
           </SelectContent>
         </Select>
-      </div>
+      </FilterField>
 
-      <div>
+      <FilterField htmlFor="item-filter-kind" label={t("itemFilters.kindAria")}>
         {/* The filter this whole field exists for: "show me the failure coverage". */}
         <Select
           value={currentFilters.kind ?? ANY}
@@ -102,7 +103,7 @@ export function ItemFilters({
             })
           }
         >
-          <SelectTrigger className="w-full" aria-label={t("itemFilters.kindAria")}>
+          <SelectTrigger id="item-filter-kind" className="w-full">
             <SelectValue>
               {(value: string) =>
                 value === ANY
@@ -120,9 +121,9 @@ export function ItemFilters({
             ))}
           </SelectContent>
         </Select>
-      </div>
+      </FilterField>
 
-      <div>
+      <FilterField htmlFor="item-filter-source" label={t("itemFilters.sourceAria")}>
         <Select
           value={currentFilters.source ?? ANY}
           onValueChange={(value) =>
@@ -132,7 +133,7 @@ export function ItemFilters({
             })
           }
         >
-          <SelectTrigger className="w-full" aria-label={t("itemFilters.sourceAria")}>
+          <SelectTrigger id="item-filter-source" className="w-full">
             {/* Base UI renders the raw selected value, not the item's label, so
                 without this the trigger reads "any" or "pass" instead of the
                 wording in the menu. */}
@@ -153,7 +154,7 @@ export function ItemFilters({
             ))}
           </SelectContent>
         </Select>
-      </div>
+      </FilterField>
     </div>
   );
 }

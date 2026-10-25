@@ -41,6 +41,7 @@
   "EVAL_SET_NOT_READY": "此評估集尚未準備好執行。",
   "EVAL_RUN_IN_PROGRESS": "已有評估執行正在進行。請等待其完成後再試。",
   "EVAL_TRANSLATION_EXISTS": "此資料集已有該語言的翻譯。請先刪除，才能建立新的翻譯。",
+  "EVAL_SET_GENERATING": "此評估集或其翻譯仍在產生中。請等待其完成後再試。",
   "INSUFFICIENT_ROLE": "你在此專案中的角色不允許執行該操作。",
   "SYSTEM_ROLE_IMMUTABLE": "viewer、editor 與 owner 為內建角色，無法變更。",
   "ROLE_NOT_FOUND": "找不到角色。",

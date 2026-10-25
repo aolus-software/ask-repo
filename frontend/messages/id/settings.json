@@ -79,6 +79,9 @@
     "description": "Bagaimana orang menilai jawaban, balasan obrolan, dan usulan. Siapa yang memberi suara, dan pertanyaan di balik suara tersebut, tidak pernah ditampilkan.",
     "forbidden": "Hanya administrator yang dapat membaca umpan balik atas keluaran model.",
     "emptyTitle": "Belum ada umpan balik",
-    "emptyDescription": "Suara atas jawaban, balasan obrolan, dan set perubahan akan muncul di sini."
+    "emptyDescription": "Suara atas jawaban, balasan obrolan, dan set perubahan akan muncul di sini.",
+    "noMatchTitle": "Tidak ada umpan balik yang cocok dengan filter ini",
+    "noMatchDescription": "Coba filter lain atau rentang tanggal yang lebih luas.",
+    "clearFilters": "Hapus filter"
   }
 }

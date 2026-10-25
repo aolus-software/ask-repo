@@ -90,7 +90,8 @@ class EvalRunRepository(BaseRepository[EvalRun]):
                 lease_expires_at=now + timedelta(seconds=lease_seconds),
                 last_job_id=job_id,
                 status=EvalRunStatus.RUNNING.value,
-                started_at=now,
+                # Stamped once: a resumed run keeps the time its first attempt began.
+                started_at=func.coalesce(EvalRun.started_at, now),
                 error=None,
                 updated_at=now,
             )
@@ -115,6 +116,25 @@ class EvalRunRepository(BaseRepository[EvalRun]):
             .values(lease_expires_at=now + timedelta(seconds=lease_seconds), updated_at=now)
         )
         return cast(CursorResult[Any], result).rowcount == 1
+
+    async def hold_for_commit(self, *, run_id: uuid.UUID, worker_id: str) -> bool:
+        """Whether the run is still live and still ours, locking its row until commit.
+
+        The runner asks this before each result batch commits. `deleted_at IS NULL`
+        catches a project or set deleted mid-run, which `renew_lease` only notices on
+        its next tick; `FOR UPDATE` makes a delete arriving now wait for the batch
+        instead of slipping between the check and the commit.
+        """
+        result = await self.session.execute(
+            select(EvalRun.id)
+            .where(
+                EvalRun.id == run_id,
+                EvalRun.deleted_at.is_(None),
+                EvalRun.lease_owner == worker_id,
+            )
+            .with_for_update()
+        )
+        return result.scalar_one_or_none() is not None
 
     async def release(
         self,

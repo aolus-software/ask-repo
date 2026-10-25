@@ -35,7 +35,7 @@ from app.eval.notifications import announce_run
 from app.ingestion.embedder import Embedder
 from app.ingestion.errors import RetryableIngestionError, TerminalIngestionError
 from app.ingestion.vector_store import VectorStoreFactory
-from app.models.eval import EvalResult, EvalRunStatus, EvalVerdict
+from app.models.eval import EvalResult, EvalRun, EvalRunStatus, EvalVerdict
 from app.models.project import Project
 from app.observability.features import CallFeature, call_config
 from app.rag.answerer import Answerer
@@ -140,13 +140,7 @@ class EvalRunner:
         ) or Language.EN
         answerer = self._answerer(project)
 
-        run.prompt_version = ANSWER_PROMPT_VERSION
-        run.judge_prompt_version = JUDGE_PROMPT_VERSION
-        run.chat_provider = self.settings.chat_provider
-        run.chat_model = self.settings.chat_model
-        run.judge_model = self.settings.chat_model
-        run.embedding_model = project.embedding_model
-        run.project_generation = project.active_generation
+        self._stamp_provenance(run, project)
         await self.session.commit()
 
         done_ids = await self.results.pair_ids_for_run(run_id)
@@ -179,7 +173,7 @@ class EvalRunner:
                 self.session.add_all(finished)
                 unsaved += len(finished)
                 if unsaved >= RESULT_BATCH:
-                    self._require_lease(renewal, run_id)
+                    await self._require_live_lease(renewal, run_id, worker_id)
                     await self.session.commit()
                     unsaved = 0
             self._require_lease(renewal, run_id)
@@ -249,6 +243,49 @@ class EvalRunner:
                 task.cancel()
             await asyncio.gather(*tasks, return_exceptions=True)
             raise
+
+    def _stamp_provenance(self, run: EvalRun, project: Project) -> None:
+        """Record what this run is made of, once; refuse a resume that would change it.
+
+        A score is comparable only against a fixed prompt and model (`docs/PRD.md`), so
+        a run that answered some pairs under one stamp and is resumed under another
+        would be a score of neither. A field already stamped is compared, never
+        overwritten, and a mismatch fails the run (terminal, so it is not retried).
+        """
+        stamp: dict[str, str | int | None] = {
+            "prompt_version": ANSWER_PROMPT_VERSION,
+            "judge_prompt_version": JUDGE_PROMPT_VERSION,
+            "chat_provider": self.settings.chat_provider,
+            "chat_model": self.settings.chat_model,
+            "judge_model": self.settings.chat_model,
+            "embedding_model": project.embedding_model,
+            "project_generation": project.active_generation,
+        }
+        changed = [
+            field
+            for field, value in stamp.items()
+            if getattr(run, field) is not None and getattr(run, field) != value
+        ]
+        if changed:
+            raise TerminalIngestionError(
+                f"eval run {run.id} was started with a different {', '.join(changed)}; "
+                "its results are not comparable, so start a new run instead of resuming it"
+            )
+        for field, value in stamp.items():
+            if getattr(run, field) is None:
+                setattr(run, field, value)
+
+    async def _require_live_lease(
+        self, renewal: "asyncio.Task[None]", run_id: uuid.UUID, worker_id: str
+    ) -> None:
+        """`_require_lease`, plus a read of the row: a deleted run commits nothing more.
+
+        The heartbeat can lag a delete by a minute; this closes that gap for the batch
+        about to commit (audit finding §5.1). The caller rolls back on the raise.
+        """
+        self._require_lease(renewal, run_id)
+        if not await self.runs.hold_for_commit(run_id=run_id, worker_id=worker_id):
+            raise RetryableIngestionError(f"eval run {run_id} was deleted or lost its lease")
 
     def _require_lease(self, renewal: "asyncio.Task[None]", run_id: uuid.UUID) -> None:
         """Refuse to commit once the heartbeat has stopped: the lease was lost.

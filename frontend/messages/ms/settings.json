@@ -79,6 +79,9 @@
     "description": "Bagaimana orang menilai jawapan, balasan sembang dan cadangan. Siapa yang mengundi, dan soalan di sebalik sesuatu undi, tidak sekali-kali ditunjukkan.",
     "forbidden": "Hanya pentadbir yang boleh membaca maklum balas tentang output model.",
     "emptyTitle": "Belum ada maklum balas",
-    "emptyDescription": "Undi pada jawapan, balasan sembang dan set perubahan akan dipaparkan di sini."
+    "emptyDescription": "Undi pada jawapan, balasan sembang dan set perubahan akan dipaparkan di sini.",
+    "noMatchTitle": "Tiada maklum balas sepadan dengan penapis ini",
+    "noMatchDescription": "Cuba penapis lain atau julat tarikh yang lebih luas.",
+    "clearFilters": "Kosongkan penapis"
   }
 }

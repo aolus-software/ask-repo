@@ -6,7 +6,7 @@ from typing import Any, cast
 from sqlalchemy import func, select, update
 from sqlalchemy.engine import CursorResult
 
-from app.models.eval import EvalPair, EvalResult, EvalRun
+from app.models.eval import EvalPair, EvalResult, EvalRun, EvalVerdict
 from app.repositories.base import BaseRepository
 
 
@@ -23,6 +23,34 @@ class EvalResultRepository(BaseRepository[EvalResult]):
             )
         )
         return set(result.scalars().all())
+
+    async def tally_for_run(self, run_id: uuid.UUID) -> dict[str, int]:
+        """The run's summary columns, computed from its committed result rows.
+
+        Keys are `eval_runs` column names, so a caller can pass the dict straight to
+        `EvalRunRepository.release`. A run with no results tallies zeros.
+        """
+        live = EvalResult.run_id == run_id, EvalResult.deleted_at.is_(None)
+        row = (
+            await self.session.execute(
+                select(
+                    func.count(),
+                    func.count().filter(EvalResult.retrieval_hit.is_(True)),
+                    func.count().filter(EvalResult.verdict == EvalVerdict.CORRECT.value),
+                    func.count().filter(EvalResult.verdict == EvalVerdict.PARTIAL.value),
+                    func.count().filter(EvalResult.verdict == EvalVerdict.WRONG.value),
+                    func.count().filter(EvalResult.verdict == EvalVerdict.ERROR.value),
+                ).where(*live)
+            )
+        ).one()
+        return {
+            "pairs_answered": row[0],
+            "hits": row[1],
+            "correct": row[2],
+            "partial": row[3],
+            "wrong": row[4],
+            "errors": row[5],
+        }
 
     async def list_for_run(self, run_id: uuid.UUID) -> list[EvalResult]:
         """Every result of a run, in the order its pairs sit in the set.

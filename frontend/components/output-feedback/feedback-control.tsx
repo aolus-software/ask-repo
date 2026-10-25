@@ -174,7 +174,7 @@ export function FeedbackControl({
         disabled={mutation.isPending}
         onClick={() => onThumb("up")}
       >
-        <ThumbsUp className="size-4" />
+        <ThumbsUp className={cn("size-4", vote?.rating === "up" && "fill-current")} />
       </Button>
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger
@@ -197,7 +197,9 @@ export function FeedbackControl({
             />
           }
         >
-          <ThumbsDown className="size-4" />
+          <ThumbsDown
+            className={cn("size-4", vote?.rating === "down" && "fill-current")}
+          />
         </PopoverTrigger>
         <PopoverContent className="w-80 space-y-3" align="start">
           <p className="text-sm font-medium">{t("whatWentWrong")}</p>
