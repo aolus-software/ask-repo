@@ -51,7 +51,9 @@ describe("LocaleSelect", () => {
     await user.click(await screen.findByRole("option", { name: "Bahasa Melayu" }));
 
     await waitFor(() =>
-      expect(toastError).toHaveBeenCalledWith("Something went wrong. Please try again."),
+      expect(toastError).toHaveBeenCalledWith(
+        "Something went wrong. Please try again.",
+      ),
     );
     expect(refresh).not.toHaveBeenCalled();
   });

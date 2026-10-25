@@ -173,7 +173,9 @@ describe("FeedbackControl", () => {
       }),
     );
     // Another target type's cache is untouched, even with a matching id.
-    expect(queryClient.getQueryData(["checklist-change-sets", "mod1"])).toBe(changeSets);
+    expect(queryClient.getQueryData(["checklist-change-sets", "mod1"])).toBe(
+      changeSets,
+    );
 
     unmount();
     const cached = queryClient.getQueryData<{ messages: { myFeedback: unknown }[] }>(
