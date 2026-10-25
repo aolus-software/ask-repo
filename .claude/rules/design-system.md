@@ -15,6 +15,14 @@ Add it with the CLI: `npx shadcn@latest add <name>`. Search first —
 `components/ui/` by hand; that directory is CLI-managed, and keeping it untouched is what makes
 an upstream diff readable.
 
+**One sanctioned edit to generated code:** the screen-reader "Close" label in
+`components/ui/dialog.tsx` and `components/ui/sheet.tsx` reads `common.close` through
+`useTranslations`. The generator writes it as an English literal, and `i18next/no-literal-string`
+exempts `components/ui/` (`eslint.config.mjs`), so nothing else would catch it — every dialog and
+sheet in the app would announce "Close" in English. Each edit carries a comment pointing here;
+re-apply it if the CLI regenerates either file. Any other user-visible literal in a generated
+component gets the same treatment and a line in this paragraph.
+
 `docs/design.md` → "Component inventory" lists the intended set per surface. Install the row
 you need when you need it; do not install the whole table up front.
 

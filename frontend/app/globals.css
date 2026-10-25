@@ -32,15 +32,22 @@
   --secondary: #9333ea;
   --secondary-foreground: #ffffff;
 
-  /* Status */
+  /* Status. Badge text is dark ink: white on these bright mid-tones is 2.2-3.8:1,
+     below the 4.5:1 small text needs; ink is 4.7-8.3:1 (docs/design.md -> Contrast). */
   --success: #00c950;
-  --success-foreground: #ffffff;
+  --success-foreground: #0f172a;
   --warning: #f59e08;
   --warning-foreground: #0f172a;
   --danger: #fb2c36;
-  --danger-foreground: #ffffff;
+  --danger-foreground: #0f172a;
   --info: #00b8db;
-  --info-foreground: #ffffff;
+  --info-foreground: #0f172a;
+
+  /* A status as a text colour on a card or the page: darker shades of the same hues,
+     since the badge colours read at 2.2-3.8:1 as text. Each clears 4.5:1 on both. */
+  --success-text: #008236;
+  --warning-text: #bb4d00;
+  --danger-text: #c10007;
 
   /* shadcn calls the danger role "destructive". Both map to one value so a
      CLI-generated component and a hand-written one cannot diverge. */
@@ -114,6 +121,11 @@
   --info: #00d3f2;
   --info-foreground: #020617;
 
+  /* Bright enough as text on the dark card and page already (6.2-11.7:1). */
+  --success-text: var(--success);
+  --warning-text: var(--warning);
+  --danger-text: var(--danger);
+
   --muted: #1d293d;
   --muted-foreground: #90a1b9;
   --accent: #1d293d;
@@ -159,6 +171,9 @@
   --color-danger-foreground: var(--danger-foreground);
   --color-info: var(--info);
   --color-info-foreground: var(--info-foreground);
+  --color-success-text: var(--success-text);
+  --color-warning-text: var(--warning-text);
+  --color-danger-text: var(--danger-text);
   --color-destructive: var(--destructive);
   --color-destructive-foreground: var(--destructive-foreground);
 

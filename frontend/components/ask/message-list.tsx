@@ -6,6 +6,7 @@ import { useState } from "react";
 
 import { Answer } from "@/components/ask/answer";
 import { AssistantTurn } from "@/components/ask/assistant-turn";
+import { EndedEarlyNote } from "@/components/ask/ended-early-note";
 import { Sources } from "@/components/ask/sources";
 import { FeedbackControl } from "@/components/output-feedback/feedback-control";
 import { Button } from "@/components/ui/button";
@@ -67,21 +68,13 @@ function AssistantMessage({
   message: MessageResponse;
   feedbackTarget: MessageFeedbackTarget;
 }) {
-  const t = useTranslations("ask");
-
   return (
     <AssistantTurn>
       {/* Sources above the answer, as on the live turn: citations arrive before the
           first token (`.claude/rules/rag.md`), and reconciling must not move them. */}
       <Sources citations={message.citations ?? []} citedIndexes={[]} />
       <Answer content={message.content} />
-      {message.finishReason && message.finishReason !== "stop" ? (
-        <p className="text-muted-foreground mt-2 text-xs">
-          {message.finishReason === "disconnected"
-            ? t("messages.interrupted")
-            : t("messages.endedEarly", { reason: message.finishReason })}
-        </p>
-      ) : null}
+      <EndedEarlyNote reason={message.finishReason} />
       <FeedbackControl
         targetType={feedbackTarget}
         targetId={message.id}

@@ -106,7 +106,7 @@ export function CreateModuleDialog({
     >
       <Field>
         <FieldLabel>
-          {t("project")} <span className="text-danger">*</span>
+          {t("project")} <span className="text-danger-text">*</span>
         </FieldLabel>
         <Combobox
           items={readyProjects}
@@ -140,7 +140,7 @@ export function CreateModuleDialog({
 
       <Field>
         <FieldLabel htmlFor="name">
-          {t("name")} <span className="text-danger">*</span>
+          {t("name")} <span className="text-danger-text">*</span>
         </FieldLabel>
         <Input
           id="name"
@@ -154,7 +154,7 @@ export function CreateModuleDialog({
 
       <Field>
         <FieldLabel htmlFor="sourcePath">
-          {t("sourcePath")} <span className="text-danger">*</span>
+          {t("sourcePath")} <span className="text-danger-text">*</span>
         </FieldLabel>
         <PathPicker
           projectId={values.projectId}

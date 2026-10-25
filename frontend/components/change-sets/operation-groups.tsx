@@ -79,7 +79,7 @@ export function OperationGroups<T extends OperationLike>({
 
       {removed.length > 0 ? (
         <div>
-          <h3 className="text-danger text-sm font-medium">{t("removed")}</h3>
+          <h3 className="text-danger-text text-sm font-medium">{t("removed")}</h3>
           <Separator className="mt-2" />
           <div className="divide-y">{removed.map(renderRow)}</div>
         </div>

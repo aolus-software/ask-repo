@@ -91,7 +91,7 @@ export function ModuleTable({
                   {module.status === "failed" && module.error ? (
                     <Tooltip>
                       <TooltipTrigger>
-                        <div className="text-danger cursor-help truncate">
+                        <div className="text-danger-text cursor-help truncate">
                           {module.failCount}
                         </div>
                       </TooltipTrigger>

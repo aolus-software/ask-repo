@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useLocale, useTranslations } from "next-intl";
+import { toast } from "sonner";
 
 import {
   Select,
@@ -18,16 +19,27 @@ import { ENDONYMS, isLanguage, LANGUAGES } from "@/lib/i18n/languages";
  */
 export function LocaleSelect() {
   const t = useTranslations("auth.locale");
+  const tErrors = useTranslations("errors");
   const locale = useLocale();
   const router = useRouter();
 
+  // No success toast: the page re-renders in the new language, which is the confirmation.
   async function change(language: string | null) {
     if (!isLanguage(language)) return;
-    await fetch("/api/auth/locale", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ language }),
-    });
+    try {
+      const res = await fetch("/api/auth/locale", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ language }),
+      });
+      if (!res.ok) {
+        toast.error(tErrors("generic"));
+        return;
+      }
+    } catch {
+      toast.error(tErrors("generic"));
+      return;
+    }
     router.refresh();
   }
 

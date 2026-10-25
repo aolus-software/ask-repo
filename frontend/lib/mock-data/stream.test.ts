@@ -1,5 +1,5 @@
 // Mirrors lib/checklist/stream.test.ts's assertions, for the mockDataChangeSet event.
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { consumeMockDataStream } from "@/lib/mock-data/stream";
 
@@ -71,3 +71,48 @@ describe("consumeMockDataStream", () => {
     expect(result.error?.finishReason).toBe("error");
   });
 });
+
+describe("consumeMockDataStream finishReason", () => {
+  it("keeps the finishReason of a done terminator", async () => {
+    const result = await consumeMockDataStream(
+      streamOf([
+        'event: done\ndata: {"messageId":"m1","model":"x","finishReason":"timeout","citedIndexes":[],"groundingWarnings":[]}\n\n',
+      ]),
+      {
+        onCitations: vi.fn(),
+        onToken: vi.fn(),
+        onChangeSet: vi.fn(),
+      },
+    );
+
+    expect(result.finishReason).toBe("timeout");
+  });
+
+  it("keeps the finishReason of an error terminator", async () => {
+    const result = await consumeMockDataStream(
+      streamOf([
+        'event: error\ndata: {"messageId":"m1","code":"LLM_UNAVAILABLE","message":"Too slow.","finishReason":"timeout"}\n\n',
+      ]),
+      {
+        onCitations: vi.fn(),
+        onToken: vi.fn(),
+        onChangeSet: vi.fn(),
+      },
+    );
+
+    expect(result.finishReason).toBe("timeout");
+  });
+
+  it("is null when the stream ends with no terminator", async () => {
+    const result = await consumeMockDataStream(
+      streamOf(['event: token\ndata: {"text":"partial"}\n\n']),
+      { onCitations: vi.fn(), onToken: vi.fn(), onChangeSet: vi.fn() },
+    );
+
+    expect(result.finishReason).toBeNull();
+  });
+});
+
+function streamOf(frames: string[]): Response {
+  return sseResponse(frames.join(""));
+}

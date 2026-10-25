@@ -36,6 +36,9 @@ variable and never a hex value.
 | `warning` | `#f59e08` | `#ffb900` | project `indexing`, unverified |
 | `danger` | `#fb2c36` | `#ff6467` | project `failed`, destructive action |
 | `info` | `#00b8db` | `#00d3f2` | neutral notice, and the one role badge (`UserRoleBadge`) |
+| `success-text` | `#008236` | → `success` | `text-success-text` — a status as a text colour on a card or the page |
+| `warning-text` | `#bb4d00` | → `warning` | `text-warning-text` |
+| `danger-text` | `#c10007` | → `danger` | `text-danger-text` — required-field asterisks, inline errors, "Removed" |
 | `destructive` | → `danger` | → `danger` | alias so shadcn-generated components match |
 | `muted` | `#e2e8f0` | `#1d293d` | `bg-muted` — inset panels, table headers |
 | `muted-foreground` | `#45556c` | `#90a1b9` | secondary text, placeholders — WCAG AA on `background`, `card` and `muted` alike |
@@ -49,6 +52,21 @@ variable and never a hex value.
 Each colour role has a paired `-foreground` giving the text colour that sits on it. `bg-primary`
 always takes `text-primary-foreground`, never `text-white` — white is wrong the moment a token
 changes.
+
+**Contrast: the status colours take dark ink, and colour text with a `-text` token.** Small
+text needs 4.5:1 (WCAG AA). The four light-mode status colours are bright mid-tones, so white on
+them fails — success 2.22, info 2.37, warning 2.15, danger 3.81 — and every status
+`-foreground` is the ink `#0f172a` instead: success 8.05, warning 8.31, danger 4.69, info 7.55.
+The same mid-tones fail as text colour on a white card too, so a status used as text takes its
+`-text` token, never the bare role: `success-text` 4.95 on `card` / 4.51 on `background`,
+`warning-text` 5.03 / 4.59, `danger-text` 6.42 / 5.86. In dark mode the status colours already
+read at 6.2–11.7 on the card and page, so each `-text` token is its role. `text-success` on
+plain text is the mistake this exists to prevent.
+
+The generated components (`FieldError`, `Alert`, the `destructive` button and badge variants) still
+colour text with `text-destructive`, the bare `danger` value, at 3.81 on `card`. That stays until
+someone decides whether to give `destructive` its own darker text value or edit generated code
+(`.claude/rules/design-system.md` §1).
 
 **Elevation runs in opposite directions in the two themes, and `muted`/`accent` follow the page,
 not the card.** In dark, `card` (`#0f172a`) is *lighter* than `background` (`#020617`) and

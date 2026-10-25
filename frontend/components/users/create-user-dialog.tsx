@@ -54,7 +54,7 @@ export function CreateUserDialog({
     >
       <Field>
         <FieldLabel htmlFor="name">
-          {t("fields.name")} <span className="text-danger">*</span>
+          {t("fields.name")} <span className="text-danger-text">*</span>
         </FieldLabel>
         <Input
           id="name"
@@ -67,7 +67,7 @@ export function CreateUserDialog({
 
       <Field>
         <FieldLabel htmlFor="email">
-          {t("fields.email")} <span className="text-danger">*</span>
+          {t("fields.email")} <span className="text-danger-text">*</span>
         </FieldLabel>
         <Input
           id="email"

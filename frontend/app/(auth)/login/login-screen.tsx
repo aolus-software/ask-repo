@@ -129,7 +129,7 @@ export function LoginScreen({ resetEnabled }: { resetEnabled: boolean }) {
           <div className="space-y-4">
             <Field>
               <FieldLabel htmlFor="email">
-                {t("fields.email")} <span className="text-danger">*</span>
+                {t("fields.email")} <span className="text-danger-text">*</span>
               </FieldLabel>
               <Input
                 id="email"
@@ -146,7 +146,7 @@ export function LoginScreen({ resetEnabled }: { resetEnabled: boolean }) {
 
             <Field>
               <FieldLabel htmlFor="password">
-                {t("fields.password")} <span className="text-danger">*</span>
+                {t("fields.password")} <span className="text-danger-text">*</span>
               </FieldLabel>
               <PasswordInput
                 id="password"

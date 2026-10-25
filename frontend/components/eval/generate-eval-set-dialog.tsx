@@ -109,7 +109,7 @@ export function GenerateEvalSetDialog({
       >
         <Field>
           <FieldLabel htmlFor="eval-name">
-            {t("nameLabel")} <span className="text-danger">*</span>
+            {t("nameLabel")} <span className="text-danger-text">*</span>
           </FieldLabel>
           <Input
             id="eval-name"

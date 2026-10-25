@@ -101,7 +101,7 @@ function RoleCell({
         </SelectContent>
       </Select>
       {isLastOwner ? (
-        <p className="text-danger text-xs">{errorText(mutation.error)}</p>
+        <p className="text-danger-text text-xs">{errorText(mutation.error)}</p>
       ) : null}
     </div>
   );

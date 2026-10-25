@@ -102,7 +102,7 @@ export function CreateItemDialog({
     >
       <Field>
         <FieldLabel htmlFor="new-item-feature">
-          {t("feature")} <span className="text-danger">*</span>
+          {t("feature")} <span className="text-danger-text">*</span>
         </FieldLabel>
         <Input
           id="new-item-feature"
@@ -117,7 +117,7 @@ export function CreateItemDialog({
 
       <Field>
         <FieldLabel htmlFor="new-item-name">
-          {t("testName")} <span className="text-danger">*</span>
+          {t("testName")} <span className="text-danger-text">*</span>
         </FieldLabel>
         <Input
           id="new-item-name"
@@ -131,7 +131,7 @@ export function CreateItemDialog({
 
       <Field>
         <FieldLabel htmlFor="new-item-expected">
-          {t("expectedResult")} <span className="text-danger">*</span>
+          {t("expectedResult")} <span className="text-danger-text">*</span>
         </FieldLabel>
         <Textarea
           id="new-item-expected"

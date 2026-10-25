@@ -77,7 +77,7 @@ export function ForgotPasswordScreen() {
       >
         <Field>
           <FieldLabel htmlFor="email">
-            {t("fields.email")} <span className="text-danger">*</span>
+            {t("fields.email")} <span className="text-danger-text">*</span>
           </FieldLabel>
           <Input
             id="email"

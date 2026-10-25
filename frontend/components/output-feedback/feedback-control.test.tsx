@@ -143,6 +143,59 @@ describe("FeedbackControl", () => {
     );
   });
 
+  it("writes a saved vote into the cached read, so a remount keeps it", async () => {
+    vi.spyOn(client, "apiFetch").mockResolvedValue({});
+    const queryClient = new QueryClient({
+      defaultOptions: { mutations: { retry: false } },
+    });
+    const conversationKey = ["conversations", "detail", "c1"];
+    const other = { id: "m2", myFeedback: null };
+    queryClient.setQueryData(conversationKey, {
+      id: "c1",
+      messages: [{ id: "m1", myFeedback: null }, other],
+    });
+    const changeSets = { items: [{ id: "m1", myFeedback: null }] };
+    queryClient.setQueryData(["checklist-change-sets", "mod1"], changeSets);
+
+    const control = (
+      <QueryClientProvider client={queryClient}>
+        <FeedbackControl targetType="message" targetId="m1" initial={null} />
+      </QueryClientProvider>
+    );
+    const { unmount } = render(control);
+    await userEvent.click(screen.getByRole("button", { name: "Helpful" }));
+
+    const up = { rating: "up", reasonCodes: [], note: null };
+    await waitFor(() =>
+      expect(queryClient.getQueryData(conversationKey)).toEqual({
+        id: "c1",
+        messages: [{ id: "m1", myFeedback: up }, other],
+      }),
+    );
+    // Another target type's cache is untouched, even with a matching id.
+    expect(queryClient.getQueryData(["checklist-change-sets", "mod1"])).toBe(
+      changeSets,
+    );
+
+    unmount();
+    const cached = queryClient.getQueryData<{ messages: { myFeedback: unknown }[] }>(
+      conversationKey,
+    );
+    render(
+      <QueryClientProvider client={queryClient}>
+        <FeedbackControl
+          targetType="message"
+          targetId="m1"
+          initial={cached?.messages[0].myFeedback as never}
+        />
+      </QueryClientProvider>,
+    );
+    expect(screen.getByRole("button", { name: "Helpful" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+  });
+
   it("disables both thumbs while a vote is in flight", async () => {
     let resolveFetch: (value: unknown) => void = () => {};
     vi.spyOn(client, "apiFetch").mockImplementation(

@@ -41,7 +41,6 @@ Every finding from the first three sweeps has been fixed and is in
 
 | # | Finding | Severity | Raised |
 | --- | --- | --- | --- |
-| §U1.4 | White text on three status colours, and three status text colours, fall below contrast guidance | 🟡 | 2026-10-04 |
 | §U3.5 | `/settings/feedback` says "No feedback yet" when filters exclude everything | 🟡 | 2026-10-04 |
 | §U3.6 | `/settings/feedback` applies URL-only filters the screen cannot show or clear | 🟡 | 2026-10-04 |
 | §U3.7 | Eval tables have no pagination and stop at 100 rows | 🟡 | 2026-10-04 |
@@ -50,11 +49,8 @@ Every finding from the first three sweeps has been fixed and is in
 | §U5.10 | The eval sizes 10/25/50 restate a backend rule without saying so | 🟡 | 2026-10-04 |
 | §U5.11 | The thumbs-down popover keeps stale reasons and sits outside the form contract | 🟡 | 2026-10-04 |
 | §U7.15 | The eval sets empty state has no action, and `ListError` sits flush in two cards | 🟡 | 2026-10-04 |
-| §U7.16 | A thumbs vote briefly reverts after a remount | 🟡 | 2026-10-04 |
 | §U8.10 | A stray separator in the mock-data change-set card | 🟡 | 2026-10-04 |
 | §U8.11 | A stored interrupted answer is worded differently from the live one | 🟡 | 2026-10-04 |
-| §U8.13 | "Try again" after a timeout exists on Ask only | 🟡 | 2026-10-04 |
-| §U8.14 | The chat composers say "no permission" while the project is still loading | 🟡 | 2026-10-04 |
 | §U9.5 | The eval set route answers a missing permission with `NotFound`, not `Forbidden` | 🟡 | 2026-10-04 |
 | §U9.7 | Admin screens request data before their admin gate | 🟡 | 2026-10-04 |
 | §U10.13 | Identifiers on the eval screens are in the body face | 🟡 | 2026-10-04 |
@@ -69,13 +65,10 @@ Every finding from the first three sweeps has been fixed and is in
 | §U5.12 | Three more labels are not tied to their control | 🟡 | 2026-10-24 |
 | §U5.13 | Three fields have no inline error to show a rejection | 🟡 | 2026-10-24 |
 | §U5.14 | The translate dialog restates the backend's "English sources only" rule | 🟡 | 2026-10-24 |
-| §U6.16 | The signed-out language picker ignores its own failure | 🟡 | 2026-10-24 |
 | §U6.17 | Single-sentence messages end in a full stop, and four small copy splits | 🟡 | 2026-10-24 |
 | §U6.18 | The not-found, in-progress and server error messages say what happened, not what to do | 🟡 | 2026-10-24 |
 | §U6.19 | Three destructive confirmations do not say what is lost | 🟡 | 2026-10-24 |
-| §U6.20 | Every dialog's Close button is announced in English | 🟡 | 2026-10-24 |
 | §U7.19 | Notification preferences load with no skeleton | 🟡 | 2026-10-24 |
-| §U8.16 | The refinement chats drop `finishReason`, so a cut-off reply looks complete | 🟡 | 2026-10-24 |
 | §U8.17 | The "thinking" label is looked up two ways | 🟡 | 2026-10-24 |
 | §U8.18 | The two refinement chats' stream readers and panels are near-verbatim copies | 🟡 | 2026-10-24 |
 | §U10.15 | Two new off-scale spacings | 🟡 | 2026-10-24 |
@@ -391,34 +384,9 @@ in a browser.
 
 ## U1 Tokens and theme
 
-### §U1.4 White text on three status colours, and three status text colours, fall below contrast guidance — 🟡 hygiene
+Every finding this sweep raised here (§U1.4) was resolved on 2026-10-25 and is in
+[`audit-finding-solved-logs.md`](audit-finding-solved-logs.md).
 
-**Where:** `app/globals.css:36-43` (light-mode `--success`, `--danger`, `--info` and their
-`-foreground`); `components/feedback/status-badge.tsx:11`, `:13`, `:15`;
-`components/users/user-role-badge.tsx:11`; `text-warning`/`text-success`/`text-danger` at
-`components/eval/eval-run-sheet.tsx:68`, `components/checklist/item-grid.tsx:204`,
-`components/checklist/change-set-panel.tsx:186`, `components/form/password-field.tsx:88`, `:111`
-
-**What this is.** Status badges (Ready, Failed, Indexing…) are small coloured pills, and a few
-places colour a line of text to signal a state. Web Content Accessibility Guidelines (WCAG)
-contrast asks for at least 4.5:1 between small text and its background, so that people with
-reduced vision can read it.
-
-**Why this can happen.** In light mode, the status colours are bright mid-tones with white text on
-top. Measured ratios: success badge 2.22, info badge 2.37, danger badge 3.81. The warning badge
-uses dark text and passes, at 8.31. Used as text colour on a card, warning is 2.15, success 2.22
-and danger 3.81, and each is lower again on the page background. All of these are `text-xs` or
-`text-sm`, so 4.5:1 applies.
-
-**What it costs.** Status pills, the single most-read signal on the list screens, are hard to read
-in light mode for anyone with reduced contrast sensitivity, and in bright light for everyone.
-`docs/design.md:41` claims AA (the 4.5:1 level) only for `muted-foreground`, so nothing promised
-otherwise. But nothing warns against it either.
-
-**What we should do.** Darken the light-mode `--success`, `--info` and `--danger` until white
-reaches 4.5:1, or switch their `-foreground` to the dark ink the warning badge already uses. Add
-separate darker `*-text` tokens for coloured text. Record the ratios in `docs/design.md`. Roughly
-half a day, most of it checking the results look right.
 
 ## U3 The list skeleton
 
@@ -571,28 +539,6 @@ and `ListError` has no padding of its own, so the alert touches the card's edges
 **What we should do.** Pass the generate dialog trigger as the empty state's action, and give
 `ListError` padding when it is inside a zero-padding card. Half an hour.
 
-### §U7.16 A thumbs vote briefly reverts after a remount — 🟡 hygiene
-
-**Where:** `components/output-feedback/feedback-control.tsx:68-82`, `:84-88`; `lib/query/client.ts:18`
-
-> **Narrowed 2026-10-17.** First filed as "saved choices briefly revert after a save or a vote".
-> The save half does not reproduce: `answer-style-section.tsx:108-113` clears its draft only after
-> the refetch lands, because TanStack awaits the hook's `invalidateQueries` first. Only the vote
-> half is confirmed.
-
-**What this is.** A vote's state comes from `myFeedback` on the message or change-set read, which
-is cached.
-
-**Why this can happen.** Casting a vote never writes back to that cache. When the control remounts
-(navigating back to a conversation, or a chat list re-rendering from cache within its 30-second
-stale time), it re-seeds from the stale cached value. The vote shows as un-cast until the refetch
-lands.
-
-**What it costs.** A user who just voted sees their vote disappear and may vote again.
-
-**What we should do.** On success, update `myFeedback` in the cached message or change set with
-`setQueryData`, or invalidate it. Half an hour.
-
 ## U8 The streaming surfaces
 
 ### §U8.10 A stray separator in the mock-data change-set card — 🟡 hygiene
@@ -621,42 +567,6 @@ stored copy.
 **What it costs.** The same event is described two ways on either side of a reload.
 
 **What we should do.** Use `INTERRUPTED_MESSAGE` in `message-list.tsx` too. Minutes.
-
-### §U8.13 "Try again" after a timeout exists on Ask only — 🟡 hygiene
-
-**Where:** `app/(app)/ask/[conversationId]/conversation-screen.tsx:163-172`;
-`components/checklist/chat-panel.tsx`, `components/mock-data/chat-panel.tsx` (no `finishReason` in
-their turn state); `lib/checklist/stream.ts:32`
-
-**What this is.** All three streaming surfaces share one backend and one terminator contract, and
-every terminator carries a `finishReason`.
-
-**Why this can happen.** Ask keeps `finishReason` and offers "Try again" on `timeout`. The two
-refinement chats drop it, though their streams carry it, so a timeout there offers nothing.
-
-**What it costs.** The same failure gives a one-click recovery on one screen, and on the other two
-the user has to retype.
-
-**What we should do.** Keep `finishReason` in both chats' turn state and render the same retry.
-One hour.
-
-### §U8.14 The chat composers say "no permission" while the project is still loading — 🟡 hygiene
-
-**Where:** `app/(app)/checklist/[moduleId]/module-screen.tsx:59-65`, `:112-113`, `:142-143`, `:243`,
-`:379`; `components/checklist/chat-panel.tsx:244-245`; `components/mock-data/chat-panel.tsx:207-208`
-
-**What this is.** The module screen decides who may generate or refine from the project's
-permissions.
-
-**Why this can happen.** Before the project loads (or if it fails), the permission flags are
-`false`. Both composers' placeholders then read "You do not have permission to refine…", and the
-Generate tooltips say the same.
-
-**What it costs.** Every user is briefly told they lack a permission they have. If the project
-request fails, they are told it permanently, which hides the real error.
-
-**What we should do.** Treat "not yet known" as disabled with no reason given, and show the
-project error where there is one. Half an hour.
 
 ## U9 Navigation and route gating
 
@@ -997,23 +907,6 @@ carry a `translatable` flag. Half an hour.
 
 ## U6 Feedback and copy
 
-### §U6.16 The signed-out language picker ignores its own failure — 🟡 hygiene
-
-**Evidence:** CONFIRMED.
-
-**Where:** `components/auth/locale-select.tsx:24-32`
-
-**What this is.** On the login, forgot-password and reset-password pages, a visitor can switch
-language. The picker posts to `/api/auth/locale` and refreshes the page.
-
-**Why this can happen.** The response is never checked and there is no `try`. A failure refreshes
-the page in the old language. A network error becomes an unhandled promise rejection.
-
-**What it costs.** The language does not change, and nothing says why.
-
-**What we should do.** On `!res.ok` or a throw, show `toast.error` with the generic message. No
-success toast is needed, because the page re-renders in the new language. Fifteen minutes.
-
 ### §U6.17 Single-sentence messages end in a full stop, and four small copy splits — 🟡 hygiene
 
 **Evidence:** CONFIRMED.
@@ -1084,27 +977,6 @@ object ("Delete project").
 **What we should do.** Name the record, say what survives a removal, and write "Delete role". Half
 an hour.
 
-### §U6.20 Every dialog's Close button is announced in English — 🟡 hygiene
-
-**Evidence:** CONFIRMED.
-
-**Where:** `components/ui/dialog.tsx:75`, `components/ui/sheet.tsx:75` (`<span className="sr-only">Close</span>`);
-`eslint.config.mjs:24` (the no-literal-string rule skips `components/ui/`)
-
-**What this is.** Every string a user reads, a screen reader's included, must come from
-`messages/` (CLAUDE.md → Frontend). The lint rule skips `components/ui/` because it holds
-CLI-generated shadcn code.
-
-**Why this can happen.** The generated dialog and sheet close buttons carry a hard-coded English
-label. That exemption is right for styling checks. Here it lets one English word through on every
-dialog and sheet in the app.
-
-**What it costs.** A Japanese screen-reader user hears "Close" in English in every dialog.
-
-**What we should do.** Give the two wrappers a translated `closeLabel`, or call `useTranslations`
-inside them. Note it in `design-system.md` §1 as the one sanctioned edit to generated code. Half an
-hour.
-
 ## U7 Loading, empty and error
 
 ### §U7.19 Notification preferences load with no skeleton — 🟡 hygiene
@@ -1122,25 +994,6 @@ then the rows pop in.
 **What we should do.** Render `TableSkeleton` while loading. Fifteen minutes.
 
 ## U8 The streaming surfaces
-
-### §U8.16 The refinement chats drop `finishReason`, so a cut-off reply looks complete — 🟡 hygiene
-
-**Evidence:** CONFIRMED.
-
-**Where:** `lib/checklist/stream.ts`, `lib/mock-data/stream.ts`; the `TurnState` in
-`components/checklist/chat-panel.tsx:~27` and `components/mock-data/chat-panel.tsx:~27`; compare
-`hooks/use-ask-stream.ts:29`, `:80`, `:91`
-
-**What this is.** Every stream ends with a `finishReason` (`.claude/rules/rag.md`). A reply cut off
-by the length limit or a timeout should say so.
-
-**Why this can happen.** Ask keeps the reason. The two refinement chats parse the `done` event and
-discard it. Live, a reply cut off at the length limit looks complete. After a reload,
-`message-list.tsx` adds "This answer ended early", so the same reply reads two ways. This extends the
-open §U8.13.
-
-**What we should do.** Carry `finishReason` into both chats' turn state and render the same note as
-Ask. Fix it together with §U8.13. One hour.
 
 ### §U8.17 The "thinking" label is looked up two ways — 🟡 hygiene
 
