@@ -7,6 +7,7 @@ import { EvalStatusBadge } from "@/components/eval/eval-status-badge";
 import { EmptyState } from "@/components/feedback/empty-state";
 import { ListError } from "@/components/feedback/list-error";
 import { TableSkeleton } from "@/components/feedback/table-skeleton";
+import { PaginationFooter } from "@/components/layout/pagination-footer";
 import {
   Table,
   TableBody,
@@ -27,6 +28,7 @@ export function EvalRunTable({
   error = null,
   onRetry,
   setStatus = "ready",
+  pagination,
 }: {
   runs: EvalRunSummary[];
   onSelect: (runId: string) => void;
@@ -35,15 +37,17 @@ export function EvalRunTable({
   onRetry?: () => void;
   /** Only a ready set can be run, so only a ready set is invited to be. */
   setStatus?: EvalSetStatus;
+  pagination?: {
+    page: number;
+    totalPages: number;
+    totalCount: number;
+    onPageChange: (page: number) => void;
+  };
 }) {
   const t = useTranslations("eval");
   const formatRelative = useFormatRelative();
   if (error) {
-    return (
-      <div className="p-4">
-        <ListError error={error} onRetry={() => onRetry?.()} />
-      </div>
-    );
+    return <ListError padded error={error} onRetry={() => onRetry?.()} />;
   }
   if (isLoading) {
     return (
@@ -81,51 +85,54 @@ export function EvalRunTable({
     );
   }
   return (
-    <div className="overflow-x-auto">
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>{t("runTable.columns.started")}</TableHead>
-            <TableHead>{t("runTable.columns.status")}</TableHead>
-            <TableHead>{t("runTable.columns.results")}</TableHead>
-            <TableHead>{t("runTable.columns.model")}</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {runs.map((run) => (
-            <TableRow key={run.id}>
-              <TableCell title={formatAbsolute(run.createdAt)}>
-                <button
-                  type="button"
-                  className="hover:text-primary text-left underline-offset-4 hover:underline"
-                  aria-label={t("runTable.openRun", {
-                    when: formatRelative(run.createdAt),
-                  })}
-                  onClick={() => onSelect(run.id)}
-                >
-                  {formatRelative(run.createdAt)}
-                </button>
-              </TableCell>
-              <TableCell>
-                <EvalStatusBadge status={run.status} />
-              </TableCell>
-              <TableCell className="text-muted-foreground text-sm">
-                {t(run.errors > 0 ? "tally.summaryWithErrors" : "tally.summary", {
-                  hits: run.hits,
-                  answered: run.pairsAnswered,
-                  correct: run.correct,
-                  partial: run.partial,
-                  wrong: run.wrong,
-                  errors: run.errors,
-                })}
-              </TableCell>
-              <TableCell className="text-muted-foreground text-sm">
-                {run.chatModel ?? "—"}
-              </TableCell>
+    <>
+      <div className="overflow-x-auto">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>{t("runTable.columns.started")}</TableHead>
+              <TableHead>{t("runTable.columns.status")}</TableHead>
+              <TableHead>{t("runTable.columns.results")}</TableHead>
+              <TableHead>{t("runTable.columns.model")}</TableHead>
             </TableRow>
-          ))}
-        </TableBody>
-      </Table>
-    </div>
+          </TableHeader>
+          <TableBody>
+            {runs.map((run) => (
+              <TableRow key={run.id}>
+                <TableCell title={formatAbsolute(run.createdAt)}>
+                  <button
+                    type="button"
+                    className="hover:text-primary text-left underline-offset-4 hover:underline"
+                    aria-label={t("runTable.openRun", {
+                      when: formatRelative(run.createdAt),
+                    })}
+                    onClick={() => onSelect(run.id)}
+                  >
+                    {formatRelative(run.createdAt)}
+                  </button>
+                </TableCell>
+                <TableCell>
+                  <EvalStatusBadge status={run.status} />
+                </TableCell>
+                <TableCell className="text-muted-foreground text-sm">
+                  {t(run.errors > 0 ? "tally.summaryWithErrors" : "tally.summary", {
+                    hits: run.hits,
+                    answered: run.pairsAnswered,
+                    correct: run.correct,
+                    partial: run.partial,
+                    wrong: run.wrong,
+                    errors: run.errors,
+                  })}
+                </TableCell>
+                <TableCell className="text-muted-foreground text-sm">
+                  {run.chatModel ?? "—"}
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
+      {pagination ? <PaginationFooter {...pagination} /> : null}
+    </>
   );
 }

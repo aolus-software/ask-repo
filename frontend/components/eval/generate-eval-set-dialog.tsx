@@ -23,6 +23,8 @@ import { useErrorText, useFieldErrorText } from "@/lib/i18n/error-text";
 import type { EvalCount, EvalMix } from "@/lib/api/types";
 import { PERMISSION, can } from "@/lib/can";
 
+// Mirrors `EvalSetCreate.count: Literal[10, 25, 50]` in `backend/app/schemas/eval.py`.
+// The backend owns the rule; if its options change, change this list with it.
 const COUNT_OPTIONS: EvalCount[] = [10, 25, 50];
 
 const MIXES: EvalMix[] = ["balanced", "explain", "locate"];
