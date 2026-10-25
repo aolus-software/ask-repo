@@ -52,7 +52,8 @@
     "searchProjects": "Cari projek",
     "label": "Projek",
     "loading": "Memuatkan…",
-    "noMatch": "Tiada projek yang sepadan."
+    "noMatch": "Tiada projek yang sepadan.",
+    "couldNotLoad": "Tidak dapat memuatkan projek."
   },
   "sources": {
     "title": "Sumber ({count})",

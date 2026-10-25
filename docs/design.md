@@ -171,22 +171,40 @@ add a row (and install it with `npx shadcn@latest add <name>`) when a new screen
 | Dev Knowledge | `textarea`, `scroll-area`, `collapsible`, `combobox` |
 | QA Checklist | `table`, `textarea`, `tooltip`, `select`, `checkbox`, `alert`, `dropdown-menu`, `command`, `popover` |
 | Mock Data tab | `tabs` |
-| Both refinement chats | `sheet` — the drawer `RefinementDrawer` is built on |
+| Both refinement chats | `sheet` — the drawer `RefinementDrawer` is built on; widths by purpose, see Sheets below |
 | Roles | `table`, `badge`, `checkbox`, `dialog`, `dropdown-menu`, `field`, `input`, `separator` |
 | Audit trail | `table`, `badge`, `combobox`, `dialog`, `card`, `separator`, `skeleton`, `alert` |
 | Notifications | `popover`, `scroll-area` (bell), `switch` (`/profile#notifications`) |
 | Eval harness | `alert`, `badge`, `button`, `field`, `input`, `select`, `sheet`, `skeleton`, `switch`, `table` |
 | Answer style | `radio-group` (`/profile#answer-style`) |
+| Language, signed out | `select` — `LocaleSelect` (`components/auth/locale-select.tsx`) on the auth screens |
+| Language, signed in | `radio-group` — `LanguageSection` (`components/profile/language-section.tsx`, `/profile#language`), saved with `PUT /me/language` |
+| Output feedback | `popover`, `checkbox`, `textarea`, `table` — the thumbs control (`components/output-feedback/feedback-control.tsx`) and the admin screen at `/settings/feedback` |
 | Lists (all) | `pagination`, `input-group` |
 
 `form` is deliberately absent: shadcn's `form` component wraps **react-hook-form**, which
 `.claude/rules/forms.md` §4 bans by name — validation is owned by the backend's `422` field map,
 and a client-side copy of a rule like the password policy cannot be kept honest. `field` is the
-composition primitive instead. `dialog` sits in the auth row because every auth form is a dialog by
-`forms.md` §1's count (create user, reset password, change own password).
+composition primitive instead. `dialog` sits in the auth row because the dialogs that sit beside the auth
+screens (create user, reset password) are dialogs by `forms.md` §1's count; changing your own
+password is a `FormPage`, in the forced first-login screen and in the profile alike.
 
 Hand-writing a component shadcn provides is a rule violation, not a shortcut — see
 `.claude/rules/design-system.md`.
+
+## Sheets
+
+A sheet's width follows its purpose, and the three widths are intentional:
+
+| Purpose | Width | Example |
+| --- | --- | --- |
+| Navigation drawer | narrow, `sm:max-w-sm` | `components/ask/conversation-rail.tsx` (left side) |
+| Refinement chat | resizable by a drag handle, default 48rem, minimum 360px, capped at the viewport less a margin; below `sm` it stays the generated `w-3/4` | `components/checklist/refinement-drawer.tsx` |
+| Data-detail sheet | wide, `data-[side=right]:sm:max-w-3xl data-[side=right]:lg:max-w-5xl` | `components/eval/eval-run-sheet.tsx` |
+
+A width override on a right-hand sheet carries the `data-[side=right]:` variant the generated
+`SheetContent` uses, or it ties on specificity, loses on order and silently does nothing. The
+refinement drawer's source comments explain the two places a class cannot do it.
 
 ## Lists
 
@@ -201,6 +219,10 @@ The `card-table` surface applies to **every** `<Table>` in the app, not only the
 screens above — a grid on a detail-page tab (the QA Checklist's test-case grid, for instance)
 wraps the same way. See `.claude/rules/design-system.md` §11.
 
+- An identifier column (a prompt version, a path, a repository URL) uses `font-mono`
+  (`feedback-table.tsx:76`, `feedback-summary.tsx:117`). A free-text column wraps with
+  `max-w-xs whitespace-pre-wrap` so a long note grows the row rather than the table
+  (`feedback-table.tsx:73`).
 - Column order: identity first, status second, timestamps last, actions in a right-aligned final
   column.
 - Timestamps are relative with an absolute `title` (`3 days ago`, hover for the ISO value).
@@ -227,7 +249,7 @@ Full rules in `.claude/rules/forms.md`. The visual contract:
 
 ## Icons
 
-`lucide-react`, the shadcn default. `size-4` inline with text, `size-5` standalone in a button.
+`lucide-react`, the shadcn default. `size-4` inline with text and inside an icon button, `size-5` for a standalone icon that is not in a button.
 Icons are decorative: every icon-only control needs an `aria-label`, and an icon never carries
 meaning a colour or label doesn't also carry.
 
@@ -241,6 +263,15 @@ meaning a colour or label doesn't also carry.
 | Destructive confirmation | `ConfirmDialog`, action button in `destructive` |
 | Long-running job (clone, index, generate) | inline status with `Progress`, never a blocking modal — ingestion takes minutes |
 | Permission denied on a route | `<Forbidden />`, not a redirect |
+
+Copy follows one punctuation rule. A single-sentence message (a toast, an alert) does not end in a
+full stop; copy of two or more sentences keeps its stops, including the last ("Could not save.
+Try again.").
+
+Votes on model output use the thumbs control (`components/output-feedback/feedback-control.tsx`):
+a thumbs-up and a thumbs-down icon button, `size-4` icons, each with an `aria-label`. Thumbs-down
+opens a `popover` with reason checkboxes and an optional note; thumbs-up records at once, and pressing the active thumb again clears the vote. The
+popover states, in fixed text, who can read the note.
 
 Ingestion and generation are slow by nature. Their feedback is always non-blocking and always
 resumable on reload, because the operator will navigate away.

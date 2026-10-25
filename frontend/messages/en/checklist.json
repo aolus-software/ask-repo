@@ -63,6 +63,9 @@
     "allStatuses": "All statuses",
     "allKinds": "All kinds",
     "allSources": "All sources",
+    "statusAria": "Filter by status",
+    "kindAria": "Filter by kind",
+    "sourceAria": "Filter by source",
     "statuses": {
       "untested": "Untested",
       "pass": "Pass",
@@ -254,6 +257,7 @@
     "projectAria": "Project",
     "loading": "Loading…",
     "noProjectMatches": "No project matches.",
+    "projectCap": "Showing the first {count} projects by name.",
     "chooseProject": "Choose a project.",
     "include": "Include",
     "testChecklist": "Test checklist",

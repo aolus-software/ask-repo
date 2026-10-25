@@ -63,6 +63,9 @@
     "allStatuses": "所有狀態",
     "allKinds": "所有類別",
     "allSources": "所有來源",
+    "statusAria": "按狀態篩選",
+    "kindAria": "按類型篩選",
+    "sourceAria": "按來源篩選",
     "statuses": {
       "untested": "未測試",
       "pass": "通過",
@@ -254,6 +257,7 @@
     "projectAria": "專案",
     "loading": "載入中…",
     "noProjectMatches": "沒有符合的專案。",
+    "projectCap": "按名稱顯示首 {count} 個專案。",
     "chooseProject": "請選擇專案。",
     "include": "包含",
     "testChecklist": "測試檢查清單",

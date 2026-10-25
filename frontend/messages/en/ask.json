@@ -52,7 +52,8 @@
     "searchProjects": "Search projects",
     "label": "Project",
     "loading": "Loading…",
-    "noMatch": "No project matches."
+    "noMatch": "No project matches.",
+    "couldNotLoad": "Could not load projects."
   },
   "sources": {
     "title": "Sources ({count})",

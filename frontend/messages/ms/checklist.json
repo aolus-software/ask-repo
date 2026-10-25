@@ -63,6 +63,9 @@
     "allStatuses": "Semua status",
     "allKinds": "Semua jenis",
     "allSources": "Semua sumber",
+    "statusAria": "Tapis mengikut status",
+    "kindAria": "Tapis mengikut jenis",
+    "sourceAria": "Tapis mengikut sumber",
     "statuses": {
       "untested": "Belum diuji",
       "pass": "Lulus",
@@ -254,6 +257,7 @@
     "projectAria": "Projek",
     "loading": "Memuatkan…",
     "noProjectMatches": "Tiada projek yang sepadan.",
+    "projectCap": "Menunjukkan {count} projek pertama mengikut nama.",
     "chooseProject": "Pilih projek.",
     "include": "Sertakan",
     "testChecklist": "Senarai semak ujian",

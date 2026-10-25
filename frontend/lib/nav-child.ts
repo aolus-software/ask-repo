@@ -17,6 +17,6 @@ export interface NavChild {
   titleKey: NavKey;
   href: string;
   icon?: LucideIcon;
-  /** Phase 1 has exactly one axis of authority, so this is a boolean, not a permission string. */
+  /** The nav gates on `is_admin` alone; per-project permissions are `lib/can.ts`'s. */
   adminOnly?: boolean;
 }

@@ -94,11 +94,15 @@ def _as_ingestion_error(error: Exception, action: str) -> IngestionError:
     401/403. There a 400 may reflect one awkward input among thousands; here it
     reflects a misconfiguration, and the operator needs to be told that rather than
     watching the job circle the retry ladder for eleven minutes.
+
+    The message carries the exception's class name (and the status), never its text:
+    Qdrant's response body or an internal URL would otherwise reach `Project.error`.
+    `raise ... from error` at the call sites keeps the full text in the logged traceback.
     """
     status = error.status_code if isinstance(error, UnexpectedResponse) else None
     if status is not None and 400 <= status < 500 and status not in _RETRYABLE_CLIENT_STATUS:
-        return TerminalIngestionError(f"{action}: {error}")
-    return RetryableIngestionError(f"{action}: {error}")
+        return TerminalIngestionError(f"{action} failed ({type(error).__name__}, HTTP {status}).")
+    return RetryableIngestionError(f"{action} failed ({type(error).__name__}).")
 
 
 def _payload(

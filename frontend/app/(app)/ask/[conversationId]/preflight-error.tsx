@@ -57,6 +57,7 @@ export function PreflightError({
               disabled={reindex.isPending}
               onClick={() =>
                 reindex.mutate(undefined, {
+                  onError: (e) => toast.error(errorText(e)),
                   onSuccess: (result) =>
                     toast.success(
                       result.enqueued

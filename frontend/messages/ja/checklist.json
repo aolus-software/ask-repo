@@ -63,6 +63,9 @@
     "allStatuses": "すべてのステータス",
     "allKinds": "すべての種類",
     "allSources": "すべてのソース",
+    "statusAria": "ステータスで絞り込む",
+    "kindAria": "種類で絞り込む",
+    "sourceAria": "ソースで絞り込む",
     "statuses": {
       "untested": "未テスト",
       "pass": "合格",
@@ -254,6 +257,7 @@
     "projectAria": "プロジェクト",
     "loading": "読み込み中…",
     "noProjectMatches": "一致するプロジェクトはありません。",
+    "projectCap": "名前順で最初の{count}件のプロジェクトを表示しています。",
     "chooseProject": "プロジェクトを選択してください。",
     "include": "含める内容",
     "testChecklist": "テストチェックリスト",

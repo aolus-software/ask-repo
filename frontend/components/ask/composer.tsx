@@ -28,7 +28,7 @@ export function Composer({
 
   return (
     <form
-      className="border-border bg-card rounded-md border p-2"
+      className="border-border bg-card focus-within:border-ring focus-within:ring-ring/50 rounded-md border p-2 transition-colors focus-within:ring-3"
       onSubmit={(event) => {
         event.preventDefault();
         submit();
@@ -41,7 +41,10 @@ export function Composer({
         aria-label={t("composer.questionLabel")}
         onChange={(event) => setQuestion(event.target.value)}
         onKeyDown={(event) => {
-          // Enter sends, Shift+Enter breaks the line.
+          // Enter sends, Shift+Enter breaks the line. Enter that confirms an IME
+          // candidate is not a send: Chrome flags it `isComposing`, Safari reports
+          // keyCode 229.
+          if (event.nativeEvent.isComposing || event.keyCode === 229) return;
           if (event.key === "Enter" && !event.shiftKey) {
             event.preventDefault();
             submit();

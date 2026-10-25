@@ -56,7 +56,6 @@ Every finding from the 2026-09-19 and 2026-09-27 sweeps has been fixed and is in
 | §9.30 | Stale comments in the feedback schema and the audit coverage test | 📄 | 2026-10-04 |
 | §4.1 | A timed-out or cancelled clone leaves its `git` process behind | 🟡 | 2026-10-24 |
 | §4.2 | The connect-time address pin uses only the first record, and may not accept IPv6 (SUSPECT) | 🟡 | 2026-10-24 |
-| §6.1 | Embedding and vector-store error text reaches `Project.error` unscrubbed | 🟡 | 2026-10-24 |
 | §6.2 | A refused reset email may log the recipient's address (SUSPECT) | 🟡 | 2026-10-24 |
 | §7.4 | The four membership routes declare no `summary` and no error responses | 🟡 | 2026-10-24 |
 | §7.5 | The source-path check's errors are undeclared on three routes | 🟡 | 2026-10-24 |
@@ -867,33 +866,6 @@ address — the security control holds.
 bracket IPv6 literals. One hour, including a test.
 
 ## §6 Secret handling
-
-### §6.1 Embedding and vector-store error text reaches `Project.error` unscrubbed — 🟡 hygiene
-
-**Evidence:** CONFIRMED.
-
-**Where:** `backend/app/queue/consumer.py:113-123` (the comment), `:200-206` (the write);
-`backend/app/ingestion/embedder/openai.py:44`, `voyage.py:42`, `ollama.py:31`;
-`backend/app/ingestion/vector_store.py:100-101`
-
-**What this is.** A project that fails to index shows its error on the project screen.
-`CLAUDE.md` ("Nothing derived from clone output is stored or logged unscrubbed") and `docs/PRD.md`
-§9 require that text to be scrubbed first, because the clone path can carry a personal access
-token.
-
-**Why this can happen.** The consumer stores `str(error)` for every `RetryableIngestionError`, with
-a comment saying they are all built from already-scrubbed clone output. That is true for the
-cloner, but the embedders and the vector store raise the same class with the underlying
-`httpx`/Qdrant exception interpolated (`f"Embedding request failed: {error}"`). When a provider
-outage exhausts the retries, that text becomes `Project.error`.
-
-**What it costs.** No token can leak this way — the token never reaches those clients. What can
-appear on the project screen is an internal embedder URL or a fragment of a Qdrant response, and a
-comment that promises more than the code delivers.
-
-**What we should do.** Build those three messages from the exception's class name (as the
-unexpected-error branch at `consumer.py:127-131` already does), and correct the comment. Half an
-hour.
 
 ### §6.2 A refused reset email may log the recipient's address — 🟡 hygiene
 

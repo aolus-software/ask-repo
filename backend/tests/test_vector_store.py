@@ -345,10 +345,10 @@ async def test_an_unrecognised_failure_is_retryable() -> None:
         await store.ensure_collection()
 
 
-async def test_the_terminal_message_names_what_qdrant_rejected() -> None:
-    """The operator sees this string in `Project.error`. "Qdrant upsert failed" alone
-    would point them at an outage that is not happening; the dimension error names the
-    actual misconfiguration."""
+async def test_the_message_names_the_class_and_status_but_not_qdrants_text() -> None:
+    """The operator sees this string in `Project.error`. It carries the exception's
+    class and the status -- enough to tell a rejected request from an outage -- but
+    never Qdrant's response body, which may quote an internal URL or payload."""
     store = store_failing_with(unexpected_response(400))
 
     with pytest.raises(TerminalIngestionError) as raised:
@@ -360,7 +360,23 @@ async def test_the_terminal_message_names_what_qdrant_rejected() -> None:
             commit_sha="a" * 40,
         )
 
-    assert "Vector dimension error" in str(raised.value)
+    assert "UnexpectedResponse" in str(raised.value)
+    assert "400" in str(raised.value)
+    assert "Vector dimension error" not in str(raised.value)
+    assert isinstance(raised.value.__cause__, UnexpectedResponse)  # full text stays chained
+
+
+async def test_a_retryable_message_does_not_interpolate_the_connection_error() -> None:
+    """A connection failure's text can name the internal Qdrant host."""
+    store = store_failing_with(
+        ResponseHandlingException(OSError("connect to http://qdrant.internal:6333 refused"))
+    )
+
+    with pytest.raises(RetryableIngestionError) as raised:
+        await store.ensure_collection()
+
+    assert "ResponseHandlingException" in str(raised.value)
+    assert "qdrant.internal" not in str(raised.value)
 
 
 async def test_a_store_built_without_a_width_refuses_to_create_a_collection() -> None:

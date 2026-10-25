@@ -1,5 +1,8 @@
 {
-  "moduleFilters": { "filterByProject": "依專案篩選", "allProjects": "所有專案" },
+  "moduleFilters": {
+    "filterByProject": "依專案篩選",
+    "allProjects": "所有專案"
+  },
   "createModuleDialog": {
     "created": "已建立模組",
     "generationNotStarted": "模組已建立，但尚未開始產生。請在該模組上使用「產生」。",
@@ -50,20 +53,29 @@
     },
     "reviewChanges": "審閱變更"
   },
-  "kinds": { "positive": "正向", "negative": "負向" },
+  "kinds": {
+    "positive": "正向",
+    "negative": "負向"
+  },
   "itemFilters": {
     "featurePlaceholder": "依功能篩選",
     "featureAria": "依功能篩選",
     "allStatuses": "所有狀態",
     "allKinds": "所有類型",
     "allSources": "所有來源",
+    "statusAria": "依狀態篩選",
+    "kindAria": "依類型篩選",
+    "sourceAria": "依來源篩選",
     "statuses": {
       "untested": "未測試",
       "pass": "通過",
       "fail": "失敗",
       "blocked": "受阻"
     },
-    "sources": { "generated": "自動產生", "manual": "手動建立" }
+    "sources": {
+      "generated": "自動產生",
+      "manual": "手動建立"
+    }
   },
   "rowActions": {
     "generationInProgress": "產生作業已在進行中",
@@ -184,7 +196,9 @@
     "replyStoppedTitle": "回覆已中止",
     "sendErrorTitle": "無法傳送"
   },
-  "refinementDrawer": { "resize": "調整側邊欄大小" },
+  "refinementDrawer": {
+    "resize": "調整側邊欄大小"
+  },
   "screen": {
     "title": "QA 檢查清單",
     "description": "為已建立索引的儲存庫中各模組產生的測試計畫。",
@@ -203,7 +217,10 @@
     "notFound": "該檢查清單模組不存在，或已被刪除。",
     "generationRunning": "此模組已有產生作業正在執行。",
     "noGeneratePermission": "你沒有權限產生此檢查清單。",
-    "tabs": { "testPlan": "測試計畫", "mockData": "模擬資料" },
+    "tabs": {
+      "testPlan": "測試計畫",
+      "mockData": "模擬資料"
+    },
     "description": "列舉自 <path>{sourcePath}</path>。僅涵蓋 {appName} 已建立索引的檔案。",
     "generate": "產生",
     "generationStarted": "已開始產生",
@@ -240,6 +257,7 @@
     "projectAria": "專案",
     "loading": "載入中…",
     "noProjectMatches": "沒有符合的專案。",
+    "projectCap": "依名稱顯示前 {count} 個專案。",
     "chooseProject": "請選擇專案。",
     "include": "包含",
     "testChecklist": "測試檢查清單",

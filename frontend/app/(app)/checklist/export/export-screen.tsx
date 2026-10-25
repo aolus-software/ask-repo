@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useState } from "react";
 import { toast } from "sonner";
 
+import { ListError } from "@/components/feedback/list-error";
 import { ItemFilters } from "@/components/checklist/item-filters";
 import { FormPage } from "@/components/form/form-page";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -37,6 +38,9 @@ import type {
 } from "@/lib/api/types";
 import { PERMISSION, can } from "@/lib/can";
 
+/** The project picker loads one page of this size; a longer list is cut off. */
+const PROJECT_LIMIT = 100;
+
 /** The list route's own page cap; a project past it can still export "All modules". */
 const MODULE_LIMIT = 100;
 
@@ -62,7 +66,7 @@ export function ExportScreen() {
   const exporter = useProjectExport();
 
   const projects = useProjects({
-    limit: 100,
+    limit: PROJECT_LIMIT,
     sort: SORT.projects.name,
     sortDirection: "asc",
   });
@@ -71,6 +75,8 @@ export function ExportScreen() {
   const exportable = (projects.data?.items ?? []).filter(
     (p) => can(p, PERMISSION.CHECKLIST_READ) || can(p, PERMISSION.MOCKDATA_READ),
   );
+  const moreProjects =
+    (projects.data?.totalCount ?? 0) > (projects.data?.items.length ?? 0);
   const project = exportable.find((p) => p.id === projectId) ?? null;
 
   const modules = useChecklistModules(
@@ -180,6 +186,14 @@ export function ExportScreen() {
             </ComboboxList>
           </ComboboxContent>
         </Combobox>
+        {projects.isError ? (
+          <ListError error={projects.error} onRetry={() => projects.refetch()} />
+        ) : null}
+        {moreProjects ? (
+          <FieldDescription>
+            {t("projectCap", { count: PROJECT_LIMIT })}
+          </FieldDescription>
+        ) : null}
         {attempted && !project ? <FieldError>{t("chooseProject")}</FieldError> : null}
       </Field>
 
@@ -228,7 +242,10 @@ export function ExportScreen() {
                 {t("chooseModules")}
               </Label>
             </RadioGroup>
-            {mode === "choose" ? (
+            {modules.isError ? (
+              <ListError error={modules.error} onRetry={() => modules.refetch()} />
+            ) : null}
+            {mode === "choose" && !modules.isError ? (
               modules.isLoading ? (
                 <FieldDescription>{t("loadingModules")}</FieldDescription>
               ) : moduleItems.length === 0 ? (
@@ -252,7 +269,7 @@ export function ExportScreen() {
                 </div>
               )
             ) : null}
-            {mode === "choose" && moreModules ? (
+            {mode === "choose" && moreModules && !modules.isError ? (
               <FieldDescription>
                 {t("moduleCap", { count: MODULE_LIMIT })}
               </FieldDescription>
