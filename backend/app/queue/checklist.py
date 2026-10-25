@@ -7,7 +7,6 @@ is claimed and the ladder a failure is routed onto.
 """
 
 import logging
-import time
 import uuid
 from collections.abc import Callable
 from typing import Protocol
@@ -24,6 +23,7 @@ from app.ingestion.errors import RetryableIngestionError, TerminalIngestionError
 from app.models.checklist import ChecklistModuleStatus
 from app.queue.consumer import JobOutcome as JobOutcome
 from app.queue.consumer import PausingConsumer
+from app.queue.job_failure import defer_for_retry, record_failure, route_failure
 from app.queue.producer import ensure_topics
 from app.queue.protocol import TopicProducer
 from app.queue.topics import (
@@ -200,25 +200,17 @@ async def _defer(
     The lease is shortened to the delay of the rung this failure routes to, rather than
     dropped: a `generating` module with no lease is what the stranded sweep reads as
     abandoned, and it waits two minutes while the second rung waits ten. See
-    `ChecklistModuleRepository.defer`.
-
-    The delay is read from `checklist_next_destination` -- the same function that picks
-    the topic in `_route_failure` -- so the lease cannot expire at a different moment
-    from the one the retry actually arrives at.
-
-    The rollback still happens first: whatever the failed run left in this session is
-    not wanted, and only the lease write should survive.
+    `ChecklistModuleRepository.defer` and `app/queue/job_failure.py`.
     """
-    _, delay_seconds = checklist_next_destination(
-        attempt=message.attempt, max_attempts=max_attempts
+    await defer_for_retry(
+        session=session,
+        defer=lambda hold_seconds: repository.defer(
+            module_id=message.module_id, worker_id=worker_id, hold_seconds=hold_seconds
+        ),
+        next_destination=checklist_next_destination,
+        attempt=message.attempt,
+        max_attempts=max_attempts,
     )
-    await session.rollback()
-    if await repository.defer(
-        module_id=message.module_id, worker_id=worker_id, hold_seconds=delay_seconds
-    ):
-        await session.commit()
-    else:
-        await session.rollback()
 
 
 async def _fail(
@@ -231,40 +223,34 @@ async def _fail(
 ) -> None:
     """Record a terminal failure on the module, scrubbed, and drop the lease.
 
-    `release` returns whether we still held the lease; a `False` means another worker
-    owns the module and this run has no right to record itself.
+    No notification: a checklist failure is read from the module's own status.
     """
-    if await repository.release(
-        module_id=message.module_id,
-        job_id=message.job_id,
-        worker_id=worker_id,
-        status=ChecklistModuleStatus.FAILED,
-        error=reason,
-    ):
-        await session.commit()
-    else:
-        await session.rollback()
+    await record_failure(
+        session=session,
+        release=lambda: repository.release(
+            module_id=message.module_id,
+            job_id=message.job_id,
+            worker_id=worker_id,
+            status=ChecklistModuleStatus.FAILED,
+            error=reason,
+        ),
+    )
 
 
 async def _route_failure(
     message: ChecklistJobMessage, *, producer: TopicProducer, max_attempts: int
 ) -> None:
-    """Send the job onward: a delay rung, or the checklist dead-letter topic.
-
-    A fresh `job_id` on every attempt, because `ChecklistModuleRepository.claim`
-    refuses a job id it has already recorded -- reusing it would make the retry a
-    no-op that looks like a success.
-    """
-    topic, delay_seconds = checklist_next_destination(
-        attempt=message.attempt, max_attempts=max_attempts
-    )
-    await producer.produce_to(
-        topic,
-        ChecklistJobMessage(
+    """Send the job onward: a delay rung, or the checklist dead-letter topic."""
+    await route_failure(
+        producer=producer,
+        attempt=message.attempt,
+        max_attempts=max_attempts,
+        next_destination=checklist_next_destination,
+        build_message=lambda job_id, attempt, not_before_ms: ChecklistJobMessage(
             module_id=message.module_id,
-            job_id=uuid.uuid4(),
-            attempt=message.attempt + 1,
-            not_before_ms=int(time.time() * 1000) + delay_seconds * 1000,
+            job_id=job_id,
+            attempt=attempt,
+            not_before_ms=not_before_ms,
             original_topic=message.original_topic,
         ),
     )

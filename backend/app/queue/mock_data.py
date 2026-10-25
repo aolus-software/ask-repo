@@ -7,7 +7,6 @@ module) and the ladder a failure is routed onto.
 """
 
 import logging
-import time
 import uuid
 from collections.abc import Callable
 from typing import Protocol
@@ -20,6 +19,7 @@ from app.ingestion.errors import RetryableIngestionError, TerminalIngestionError
 from app.models.mock_data import MockDataDatasetStatus
 from app.queue.consumer import JobOutcome as JobOutcome
 from app.queue.consumer import PausingConsumer
+from app.queue.job_failure import defer_for_retry, record_failure, route_failure
 from app.queue.producer import ensure_topics
 from app.queue.protocol import TopicProducer
 from app.queue.topics import (
@@ -169,21 +169,19 @@ async def _defer(
 ) -> None:
     """Hand back a run that ended but is coming back, until its retry is due.
 
-    The lease is shortened to the rung's delay rather than dropped, read from the same
-    `mock_data_next_destination` that `_route_failure` routes on. See
+    The lease is shortened to the rung's delay rather than dropped. See
     `ChecklistModuleRepository.defer` for why a lease-less `generating` row is the
-    dangerous state.
+    dangerous state, and `app/queue/job_failure.py`.
     """
-    _, delay_seconds = mock_data_next_destination(
-        attempt=message.attempt, max_attempts=max_attempts
+    await defer_for_retry(
+        session=session,
+        defer=lambda hold_seconds: repository.defer(
+            dataset_id=message.dataset_id, worker_id=worker_id, hold_seconds=hold_seconds
+        ),
+        next_destination=mock_data_next_destination,
+        attempt=message.attempt,
+        max_attempts=max_attempts,
     )
-    await session.rollback()
-    if await repository.defer(
-        dataset_id=message.dataset_id, worker_id=worker_id, hold_seconds=delay_seconds
-    ):
-        await session.commit()
-    else:
-        await session.rollback()
 
 
 async def _fail(
@@ -195,32 +193,32 @@ async def _fail(
     session: AsyncSession,
 ) -> None:
     """Record a terminal failure on the dataset, scrubbed, and drop the lease."""
-    if await repository.release(
-        dataset_id=message.dataset_id,
-        job_id=message.job_id,
-        worker_id=worker_id,
-        status=MockDataDatasetStatus.FAILED,
-        error=reason,
-    ):
-        await session.commit()
-    else:
-        await session.rollback()
+    await record_failure(
+        session=session,
+        release=lambda: repository.release(
+            dataset_id=message.dataset_id,
+            job_id=message.job_id,
+            worker_id=worker_id,
+            status=MockDataDatasetStatus.FAILED,
+            error=reason,
+        ),
+    )
 
 
 async def _route_failure(
     message: MockDataJobMessage, *, producer: TopicProducer, max_attempts: int
 ) -> None:
     """Send the job onward: a delay rung, or the mock-data dead-letter topic."""
-    topic, delay_seconds = mock_data_next_destination(
-        attempt=message.attempt, max_attempts=max_attempts
-    )
-    await producer.produce_to(
-        topic,
-        MockDataJobMessage(
+    await route_failure(
+        producer=producer,
+        attempt=message.attempt,
+        max_attempts=max_attempts,
+        next_destination=mock_data_next_destination,
+        build_message=lambda job_id, attempt, not_before_ms: MockDataJobMessage(
             dataset_id=message.dataset_id,
-            job_id=uuid.uuid4(),
-            attempt=message.attempt + 1,
-            not_before_ms=int(time.time() * 1000) + delay_seconds * 1000,
+            job_id=job_id,
+            attempt=attempt,
+            not_before_ms=not_before_ms,
             original_topic=message.original_topic,
             count=message.count,
         ),
