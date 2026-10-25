@@ -8,10 +8,10 @@ trail has a hole nobody finds until the day it is needed.
 So this module asserts three things no per-event test can:
 
 1. **Every mutating route in the app is classified** — either it maps to an event, or
-   it is one of the six exemptions. A new route fails here until someone decides.
+   it is one of the named exemptions. A new route fails here until someone decides.
 2. **Every catalogue name is claimed by a route** (or by the CLI), so a name cannot
    exist unwritten.
-3. **Every exemption is one of the six the rule names**, so the escape hatch cannot
+3. **Every exemption is one the rule names**, so the escape hatch cannot
    quietly widen.
 """
 
@@ -48,7 +48,7 @@ NO_ACTOR = "ingestion outcome — no actor; projects.status holds the result"
 # risk. Their (method, path) entries in ROUTE_EVENTS point at this same reason.
 NOTIFICATION_STATE = "a user's own notification state — private, non-shared, attention-rate"
 # Exemption 6. Email delivery has no route — a background task or the worker sends it —
-# so no ROUTE_EVENTS entry points here. Declared so the rule's six exemptions and this
+# so no ROUTE_EVENTS entry points here. Declared so the rule's named exemptions and this
 # module's agree; see `.claude/rules/audit-trail.md`.
 EMAIL_DELIVERY = (
     "email delivery — a transport of an already-recorded event; state columns are its record"
@@ -224,7 +224,7 @@ def test_every_mutating_route_is_classified() -> None:
 
     This is the failure `.claude/rules/audit-trail.md` exists to cause. If you are
     reading it because your new route broke this test: add it to `ROUTE_EVENTS` with
-    an event, or with one of the five exemption reasons and a line in the rule.
+    an event, or with one of the named exemption reasons and a line in the rule.
     """
     unclassified = _app_routes() - set(ROUTE_EVENTS)
 
@@ -241,11 +241,8 @@ def test_the_classification_table_has_no_stale_entries() -> None:
     assert not stale, f"ROUTE_EVENTS names routes the app does not serve: {sorted(stale)}"
 
 
-def test_every_exemption_is_one_of_the_five() -> None:
+def test_every_exemption_is_one_the_rule_names() -> None:
     """The escape hatch cannot widen without editing the rule.
-
-    Named for the original five; a sixth (`EMAIL_DELIVERY`) was added alongside it in
-    the same rule change, so the name stays as-is rather than becoming churn.
 
     `AuditEventType` is a `StrEnum`, so its members are themselves `str` instances --
     `isinstance(value, str)` alone would also match every classified event. The

@@ -216,7 +216,8 @@ async def test_identity_is_established_even_on_exempt_paths(
 ) -> None:
     """Trap 1: an early return for /auth would leave request.state.auth unset.
 
-    Uses a probe mounted under the exempt prefix, since /auth/me does not exist yet.
+    Uses a probe mounted under the exempt prefix, so the test does not depend on what any
+    real /auth route does.
     """
 
     @probe_app.get("/auth/probe-me")

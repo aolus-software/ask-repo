@@ -48,7 +48,6 @@ Every finding from the 2026-09-19 and 2026-09-27 sweeps has been fixed and is in
 | §9.20 | The lease and heartbeat mechanism is copied across five repositories | 🟡 | 2026-10-04 |
 | §9.21 | Four dead `STRANDED_AFTER_SECONDS` constants | 🟡 | 2026-10-04 |
 | §9.22 | Eval does not normalise `sourcePath` the way checklist modules do | 🟡 | 2026-10-04 |
-| §9.30 | Stale comments in the feedback schema and the audit coverage test | 📄 | 2026-10-04 |
 | §4.1 | A timed-out or cancelled clone leaves its `git` process behind | 🟡 | 2026-10-24 |
 | §4.2 | The connect-time address pin uses only the first record, and may not accept IPv6 (SUSPECT) | 🟡 | 2026-10-24 |
 | §7.4 | The four membership routes declare no `summary` and no error responses | 🟡 | 2026-10-24 |
@@ -60,8 +59,6 @@ Every finding from the 2026-09-19 and 2026-09-27 sweeps has been fixed and is in
 | §9.32 | Five English-only constants survive the translated tables | 🟡 | 2026-10-24 |
 | §9.33 | "An unset or unshipped language reads as English" is written out eight times | 🟡 | 2026-10-24 |
 | §9.34 | The single- and multi-module checklist exports duplicate their filter and cap logic | 🟡 | 2026-10-24 |
-| §9.36 | `docs/architecture.md` counts nine notification fan-out sites; there are thirteen | 📄 | 2026-10-24 |
-| §9.38 | A project-list docstring still describes phase 1 | 📄 | 2026-10-24 |
 
 ## Top priorities (2026-10-24)
 
@@ -614,18 +611,6 @@ passes it raw, so the same input answers `400 MODULE_PATH_NOT_INDEXED`. Eval als
 1024 characters where checklist uses 512, and repeats the 120-character name limit as its own
 constant. **Fix:** one shared normaliser and the shared length constants. One hour.
 
-### §9.30 Stale comments in the feedback schema and the audit coverage test — 📄 doc
-
-**Where:** `backend/app/schemas/feedback.py:95` ("Stage 2 (Langfuse) fills this; until then…
-null" — Stage 2 shipped, `backend/app/services/feedback.py:165-166`);
-`backend/tests/test_audit_coverage.py:11`, `:14`, `:50`, `:221`, `:238-241` ("six", "five"
-exemptions — there are seven: the comment at `:38` says so, and `VALID_EXEMPTIONS` at `:60-62`
-has seven);
-`backend/tests/test_auth_middleware.py:219` ("`/auth/me` does not exist yet" — it does,
-`backend/app/api/routes/auth.py:327`)
-
-**Fix:** reword to "the named exemptions" and rename `test_every_exemption_is_one_of_the_five`.
-
 ## Verified correct in this sweep (2026-10-04), with what was checked
 
 - **Access on every new route.** `backend/app/api/routes/eval.py` (8 routes), `feedback.py` and
@@ -940,31 +925,6 @@ wording ("rows" vs "test cases"), and build the same audit `filter` details. A c
 `project_export.py:~183` says "same envelope as the per-module export" — the comment is the only
 thing keeping them aligned. **Fix:** extract the filter-to-details mapping and the cap check beside
 `build_workbook` in `app/services/checklist_export.py`. One hour.
-
-### §9.36 `docs/architecture.md` counts nine notification fan-out sites; there are thirteen — 📄 doc
-
-**Evidence:** CONFIRMED.
-
-**Where:** `docs/architecture.md:303`; the sites are `backend/app/ingestion/pipeline.py:140,184`,
-`backend/app/checklist/generator.py:198`, `backend/app/mockdata/generator.py:218`,
-`backend/app/services/checklist_change_set.py:186,255`, `backend/app/services/mock_data_change_set.py:144,210`,
-`backend/app/services/membership.py:116`, and the four eval callers of `backend/app/eval/notifications.py`
-(`eval/generator.py:147`, `eval/runner.py:213`, `queue/eval.py:120,162`)
-
-`.claude/rules/notifications.md` already says thirteen. The architecture page predates #66 and also
-words the generators as "two checklist and two mock-data", which reads as four. **Fix:** "Thirteen",
-listing the eval generator, runner and terminal-failure path. `docs/PRD.md` §6 items 7 and 8 also
-quote "40 events", "eleven members" and "nine call sites" (now 47, 15 and 13); they read as
-snapshots, and adding "at the time" would make that explicit. Ten minutes.
-
-### §9.38 A project-list docstring still describes phase 1 — 📄 doc
-
-**Evidence:** CONFIRMED.
-
-**Where:** `backend/app/services/project.py:192-194`
-
-"In phase 1 it is unrestricted; phase 2 changes the resolver's body" — phase 2.1 shipped per-project
-access long ago. **Fix:** "The scope comes from the access resolver and nowhere else." Two minutes.
 
 ## Verified correct in this sweep (2026-10-24), with what was checked
 

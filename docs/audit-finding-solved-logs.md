@@ -1135,6 +1135,23 @@ Reindex and checklist generation record before the publish. Mock data has the sa
 **What we should do.** Record the audit event before the publish (still after the commit, as
 `.claude/rules/audit-trail.md` requires), in eval and mock data. Half an hour.
 
+### §9.30 Stale comments in the feedback schema and the audit coverage test — 📄 doc — ✅ RESOLVED 2026-10-25
+
+> Fixed. The feedback schema's `trace_url` comment now says when the value is set and why it is always null for an Ask answer; the audit coverage test speaks of "the named exemptions" and its check is renamed `test_every_exemption_is_one_the_rule_names`; and the middleware test no longer claims `/auth/me` does not exist. On `fix/eval-reliability-forms-2026-10-25`.
+>
+> Original finding follows.
+
+**Where:** `backend/app/schemas/feedback.py:95` ("Stage 2 (Langfuse) fills this; until then…
+null" — Stage 2 shipped, `backend/app/services/feedback.py:165-166`);
+`backend/tests/test_audit_coverage.py:11`, `:14`, `:50`, `:221`, `:238-241` ("six", "five"
+exemptions — there are seven: the comment at `:38` says so, and `VALID_EXEMPTIONS` at `:60-62`
+has seven);
+`backend/tests/test_auth_middleware.py:219` ("`/auth/me` does not exist yet" — it does,
+`backend/app/api/routes/auth.py:327`)
+
+**Fix:** reword to "the named exemptions" and rename `test_every_exemption_is_one_of_the_five`.
+
+
 
 
 ## Sweep 2026-10-24
@@ -1247,6 +1264,40 @@ true. No row is stuck.
 
 **What we should do.** Refuse to delete a set while a translation of it is generating — the same
 guard §8.4 proposes for a set that is itself generating. One hour, both together.
+
+### §9.36 `docs/architecture.md` counts nine notification fan-out sites; there are thirteen — 📄 doc — ✅ RESOLVED 2026-10-25
+
+> Fixed. `docs/architecture.md` says thirteen fan-out sites and lists the eval set generator, the runner and the queue's two terminal-failure paths. `docs/PRD.md` §6 items 7 and 8 now say their counts were the counts when each phase shipped, and give today's (47 events; fifteen notification events at thirteen sites). On `fix/eval-reliability-forms-2026-10-25`.
+>
+> Original finding follows.
+
+**Evidence:** CONFIRMED.
+
+**Where:** `docs/architecture.md:303`; the sites are `backend/app/ingestion/pipeline.py:140,184`,
+`backend/app/checklist/generator.py:198`, `backend/app/mockdata/generator.py:218`,
+`backend/app/services/checklist_change_set.py:186,255`, `backend/app/services/mock_data_change_set.py:144,210`,
+`backend/app/services/membership.py:116`, and the four eval callers of `backend/app/eval/notifications.py`
+(`eval/generator.py:147`, `eval/runner.py:213`, `queue/eval.py:120,162`)
+
+`.claude/rules/notifications.md` already says thirteen. The architecture page predates #66 and also
+words the generators as "two checklist and two mock-data", which reads as four. **Fix:** "Thirteen",
+listing the eval generator, runner and terminal-failure path. `docs/PRD.md` §6 items 7 and 8 also
+quote "40 events", "eleven members" and "nine call sites" (now 47, 15 and 13); they read as
+snapshots, and adding "at the time" would make that explicit. Ten minutes.
+
+### §9.38 A project-list docstring still describes phase 1 — 📄 doc — ✅ RESOLVED 2026-10-25
+
+> Fixed. The `list_projects` docstring in `backend/app/services/project.py` says only that the scope comes from the access resolver and nowhere else. On `fix/eval-reliability-forms-2026-10-25`.
+>
+> Original finding follows.
+
+**Evidence:** CONFIRMED.
+
+**Where:** `backend/app/services/project.py:192-194`
+
+"In phase 1 it is unrestricted; phase 2 changes the resolver's body" — phase 2.1 shipped per-project
+access long ago. **Fix:** "The scope comes from the access resolver and nowhere else." Two minutes.
+
 
 
 
