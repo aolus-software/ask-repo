@@ -30,6 +30,32 @@ client can have received it, so it is recorded under Changed and allowed in a `M
 - **Every filter has a visible label.** The checklist grid, the eval compare selects, and the
   feedback and audit filters show a small label above each control, instead of a placeholder
   that disappeared once a value was chosen.
+- **The fixed-order lists no longer advertise `sort` or `search`.** `GET
+  /projects/{id}/eval-sets`, `GET /eval-sets/{id}/runs`, `GET /feedback` and `GET /me/activity` take
+  `page` and `limit` only; both were ignored before, and an unknown query parameter is still
+  ignored, so no client breaks. The feedback list's day-then-id order stays fixed on purpose.
+- **An eval set's source path is normalised like a checklist module's** (trimmed, leading and
+  trailing slashes removed) and capped at 512 characters, down from 1024, matching modules.
+- **The API documentation declares what each route returns**: `422` on the eval routes, the
+  membership routes' summaries and errors, the source-path `400`/`503`/`409`, both shapes of the
+  `409` on `DELETE /users/{id}` (`LAST_OWNER` with `projects`, `LAST_ADMIN` without), the download
+  routes' file types, and the eval-set create body's two shapes.
+- **Error messages say what to do next**: a missing record suggests refreshing the list, a job in
+  progress says to wait, and a server error says to try again and tell an administrator if it
+  persists. Single-sentence messages drop their full stop, in every language.
+- **Destructive confirmations say what is lost**: deleting a mock-data record names it and says the
+  rest of the dataset stays, and removing a member names them and says their conversations and
+  recorded results stay.
+- **Status colours come from one place.** The "Negative" test-case badge, change-set operation
+  headings (added in green, changed muted, removed red) and pending change sets use the shared
+  status tones rather than colours chosen on each screen.
+- **The thumbs-down popover stays open until its save lands**, so a failed save shows its error
+  in the form as well as in a toast, and it starts empty on a fresh vote.
+
+### Removed
+
+- **`HOST` and `PORT` settings.** Nothing read them; the bind address and port come from the
+  uvicorn command (`docs/configuration.md`).
 
 ### Fixed
 
@@ -77,6 +103,22 @@ client can have received it, so it is recorded under Changed and allowed in a `M
   as well as by mouse.
 - **The feedback screen says "No feedback matches these filters"**, with a way to clear them,
   instead of "No feedback yet" when its filters hide everything.
+- **An eval set or checklist module named with only spaces is refused with `422`**, instead of
+  being created with a blank name.
+- **One eval set whose language a later release no longer ships no longer breaks every list it
+  appears in** with a `500`; it reads as English, as projects already did.
+- **A timed-out or cancelled clone no longer leaves its `git` process running.**
+- **The eval tables paginate** instead of stopping at 100 rows, and an empty eval set list offers
+  to generate one.
+- **The feedback screen shows every filter it applies.** A project or prompt-version filter that
+  arrived in the link appears as a removable chip instead of narrowing the list invisibly, and the
+  vote day is shown in the interface language.
+- **Smaller fixes**: a long module name in the export picker wraps instead of being cut off;
+  notification times show the exact time on hover; notification preferences show a skeleton while
+  loading; the eval set screen says "you do not have access" rather than "not found" to a member
+  without permission; admin screens fetch nothing for a non-admin; an interrupted Ask answer reads
+  the same live and after a reload; identifiers and paths on the eval and module screens are in
+  the monospace face.
 
 ## [2.4.1] — 2026-10-25
 
