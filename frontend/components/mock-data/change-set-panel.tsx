@@ -28,7 +28,6 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Separator } from "@/components/ui/separator";
 import { apiFetch } from "@/lib/api/client";
 import { endpoints } from "@/lib/api/endpoints";
 import type {
@@ -204,7 +203,6 @@ export function MockDataChangeSetPanel({
 
         <OperationGroups operations={changeSet.operations} renderRow={renderRow} />
 
-        <Separator />
         <FormError error={applyMutation.error} />
       </CardContent>
       <CardFooter className="justify-between gap-2">

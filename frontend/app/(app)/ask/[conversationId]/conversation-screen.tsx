@@ -23,12 +23,14 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { useAskStream } from "@/hooks/use-ask-stream";
 import { useConversation } from "@/hooks/use-conversations";
 import { useBreadcrumbLabel } from "@/components/layout/breadcrumb-labels";
+import { usePhaseLabel } from "@/hooks/use-phase-label";
 import { useProject } from "@/hooks/use-projects";
 import { takePendingQuestion } from "@/lib/ask/pending";
 import { useErrorText } from "@/lib/i18n/error-text";
 
 export function ConversationScreen({ conversationId }: { conversationId: string }) {
   const t = useTranslations("ask");
+  const phaseLabel = usePhaseLabel();
   const errorText = useErrorText();
   const conversation = useConversation(conversationId);
   // A conversation is bound to one project for its whole life, and every follow-up
@@ -137,9 +139,7 @@ export function ConversationScreen({ conversationId }: { conversationId: string 
         <AssistantTurn>
           {state.phase && state.isStreaming ? (
             <p className="text-muted-foreground mb-2 text-sm">
-              {t.has(`phases.${state.phase}` as never)
-                ? t(`phases.${state.phase}` as never)
-                : null}
+              {phaseLabel(state.phase)}
             </p>
           ) : null}
 
