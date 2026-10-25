@@ -266,8 +266,17 @@ wraps the same way. See `.claude/rules/design-system.md` §11.
 - Column order: identity first, status second, timestamps last, actions in a right-aligned final
   column.
 - Timestamps are relative with an absolute `title` (`3 days ago`, hover for the ISO value).
+  **The one exception is the admin feedback table's day column**: it is a date and never a time
+  (`.claude/rules/feedback.md` rule 2), shown with `formatDay(createdOn, locale)` in the active
+  locale and with no `title`, because a time would undo the privacy the day-only value exists for.
 - Status renders as a `Badge` with the semantic colour, never a coloured dot alone.
-- An empty list shows an empty state with the primary action, never a bare "No results".
+- An empty list shows an empty state with the primary action, never a bare "No results". When a
+  filter hides everything, the empty state says so and offers to clear the filters, rather than
+  claiming there is nothing at all.
+- A filter the URL can carry but the toolbar has no control for renders as a removable chip
+  (`components/output-feedback/active-filter-chips.tsx`), so no filter is applied invisibly.
+- A `ListError` inside a `p-0` card takes `padded`, so the message does not sit flush to the edge.
+- Every list paginates through `PaginationFooter`, the eval tables included.
 - Loading shows `Skeleton` rows matching the real column count, not a spinner — the layout must
   not jump when data arrives.
 
