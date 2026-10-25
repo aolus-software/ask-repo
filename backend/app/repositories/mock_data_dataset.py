@@ -1,9 +1,7 @@
 """Queries over `mock_data_datasets`, including the generation lease.
 
-A near-copy of `ChecklistModuleRepository`'s lease logic rather than a shared helper --
-the two rows carry independent status vocabularies and outcome columns, and a premature
-abstraction over them would hide the day they stop agreeing (same reasoning that
-repository's own docstring gives for not sharing with `ProjectRepository.claim`).
+The lease statements are the shared ones in `app/repositories/lease.py`; each method here
+passes this table's status vocabulary and outcome columns and stages its own live event.
 
 Unscoped by `ProjectScope`, like `ChecklistChangeSetRepository`: a dataset is always
 reached through its module, and the module read is already scoped.
@@ -11,20 +9,20 @@ reached through its module, and the module read is already scoped.
 
 import uuid
 from collections.abc import Collection, Sequence
-from datetime import UTC, datetime, timedelta
 from typing import Any, cast
 
-from sqlalchemy import ScalarSelect, func, or_, select, update
+from sqlalchemy import ScalarSelect, func, select, update
 from sqlalchemy.engine import CursorResult
 
 from app.live.events import mock_data_event
 from app.live.staging import stage_live_event
 from app.models.checklist import ChecklistModule
 from app.models.mock_data import MockDataDataset, MockDataDatasetStatus
+from app.repositories import lease
 from app.repositories.base import BaseRepository
 
-LEASE_SECONDS = 300
-LEASE_RENEWAL_SECONDS = 60
+LEASE_RENEWAL_SECONDS = lease.LEASE_RENEWAL_SECONDS
+LEASE_SECONDS = lease.LEASE_SECONDS
 
 
 def _dataset_project_id() -> ScalarSelect[uuid.UUID]:
@@ -80,29 +78,16 @@ class MockDataDatasetRepository(BaseRepository[MockDataDataset]):
         self, *, dataset_id: uuid.UUID, job_id: uuid.UUID, worker_id: str, lease_seconds: int
     ) -> bool:
         """Take ownership of a dataset's next generation. True if we won it."""
-        now = datetime.now(UTC)
-        result = await self.session.execute(
-            update(MockDataDataset)
-            .where(
-                MockDataDataset.id == dataset_id,
-                MockDataDataset.deleted_at.is_(None),
-                MockDataDataset.last_job_id.is_distinct_from(job_id),
-                or_(
-                    MockDataDataset.lease_expires_at.is_(None),
-                    MockDataDataset.lease_expires_at < now,
-                ),
-            )
-            .values(
-                lease_owner=worker_id,
-                lease_expires_at=now + timedelta(seconds=lease_seconds),
-                last_job_id=job_id,
-                status=MockDataDatasetStatus.GENERATING.value,
-                error=None,
-                updated_at=now,
-            )
-            .returning(MockDataDataset.checklist_module_id, _dataset_project_id())
+        row = await lease.claim_lease(
+            self.session,
+            MockDataDataset,
+            row_id=dataset_id,
+            job_id=job_id,
+            worker_id=worker_id,
+            lease_seconds=lease_seconds,
+            extra_values={"status": MockDataDatasetStatus.GENERATING.value, "error": None},
+            returning=(MockDataDataset.checklist_module_id, _dataset_project_id()),
         )
-        row = result.one_or_none()
         if row is None:
             return False
         module_id, project_id = row
@@ -113,13 +98,14 @@ class MockDataDatasetRepository(BaseRepository[MockDataDataset]):
         self, *, dataset_id: uuid.UUID, worker_id: str, lease_seconds: int
     ) -> bool:
         """Extend our own lease. False means we lost it and must abandon the job."""
-        now = datetime.now(UTC)
-        result = await self.session.execute(
-            update(MockDataDataset)
-            .where(MockDataDataset.id == dataset_id, MockDataDataset.lease_owner == worker_id)
-            .values(lease_expires_at=now + timedelta(seconds=lease_seconds), updated_at=now)
+        return await lease.renew_lease(
+            self.session,
+            MockDataDataset,
+            row_id=dataset_id,
+            worker_id=worker_id,
+            lease_seconds=lease_seconds,
+            skip_deleted=False,
         )
-        return cast(CursorResult[Any], result).rowcount == 1
 
     async def release(
         self,
@@ -132,26 +118,17 @@ class MockDataDatasetRepository(BaseRepository[MockDataDataset]):
         **fields: object,
     ) -> bool:
         """Finish a run: write the outcome and drop the lease. True if we still held it."""
-        now = datetime.now(UTC)
-        result = await self.session.execute(
-            update(MockDataDataset)
-            .where(
-                MockDataDataset.id == dataset_id,
-                MockDataDataset.deleted_at.is_(None),
-                MockDataDataset.lease_owner == worker_id,
-            )
-            .values(
-                status=status.value,
-                error=error,
-                lease_owner=None,
-                lease_expires_at=None,
-                last_job_id=job_id,
-                updated_at=now,
-                **fields,
-            )
-            .returning(MockDataDataset.checklist_module_id, _dataset_project_id())
+        row = await lease.release_lease(
+            self.session,
+            MockDataDataset,
+            row_id=dataset_id,
+            job_id=job_id,
+            worker_id=worker_id,
+            status=status.value,
+            error=error,
+            fields=fields,
+            returning=(MockDataDataset.checklist_module_id, _dataset_project_id()),
         )
-        row = result.one_or_none()
         if row is None:
             return False
         module_id, project_id = row
@@ -192,25 +169,17 @@ class MockDataDatasetRepository(BaseRepository[MockDataDataset]):
         status alone says nothing about whether a worker holds it. Stamping
         `updated_at` is what stops the sweep re-publishing the same dataset forever.
         """
-        cutoff = datetime.now(UTC) - timedelta(seconds=generating_older_than_seconds)
-        now = datetime.now(UTC)
-        result = await self.session.execute(
-            update(MockDataDataset)
-            .where(
-                MockDataDataset.deleted_at.is_(None),
-                MockDataDataset.status == MockDataDatasetStatus.GENERATING.value,
-                MockDataDataset.updated_at < cutoff,
-                or_(
-                    MockDataDataset.lease_expires_at.is_(None),
-                    MockDataDataset.lease_expires_at < now,
-                ),
-            )
-            .values(updated_at=now)
-            .returning(
-                MockDataDataset.id, MockDataDataset.checklist_module_id, _dataset_project_id()
-            )
+        rows = await lease.claim_stranded_rows(
+            self.session,
+            MockDataDataset,
+            working_status=MockDataDatasetStatus.GENERATING.value,
+            older_than_seconds=generating_older_than_seconds,
+            returning=(
+                MockDataDataset.id,
+                MockDataDataset.checklist_module_id,
+                _dataset_project_id(),
+            ),
         )
-        rows = result.all()
         for _, module_id, project_id in rows:
             stage_live_event(self.session, mock_data_event(module_id, project_id))
         return [row[0] for row in rows]
@@ -224,18 +193,14 @@ class MockDataDatasetRepository(BaseRepository[MockDataDataset]):
         with no lease is what the reconcile sweep reads as abandoned, so a long rung
         would have it published a second time while the first retry is still pending.
         """
-        now = datetime.now(UTC)
-        result = await self.session.execute(
-            update(MockDataDataset)
-            .where(
-                MockDataDataset.id == dataset_id,
-                MockDataDataset.deleted_at.is_(None),
-                MockDataDataset.lease_owner == worker_id,
-            )
-            .values(lease_expires_at=now + timedelta(seconds=hold_seconds), updated_at=now)
-            .returning(MockDataDataset.checklist_module_id, _dataset_project_id())
+        row = await lease.defer_lease(
+            self.session,
+            MockDataDataset,
+            row_id=dataset_id,
+            worker_id=worker_id,
+            hold_seconds=hold_seconds,
+            returning=(MockDataDataset.checklist_module_id, _dataset_project_id()),
         )
-        row = result.one_or_none()
         if row is None:
             return False
         module_id, project_id = row
