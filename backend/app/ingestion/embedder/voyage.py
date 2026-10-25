@@ -39,7 +39,9 @@ class VoyageEmbedder:
                     headers={"Authorization": f"Bearer {self._api_key}"},
                 )
             except httpx.HTTPError as error:
-                raise RetryableIngestionError(f"Embedding request failed: {error}") from error
+                raise RetryableIngestionError(
+                    f"Embedding request failed ({type(error).__name__})."
+                ) from error
 
         if response.status_code in (401, 403):
             raise TerminalIngestionError("Embedding provider rejected the credentials.")

@@ -111,8 +111,10 @@ async def handle_message(
         logger.warning("project %s failed terminally", message.project_id)
         return JobOutcome.COMPLETED
     except RetryableIngestionError as error:
-        # Safe to record: every `IngestionError` the cloner raises is built from
-        # already-scrubbed stderr (`app/ingestion/cloner.py`).
+        # Safe to record: the cloner builds its messages from scrubbed stderr
+        # (`app/ingestion/cloner.py`), and the embedders, vector store and
+        # generators put only an exception's class name in theirs, never its text.
+        # A new raise site must keep to one of the two.
         return await _route_failure(
             message,
             producer=producer,
