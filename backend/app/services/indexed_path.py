@@ -33,10 +33,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import Settings
 from app.core import access
 from app.core.errors import AppError, ErrorCode
+from app.core.indexed import require_indexed
 from app.core.middleware import AuthenticatedUser
 from app.ingestion.errors import IngestionError
 from app.ingestion.vector_store import VectorStoreFactory
-from app.models.project import Project, ProjectStatus
+from app.models.project import Project
 from app.repositories.project import ProjectRepository
 from app.schemas.project import IndexedPathEntry, IndexedPathsResponse
 from app.services import path_tree
@@ -172,7 +173,7 @@ class IndexedPathService:
         chat paths make (`.claude/rules/ingestion.md`).
         """
         project = await access.require_readable_project(self.projects, project_id, actor)
-        self._require_indexed(project)
+        require_indexed(project)
         paths = await self.reader.paths_for(project)
 
         if search:
@@ -195,21 +196,6 @@ class IndexedPathService:
             entries=path_tree.children_of(paths, directory),
             truncated=False,
         )
-
-    @staticmethod
-    def _require_indexed(project: Project) -> None:
-        """There has to be an index to enumerate.
-
-        `409` rather than an empty list: a picker showing no files is indistinguishable
-        from a repository that has none, and the user would go looking for the wrong
-        problem.
-        """
-        if project.status != ProjectStatus.READY.value or not project.embedding_collection:
-            raise AppError(
-                status.HTTP_409_CONFLICT,
-                ErrorCode.PROJECT_NOT_READY,
-                "This project is not indexed yet. Wait for indexing to finish.",
-            )
 
 
 def _response(

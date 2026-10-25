@@ -1,26 +1,27 @@
-"""Queries over `eval_sets`, including the generation lease.
+"""Queries over `eval_runs`, including the run lease.
 
-A near-copy of `MockDataDatasetRepository`'s lease logic, for the reasons that
-repository's docstring gives. Unscoped by `ProjectScope`: access is decided in
+The lease statements are the shared ones in `app/repositories/lease.py`; each method
+here passes this table's status vocabulary and stages its own live event.
+Unscoped by `ProjectScope`: access is decided in
 `app/core/access.py`, and these methods filter only by ids they are handed.
 """
 
 import uuid
 from collections.abc import Sequence
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from typing import Any, cast
 
-from sqlalchemy import func, or_, select, update
+from sqlalchemy import func, select, update
 from sqlalchemy.engine import CursorResult
 
 from app.live.events import eval_run_event
 from app.live.staging import stage_live_event
 from app.models.eval import EvalRun, EvalRunStatus
+from app.repositories import lease
 from app.repositories.base import BaseRepository
 
-LEASE_SECONDS = 300
-LEASE_RENEWAL_SECONDS = 60
-STRANDED_AFTER_SECONDS = 120
+LEASE_RENEWAL_SECONDS = lease.LEASE_RENEWAL_SECONDS
+LEASE_SECONDS = lease.LEASE_SECONDS
 
 
 class EvalRunRepository(BaseRepository[EvalRun]):
@@ -73,31 +74,21 @@ class EvalRunRepository(BaseRepository[EvalRun]):
         self, *, run_id: uuid.UUID, job_id: uuid.UUID, worker_id: str, lease_seconds: int
     ) -> bool:
         """Take ownership of a run. True if we won it."""
-        now = datetime.now(UTC)
-        result = await self.session.execute(
-            update(EvalRun)
-            .where(
-                EvalRun.id == run_id,
-                EvalRun.deleted_at.is_(None),
-                # A sweep-published copy carries a fresh job id, so `last_job_id` cannot
-                # refuse it; a finished row must refuse on status instead.
-                EvalRun.status == EvalRunStatus.RUNNING.value,
-                EvalRun.last_job_id.is_distinct_from(job_id),
-                or_(EvalRun.lease_expires_at.is_(None), EvalRun.lease_expires_at < now),
-            )
-            .values(
-                lease_owner=worker_id,
-                lease_expires_at=now + timedelta(seconds=lease_seconds),
-                last_job_id=job_id,
-                status=EvalRunStatus.RUNNING.value,
-                # Stamped once: a resumed run keeps the time its first attempt began.
-                started_at=func.coalesce(EvalRun.started_at, now),
-                error=None,
-                updated_at=now,
-            )
-            .returning(EvalRun.project_id)
+        row = await lease.claim_lease(
+            self.session,
+            EvalRun,
+            row_id=run_id,
+            job_id=job_id,
+            worker_id=worker_id,
+            lease_seconds=lease_seconds,
+            extra_where=(EvalRun.status == EvalRunStatus.RUNNING.value,),
+            extra_values={
+                "status": EvalRunStatus.RUNNING.value,
+                "started_at": func.coalesce(EvalRun.started_at, datetime.now(UTC)),
+                "error": None,
+            },
+            returning=(EvalRun.project_id,),
         )
-        row = result.one_or_none()
         if row is None:
             return False
         stage_live_event(self.session, eval_run_event(run_id, row[0]))
@@ -105,17 +96,14 @@ class EvalRunRepository(BaseRepository[EvalRun]):
 
     async def renew_lease(self, *, run_id: uuid.UUID, worker_id: str, lease_seconds: int) -> bool:
         """Extend our own lease. False means we lost it and must abandon the job."""
-        now = datetime.now(UTC)
-        result = await self.session.execute(
-            update(EvalRun)
-            .where(
-                EvalRun.id == run_id,
-                EvalRun.deleted_at.is_(None),
-                EvalRun.lease_owner == worker_id,
-            )
-            .values(lease_expires_at=now + timedelta(seconds=lease_seconds), updated_at=now)
+        return await lease.renew_lease(
+            self.session,
+            EvalRun,
+            row_id=run_id,
+            worker_id=worker_id,
+            lease_seconds=lease_seconds,
+            skip_deleted=True,
         )
-        return cast(CursorResult[Any], result).rowcount == 1
 
     async def hold_for_commit(self, *, run_id: uuid.UUID, worker_id: str) -> bool:
         """Whether the run is still live and still ours, locking its row until commit.
@@ -147,26 +135,17 @@ class EvalRunRepository(BaseRepository[EvalRun]):
         **fields: object,
     ) -> bool:
         """Finish a run: write the outcome and drop the lease. True if we held it."""
-        now = datetime.now(UTC)
-        result = await self.session.execute(
-            update(EvalRun)
-            .where(
-                EvalRun.id == run_id,
-                EvalRun.deleted_at.is_(None),
-                EvalRun.lease_owner == worker_id,
-            )
-            .values(
-                status=status.value,
-                error=error,
-                lease_owner=None,
-                lease_expires_at=None,
-                last_job_id=job_id,
-                updated_at=now,
-                **fields,
-            )
-            .returning(EvalRun.project_id)
+        row = await lease.release_lease(
+            self.session,
+            EvalRun,
+            row_id=run_id,
+            job_id=job_id,
+            worker_id=worker_id,
+            status=status.value,
+            error=error,
+            fields=fields,
+            returning=(EvalRun.project_id,),
         )
-        row = result.one_or_none()
         if row is None:
             return False
         stage_live_event(self.session, eval_run_event(run_id, row[0]))
@@ -179,20 +158,13 @@ class EvalRunRepository(BaseRepository[EvalRun]):
         `running` before its claim, so status says nothing about whether a worker
         holds it, and stamping `updated_at` stops the sweep re-publishing it forever.
         """
-        now = datetime.now(UTC)
-        cutoff = now - timedelta(seconds=older_than_seconds)
-        result = await self.session.execute(
-            update(EvalRun)
-            .where(
-                EvalRun.deleted_at.is_(None),
-                EvalRun.status == EvalRunStatus.RUNNING.value,
-                EvalRun.updated_at < cutoff,
-                or_(EvalRun.lease_expires_at.is_(None), EvalRun.lease_expires_at < now),
-            )
-            .values(updated_at=now)
-            .returning(EvalRun.id, EvalRun.project_id)
+        rows = await lease.claim_stranded_rows(
+            self.session,
+            EvalRun,
+            working_status=EvalRunStatus.RUNNING.value,
+            older_than_seconds=older_than_seconds,
+            returning=(EvalRun.id, EvalRun.project_id),
         )
-        rows = result.all()
         for run_id, project_id in rows:
             stage_live_event(self.session, eval_run_event(run_id, project_id))
         return [row[0] for row in rows]
@@ -204,18 +176,14 @@ class EvalRunRepository(BaseRepository[EvalRun]):
         `MockDataDatasetRepository.defer` gives: a lease-less `running` row is what
         the sweep reads as abandoned.
         """
-        now = datetime.now(UTC)
-        result = await self.session.execute(
-            update(EvalRun)
-            .where(
-                EvalRun.id == run_id,
-                EvalRun.deleted_at.is_(None),
-                EvalRun.lease_owner == worker_id,
-            )
-            .values(lease_expires_at=now + timedelta(seconds=hold_seconds), updated_at=now)
-            .returning(EvalRun.project_id)
+        row = await lease.defer_lease(
+            self.session,
+            EvalRun,
+            row_id=run_id,
+            worker_id=worker_id,
+            hold_seconds=hold_seconds,
+            returning=(EvalRun.project_id,),
         )
-        row = result.one_or_none()
         if row is None:
             return False
         stage_live_event(self.session, eval_run_event(run_id, row[0]))

@@ -546,7 +546,8 @@ backend/
 │   │   ├── protocol.py   # IngestionQueue + TopicProducer + the in-memory double
 │   │   ├── producer.py   # KafkaIngestionQueue + ensure_topics
 │   │   ├── consumer.py   # handle_message, the routing ladder, the polling loop
-│   │   └── retry.py      # holds a delayed message until it is due, then re-queues it
+│   │   ├── retry.py      # holds a delayed message until it is due, then re-queues it
+│   │   └── heartbeat.py  # the lease-renewal task every long job runs beside its work
 │   ├── rag/               # one answer, stage by stage
 │   │   ├── retriever.py  # embed query → filtered search → merge adjacent → typed spans
 │   │   ├── chat.py       # Ollama / OpenAI chat models behind build_chat_model
@@ -566,7 +567,7 @@ backend/
 │   ├── worker.py          # the worker entrypoint: four consumers + retry ladders + mail loop + sweep
 │   ├── models/            # SQLAlchemy models: User, RefreshToken, Project, Conversation,
 │   │                      #   Message, Role, RolePermission, ProjectMembership, ...
-│   ├── repositories/      # the only layer that issues `select`
+│   ├── repositories/      # the only layer that issues `select`; lease.py holds the shared lease statements
 │   ├── schemas/           # 18 modules, all on ApiModel (base.py — the snake_case → camelCase boundary)
 │   └── services/          # 21 services plus path_tree.py and index_guards.py
 └── tests/

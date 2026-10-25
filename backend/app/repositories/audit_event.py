@@ -12,6 +12,7 @@ from typing import Any, TypedDict, cast
 
 from sqlalchemy import CursorResult, Select, delete, func, or_, select
 
+from app.core.access import ProjectScope
 from app.models.audit import AuditEvent
 from app.repositories.base import BaseRepository
 
@@ -32,7 +33,7 @@ class _PageFilters(TypedDict):
     occurred_from: datetime | None
     occurred_to: datetime | None
     search: str | None
-    visible_project_ids: frozenset[uuid.UUID] | None
+    visible_scope: ProjectScope | None
 
 
 class AuditEventRepository(BaseRepository[AuditEvent]):
@@ -50,7 +51,7 @@ class AuditEventRepository(BaseRepository[AuditEvent]):
         occurred_from: datetime | None,
         occurred_to: datetime | None,
         search: str | None,
-        visible_project_ids: frozenset[uuid.UUID] | None,
+        visible_scope: ProjectScope | None,
     ) -> Select[tuple[AuditEvent]]:
         """The shared WHERE for the page and its count, so the two cannot disagree."""
         statement = select(AuditEvent)
@@ -60,14 +61,14 @@ class AuditEventRepository(BaseRepository[AuditEvent]):
             statement = statement.where(AuditEvent.actor_user_id == actor_user_id)
         if project_id is not None:
             statement = statement.where(AuditEvent.project_id == project_id)
-        if visible_project_ids is not None:
+        if visible_scope is not None and not visible_scope.unrestricted:
             # A narrowing applied on top of the access resolver's answer, never instead of
-            # it: the caller passes `resolve_project_scope`'s ids. Rows with no project —
+            # it: the caller passes `resolve_project_scope`'s scope. Rows with no project —
             # sign-ins, account events — are always visible to their own actor.
             statement = statement.where(
                 or_(
                     AuditEvent.project_id.is_(None),
-                    AuditEvent.project_id.in_(visible_project_ids),
+                    AuditEvent.project_id.in_(visible_scope.ids),
                 )
             )
         if outcome is not None:
@@ -121,7 +122,7 @@ class AuditEventRepository(BaseRepository[AuditEvent]):
         occurred_from: datetime | None = None,
         occurred_to: datetime | None = None,
         search: str | None = None,
-        visible_project_ids: frozenset[uuid.UUID] | None = None,
+        visible_scope: ProjectScope | None = None,
         descending: bool = True,
     ) -> tuple[list[AuditEvent], int]:
         """One page plus the total. `created_at` is the only ordering offered."""
@@ -133,7 +134,7 @@ class AuditEventRepository(BaseRepository[AuditEvent]):
             "occurred_from": occurred_from,
             "occurred_to": occurred_to,
             "search": search,
-            "visible_project_ids": visible_project_ids,
+            "visible_scope": visible_scope,
         }
         statement = self._filtered(**filters)
         order = AuditEvent.created_at.desc() if descending else AuditEvent.created_at.asc()

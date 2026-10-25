@@ -219,10 +219,18 @@ async def clone(
     try:
         _, stderr_bytes = await asyncio.wait_for(process.communicate(), timeout=timeout_seconds)
     except TimeoutError as error:
-        process.kill()
         raise TerminalIngestionError(f"Cloning timed out after {timeout_seconds}s.") from error
     finally:
         watcher.cancel()
+        # A timeout or a cancelled worker must not leave the clone process writing
+        # into a directory the pipeline is about to remove. Kill it if it is still
+        # running, then reap it. The wait is shielded: when this task is being
+        # cancelled, an unshielded `await` raises again immediately and the process
+        # would never be reaped.
+        if process.returncode is None:
+            with contextlib.suppress(ProcessLookupError):
+                process.kill()
+            await asyncio.shield(process.wait())
         # Wait for the watcher to actually stop before touching `state`. Without
         # this, a slow watcher iteration could still be mid-check — reading disk,
         # about to set the flag — when we read it a line below.

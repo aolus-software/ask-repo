@@ -2,6 +2,7 @@
 specific hole named in docs/PRD.md §9."""
 
 import asyncio
+import os
 import subprocess
 from pathlib import Path
 from typing import Any
@@ -327,3 +328,80 @@ async def test_the_watchdog_kills_a_clone_that_outgrows_the_cap_mid_flight(
 
     assert state.killed_for_size is True
     assert process.killed is True
+
+
+async def _process_is_alive(pid: int) -> bool:
+    """Whether `pid` still names a live process (a reaped one raises)."""
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    return True
+
+
+async def test_a_timed_out_clone_kills_and_reaps_its_process(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A clone that outlives its timeout must not leave its process running."""
+    started: list[asyncio.subprocess.Process] = []
+    real_exec = asyncio.create_subprocess_exec
+
+    async def hang(*args: str, **kwargs: Any) -> asyncio.subprocess.Process:
+        process = await real_exec("sleep", "60", **kwargs)
+        started.append(process)
+        return process
+
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", hang)
+    remote = ValidatedRepoUrl(
+        url="https://example.com/r.git", host="example.com", port=443, pinned_ip="1.2.3.4"
+    )
+
+    with pytest.raises(TerminalIngestionError, match="timed out"):
+        await clone(
+            remote,
+            branch="main",
+            destination=tmp_path / "clone",
+            pat=None,
+            timeout_seconds=0.2,  # type: ignore[arg-type]  # a fraction keeps the test fast
+            max_bytes=100_000_000,
+        )
+
+    assert started[0].returncode is not None
+    assert not await _process_is_alive(started[0].pid)
+
+
+async def test_a_cancelled_clone_kills_and_reaps_its_process(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Cancelling the worker mid-clone must still stop and reap the process."""
+    started: list[asyncio.subprocess.Process] = []
+    real_exec = asyncio.create_subprocess_exec
+
+    async def hang(*args: str, **kwargs: Any) -> asyncio.subprocess.Process:
+        process = await real_exec("sleep", "60", **kwargs)
+        started.append(process)
+        return process
+
+    monkeypatch.setattr(asyncio, "create_subprocess_exec", hang)
+    remote = ValidatedRepoUrl(
+        url="https://example.com/r.git", host="example.com", port=443, pinned_ip="1.2.3.4"
+    )
+
+    task = asyncio.create_task(
+        clone(
+            remote,
+            branch="main",
+            destination=tmp_path / "clone",
+            pat=None,
+            timeout_seconds=60,
+            max_bytes=100_000_000,
+        )
+    )
+    while not started:
+        await asyncio.sleep(0.01)
+    await asyncio.sleep(0.05)
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+
+    assert not await _process_is_alive(started[0].pid)

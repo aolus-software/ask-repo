@@ -23,10 +23,11 @@ from fastapi import status
 
 from app.config import Settings
 from app.core.errors import AppError, ErrorCode
+from app.core.indexed import require_indexed
 from app.core.middleware import AuthenticatedUser, ProjectGrant
 from app.core.permissions import Permission
 from app.live.events import LiveEvent
-from app.models.project import Project, ProjectStatus
+from app.models.project import Project
 from app.repositories.membership import MembershipRepository
 
 
@@ -175,12 +176,7 @@ def require_answerable(project: Project, settings: Settings) -> None:
     space this collection was never built in. Retrieval becomes noise, the
     answers stay fluent and cited, and nothing anywhere reports an error.
     """
-    if project.status != ProjectStatus.READY.value or not project.embedding_collection:
-        raise AppError(
-            status.HTTP_409_CONFLICT,
-            ErrorCode.PROJECT_NOT_READY,
-            "This project is not indexed yet. Wait for indexing to finish.",
-        )
+    require_indexed(project)
     if project.embedding_model != settings.embedding_model:
         raise AppError(
             status.HTTP_409_CONFLICT,

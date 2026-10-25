@@ -1,8 +1,8 @@
 """Reads and writes for `feedback`.
 
 Scoping is the service's job: a caller that reaches `upsert` has already proved the
-target exists and is visible to it. The admin reads take `project_ids` from
-`resolve_project_scope`, never from a filter of their own.
+target exists and is visible to it. The admin reads take a `ProjectScope` from
+`resolve_project_scope`, never a filter of their own.
 """
 
 import uuid
@@ -14,6 +14,7 @@ from sqlalchemy import Select, and_, delete, func, select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.engine import CursorResult
 
+from app.core.access import ProjectScope
 from app.core.feedback import FeedbackTarget
 from app.models.conversation import Message
 from app.models.feedback import Feedback
@@ -24,7 +25,7 @@ from app.repositories.base import BaseRepository
 class FeedbackFilters(TypedDict, total=False):
     """The admin filters, shared by the page, its count, and every aggregate."""
 
-    project_ids: frozenset[uuid.UUID] | None
+    scope: ProjectScope | None
     feature: str | None
     rating: str | None
     reason_code: str | None
@@ -41,9 +42,11 @@ def _start_of(day: date) -> datetime:
 def _apply(statement: Select[Any], filters: FeedbackFilters) -> Select[Any]:
     """The shared WHERE, so the page, its count and the aggregates cannot disagree."""
     statement = statement.where(Feedback.deleted_at.is_(None))
-    project_ids = filters.get("project_ids")
-    if project_ids is not None:
-        statement = statement.where(Feedback.project_id.in_(project_ids))
+    scope = filters.get("scope")
+    if scope is not None and not scope.unrestricted:
+        # `in_` over an empty collection renders `WHERE false`: an empty scope means no
+        # access, never all of it.
+        statement = statement.where(Feedback.project_id.in_(scope.ids))
     if feature := filters.get("feature"):
         statement = statement.where(Feedback.feature == feature)
     if rating := filters.get("rating"):

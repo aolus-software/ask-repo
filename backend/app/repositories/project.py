@@ -17,13 +17,14 @@ from app.core.access import ProjectScope
 from app.live.events import project_event
 from app.live.staging import stage_live_event
 from app.models.project import Project, ProjectStatus
+from app.repositories import lease
 from app.repositories.base import BaseRepository
 
-# How long a claim is good for. Declared beside the queries that grant and renew it so
-# the consumer (which claims) and the pipeline (which renews) cannot drift apart on it
+# How long a claim is good for, declared once in `repositories/lease.py` and re-exported
+# so the consumer (which claims) and the pipeline (which renews) cannot drift apart on it
 # — spec §4.2 makes five minutes safe only because renewal runs every sixty seconds.
-LEASE_SECONDS = 300
-LEASE_RENEWAL_SECONDS = 60
+LEASE_RENEWAL_SECONDS = lease.LEASE_RENEWAL_SECONDS
+LEASE_SECONDS = lease.LEASE_SECONDS
 
 
 class ProjectSummary(NamedTuple):
@@ -113,55 +114,41 @@ class ProjectRepository(BaseRepository[Project]):
         would let a redelivered message start an unwanted reindex once a finished job
         cleared its lease — `last_job_id` is what separates those two cases.
         """
-        now = datetime.now(UTC)
-        expires_at = now + timedelta(seconds=lease_seconds)
-
-        statement = (
-            update(Project)
-            .where(
-                Project.id == project_id,
-                Project.deleted_at.is_(None),
-                Project.last_job_id.is_distinct_from(job_id),
-                or_(Project.lease_expires_at.is_(None), Project.lease_expires_at < now),
-            )
-            .values(
-                lease_owner=worker_id,
-                lease_expires_at=expires_at,
-                last_job_id=job_id,
-                # One statement serves both modes: a first index moves to `cloning`,
-                # a reindex stays `ready` and raises the flag instead.
-                status=case(
+        row = await lease.claim_lease(
+            self.session,
+            Project,
+            row_id=project_id,
+            job_id=job_id,
+            worker_id=worker_id,
+            lease_seconds=lease_seconds,
+            extra_values={
+                "status": case(
                     (Project.status == ProjectStatus.READY.value, ProjectStatus.READY.value),
                     else_=ProjectStatus.CLONING.value,
                 ),
-                reindex_in_progress=case(
+                "reindex_in_progress": case(
                     (Project.status == ProjectStatus.READY.value, True), else_=False
                 ),
-                # Bulk UPDATE: `onupdate` does not fire on this path
-                # (.claude/rules/persistence.md).
-                updated_at=now,
-            )
+            },
+            returning=(Project.id,),
         )
-        result = await self.session.execute(statement)
-        claimed = cast(CursorResult[Any], result).rowcount == 1
-        if claimed:
-            stage_live_event(self.session, project_event(project_id))
-        return claimed
+        if row is None:
+            return False
+        stage_live_event(self.session, project_event(project_id))
+        return True
 
     async def renew_lease(
         self, *, project_id: uuid.UUID, worker_id: str, lease_seconds: int
     ) -> bool:
         """Extend our own lease. False means we lost it and must abandon the job."""
-        now = datetime.now(UTC)
-        result = await self.session.execute(
-            update(Project)
-            .where(Project.id == project_id, Project.lease_owner == worker_id)
-            .values(
-                lease_expires_at=now + timedelta(seconds=lease_seconds),
-                updated_at=now,
-            )
+        return await lease.renew_lease(
+            self.session,
+            Project,
+            row_id=project_id,
+            worker_id=worker_id,
+            lease_seconds=lease_seconds,
+            skip_deleted=False,
         )
-        return cast(CursorResult[Any], result).rowcount == 1
 
     async def set_status(self, *, project_id: uuid.UUID, status: ProjectStatus) -> None:
         """Advance a project's status without touching its lease.
@@ -208,29 +195,21 @@ class ProjectRepository(BaseRepository[Project]):
 
         The caller must handle `False`: the points this run wrote are unreferenced.
         """
-        now = datetime.now(UTC)
-        result = await self.session.execute(
-            update(Project)
-            .where(
-                Project.id == project_id,
-                Project.deleted_at.is_(None),
-                Project.lease_owner == worker_id,
-            )
-            .values(
-                status=status.value,
-                error=error,
-                lease_owner=None,
-                lease_expires_at=None,
-                last_job_id=job_id,
-                reindex_in_progress=False,
-                updated_at=now,
-                **fields,
-            )
+        row = await lease.release_lease(
+            self.session,
+            Project,
+            row_id=project_id,
+            job_id=job_id,
+            worker_id=worker_id,
+            status=status.value,
+            error=error,
+            fields={**fields, "reindex_in_progress": False},
+            returning=(Project.id,),
         )
-        released = cast(CursorResult[Any], result).rowcount == 1
-        if released:
-            stage_live_event(self.session, project_event(project_id))
-        return released
+        if row is None:
+            return False
+        stage_live_event(self.session, project_event(project_id))
+        return True
 
     async def abandon(self, *, project_id: uuid.UUID, worker_id: str) -> bool:
         """Give up a run without deciding its outcome. True if we still held it.

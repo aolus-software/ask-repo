@@ -148,11 +148,12 @@ backend/app/
 │   └── routes/        21 routers, 97 routes
 │
 ├── core/              cross-cutting: access, audit, crypto, errors, feedback, grant_cache,
-│                      logging, middleware, notifications, passwords, permissions, rate_limit,
-│                      repo_url, role_seed, security
+│                      indexed, logging, middleware, notifications, passwords, permissions,
+│                      rate_limit, repo_url, role_seed, security
 ├── db/session.py      engine + sessionmaker
 ├── models/            12 modules, 26 tables
-├── repositories/      24 repositories — the only place SQL is written
+├── repositories/      24 repositories — the only place SQL is written — plus lease.py,
+│                      the lease statements five of them share
 ├── schemas/           request/response shapes, all on ApiModel
 ├── services/          22 services — business rules and authorization,
 │                      plus path_tree.py (pure tree shaping, no I/O),
@@ -161,7 +162,7 @@ backend/app/
 │
 ├── ingestion/         cloner, walker, chunker, embedder/, vector_store, pipeline, errors
 ├── observability/     the AI call log: features, record, recorder, trace_ids, langfuse_sink
-├── queue/             topics, producer, consumer, retry, protocol, checklist, mock_data, eval
+├── queue/             topics, producer, consumer, retry, protocol, heartbeat, checklist, mock_data, eval
 ├── rag/               retriever, chat, prompts, prompt_version, answer_style, answerer,
 │   │                  grounding, capability, errors
 │   └── graph/         build.py, nodes.py, state.py

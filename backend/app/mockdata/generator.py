@@ -10,7 +10,6 @@ The output is always a pending change set, never a row -- nothing generated ente
 states for the checklist.
 """
 
-import asyncio
 import logging
 import uuid
 from dataclasses import replace
@@ -24,7 +23,6 @@ from app.checklist.source import ModuleSource, rebuild_files
 from app.config import Settings
 from app.core.language import Language, language_or_default
 from app.core.notifications import NotificationType
-from app.db.session import get_sessionmaker
 from app.ingestion.errors import RetryableIngestionError, TerminalIngestionError
 from app.ingestion.vector_store import VectorStoreFactory
 from app.mockdata.model_output import ProposedMockDataSet
@@ -32,6 +30,7 @@ from app.mockdata.operations import stored_mock_data_operation
 from app.models.checklist import ChangeSetOrigin, ChangeSetStatus
 from app.models.mock_data import MockDataChangeSet, MockDataDatasetStatus
 from app.observability.features import CallFeature, call_config
+from app.queue.heartbeat import lease_heartbeat, renew_until_lost
 from app.rag.errors import TerminalChatError, classify_chat_error
 from app.rag.prompts import ExistingRecord, build_mock_data_generate_prompt
 from app.repositories.checklist_module import ChecklistModuleRepository
@@ -140,8 +139,10 @@ class MockDataGenerator:
             "attempt": attempt,
         }
 
-        renewal = asyncio.create_task(self._renew(dataset_id=dataset_id, worker_id=worker_id))
-        try:
+        async with lease_heartbeat(
+            self._renew(dataset_id=dataset_id, worker_id=worker_id),
+            subject=f"mock data dataset {dataset_id}",
+        ):
             source = await self._read_source(
                 # Verbatim from the row, never recomputed from current settings: the
                 # width is probed at worker startup, and a project indexed before a
@@ -163,8 +164,6 @@ class MockDataGenerator:
                 count=count,
                 language=language,
             )
-        finally:
-            await self._stop_renewal(renewal, dataset_id=dataset_id)
 
         if not proposal.schema_found:
             raise NoSchemaFoundError(
@@ -233,35 +232,14 @@ class MockDataGenerator:
         await self.session.commit()
 
     async def _renew(self, *, dataset_id: uuid.UUID, worker_id: str) -> None:
-        """Hold the lease for the length of the run. Mirrors `ChecklistGenerator._renew`.
-
-        Each tick uses its own short-lived session, never the one the generation is
-        running on: an `AsyncSession` is not safe for concurrent use, and two
-        coroutines interleaving on one connection fail with an `InterfaceError` or,
-        worse, a mis-scoped transaction.
-        """
-        while True:
-            await asyncio.sleep(LEASE_RENEWAL_SECONDS)
-            async with get_sessionmaker()() as session:
-                held = await MockDataDatasetRepository(session).renew_lease(
-                    dataset_id=dataset_id, worker_id=worker_id, lease_seconds=LEASE_SECONDS
-                )
-                await session.commit()
-            if not held:
-                logger.warning("lost the lease on mock data dataset %s mid-run", dataset_id)
-                return
-
-    async def _stop_renewal(self, renewal: asyncio.Task[None], *, dataset_id: uuid.UUID) -> None:
-        """Cancel the heartbeat and collect it. Mirrors `ChecklistGenerator._stop_renewal`."""
-        renewal.cancel()
-        try:
-            await renewal
-        except asyncio.CancelledError:
-            pass
-        except Exception:
-            logger.warning(
-                "lease renewal for mock data dataset %s failed", dataset_id, exc_info=True
-            )
+        """Hold the lease for the length of the run. Mirrors `ChecklistGenerator._renew`."""
+        await renew_until_lost(
+            lambda session: MockDataDatasetRepository(session).renew_lease(
+                dataset_id=dataset_id, worker_id=worker_id, lease_seconds=LEASE_SECONDS
+            ),
+            interval_seconds=LEASE_RENEWAL_SECONDS,
+            subject=f"mock data dataset {dataset_id}",
+        )
 
     async def _read_source(
         self,
