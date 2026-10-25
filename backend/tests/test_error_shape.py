@@ -61,12 +61,16 @@ def test_only_declared_modules_widen_an_error_body() -> None:
 
 def test_the_last_owner_refusal_documents_the_projects_it_names() -> None:
     """The generic 409 body would document `{code, message}` and omit `projects`,
-    which is the field that tells an admin which projects to hand over first."""
+    which is the field that tells an admin which projects to hand over first.
+
+    The route answers two 409s — `LAST_OWNER` with `projects`, `LAST_ADMIN` without —
+    so it declares both shapes as a union, and the widened one must be among them."""
     responses = create_app().openapi()["paths"]["/users/{user_id}"]["delete"]["responses"]
 
-    reference = responses["409"]["content"]["application/json"]["schema"]["$ref"]
+    schema = responses["409"]["content"]["application/json"]["schema"]
+    references = {option["$ref"].rsplit("/", 1)[-1] for option in schema["anyOf"]}
 
-    assert reference.endswith("/LastOwnerErrorResponse")
+    assert references == {"LastOwnerErrorResponse", "ErrorResponse"}
 
 
 def test_the_widened_body_still_carries_the_common_two_fields() -> None:
