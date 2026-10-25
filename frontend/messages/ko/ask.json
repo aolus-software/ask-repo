@@ -26,8 +26,13 @@
     "noStream": "서버가 답변 스트림을 보내지 않았습니다.",
     "failed": "답변에 실패했습니다."
   },
-  "composer": { "questionLabel": "질문", "ask": "질문" },
-  "answer": { "copyCode": "코드 복사" },
+  "composer": {
+    "questionLabel": "질문",
+    "ask": "질문"
+  },
+  "answer": {
+    "copyCode": "코드 복사"
+  },
   "groundingWarnings": {
     "no_context": "이 프로젝트에서 관련된 내용을 찾지 못해 코드를 근거로 한 답변을 생성하지 않았습니다.",
     "uncited_answer": "이 답변은 제공된 발췌문을 하나도 인용하지 않았습니다. 주의해서 확인하세요.",
@@ -47,9 +52,13 @@
     "searchProjects": "프로젝트 검색",
     "label": "프로젝트",
     "loading": "불러오는 중…",
-    "noMatch": "일치하는 프로젝트가 없습니다."
+    "noMatch": "일치하는 프로젝트가 없습니다.",
+    "couldNotLoad": "프로젝트를 불러올 수 없습니다."
   },
-  "sources": { "title": "출처 ({count})", "lines": "{start}–{end}번째 줄" },
+  "sources": {
+    "title": "출처 ({count})",
+    "lines": "{start}–{end}번째 줄"
+  },
   "preflight": {
     "couldNotAnswer": "이 질문에 답변할 수 없었습니다",
     "genericError": "문제가 발생했습니다.",

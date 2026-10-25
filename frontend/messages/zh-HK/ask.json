@@ -52,7 +52,8 @@
     "searchProjects": "搜尋專案",
     "label": "專案",
     "loading": "載入中…",
-    "noMatch": "沒有符合的專案。"
+    "noMatch": "沒有符合的專案。",
+    "couldNotLoad": "無法載入專案。"
   },
   "sources": {
     "title": "來源（{count}）",

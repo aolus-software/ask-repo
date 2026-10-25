@@ -49,6 +49,7 @@ export function LanguageSection() {
           </div>
         ) : (
           <RadioGroup
+            aria-label={t("groupAria")}
             value={value ?? BROWSER_DEFAULT}
             onValueChange={(next) => setDraft(isLanguage(next) ? next : null)}
             className="grid gap-3"

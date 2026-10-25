@@ -78,7 +78,7 @@ export function PathPicker({
         aria-invalid={invalid}
       />
 
-      <div className="border-border overflow-hidden rounded-md border">
+      <div className="border-border focus-within:border-ring focus-within:ring-ring/50 overflow-hidden rounded-md border transition-colors focus-within:ring-3">
         <div className="border-border flex items-center gap-2 border-b px-3 py-2">
           <Search className="text-muted-foreground size-4 shrink-0" aria-hidden />
           <input

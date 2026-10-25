@@ -63,6 +63,9 @@
     "allStatuses": "Semua status",
     "allKinds": "Semua jenis",
     "allSources": "Semua sumber",
+    "statusAria": "Filter berdasarkan status",
+    "kindAria": "Filter berdasarkan jenis",
+    "sourceAria": "Filter berdasarkan sumber",
     "statuses": {
       "untested": "Belum diuji",
       "pass": "Lulus",
@@ -254,6 +257,7 @@
     "projectAria": "Proyek",
     "loading": "Memuat…",
     "noProjectMatches": "Tidak ada proyek yang cocok.",
+    "projectCap": "Menampilkan {count} proyek pertama berdasarkan nama.",
     "chooseProject": "Pilih proyek.",
     "include": "Sertakan",
     "testChecklist": "Daftar periksa pengujian",

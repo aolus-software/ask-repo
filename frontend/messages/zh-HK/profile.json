@@ -2,6 +2,7 @@
   "language": {
     "intro": "每個畫面和電郵所使用的語言。回答會跟隨你提問時使用的語言。",
     "browserDefault": "瀏覽器預設",
+    "groupAria": "介面語言",
     "save": "儲存語言",
     "saved": "已儲存語言"
   },
