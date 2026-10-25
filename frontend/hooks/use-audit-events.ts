@@ -12,8 +12,12 @@ import type {
 } from "@/lib/api/types";
 import { keys } from "@/lib/query/keys";
 
-export function useAuditEvents(params: AuditEventListParams) {
+export function useAuditEvents(
+  params: AuditEventListParams,
+  { enabled = true }: { enabled?: boolean } = {},
+) {
   return useQuery({
+    enabled,
     queryKey: keys.auditEvents.list(params),
     queryFn: () =>
       apiFetch<PaginatedResponse<AuditEventSummary>>(
@@ -23,12 +27,15 @@ export function useAuditEvents(params: AuditEventListParams) {
 }
 
 /** One event, by id — the detail screen's `GET /audit-events/{id}`. */
-export function useAuditEvent(id: string) {
+export function useAuditEvent(
+  id: string,
+  { enabled = true }: { enabled?: boolean } = {},
+) {
   return useQuery({
     queryKey: keys.auditEvents.detail(id),
     queryFn: () => apiFetch<AuditEventResponse>(endpoints.auditEvents.detail(id)),
     // Guards a caller that does not have the id yet — without it an empty id fires
     // GET /audit-events/ and 404s on every render of the component holding it.
-    enabled: Boolean(id),
+    enabled: enabled && Boolean(id),
   });
 }

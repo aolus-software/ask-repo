@@ -30,8 +30,8 @@ export function RoleMatrixScreen({ id }: { id: string }) {
   const errorText = useErrorText();
   const router = useRouter();
   const user = useSession();
-  const roleQuery = useRole(id);
-  const catalogQuery = usePermissionCatalog();
+  const roleQuery = useRole(id, { enabled: user.isAdmin });
+  const catalogQuery = usePermissionCatalog({ enabled: user.isAdmin });
   const mutation = useUpdateRolePermissions(id);
 
   // Seeded during render, never from an effect (forms.md §6): keying on the role's id

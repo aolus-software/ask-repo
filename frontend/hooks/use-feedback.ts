@@ -12,8 +12,12 @@ import type {
 } from "@/lib/api/types";
 import { keys } from "@/lib/query/keys";
 
-export function useFeedbackList(params: FeedbackListParams) {
+export function useFeedbackList(
+  params: FeedbackListParams,
+  { enabled = true }: { enabled?: boolean } = {},
+) {
   return useQuery({
+    enabled,
     queryKey: keys.feedback.list(params),
     queryFn: () =>
       apiFetch<PaginatedResponse<FeedbackAdminRead>>(
@@ -27,7 +31,10 @@ export function useFeedbackList(params: FeedbackListParams) {
  * bound and then thrown away unused. An omitted filter lands as `undefined`, which
  * `JSON.stringify` (what the query-key hash goes through) drops the same as an
  * absent key, so the cache key is unchanged either way. */
-export function useFeedbackSummary(params: Partial<FeedbackListParams>) {
+export function useFeedbackSummary(
+  params: Partial<FeedbackListParams>,
+  { enabled = true }: { enabled?: boolean } = {},
+) {
   const filters: Partial<FeedbackListParams> = {
     projectId: params.projectId,
     feature: params.feature,
@@ -39,6 +46,7 @@ export function useFeedbackSummary(params: Partial<FeedbackListParams>) {
   };
 
   return useQuery({
+    enabled,
     queryKey: keys.feedback.summary(filters),
     queryFn: () =>
       apiFetch<FeedbackSummary>(
