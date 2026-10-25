@@ -1103,3 +1103,51 @@ async def test_the_generating_refusal_comes_after_the_404_and_403(
     assert not_a_member.json()["detail"]["code"] == "EVAL_SET_NOT_FOUND"
     assert without_permission.status_code == 403
     assert without_permission.json()["detail"]["code"] == "INSUFFICIENT_ROLE"
+
+
+class _BrokerDown(Exception):
+    """Stands in for any failure of the Kafka produce."""
+
+
+async def _refuse_to_publish(*args: object, **kwargs: object) -> None:
+    raise _BrokerDown
+
+
+async def test_a_failed_publish_still_leaves_the_set_request_on_the_trail(
+    authed_client: AsyncClient,
+    authed_user: User,
+    grant_membership: GrantMembership,
+    db_session: AsyncSession,
+    ingestion_queue: InMemoryIngestionQueue,
+    audit_rows: AuditRows,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project = await _ready_project(db_session)
+    await db_session.commit()
+    await grant_membership(authed_user.id, project.id, EDITOR_NAME)
+    monkeypatch.setattr(ingestion_queue, "enqueue_eval", _refuse_to_publish)
+
+    with pytest.raises(_BrokerDown):
+        await authed_client.post(f"/projects/{project.id}/eval-sets", json=BODY)
+
+    assert len(await audit_rows("eval_set.generation.requested")) == 1
+
+
+async def test_a_failed_publish_still_leaves_the_run_request_on_the_trail(
+    authed_client: AsyncClient,
+    authed_user: User,
+    grant_membership: GrantMembership,
+    db_session: AsyncSession,
+    ingestion_queue: InMemoryIngestionQueue,
+    audit_rows: AuditRows,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project, eval_set = await _runnable_set(db_session, pairs=2)
+    await db_session.commit()
+    await grant_membership(authed_user.id, project.id, EDITOR_NAME)
+    monkeypatch.setattr(ingestion_queue, "enqueue_eval", _refuse_to_publish)
+
+    with pytest.raises(_BrokerDown):
+        await authed_client.post(f"/eval-sets/{eval_set.id}/runs")
+
+    assert len(await audit_rows("eval_run.requested")) == 1

@@ -100,16 +100,6 @@ class EvalService:
         set_id, language, source_set_id = eval_set.id, eval_set.language, eval_set.source_set_id
         await self.session.commit()
 
-        await queue.enqueue_eval(
-            EvalJobMessage(
-                kind="generate",
-                target_id=set_id,
-                job_id=uuid.uuid4(),
-                attempt=0,
-                not_before_ms=int(time.time() * 1000),
-                original_topic=self.settings.kafka_eval_topic,
-            )
-        )
         context: dict[str, ContextValue] = {"language": language}
         if source_set_id is not None:
             context["sourceSetId"] = str(source_set_id)
@@ -129,6 +119,19 @@ class EvalService:
                     "mix": (None, mix),
                 },
                 context=context,
+            )
+        )
+        # After the commit and the audit write, like `ProjectService.reindex`: a failed
+        # publish is then a 500 with the request already on the trail, and the sweep
+        # re-publishes the committed row (audit finding §8.6).
+        await queue.enqueue_eval(
+            EvalJobMessage(
+                kind="generate",
+                target_id=set_id,
+                job_id=uuid.uuid4(),
+                attempt=0,
+                not_before_ms=int(time.time() * 1000),
+                original_topic=self.settings.kafka_eval_topic,
             )
         )
         return summary
@@ -391,16 +394,6 @@ class EvalService:
         await self.session.refresh(run)
         summary = EvalRunSummary.model_validate(run)
 
-        await queue.enqueue_eval(
-            EvalJobMessage(
-                kind="run",
-                target_id=run_id,
-                job_id=uuid.uuid4(),
-                attempt=0,
-                not_before_ms=int(time.time() * 1000),
-                original_topic=self.settings.kafka_eval_topic,
-            )
-        )
         await self._recorder.record(
             AuditEntry(
                 event_type=AuditEventType.EVAL_RUN_REQUESTED,
@@ -411,6 +404,19 @@ class EvalService:
                 target_label=set_name,
                 project_id=project_id,
                 context={"pairCount": pair_count},
+            )
+        )
+        # After the commit and the audit write, like `ProjectService.reindex`: a failed
+        # publish is then a 500 with the request already on the trail, and the sweep
+        # re-publishes the committed row (audit finding §8.6).
+        await queue.enqueue_eval(
+            EvalJobMessage(
+                kind="run",
+                target_id=run_id,
+                job_id=uuid.uuid4(),
+                attempt=0,
+                not_before_ms=int(time.time() * 1000),
+                original_topic=self.settings.kafka_eval_topic,
             )
         )
         return summary

@@ -8,7 +8,8 @@ from app.config import Settings
 from app.core.permissions import VIEWER_NAME
 from app.models.project import Project, ProjectStatus
 from app.models.user import User
-from tests.conftest import GrantMembership
+from app.queue.protocol import InMemoryIngestionQueue
+from tests.conftest import AuditRows, GrantMembership
 from tests.factories import create_checklist_module, create_mock_data_record, create_project
 
 
@@ -107,3 +108,32 @@ async def test_delete_record_is_404_for_a_non_member(
     response = await client_for_user_b.delete(f"/mock-data-records/{record.id}")
 
     assert response.status_code == 404
+
+
+class _BrokerDown(Exception):
+    """Stands in for any failure of the Kafka produce."""
+
+
+@pytest.mark.asyncio
+async def test_a_failed_publish_still_leaves_the_generation_request_on_the_trail(
+    client_for_admin: AsyncClient,
+    db_session: AsyncSession,
+    ingestion_queue: InMemoryIngestionQueue,
+    audit_rows: AuditRows,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    project = await _ready_project(db_session)
+    module = await create_checklist_module(db_session, project_id=project.id)
+    await db_session.commit()
+
+    async def refuse(*args: object, **kwargs: object) -> None:
+        raise _BrokerDown
+
+    monkeypatch.setattr(ingestion_queue, "enqueue_mock_data", refuse)
+
+    with pytest.raises(_BrokerDown):
+        await client_for_admin.post(
+            f"/checklist-modules/{module.id}/mock-data-generations", json={"count": 5}
+        )
+
+    assert len(await audit_rows("mock_data.generation.requested")) == 1
