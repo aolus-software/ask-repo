@@ -160,7 +160,7 @@ services:
       start_period: 10s
 
   qdrant:
-    image: qdrant/qdrant:v1.15.1
+    image: qdrant/qdrant:v1.20.0
     restart: unless-stopped
     ports:
       - "${QDRANT_HTTP_PORT:-6333}:6333"
