@@ -434,7 +434,7 @@ services:
     profiles: ["langfuse"]
 
   langfuse-redis:
-    image: docker.io/redis:7
+    image: docker.io/redis:8
     restart: unless-stopped
     <<: *logging
     # noeviction is upstream's setting (a queue must never lose a job to memory pressure).
