@@ -28,7 +28,7 @@ RUN uv sync --no-install-project --no-dev
 # ── Runtime stage ─────────────────────────────────────────────────────────────
 # The same base the uv image is built on, so the venv's interpreter symlinks still
 # resolve after the copy below. uv itself is a build tool and does not ship.
-FROM python:3.13-slim-bookworm
+FROM python:3.15-slim-bookworm
 
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
