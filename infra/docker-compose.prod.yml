@@ -394,7 +394,7 @@ services:
     profiles: ["langfuse"]
 
   langfuse-clickhouse:
-    image: docker.io/clickhouse/clickhouse-server:25.12
+    image: docker.io/clickhouse/clickhouse-server:26.10
     restart: unless-stopped
     <<: *logging
     user: "101:101"
