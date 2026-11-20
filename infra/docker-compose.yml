@@ -425,7 +425,7 @@ services:
     profiles: ["langfuse"]
 
   langfuse-redis:
-    image: docker.io/redis:7
+    image: docker.io/redis:8
     restart: unless-stopped
     # noeviction is upstream's setting (a queue must never lose a job to memory pressure).
     command: ["redis-server", "--requirepass", "${LANGFUSE_REDIS_AUTH:-dev-insecure-change-me}", "--maxmemory-policy", "noeviction"]
