@@ -170,8 +170,11 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:-askrepo}
     # No `ports:`. Reached over the compose network only. `make psql-prod` gets you
     # a shell without exposing 5432 to the host.
+    # Postgres 18 images refuse a mount at /var/lib/postgresql/data and keep PGDATA
+    # in a versioned subdirectory of /var/lib/postgresql. The volume name carries the
+    # major so a 17 volume is never opened by 18: see docs/deployment.md, Upgrades.
     volumes:
-      - pgdata:/var/lib/postgresql/data
+      - pgdata18:/var/lib/postgresql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-askrepo} -d ${POSTGRES_DB:-askrepo}"]
       interval: 10s
@@ -470,7 +473,7 @@ services:
         condition: service_healthy
 
 volumes:
-  pgdata:
+  pgdata18:
   qdrant_data:
   redis_data:
   kafka_data:

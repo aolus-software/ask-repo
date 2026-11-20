@@ -370,6 +370,58 @@ docker compose -f infra/docker-compose.prod.yml --profile ollama \
 Skipping it only delays the Eval tab for existing sessions by at most one cache TTL; it never
 grants anything wrongly. Custom roles gain nothing — an admin grants them deliberately.
 
+#### Upgrading from Postgres 17 to 18
+
+Postgres cannot open a data directory written by an earlier major, and the 18 image refuses
+the old mount at `/var/lib/postgresql/data`. The compose files therefore mount a **new** volume,
+`pgdata18`, at `/var/lib/postgresql`. The old `pgdata` volume is not touched: after the upgrade
+it is simply no longer mounted, and it stays on disk until you remove it. An instance that pulls
+this change and runs `make up-prod` without the steps below starts on an **empty** database.
+
+```bash
+# 1. On the old version, with the stack still running
+make backup-prod                      # the askrepo database
+# only if LANGFUSE=1: its database is separate and backup-prod does not include it
+docker compose -f infra/docker-compose.prod.yml exec -T postgres \
+  pg_dump -U "$POSTGRES_USER" langfuse | gzip > backups/langfuse-pre-pg18.sql.gz
+
+# 2. Pull, build, and stop the old stack (volumes are kept)
+git pull
+make build-prod
+make down-prod
+
+# 3. Start only the new Postgres, on the empty pgdata18 volume, and restore into it
+docker compose -f infra/docker-compose.prod.yml up -d --wait postgres
+gunzip -c backups/askrepo-<timestamp>.sql.gz | docker compose -f infra/docker-compose.prod.yml \
+  exec -T postgres psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d "$POSTGRES_DB"
+# only if LANGFUSE=1
+make langfuse-db-prod
+gunzip -c backups/langfuse-pre-pg18.sql.gz | docker compose -f infra/docker-compose.prod.yml \
+  exec -T postgres psql -v ON_ERROR_STOP=1 -U "$POSTGRES_USER" -d langfuse
+
+# 4. Bring the rest up
+make migrate-prod
+make up-prod
+```
+
+`ON_ERROR_STOP` makes a failed restore stop at the first error instead of leaving a partial
+database that looks healthy. Load `infra/.env` into the shell first (`set -a; . infra/.env;
+set +a`) so `POSTGRES_USER` and `POSTGRES_DB` resolve. Once you have signed in and seen your
+projects, remove the old volume yourself: `docker volume rm askrepo-prod_pgdata`. Nothing removes
+it for you, and until you do it is the rollback: check out the previous release and the old
+volume is mounted again, without anything written since the upgrade.
+
+A development stack follows the same rule: after this change `make infra` starts on an empty
+`pgdata18`, and the development data stays in `askrepo_pgdata` until you dump it or remove it.
+
+#### Upgrading Qdrant
+
+The image went from v1.15 to v1.20. Qdrant documents upgrades one minor version at a time, so a
+stored collection may be refused by a release that skipped versions. If the `qdrant` container
+does not become healthy after the upgrade, stop the stack, remove the `qdrant_data` volume and
+reindex every project: as § 7 says, every vector is reproducible from the repository, and
+Postgres still records which collection each project wrote to.
+
 There is no automated rollback, and a migration that has run cannot be assumed reversible.
 
 Tag your images if you deploy by pulling rather than building on the box: `VERSION` sets the

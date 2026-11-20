@@ -108,7 +108,7 @@ The same graph, with one extra node, powers the QA Checklist and Mock Data refin
 
 **Backend** FastAPI · Python 3.13 · uv · SQLAlchemy + Alembic · LangGraph · LangChain
 **Frontend** Next.js 16 · React 19 · TypeScript · Tailwind CSS 4 · next-intl · Bun
-**Data** Postgres 17 · Qdrant · Redis · Kafka
+**Data** Postgres 18 · Qdrant · Redis · Kafka
 **Observability** self-hosted Langfuse for the AI call log — opt-in, off by default
 **Models** Ollama (qwen2.5-coder, qwen3), run on the host rather than in Compose, or any
 OpenAI-compatible endpoint, or Anthropic — the answering model is a setting, not a rebuild
