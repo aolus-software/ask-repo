@@ -161,7 +161,7 @@ x-langfuse-env: &langfuse-env
 
 services:
   postgres:
-    image: postgres:17-alpine
+    image: postgres:18-alpine
     restart: unless-stopped
     <<: *logging
     environment:
@@ -170,8 +170,11 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:-askrepo}
     # No `ports:`. Reached over the compose network only. `make psql-prod` gets you
     # a shell without exposing 5432 to the host.
+    # Postgres 18 images refuse a mount at /var/lib/postgresql/data and keep PGDATA
+    # in a versioned subdirectory of /var/lib/postgresql. The volume name carries the
+    # major so a 17 volume is never opened by 18: see docs/deployment.md, Upgrades.
     volumes:
-      - pgdata:/var/lib/postgresql/data
+      - pgdata18:/var/lib/postgresql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-askrepo} -d ${POSTGRES_DB:-askrepo}"]
       interval: 10s
@@ -180,7 +183,7 @@ services:
       start_period: 10s
 
   qdrant:
-    image: qdrant/qdrant:v1.15.1
+    image: qdrant/qdrant:v1.20.0
     restart: unless-stopped
     <<: *logging
     volumes:
@@ -394,7 +397,7 @@ services:
     profiles: ["langfuse"]
 
   langfuse-clickhouse:
-    image: docker.io/clickhouse/clickhouse-server:25.12
+    image: docker.io/clickhouse/clickhouse-server:26.10
     restart: unless-stopped
     <<: *logging
     user: "101:101"
@@ -434,7 +437,7 @@ services:
     profiles: ["langfuse"]
 
   langfuse-redis:
-    image: docker.io/redis:7
+    image: docker.io/redis:8
     restart: unless-stopped
     <<: *logging
     # noeviction is upstream's setting (a queue must never lose a job to memory pressure).
@@ -470,7 +473,7 @@ services:
         condition: service_healthy
 
 volumes:
-  pgdata:
+  pgdata18:
   qdrant_data:
   redis_data:
   kafka_data:

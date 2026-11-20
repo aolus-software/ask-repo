@@ -13,7 +13,7 @@
 # and npm would resolve it afresh.
 
 # ── Dependency stage ──────────────────────────────────────────────────────────
-FROM oven/bun:1.3.14-debian AS deps
+FROM oven/bun:1.4.4-debian AS deps
 
 WORKDIR /app
 
@@ -26,7 +26,7 @@ RUN bun install --frozen-lockfile
 # Installed separately rather than pruned afterwards, because `bun install` has no
 # prune and deleting from a resolved tree by hand is how a runtime import goes
 # missing on a Tuesday.
-FROM oven/bun:1.3.14-debian AS prod-deps
+FROM oven/bun:1.4.4-debian AS prod-deps
 
 WORKDIR /app
 
@@ -34,7 +34,7 @@ COPY package.json bun.lock ./
 RUN bun install --frozen-lockfile --production
 
 # ── Build stage ───────────────────────────────────────────────────────────────
-FROM node:22-bookworm-slim AS build
+FROM node:26-bookworm-slim AS build
 
 ENV NEXT_TELEMETRY_DISABLED=1
 
@@ -56,7 +56,7 @@ COPY . .
 RUN node node_modules/.bin/next build && rm -rf .next/cache
 
 # ── Runtime stage ─────────────────────────────────────────────────────────────
-FROM node:22-bookworm-slim
+FROM node:26-bookworm-slim
 
 ENV NODE_ENV=production \
     NEXT_TELEMETRY_DISABLED=1

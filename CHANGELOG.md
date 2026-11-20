@@ -13,6 +13,33 @@ client can have received it, so it is recorded under Changed and allowed in a `M
 
 ## [Unreleased]
 
+## [2.5.0] — 2026-11-20
+
+### Security
+
+- **Next.js 16.4.2 → 16.4.6** (and `eslint-config-next` to match), closing three advisories
+  (GHSA-vvgp-ww4w-46vf, GHSA-vc7v-qv4w-wrv8, GHSA-mfr8-8qww-v76h).
+- **langgraph 1.2.11 → 1.2.19**, with `langgraph-sdk` at 0.4.13, closing GHSA-3fx2-cqw9-xr3c.
+- **dnspython 2.8.0 → 2.9.2**, closing two high-severity advisories (GHSA-45c3-73f7-pv4m,
+  GHSA-vvf4-9x63-8xvv). dnspython arrives through `email-validator`.
+- **opentelemetry-api 1.45.1 → 1.45.2** (with `opentelemetry-sdk` to match), closing
+  GHSA-mf5v-w3w3-f6cg. OpenTelemetry arrives through Langfuse.
+
+### Changed
+
+- **Postgres 17 → 18, on a new volume. An existing instance must dump and restore** — see
+  `docs/deployment.md`, "Upgrading from Postgres 17 to 18". The 18 image refuses the old mount
+  at `/var/lib/postgresql/data`, so both compose files now mount `pgdata18` at
+  `/var/lib/postgresql`. The old `pgdata` volume is left untouched for the restore and as the
+  rollback; an instance that skips the procedure starts on an empty database. If Langfuse is on,
+  its `langfuse` database needs its own dump, since `make backup-prod` covers `askrepo` only.
+- **Qdrant v1.15.1 → v1.20.0**, matching `qdrant-client` 1.20. A v1.15 collection opened cleanly
+  under v1.20 in testing; if one does not, remove `qdrant_data` and reindex.
+- **Redis 7 → 8**, **ClickHouse 25.12 → 26.10** (Langfuse's store), **Bun 1.3.14 → 1.4.4** and
+  **Node 22 → 26** in the frontend images.
+- Backend and frontend minor and patch updates: FastAPI 0.162, React 19.3, Next.js 16.4.6,
+  aiokafka 0.15, asyncpg 0.32, alembic 1.20 and the LangChain family, among others.
+
 ## [2.4.2] — 2026-10-25
 
 > **Read before upgrading: this is not a fixes-only release, despite the patch number.** It adds
@@ -1075,7 +1102,8 @@ None of these is a defect. Each is a documented, deliberate scope decision:
 
 ---
 
-[Unreleased]: https://github.com/aolus-software/ask-repo/compare/v2.4.2...HEAD
+[Unreleased]: https://github.com/aolus-software/ask-repo/compare/v2.5.0...HEAD
+[2.5.0]: https://github.com/aolus-software/ask-repo/compare/v2.4.2...v2.5.0
 [2.4.2]: https://github.com/aolus-software/ask-repo/compare/v2.4.1...v2.4.2
 [2.4.1]: https://github.com/aolus-software/ask-repo/compare/v2.4.0...v2.4.1
 [2.4.0]: https://github.com/aolus-software/ask-repo/compare/v2.3.0...v2.4.0
