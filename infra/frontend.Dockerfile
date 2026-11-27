@@ -1,6 +1,6 @@
 # AskRepo frontend — development image (Next.js dev server).
 # Build context is ./frontend; see infra/docker-compose.yml.
-FROM oven/bun:1.4.4-alpine
+FROM oven/bun:1.4.5-alpine
 
 ENV NEXT_TELEMETRY_DISABLED=1
 
